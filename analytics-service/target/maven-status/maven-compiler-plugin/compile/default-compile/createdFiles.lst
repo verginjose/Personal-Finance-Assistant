@@ -1,0 +1,14 @@
+com/finance/history/HistoryServiceApplication.class
+com/finance/history/repository/TransactionEntryRepository.class
+com/finance/history/dto/PagedTransactionResponse.class
+com/finance/history/exception/GlobalExceptionHandler.class
+com/finance/history/dto/TransactionSummaryResponse.class
+com/finance/history/dto/TransactionHistoryResponse.class
+com/finance/history/service/TransactionHistoryService.class
+com/finance/history/dto/TransactionHistoryRequest.class
+com/finance/history/model/TransactionType.class
+com/finance/history/controller/TransactionHistoryController.class
+com/finance/history/model/ExpenseCategory.class
+com/finance/history/dto/ErrorResponse.class
+com/finance/history/model/IncomeCategory.class
+com/finance/history/model/TransactionEntry.class

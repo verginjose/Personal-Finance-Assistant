@@ -1,0 +1,28 @@
+### Create Expense Entry
+POST http://localhost:8080/api/upsert/create
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NTg4MTAyOTQsImV4cCI6MTc1ODg5NjY5NH0.uj1_ZEaCOB99QlfXva59iW8ySorJigoSJIGIPe2iDO0wsy-gaiyqDwk0lhNpNUEGUFRSDDTW1gV8jK-mMlFySA
+Content-Type: application/json
+
+{
+  "userId": "d9b1ab8f-6acc-4cf5-b8fd-ce4e0b41d2bc",
+  "name": "Grocery Shopping",
+  "amount": 1200.50,
+  "type": "EXPENSE",
+  "expenseCategory": "FOOD_AND_DINING",
+  "currency": "INR",
+  "description": "Monthly groceries from supermarket"
+}
+
+### Create Income Entry
+POST http://localhost:8080/api/v1/entries/create
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "name": "Salary",
+  "amount": 50000.00,
+  "type": "INCOME",
+  "incomeCategory": "SALARY",
+  "currency": "INR",
+  "description": "September salary"
+}

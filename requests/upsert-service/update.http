@@ -1,0 +1,29 @@
+### Update Expense Entry
+PUT http://localhost:8080/api/v1/entries/update
+Content-Type: application/json
+
+{
+  "id": 1,
+  "userId": 1,
+  "name": "Grocery Shopping - Updated",
+  "amount": 1250.75,
+  "type": "EXPENSE",
+  "expenseCategory": "FOOD_AND_DINING",
+  "currency": "INR",
+  "description": "Updated monthly groceries from supermarket"
+}
+
+### Update Income Entry
+PUT http://localhost:8080/api/v1/entries/update
+Content-Type: application/json
+
+{
+  "id": 2,
+  "userId": 1,
+  "name": "Salary - September",
+  "amount": 52000.00,
+  "type": "INCOME",
+  "incomeCategory": "SALARY",
+  "currency": "INR",
+  "description": "Updated September salary"
+}

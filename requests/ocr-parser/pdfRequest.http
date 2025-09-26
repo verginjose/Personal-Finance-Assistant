@@ -1,0 +1,10 @@
+POST http://localhost:8080/api/bill/process/123-wer
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NTg4MTAyOTQsImV4cCI6MTc1ODg5NjY5NH0.uj1_ZEaCOB99QlfXva59iW8ySorJigoSJIGIPe2iDO0wsy-gaiyqDwk0lhNpNUEGUFRSDDTW1gV8jK-mMlFySA
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="ParkingLot.pdf"
+Content-Type: application/pdf
+
+< ./ParkingLot.pdf
+--boundary123--

@@ -1,0 +1,7 @@
+POST http://localhost:8010/process-document-convert
+Content-Type: application/json
+
+{
+  "user_id": "user-12345",
+  "raw_text": "Received from Big Bazaar, Mumbai. 1x Bread for ₹45.00, 2x Milk 1L for ₹110.00. Total amount is 155.00 INR. Paid with card. It was for groceries."
+}

@@ -1,0 +1,142 @@
+services:
+  postgres-upsert:
+    image: postgres:15
+    container_name: postgres-upsert-db
+    environment:
+      POSTGRES_DB: finance_db
+      POSTGRES_USER: finance_user
+      POSTGRES_PASSWORD: finance_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_upsert_data:/var/lib/postgresql/data
+    networks:
+      - finance-network
+
+  postgres-auth:
+    image: postgres:15
+    container_name: postgres-auth-db
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+    networks:
+      - finance-network
+
+  upsert-service:
+    build:
+      context: ./upsert-service
+      dockerfile: Dockerfile
+    container_name: upsert-service
+    depends_on:
+      - postgres-upsert
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-upsert:5432/finance_db
+      SPRING_DATASOURCE_USERNAME: finance_user
+      SPRING_DATASOURCE_PASSWORD: finance_pass
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+    ports:
+      - "8081:8081"
+    networks:
+      - finance-network
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    depends_on:
+      - postgres-auth
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-auth:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: auth_user
+      SPRING_DATASOURCE_PASSWORD: auth_pass
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      JWT_SECRET: my-super-secret-key-that-is-long-enough-for-hmac-sha256-algorithm-and-very-secure
+      JWT_EXPIRATION: 86400000
+    ports:
+      - "8082:8082"
+    networks:
+      - finance-network
+
+  ocr-parser-service:
+    build:
+      context: ./ocr-parser-service
+      dockerfile: Dockerfile
+    container_name: ocr-parser-service
+    ports:
+      - "8083:8083"
+    networks:
+      - finance-network
+
+  analytics-service:
+    build:
+      context: ./analytics-service
+      dockerfile: Dockerfile
+    container_name: analytics-service
+    depends_on:
+      - postgres-upsert
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-upsert:5432/finance_db
+      SPRING_DATASOURCE_USERNAME: finance_user
+      SPRING_DATASOURCE_PASSWORD: finance_pass
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+    ports:
+      - "8084:8084"
+    networks:
+      - finance-network
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    depends_on:
+      - upsert-service
+      - auth-service
+      - ocr-parser-service
+      - analytics-service
+    environment:
+      SPRING_CLOUD_GATEWAY_ROUTES_0_ID: upsert-service
+      SPRING_CLOUD_GATEWAY_ROUTES_0_URI: http://upsert-service:8081
+      SPRING_CLOUD_GATEWAY_ROUTES_0_PREDICATES_0: Path=/api/upsert/**
+      SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_0: StripPrefix=1
+      SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_1: JwtValidation
+
+      SPRING_CLOUD_GATEWAY_ROUTES_1_ID: auth-service
+      SPRING_CLOUD_GATEWAY_ROUTES_1_URI: http://auth-service:8082
+      SPRING_CLOUD_GATEWAY_ROUTES_1_PREDICATES_0: Path=/api/auth/**
+      SPRING_CLOUD_GATEWAY_ROUTES_1_FILTERS_0: StripPrefix=1
+
+      SPRING_CLOUD_GATEWAY_ROUTES_2_ID: analytics-service
+      SPRING_CLOUD_GATEWAY_ROUTES_2_URI: http://analytics-service:8084
+      SPRING_CLOUD_GATEWAY_ROUTES_2_PREDICATES_0: Path=/api/analytics/**
+      SPRING_CLOUD_GATEWAY_ROUTES_2_FILTERS_0: StripPrefix=1
+      SPRING_CLOUD_GATEWAY_ROUTES_2_FILTERS_1: JwtValidation
+
+      SPRING_CLOUD_GATEWAY_ROUTES_3_ID: ocr-parser-service
+      SPRING_CLOUD_GATEWAY_ROUTES_3_URI: http://ocr-parser-service:8083
+      SPRING_CLOUD_GATEWAY_ROUTES_3_PREDICATES_0: Path=/api/bill/**
+      SPRING_CLOUD_GATEWAY_ROUTES_3_FILTERS_0: StripPrefix=1
+      SPRING_CLOUD_GATEWAY_ROUTES_3_FILTERS_1: JwtValidation
+
+      AUTH_SERVICE_URL: http://auth-service:8082
+    ports:
+      - "8080:8080"
+    networks:
+      - finance-network
+
+volumes:
+  postgres_upsert_data:
+  postgres_auth_data:
+
+networks:
+  finance-network:
+    driver: bridge

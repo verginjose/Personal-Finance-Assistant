@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CORS Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>CORS Fix Test</h1>
+    <p>This page tests if the CORS issues have been resolved.</p>
+    
+    <button onclick="testCORS()">Test CORS</button>
+    <button onclick="testLogin()">Test Login</button>
+    <button onclick="testAnalytics()">Test Analytics</button>
+    
+    <div id="results"></div>
+
+    <script>
+        function addResult(message, isSuccess = true) {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${isSuccess ? 'success' : 'error'}`;
+            resultDiv.textContent = message;
+            resultsDiv.appendChild(resultDiv);
+        }
+
+        async function testCORS() {
+            addResult('Testing CORS configuration...');
+            
+            try {
+                const response = await fetch('http://localhost:8080/api/analytics/health', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.status === 401) {
+                    addResult('✅ CORS is working! Got 401 (expected without auth token)', true);
+                } else if (response.ok) {
+                    addResult('✅ CORS is working! Got successful response', true);
+                } else {
+                    addResult(`⚠️ CORS is working but got status ${response.status}`, true);
+                }
+            } catch (error) {
+                if (error.message.includes('CORS')) {
+                    addResult(`❌ CORS Error: ${error.message}`, false);
+                } else {
+                    addResult(`❌ Network Error: ${error.message}`, false);
+                }
+            }
+        }
+
+        async function testLogin() {
+            addResult('Testing login endpoint...');
+            
+            try {
+                const response = await fetch('http://localhost:8080/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'test@example.com',
+                        password: 'password123',
+                        role: 'USER'
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult(`✅ Login successful! Token received: ${data.token.substring(0, 20)}...`, true);
+                    window.testToken = data.token;
+                    window.testUserId = data.userId;
+                } else {
+                    addResult(`❌ Login failed with status: ${response.status}`, false);
+                }
+            } catch (error) {
+                addResult(`❌ Login error: ${error.message}`, false);
+            }
+        }
+
+        async function testAnalytics() {
+            if (!window.testToken || !window.testUserId) {
+                addResult('❌ Please test login first to get authentication token', false);
+                return;
+            }
+            
+            addResult('Testing analytics endpoint...');
+            
+            try {
+                const response = await fetch(`http://localhost:8080/api/analytics/comprehensive?userId=${window.testUserId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${window.testToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult(`✅ Analytics working! Got data: ${JSON.stringify(data).substring(0, 100)}...`, true);
+                } else {
+                    addResult(`❌ Analytics failed with status: ${response.status}`, false);
+                }
+            } catch (error) {
+                addResult(`❌ Analytics error: ${error.message}`, false);
+            }
+        }
+    </script>
+</body>
+</html>

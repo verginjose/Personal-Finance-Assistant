@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Typeface India - Financial Management</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="screen active">
+        <div class="login-container">
+            <div class="login-card">
+                <h1>Typeface India</h1>
+                <h2>Financial Management System</h2>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="role">Role</label>
+                        <select id="role" name="role" required>
+                            <option value="USER">User</option>
+                            <option value="ADMIN">Admin</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                </form>
+                <div id="loginError" class="error-message"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboardScreen" class="screen">
+        <header class="header">
+            <div class="header-content">
+                <h1>Financial Dashboard</h1>
+                <div class="user-info">
+                    <span id="userEmail"></span>
+                    <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
+            <button class="nav-tab" data-tab="add-entry">Add Entry</button>
+            <button class="nav-tab" data-tab="upload-bill">Upload Bill</button>
+            <button class="nav-tab" data-tab="analytics">Analytics</button>
+        </nav>
+
+        <main class="main-content">
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h3>Recent Transactions</h3>
+                        <div id="recentTransactions" class="transaction-list">
+                            <!-- Recent transactions will be loaded here -->
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Quick Stats</h3>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <span class="stat-label">Total Income</span>
+                                <span id="totalIncome" class="stat-value income">₹0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Total Expenses</span>
+                                <span id="totalExpenses" class="stat-value expense">₹0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Net Balance</span>
+                                <span id="netBalance" class="stat-value">₹0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Entry Tab -->
+            <div id="add-entry" class="tab-content">
+                <div class="form-container">
+                    <h2>Add New Entry</h2>
+                    <form id="entryForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="entryName">Name *</label>
+                                <input type="text" id="entryName" name="name" required maxlength="100">
+                            </div>
+                            <div class="form-group">
+                                <label for="entryAmount">Amount *</label>
+                                <input type="number" id="entryAmount" name="amount" step="0.01" min="0.01" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="entryType">Transaction Type *</label>
+                                <select id="entryType" name="type" required>
+                                    <option value="">Select Type</option>
+                                    <option value="INCOME">Income</option>
+                                    <option value="EXPENSE">Expense</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="entryCurrency">Currency *</label>
+                                <select id="entryCurrency" name="currency" required>
+                                    <option value="INR">INR (₹)</option>
+                                    <option value="USD">USD ($)</option>
+                                    <option value="EUR">EUR (€)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group" id="categoryGroup">
+                            <label id="categoryLabel">Category *</label>
+                            <select id="entryCategory" name="category" required>
+                                <option value="">Select Category</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="entryDescription">Description</label>
+                            <textarea id="entryDescription" name="description" maxlength="500" rows="3"></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Add Entry</button>
+                    </form>
+                    <div id="entryError" class="error-message"></div>
+                    <div id="entrySuccess" class="success-message"></div>
+                </div>
+            </div>
+
+            <!-- Upload Bill Tab -->
+            <div id="upload-bill" class="tab-content">
+                <div class="form-container">
+                    <h2>Upload Bill for OCR Processing</h2>
+                    <form id="billUploadForm" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label for="billFile">Select Bill (Image or PDF) *</label>
+                            <input type="file" id="billFile" name="file" accept="image/*,.pdf" required>
+                            <div class="file-info">
+                                <p>Supported formats: PNG, JPG, PDF</p>
+                                <p>Maximum file size: 10MB</p>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Process Bill</button>
+                    </form>
+                    <div id="uploadError" class="error-message"></div>
+                    <div id="uploadSuccess" class="success-message"></div>
+                    
+                    <!-- OCR Results -->
+                    <div id="ocrResults" class="ocr-results" style="display: none;">
+                        <h3>Extracted Information</h3>
+                        <div class="extracted-data">
+                            <div class="form-group">
+                                <label>Name</label>
+                                <input type="text" id="ocrName" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>Amount</label>
+                                <input type="text" id="ocrAmount" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>Type</label>
+                                <input type="text" id="ocrType" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>Category</label>
+                                <input type="text" id="ocrCategory" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>Currency</label>
+                                <input type="text" id="ocrCurrency" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>Description</label>
+                                <textarea id="ocrDescription" readonly rows="3"></textarea>
+                            </div>
+                            <button id="confirmOcrEntry" class="btn btn-success">Confirm & Add Entry</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics Tab -->
+            <div id="analytics" class="tab-content">
+                <div class="analytics-container">
+                    <h2>Financial Analytics</h2>
+                    
+                    <div class="analytics-filters">
+                        <div class="filter-group">
+                            <label for="analyticsType">Transaction Type</label>
+                            <select id="analyticsType">
+                                <option value="">All</option>
+                                <option value="INCOME">Income</option>
+                                <option value="EXPENSE">Expense</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="timelineType">Timeline</label>
+                            <select id="timelineType">
+                                <option value="MONTHLY">Monthly</option>
+                                <option value="DAILY">Daily</option>
+                                <option value="YEARLY">Yearly</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="startDate">Start Date</label>
+                            <input type="date" id="startDate">
+                        </div>
+                        <div class="filter-group">
+                            <label for="endDate">End Date</label>
+                            <input type="date" id="endDate">
+                        </div>
+                        <button id="applyFilters" class="btn btn-primary">Apply Filters</button>
+                    </div>
+
+                    <div class="charts-container">
+                        <div class="chart-card">
+                            <h3>Category Distribution</h3>
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Timeline Analysis</h3>
+                            <canvas id="timelineChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="comprehensive-stats">
+                        <h3>Comprehensive Statistics</h3>
+                        <div id="comprehensiveStats" class="stats-grid">
+                            <!-- Comprehensive stats will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p>Processing...</p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

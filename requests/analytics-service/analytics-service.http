@@ -1,0 +1,198 @@
+### Analytics Service HTTP Requests
+### Base URL: http://localhost:8080/api/analytics
+
+### 1. Health Check
+GET http://localhost:8080/api/analytics/health
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NTg4MTAyOTQsImV4cCI6MTc1ODg5NjY5NH0.uj1_ZEaCOB99QlfXva59iW8ySorJigoSJIGIPe2iDO0wsy-gaiyqDwk0lhNpNUEGUFRSDDTW1gV8jK-mMlFySA
+Content-Type: application/json
+
+###
+
+### 2. Category Pie Chart (Basic)
+GET http://localhost:8080/api/analytics/category-pie-chart?userId=d9b1ab8f-6acc-4cf5-b8fd-ce4e0b41d2bc
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NTg4MTAyOTQsImV4cCI6MTc1ODg5NjY5NH0.uj1_ZEaCOB99QlfXva59iW8ySorJigoSJIGIPe2iDO0wsy-gaiyqDwk0lhNpNUEGUFRSDDTW1gV8jK-mMlFySA
+Content-Type: application/json
+
+###
+
+### 3. Category Pie Chart (With Filters)
+GET http://localhost:8080/api/analytics/category-pie-chart?userId=d9b1ab8f-6acc-4cf5-b8fd-ce4e0b41d2bc&transactionFilter=EXPENSE&startDate=2024-01-01T00:00:00&endDate=2024-12-31T23:59:59
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NTg4MTAyOTQsImV4cCI6MTc1ODg5NjY5NH0.uj1_ZEaCOB99QlfXva59iW8ySorJigoSJIGIPe2iDO0wsy-gaiyqDwk0lhNpNUEGUFRSDDTW1gV8jK-mMlFySA
+Content-Type: application/json
+
+###
+
+### 4. Category Pie Chart (Income Only)
+GET http://localhost:8080/api/analytics/category-pie-chart?userId=d9b1ab8f-6acc-4cf5-b8fd-ce4e0b41d2bc&transactionFilter=INCOME
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NTg4MTAyOTQsImV4cCI6MTc1ODg5NjY5NH0.uj1_ZEaCOB99QlfXva59iW8ySorJigoSJIGIPe2iDO0wsy-gaiyqDwk0lhNpNUEGUFRSDDTW1gV8jK-mMlFySA
+Content-Type: application/json
+
+###
+
+### 5. Timeline Chart (Monthly - Default)
+GET http://localhost:8080/api/analytics/timeline-chart?userId=550e8400-e29b-41d4-a716-446655440000
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+###
+
+### 6. Timeline Chart (Daily)
+GET http://localhost:8080/api/analytics/timeline-chart?userId=550e8400-e29b-41d4-a716-446655440000&timelineType=DAILY&startDate=2024-09-01T00:00:00&endDate=2024-09-30T23:59:59
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+###
+
+### 7. Timeline Chart (Yearly)
+GET http://localhost:8080/api/analytics/timeline-chart?userId=550e8400-e29b-41d4-a716-446655440000&timelineType=YEARLY
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+###
+
+### 8. Timeline Chart (Expenses Only)
+GET http://localhost:8080/api/analytics/timeline-chart?userId=d9b1ab8f-6acc-4cf5-b8fd-ce4e0b41d2bc&timelineType=MONTHLY&transactionFilter=EXPENSE
+Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NTg4MTAyOTQsImV4cCI6MTc1ODg5NjY5NH0.uj1_ZEaCOB99QlfXva59iW8ySorJigoSJIGIPe2iDO0wsy-gaiyqDwk0lhNpNUEGUFRSDDTW1gV8jK-mMlFySA
+Content-Type: application/json
+
+###
+
+### 9. Comprehensive Analytics (Basic)
+GET http://localhost:8080/api/analytics/comprehensive?userId=550e8400-e29b-41d4-a716-446655440000
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+###
+
+### 10. Comprehensive Analytics (With Date Range)
+GET http://localhost:8080/api/analytics/comprehensive?userId=550e8400-e29b-41d4-a716-446655440000&timelineType=DAILY&startDate=2024-09-01T00:00:00&endDate=2024-09-30T23:59:59
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+###
+
+### 11. Custom Analytics (POST)
+POST http://localhost:8080/api/analytics/custom-analytics
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "transactionFilter": "EXPENSE",
+  "timelineType": "MONTHLY",
+  "startDate": "2024-01-01T00:00:00",
+  "endDate": "2024-12-31T23:59:59"
+}
+
+###
+
+### 12. Custom Analytics (POST - Income Only)
+POST http://localhost:8080/api/analytics/custom-analytics
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "transactionFilter": "INCOME",
+  "timelineType": "YEARLY"
+}
+
+###
+
+### 13. Custom Analytics (POST - Complete Request)
+POST http://localhost:8080/api/analytics/custom-analytics
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "transactionFilter": null,
+  "timelineType": "MONTHLY",
+  "startDate": "2024-06-01T00:00:00",
+  "endDate": "2024-08-31T23:59:59"
+}
+
+###
+
+### 14. Dashboard View (HTML Response)
+GET http://localhost:8080/api/analytics/dashboard?userId=550e8400-e29b-41d4-a716-446655440000
+Authorization: Bearer your-jwt-token-here
+
+###
+
+### 15. Dashboard View (With Parameters)
+GET http://localhost:8080/api/analytics/dashboard?userId=550e8400-e29b-41d4-a716-446655440000&timelineType=DAILY&startDate=2024-09-01T00:00:00&endDate=2024-09-30T23:59:59
+Authorization: Bearer your-jwt-token-here
+
+###
+
+### 16. Category Pie Chart (Date Range)
+GET http://localhost:8080/api/analytics/category-pie-chart?userId=550e8400-e29b-41d4-a716-446655440000&startDate=2024-07-01T00:00:00&endDate=2024-07-31T23:59:59
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+###
+
+### 17. Timeline Chart (Income with Date Range)
+GET http://localhost:8080/api/analytics/timeline-chart?userId=550e8400-e29b-41d4-a716-446655440000&timelineType=MONTHLY&transactionFilter=INCOME&startDate=2024-01-01T00:00:00&endDate=2024-06-30T23:59:59
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+###
+
+### Variable Examples for Different User IDs
+### Replace the userId parameter with these examples:
+
+# User 1
+# userId=550e8400-e29b-41d4-a716-446655440000
+
+# User 2
+# userId=6ba7b810-9dad-11d1-80b4-00c04fd430c8
+
+# User 3
+# userId=6ba7b811-9dad-11d1-80b4-00c04fd430c8
+
+###
+
+### Error Testing Examples
+
+### 18. Invalid User ID Format
+GET http://localhost:8080/api/analytics/category-pie-chart?userId=invalid-uuid
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+###
+
+### 19. Missing Required Parameter
+GET http://localhost:8080/api/analytics/category-pie-chart
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+###
+
+### 20. Invalid Date Format
+GET http://localhost:8080/api/analytics/category-pie-chart?userId=550e8400-e29b-41d4-a716-446655440000&startDate=invalid-date
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+###
+
+### 21. Invalid Transaction Filter
+GET http://localhost:8080/api/analytics/category-pie-chart?userId=550e8400-e29b-41d4-a716-446655440000&transactionFilter=INVALID_TYPE
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+###
+
+### 22. Custom Analytics with Validation Errors
+POST http://localhost:8080/api/analytics/custom-analytics
+Authorization: Bearer your-jwt-token-here
+Content-Type: application/json
+
+{
+  "transactionFilter": "EXPENSE",
+  "timelineType": "INVALID_TYPE",
+  "startDate": "invalid-date"
+}
+
+###

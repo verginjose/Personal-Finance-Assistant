@@ -1,0 +1,13 @@
+org/javacode/service/BillOcrService.class
+org/javacode/BillOcrApplication.class
+org/javacode/service/FinancialDocumentProcessor$IncomeCategory.class
+org/javacode/service/FinancialDocumentProcessor$DocumentInput.class
+org/javacode/service/FinancialDocumentProcessor$ExpenseCategory.class
+org/javacode/service/FinancialDocumentProcessor$FinancialDocument.class
+org/javacode/service/FinancialDocumentProcessor$ProcessedFinancialDocument.class
+org/javacode/controller/BillOcrController.class
+org/javacode/service/FinancialDocumentProcessor.class
+org/javacode/service/FinancialDocumentProcessor$CreateEntryResponse.class
+org/javacode/dto/CreateEntryResponse.class
+org/javacode/service/FinancialDocumentProcessor$LineItem.class
+org/javacode/dto/BillProcessingResult.class

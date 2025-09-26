@@ -78,7 +78,7 @@ The frontend integrates with the following backend services:
 
 3. **Access the Application**
    - The server will automatically open your browser
-   - Or manually navigate to `http://localhost:8001`
+   - Or manually navigate to `http://localhost:8000`
    - The development server includes CORS headers to prevent issues
 
 ## CORS Issues Fixed

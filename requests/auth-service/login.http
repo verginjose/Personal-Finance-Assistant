@@ -1,5 +1,5 @@
 ### Login to get JWT token
-POST http://localhost:8080/api/auth/login
+POST http://localhost:8082/auth/login
 Content-Type: application/json
 
 {
@@ -11,3 +11,15 @@ Content-Type: application/json
 
 GET http://localhost:8080/api/auth/validate
 Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NTg4MTAyOTQsImV4cCI6MTc1ODg5NjY5NH0.uj1_ZEaCOB99QlfXva59iW8ySorJigoSJIGIPe2iDO0wsy-gaiyqDwk0lhNpNUEGUFRSDDTW1gV8jK-mMlFySA
+
+###
+
+POST http://localhost:8082/auth/login
+Content-Type: application/json
+
+{
+  "email": "jose2004@example.com",
+  "password": "password1323",
+  "role": "USER"
+}
+###

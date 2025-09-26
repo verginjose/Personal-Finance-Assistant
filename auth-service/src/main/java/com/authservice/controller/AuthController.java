@@ -2,6 +2,9 @@ package com.authservice.controller;
 
 import com.authservice.dto.LoginRequestDTO;
 import com.authservice.dto.LoginResponseDTO;
+import com.authservice.dto.RegisterRequestDTO;
+import com.authservice.dto.RegisterResponseDTO;
+
 import com.authservice.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import java.util.Optional;
@@ -35,6 +38,26 @@ public class AuthController {
     String userId = authService.getUserIdByEmail(loginRequestDTO.getEmail());
 
     return ResponseEntity.ok(new LoginResponseDTO(token, userId));
+  }
+  @Operation(summary = "Register a new user account")
+  @PostMapping("/register")
+  public ResponseEntity<RegisterResponseDTO> register(@RequestBody RegisterRequestDTO registerRequestDTO) {
+
+    try {
+      // Check if user already exists
+      if (authService.userExistsByEmail(registerRequestDTO.getEmail())) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).build();
+      }
+
+      // Register the user (password will be bcrypted in the service)
+      String userId = authService.registerUser(registerRequestDTO);
+
+      return ResponseEntity.status(HttpStatus.CREATED)
+              .body(new RegisterResponseDTO(userId, registerRequestDTO.getEmail()));
+
+    } catch (Exception e) {
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+    }
   }
 
   @Operation(summary = "Validate Token")

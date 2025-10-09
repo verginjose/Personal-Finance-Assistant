@@ -1,7 +1,6 @@
 ### Test processing an image file
 
-POST http://localhost:8080/api/bill/process/123-wer
-Authorization: Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6IlVTRVIiLCJpYXQiOjE3NTg4MTAyOTQsImV4cCI6MTc1ODg5NjY5NH0.uj1_ZEaCOB99QlfXva59iW8ySorJigoSJIGIPe2iDO0wsy-gaiyqDwk0lhNpNUEGUFRSDDTW1gV8jK-mMlFySA
+POST http://localhost:8083/bill/process/123-wer
 Content-Type: multipart/form-data; boundary=boundary123
 
 

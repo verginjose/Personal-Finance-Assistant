@@ -7,7 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Controller;
 
 import java.io.IOException;
 import java.net.URI;
@@ -18,35 +19,24 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+@Controller
 public class FinancialDocumentProcessor {
 
     // Logger for the class
     private static final Logger logger = Logger.getLogger(FinancialDocumentProcessor.class.getName());
 
     // Reusable components
-    private final HttpClient httpClient;
-    private final ObjectMapper objectMapper;
-    private final String geminiApiKey;
-    private final String geminiModelName;
-    private final String currencyApiUrl;
+    private final HttpClient httpClient=HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_2)
+            .connectTimeout(Duration.ofSeconds(20))
+            .build();;
+    private final ObjectMapper objectMapper= new ObjectMapper();;
+    @Value("${GOOGLE_API_KEY}")
+    private String geminiApiKey;
 
-    // --- 1. Configuration and Constructor ---
-
-    public FinancialDocumentProcessor(String geminiApiKey) {
-        this.geminiApiKey = Objects.requireNonNull(geminiApiKey, "Gemini API key must not be null");
-        this.httpClient = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_2)
-                .connectTimeout(Duration.ofSeconds(20))
-                .build();
-        this.objectMapper = new ObjectMapper();
-        // FIXED: Updated to use Gemini 2.5 Flash instead of deprecated 1.5 models
-        this.geminiModelName = "gemini-2.5-flash-lite"; // Updated model name
-        this.currencyApiUrl = "https://api.frankfurter.app/latest"; // Configurable
-    }
 
     // --- 2. Java Records Mirroring Pydantic Models ---
 
@@ -59,9 +49,6 @@ public class FinancialDocumentProcessor {
     }
 
     @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
-    public record LineItem(String description, double quantity, double totalPrice) {}
-
-    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record FinancialDocument(
             String userId,
             @JsonProperty("vendor") String name, // Fix: Map JSON "vendor" to "name"
@@ -70,8 +57,7 @@ public class FinancialDocumentProcessor {
             ExpenseCategory expenseCategory,
             IncomeCategory incomeCategory,
             String currency,
-            String description,
-            List<LineItem> lineItems
+            String description
     ) {
         // Validation logic similar to @model_validator
         @JsonCreator
@@ -132,6 +118,7 @@ public class FinancialDocumentProcessor {
         if ("USD".equalsIgnoreCase(baseCurrency)) targets = "INR";
         if ("INR".equalsIgnoreCase(baseCurrency)) targets = "USD";
 
+        String currencyApiUrl = "https://api.frankfurter.app/latest";
         String apiUrl = String.format("%s?from=%s&to=%s", currencyApiUrl, baseCurrency.toUpperCase(), targets);
         HttpRequest request = HttpRequest.newBuilder().uri(URI.create(apiUrl)).GET().build();
 
@@ -155,6 +142,7 @@ public class FinancialDocumentProcessor {
      * Uses the Gemini model to extract financial data from text.
      */
     public FinancialDocument extractFinancialDataWithGemini(String text, String userId) {
+        // --- MODIFIED PROMPT ---
         String prompt = """
         You are an expert financial data entry assistant. Analyze the raw text from a financial document.
 
@@ -165,7 +153,7 @@ public class FinancialDocumentProcessor {
             - If 'type' is 'Income', for 'incomeCategory' you MUST choose one of: [SALARY, BUSINESS, INVESTMENTS, GIFTS, FREELANCE, RENTAL_INCOME, INTEREST, OTHERS]. 'expenseCategory' must be null.
         3.  Identify the 'name' of the vendor or source and return it in a field named "vendor".
         4.  Identify the total 'amount' and the 'currency' (use 3-letter ISO code like INR for ₹).
-        5.  For `lineItems`, each item must be an object with keys 'description', 'quantity', and 'totalPrice'.
+        5.  Create a brief 'description' summarizing the transaction (e.g., "Grocery shopping at Reliance Fresh Mart").
 
         **Output Format:**
         Provide the output ONLY in valid JSON format, with camelCase keys. Do not include 'userId'.
@@ -177,6 +165,7 @@ public class FinancialDocumentProcessor {
         """.formatted(text);
 
         // FIXED: Updated API URL format for newer Gemini models
+        String geminiModelName = "gemini-2.5-flash-lite";
         String geminiApiUrl = String.format("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
                 geminiModelName, geminiApiKey);
 
@@ -271,58 +260,4 @@ public class FinancialDocumentProcessor {
         );
     }
 
-    // --- 4. Main Method ---
-
-    public static void main(String[] args) {
-        // --- IMPORTANT ---
-        // Replace "YOUR_GEMINI_API_KEY" with your actual Google Gemini API key.
-        String apiKey = "AIzaSyC2NHJFeIjtFUlYNtFn1SEEsovfWVmQDA8"; // SECURITY: Don't hardcode API keys in production
-
-        if (apiKey == null || apiKey.isBlank() || "YOUR_GEMINI_API_KEY".equals(apiKey)) {
-            logger.severe("Execution stopped. Please set your actual Gemini API key in the 'apiKey' variable in the main method.");
-            System.err.println("IMPORTANT: Gemini 1.5 models have been retired as of September 24, 2025.");
-            System.err.println("This code now uses gemini-2.5-flash-lite. Please update your API key and try again.");
-            return;
-        }
-
-        FinancialDocumentProcessor processor = new FinancialDocumentProcessor(apiKey);
-
-        String sampleBillText = """
-                Reliance Fresh Mart
-                Shop No 5, Main Market, Mumbai
-                Date: 25-09-2025
-
-                Parle-G Biscuit      2 x 10.00      ₹20.00
-                Amul Gold Milk 1L                   ₹55.00
-                Tata Salt 1kg                       ₹21.00
-
-                TOTAL AMOUNT:                       ₹96.00
-                """;
-
-        DocumentInput input = new DocumentInput("38400000-8cf0-11bd-b23e-10b96e4ef00d", sampleBillText);
-
-        try {
-            ProcessedFinancialDocument result = processor.processDocumentAndConvert(input);
-
-            // Convert the final result to the CreateEntryResponse DTO
-            FinancialDocument doc = result.originalData();
-            CreateEntryResponse dto = new CreateEntryResponse(
-                    doc.userId(),
-                    doc.name(),
-                    String.valueOf(doc.amount()),
-                    doc.type(),
-                    doc.expenseCategory() != null ? doc.expenseCategory().name() : null,
-                    doc.incomeCategory() != null ? doc.incomeCategory().name() : null,
-                    doc.currency(),
-                    doc.description()
-            );
-
-            logger.info("--- Converted to CreateEntryResponse DTO ---");
-            String prettyResult = new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(dto);
-            System.out.println(prettyResult);
-
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "An error occurred during the document processing test.", e);
-        }
-    }
 }

@@ -1,9 +1,15 @@
 package com.finance.analytics.dto;
 
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 
+@Setter
+@Getter
 public class CategoryAnalytics {
+    // Getters and Setters
     private String category;
     private BigDecimal totalAmount;
     private long transactionCount;
@@ -18,16 +24,4 @@ public class CategoryAnalytics {
         this.transactionCount = transactionCount;
     }
 
-    // Getters and Setters
-    public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category; }
-
-    public BigDecimal getTotalAmount() { return totalAmount; }
-    public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
-
-    public long getTransactionCount() { return transactionCount; }
-    public void setTransactionCount(long transactionCount) { this.transactionCount = transactionCount; }
-
-    public double getPercentage() { return percentage; }
-    public void setPercentage(double percentage) { this.percentage = percentage; }
 }

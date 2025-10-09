@@ -2,6 +2,8 @@ package com.finance.analytics.repository;
 
 import com.finance.analytics.model.TransactionEntry;
 import com.finance.analytics.model.TransactionType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -135,4 +137,5 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
     @Query(value = "SELECT SUM(t.amount) FROM transaction_entries t WHERE t.user_id = ?1 AND t.type = ?2 " +
             "AND t.created_at >= ?3 AND t.created_at <= ?4", nativeQuery = true)
     BigDecimal getTotalAmountByTypeAndDateRange(UUID userId, String type, LocalDateTime startDate, LocalDateTime endDate);
+    Page<TransactionEntry> findByUserId(UUID userId, Pageable pageable);
 }

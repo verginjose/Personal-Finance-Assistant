@@ -1,5 +1,8 @@
 package com.finance.analytics.model;
 
+import lombok.Getter;
+
+@Getter
 public enum IncomeCategory {
     SALARY("Salary"),
     BUSINESS("Business"),
@@ -16,8 +19,4 @@ public enum IncomeCategory {
         this.displayName = displayName;
     }
 
-    public String getDisplayName() {
-        return displayName;
-
-    }
 }

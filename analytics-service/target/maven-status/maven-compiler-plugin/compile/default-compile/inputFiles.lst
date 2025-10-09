@@ -1,14 +1,13 @@
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/HistoryServiceApplication.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/dto/TransactionHistoryRequest.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/service/TransactionHistoryService.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/dto/TransactionSummaryResponse.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/dto/ErrorResponse.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/dto/PagedTransactionResponse.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/model/IncomeCategory.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/dto/TransactionHistoryResponse.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/exception/GlobalExceptionHandler.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/model/ExpenseCategory.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/model/TransactionType.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/model/TransactionEntry.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/controller/TransactionHistoryController.java
-/home/verginjose/IdeaProjects/Typeface India/analytics-service/src/main/java/com/finance/history/repository/TransactionEntryRepository.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/dto/CategoryAnalytics.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/model/TransactionType.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/controller/AnalyticsController.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/exception/GlobalExceptionHandler.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/AnalyticsServiceApplication.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/service/AnalyticsService.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/repository/TransactionEntryRepository.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/dto/TimelineAnalytics.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/dto/ChartData.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/model/TransactionEntry.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/dto/AnalyticsRequest.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/model/IncomeCategory.java
+/home/verginjose/IdeaProjects/Personal-Finance-Assistant/analytics-service/src/main/java/com/finance/analytics/model/ExpenseCategory.java

@@ -6,7 +6,6 @@ import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.javacode.dto.BillProcessingResult;
 import org.javacode.dto.CreateEntryResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,22 +16,20 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import org.javacode.service.FinancialDocumentProcessor.ProcessedFinancialDocument;
+import org.javacode.service.FinancialDocumentProcessor.DocumentInput;
+import org.javacode.service.FinancialDocumentProcessor.FinancialDocument;
 
 @Service
 public class BillOcrService {
 
     private final ITesseract tesseract;
     private static final Logger logger = LoggerFactory.getLogger(BillOcrService.class);
+    private final FinancialDocumentProcessor financialDocumentProcessor;
 
 
-
-    public BillOcrService() {
+    public BillOcrService(FinancialDocumentProcessor financialDocumentProcessor) {
+        this.financialDocumentProcessor = financialDocumentProcessor;
         tesseract = new Tesseract();
         // Use the correct path for Tesseract 5
         tesseract.setDatapath("/usr/share/tesseract-ocr/5/tessdata");
@@ -45,7 +42,6 @@ public class BillOcrService {
         String filename = file.getOriginalFilename();
         String extractedText = "";
         CreateEntryResponse createEntryResponse=new CreateEntryResponse();
-        FinancialDocumentProcessor processor=new FinancialDocumentProcessor("AIzaSyC2NHJFeIjtFUlYNtFn1SEEsovfWVmQDA8");
         if (filename != null && filename.toLowerCase().endsWith(".pdf")) {
                 extractedText = extractTextFromPdf(file);
         }
@@ -53,9 +49,9 @@ public class BillOcrService {
                 extractedText = extractTextFromImage(file);
         }
         try {
-            FinancialDocumentProcessor.ProcessedFinancialDocument result = processor.processDocumentAndConvert(new FinancialDocumentProcessor.DocumentInput(userId,extractedText));
+             ProcessedFinancialDocument result =financialDocumentProcessor.processDocumentAndConvert(new DocumentInput(userId, extractedText));
 
-            FinancialDocumentProcessor.FinancialDocument doc = result.originalData();
+            FinancialDocument doc = result.originalData();
             createEntryResponse = new CreateEntryResponse(
                     doc.userId(),
                     doc.name(),

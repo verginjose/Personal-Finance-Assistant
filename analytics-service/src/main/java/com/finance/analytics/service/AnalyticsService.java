@@ -4,9 +4,12 @@ import com.finance.analytics.dto.AnalyticsRequest;
 import com.finance.analytics.dto.CategoryAnalytics;
 import com.finance.analytics.dto.ChartData;
 import com.finance.analytics.dto.TimelineAnalytics;
+import com.finance.analytics.model.TransactionEntry;
 import com.finance.analytics.model.TransactionType;
 import com.finance.analytics.repository.TransactionEntryRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -307,5 +310,8 @@ public class AnalyticsService {
         } else {
             return repository.getTotalAmountByType(userId, typeString);
         }
+    }
+    public Page<TransactionEntry> getTransactionEntriesByUserId(UUID userId, Pageable pageable) {
+        return repository.findByUserId(userId, pageable);
     }
 }

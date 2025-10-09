@@ -1,0 +1,4 @@
+### GET request to example server
+GET http://localhost:8084/analytics/transaction-entries?userId=e4bf6274-700c-4b2f-a455-d1d49e317dc4
+
+###

@@ -1,6 +1,9 @@
 package com.finance.analytics.model;
 
 
+import lombok.Getter;
+
+@Getter
 public enum ExpenseCategory {
     FOOD_AND_DINING("Food & Dining"),
     TRANSPORTATION("Transportation"),
@@ -18,7 +21,4 @@ public enum ExpenseCategory {
         this.displayName = displayName;
     }
 
-    public String getDisplayName() {
-        return displayName;
-    }
 }

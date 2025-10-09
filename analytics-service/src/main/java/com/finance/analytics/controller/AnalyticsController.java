@@ -11,6 +11,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -176,37 +178,20 @@ public class AnalyticsController {
                             "timestamp", LocalDateTime.now()));
         }
     }
-
-    @GetMapping("/dashboard")
-    @Operation(summary = "Get dashboard view with charts", description = "Returns HTML page with rendered charts for dashboard view")
-    public ResponseEntity<String> getDashboard(
-            @RequestParam UUID userId,
-            @RequestParam(defaultValue = "MONTHLY") String timelineType,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
-
-        try {
-            AnalyticsRequest request = new AnalyticsRequest();
-            request.setUserId(userId);
-            request.setTimelineType(timelineType);
-            request.setStartDate(startDate);
-            request.setEndDate(endDate);
-
-            Map<String, Object> analytics = analyticsService.getComprehensiveAnalytics(request);
-
-            String html = generateDashboardHTML(analytics);
-            return ResponseEntity.ok()
-                    .header("Content-Type", "text/html")
-                    .body(html);
-
-        } catch (Exception e) {
-            String errorHtml = "<html><body><h1>Error</h1><p>" + e.getMessage() + "</p></body></html>";
+    @GetMapping("/transaction-entries")
+    public ResponseEntity<?> getTransactionEntries(@RequestParam UUID userId,@RequestParam(defaultValue = "0") int page,@RequestParam(defaultValue = "10") int size) {
+        try{
+            Pageable pageable = PageRequest.of(page, size);
+            var response=analyticsService.getTransactionEntriesByUserId(userId, pageable);
+            return ResponseEntity.ok(response);
+        }catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .header("Content-Type", "text/html")
-                    .body(errorHtml);
+                    .body(Map.of(
+                            "error", "Failed to get TransactionEntries",
+                            "message", e.getMessage(),
+                            "timestamp", LocalDateTime.now()));
         }
     }
-
     @GetMapping("/health")
     @Operation(summary = "Health check", description = "Check if the analytics service is running")
     public ResponseEntity<Map<String, Object>> healthCheck() {
@@ -216,121 +201,4 @@ public class AnalyticsController {
                 "timestamp", LocalDateTime.now()));
     }
 
-    private String generateDashboardHTML(Map<String, Object> analytics) {
-        ChartData incomeChart = (ChartData) analytics.get("incomeByCategory");
-        ChartData expenseChart = (ChartData) analytics.get("expenseByCategory");
-        ChartData timelineChart = (ChartData) analytics.get("timelineTrends");
-
-        return String.format("""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Transaction Analytics Dashboard</title>
-                    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-                    <style>
-                        body { font-family: Arial, sans-serif; margin: 20px; }
-                        .chart-container { width: 48%%; display: inline-block; margin: 1%%; }
-                        .timeline-container { width: 98%%; margin: 1%%; }
-                        .summary { background: #f5f5f5; padding: 20px; margin-bottom: 20px; border-radius: 5px; }
-                        canvas { max-height: 400px; }
-                    </style>
-                </head>
-                <body>
-                    <h1>Transaction Analytics Dashboard</h1>
-
-                    <div class="summary">
-                        <h2>Summary</h2>
-                        <p>Total Income: $%s</p>
-                        <p>Total Expense: $%s</p>
-                        <p>Net Amount: $%s</p>
-                    </div>
-
-                    <div class="chart-container">
-                        <canvas id="incomeChart"></canvas>
-                    </div>
-
-                    <div class="chart-container">
-                        <canvas id="expenseChart"></canvas>
-                    </div>
-
-                    <div class="timeline-container">
-                        <canvas id="timelineChart"></canvas>
-                    </div>
-
-                    <script>
-                        // Income Pie Chart
-                        const incomeCtx = document.getElementById('incomeChart').getContext('2d');
-                        new Chart(incomeCtx, {
-                            type: 'pie',
-                            data: %s,
-                            options: {
-                                responsive: true,
-                                plugins: {
-                                    title: {
-                                        display: true,
-                                        text: 'Income by Category'
-                                    }
-                                }
-                            }
-                        });
-
-                        // Expense Pie Chart
-                        const expenseCtx = document.getElementById('expenseChart').getContext('2d');
-                        new Chart(expenseCtx, {
-                            type: 'pie',
-                            data: %s,
-                            options: {
-                                responsive: true,
-                                plugins: {
-                                    title: {
-                                        display: true,
-                                        text: 'Expenses by Category'
-                                    }
-                                }
-                            }
-                        });
-
-                        // Timeline Chart
-                        const timelineCtx = document.getElementById('timelineChart').getContext('2d');
-                        new Chart(timelineCtx, {
-                            type: 'line',
-                            data: %s,
-                            options: {
-                                responsive: true,
-                                plugins: {
-                                    title: {
-                                        display: true,
-                                        text: 'Transaction Trends Over Time'
-                                    }
-                                },
-                                scales: {
-                                    y: {
-                                        beginAtZero: true
-                                    }
-                                }
-                            }
-                        });
-                    </script>
-                </body>
-                </html>
-                """,
-                analytics.get("totalIncome"),
-                analytics.get("totalExpense"),
-                analytics.get("netAmount"),
-                convertChartDataToJSON(incomeChart),
-                convertChartDataToJSON(expenseChart),
-                convertChartDataToJSON(timelineChart));
-    }
-
-    private String convertChartDataToJSON(ChartData chartData) {
-        // Simple JSON conversion - in production, use a proper JSON library
-        return String.format("""
-                {
-                    "labels": %s,
-                    "datasets": %s
-                }
-                """,
-                chartData.getLabels().toString().replace("[", "[\"").replace("]", "\"]").replace(", ", "\", \""),
-                chartData.getDatasets().toString());
-    }
 }

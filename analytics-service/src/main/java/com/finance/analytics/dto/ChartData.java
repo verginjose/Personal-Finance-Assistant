@@ -1,8 +1,14 @@
 package com.finance.analytics.dto;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.util.List;
 
+@Setter
+@Getter
 public class ChartData {
+    // Getters and Setters
     private String chartType; // "pie", "line", "bar"
     private String title;
     private List<String> labels;
@@ -17,19 +23,6 @@ public class ChartData {
         this.labels = labels;
         this.datasets = datasets;
     }
-
-    // Getters and Setters
-    public String getChartType() { return chartType; }
-    public void setChartType(String chartType) { this.chartType = chartType; }
-
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
-
-    public List<String> getLabels() { return labels; }
-    public void setLabels(List<String> labels) { this.labels = labels; }
-
-    public List<DataSet> getDatasets() { return datasets; }
-    public void setDatasets(List<DataSet> datasets) { this.datasets = datasets; }
 
     public static class DataSet {
         private String label;

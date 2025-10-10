@@ -1,10 +1,10 @@
 ### Login to get JWT token
-POST http://localhost:8082/auth/login
+POST http://localhost:8080/api/auth/login
 Content-Type: application/json
 
 {
-  "email": "test@example.com",
-  "password": "password123",
+  "email": "jose2004@example.com",
+  "password": "password1323",
   "role": "USER"
 }
 ###

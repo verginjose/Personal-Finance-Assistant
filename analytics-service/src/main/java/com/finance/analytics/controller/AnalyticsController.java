@@ -2,6 +2,8 @@ package com.finance.analytics.controller;
 
 import com.finance.analytics.dto.AnalyticsRequest;
 import com.finance.analytics.dto.ChartData;
+import com.finance.analytics.model.IncomeCategory;
+import com.finance.analytics.model.TransactionEntry;
 import com.finance.analytics.model.TransactionType;
 import com.finance.analytics.service.AnalyticsService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -11,6 +13,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -19,7 +22,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -191,6 +196,63 @@ public class AnalyticsController {
                             "message", e.getMessage(),
                             "timestamp", LocalDateTime.now()));
         }
+    }
+    @GetMapping("/transactions/income-by-category")
+    public ResponseEntity<Page<TransactionEntry>> getIncomeTransactions(
+            @RequestParam UUID userId,
+            @RequestParam IncomeCategory incomeCategory,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        LocalDateTime endDateTime = (endDate == null)
+                ? LocalDateTime.now()
+                : endDate.atTime(LocalTime.MAX);
+
+        LocalDateTime startDateTime = (startDate == null)
+                ? endDateTime.minusYears(1)
+                : startDate.atStartOfDay();
+
+        Pageable pageable = PageRequest.of(page, size);
+
+        Page<TransactionEntry> results = analyticsService.findIncomeByCategoryAndDate(
+                userId,
+                incomeCategory,
+                startDateTime,
+                endDateTime,
+                pageable
+        );
+
+        return ResponseEntity.ok(results);
+    }
+    @GetMapping("/transactions/by-type")
+    public ResponseEntity<Page<TransactionEntry>> getTransactionsByType(
+            @RequestParam UUID userId,
+            @RequestParam TransactionType type,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        LocalDateTime endDateTime = (endDate == null)
+                ? LocalDateTime.now()
+                : endDate.atTime(LocalTime.MAX);
+
+        LocalDateTime startDateTime = (startDate == null)
+                ? endDateTime.minusYears(1)
+                : startDate.atStartOfDay();
+
+        Pageable pageable = PageRequest.of(page, size);
+
+        Page<TransactionEntry> results = analyticsService.findTransactionsByTypeAndDate(
+                userId,
+                type,
+                startDateTime,
+                endDateTime,
+                pageable
+        );
+
+        return ResponseEntity.ok(results);
     }
     @GetMapping("/health")
     @Operation(summary = "Health check", description = "Check if the analytics service is running")

@@ -1,5 +1,6 @@
 package com.finance.analytics.repository;
 
+import com.finance.analytics.model.IncomeCategory;
 import com.finance.analytics.model.TransactionEntry;
 import com.finance.analytics.model.TransactionType;
 import org.springframework.data.domain.Page;
@@ -138,4 +139,14 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             "AND t.created_at >= ?3 AND t.created_at <= ?4", nativeQuery = true)
     BigDecimal getTotalAmountByTypeAndDateRange(UUID userId, String type, LocalDateTime startDate, LocalDateTime endDate);
     Page<TransactionEntry> findByUserId(UUID userId, Pageable pageable);
+
+    Page<TransactionEntry> findByUserIdAndIncomeCategoryAndCreatedAtBetween(UUID userId, IncomeCategory incomeCategory, LocalDateTime createdAtAfter, LocalDateTime createdAtBefore,
+                                                                            Pageable pageable);
+    Page<TransactionEntry> findByUserIdAndTypeAndCreatedAtBetween(
+            UUID userId,
+            TransactionType type,
+            LocalDateTime createdAtStart,
+            LocalDateTime createdAtEnd,
+            Pageable pageable
+    );
 }

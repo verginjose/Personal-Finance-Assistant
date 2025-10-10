@@ -1,4 +1,4 @@
 ### GET request to example server
-GET http://localhost:8084/analytics/transaction-entries?userId=e4bf6274-700c-4b2f-a455-d1d49e317dc4
-
+GET http://localhost:8080/api/analytics/transactions/by-type?userId=e4bf6274-700c-4b2f-a455-d1d49e317dc4&type=INCOME
+Authorization:Bearer eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJqb3NlMjAwNEBleGFtcGxlLmNvbSIsInJvbGUiOiJVU0VSIiwiaWF0IjoxNzYwMDcxMjI3LCJleHAiOjE3NjAxNTc2Mjd9.BiRezCabAn9pAUtiPRhOne12YYDDo1vG8vh1FsYwUDYJcqYBwW1C4TDAD7Z8iEc1llKu9GH4fD1BNCl6JBcFVA
 ###

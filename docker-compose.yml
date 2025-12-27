@@ -3,11 +3,11 @@ services:
     image: postgres:15
     container_name: postgres-upsert-db
     environment:
-      POSTGRES_DB: finance_db
-      POSTGRES_USER: finance_user
-      POSTGRES_PASSWORD: finance_pass
+      POSTGRES_DB: ${UPSERT_DB_NAME}
+      POSTGRES_USER: ${UPSERT_DB_USER}
+      POSTGRES_PASSWORD: ${UPSERT_DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${UPSERT_DB_HOST_PORT}:5432"
     volumes:
       - postgres_upsert_data:/var/lib/postgresql/data
     networks:
@@ -17,11 +17,11 @@ services:
     image: postgres:15
     container_name: postgres-auth-db
     environment:
-      POSTGRES_DB: auth_db
-      POSTGRES_USER: auth_user
-      POSTGRES_PASSWORD: auth_pass
+      POSTGRES_DB: ${AUTH_DB_NAME}
+      POSTGRES_USER: ${AUTH_DB_USER}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
     ports:
-      - "5433:5432"
+      - "${AUTH_DB_HOST_PORT}:5432"
     volumes:
       - postgres_auth_data:/var/lib/postgresql/data
     networks:
@@ -35,13 +35,13 @@ services:
     depends_on:
       - postgres-upsert
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-upsert:5432/finance_db
-      SPRING_DATASOURCE_USERNAME: finance_user
-      SPRING_DATASOURCE_PASSWORD: finance_pass
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-upsert:5432/${UPSERT_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${UPSERT_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${UPSERT_DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
     ports:
-      - "8081:8081"
+      - "${UPSERT_SERVICE_PORT}:8081"
     networks:
       - finance-network
 
@@ -53,15 +53,15 @@ services:
     depends_on:
       - postgres-auth
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-auth:5432/auth_db
-      SPRING_DATASOURCE_USERNAME: auth_user
-      SPRING_DATASOURCE_PASSWORD: auth_pass
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-auth:5432/${AUTH_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${AUTH_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${AUTH_DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
-      JWT_SECRET: my-super-secret-key-that-is-long-enough-for-hmac-sha256-algorithm-and-very-secure
-      JWT_EXPIRATION: 86400000
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
     ports:
-      - "8082:8082"
+      - "${AUTH_SERVICE_PORT}:8082"
     networks:
       - finance-network
 
@@ -71,7 +71,7 @@ services:
       dockerfile: Dockerfile
     container_name: ocr-parser-service
     ports:
-      - "8083:8083"
+      - "${OCR_SERVICE_PORT}:8083"
     networks:
       - finance-network
 
@@ -83,13 +83,13 @@ services:
     depends_on:
       - postgres-upsert
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-upsert:5432/finance_db
-      SPRING_DATASOURCE_USERNAME: finance_user
-      SPRING_DATASOURCE_PASSWORD: finance_pass
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-upsert:5432/${UPSERT_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${UPSERT_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${UPSERT_DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
     ports:
-      - "8084:8084"
+      - "${ANALYTICS_SERVICE_PORT}:8084"
     networks:
       - finance-network
 
@@ -129,7 +129,7 @@ services:
 
       AUTH_SERVICE_URL: http://auth-service:8082
     ports:
-      - "8080:8080"
+      - "${API_GATEWAY_PORT}:8080"
     networks:
       - finance-network
 

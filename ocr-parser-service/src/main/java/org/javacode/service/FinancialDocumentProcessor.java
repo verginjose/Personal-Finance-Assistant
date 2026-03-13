@@ -1,4 +1,5 @@
 package org.javacode.service;
+
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -7,9 +8,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.genai.Client;
+import com.google.genai.types.Content;
+import com.google.genai.types.GenerateContentResponse;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Controller;
+import org.springframework.stereotype.Service;
 
+import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -17,57 +22,93 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-@Controller
+@Service
 public class FinancialDocumentProcessor {
 
-    // Logger for the class
     private static final Logger logger = Logger.getLogger(FinancialDocumentProcessor.class.getName());
+    private static final String GEMINI_MODEL = "gemini-2.0-flash";
+    private static final String CURRENCY_API_URL = "https://api.frankfurter.app/latest";
 
-    // Reusable components
-    private final HttpClient httpClient=HttpClient.newBuilder()
-            .version(HttpClient.Version.HTTP_2)
-            .connectTimeout(Duration.ofSeconds(20))
-            .build();;
-    private final ObjectMapper objectMapper= new ObjectMapper();;
+    private final HttpClient httpClient;
+    private final ObjectMapper objectMapper;
+
     @Value("${GOOGLE_API_KEY}")
     private String geminiApiKey;
 
+    public FinancialDocumentProcessor() {
+        this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_2)
+                .connectTimeout(Duration.ofSeconds(20))
+                .build();
+        this.objectMapper = new ObjectMapper();
+    }
 
-    // --- 2. Java Records Mirroring Pydantic Models ---
+    @PostConstruct
+    public void initializeGeminiClient() {
+        logger.info("Gemini initialized for REST API usage");
+    }
+
+    // --- Enums and Records ---
 
     public enum ExpenseCategory {
-        FOOD_AND_DINING, TRANSPORTATION, SHOPPING, ENTERTAINMENT, BILLS_AND_UTILITIES, HEALTHCARE, TRAVEL, EDUCATION, OTHERS
+        FOOD_AND_DINING,
+        TRANSPORTATION,
+        SHOPPING,
+        ENTERTAINMENT,
+        BILLS_AND_UTILITIES,
+        HEALTHCARE,
+        TRAVEL,
+        EDUCATION,
+        OTHERS
     }
 
     public enum IncomeCategory {
-        SALARY, BUSINESS, INVESTMENTS, GIFTS, FREELANCE, RENTAL_INCOME, INTEREST, OTHERS
+        SALARY,
+        BUSINESS,
+        INVESTMENTS,
+        GIFTS,
+        FREELANCE,
+        RENTAL_INCOME,
+        INTEREST,
+        OTHERS
     }
 
     @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record FinancialDocument(
             String userId,
-            @JsonProperty("vendor") String name, // Fix: Map JSON "vendor" to "name"
+            @JsonProperty("vendor") String name,
             double amount,
-            @JsonProperty("transactionType") String type, // Fix: Map JSON "transactionType" to "type"
+            @JsonProperty("transactionType") String type,
             ExpenseCategory expenseCategory,
             IncomeCategory incomeCategory,
             String currency,
             String description
     ) {
-        // Validation logic similar to @model_validator
         @JsonCreator
         public FinancialDocument {
+            validateTransaction(type, expenseCategory, incomeCategory);
+        }
+
+        private static void validateTransaction(String type, ExpenseCategory expenseCategory, IncomeCategory incomeCategory) {
             if ("Expense".equals(type)) {
-                if (expenseCategory == null) throw new IllegalArgumentException("expenseCategory must be set for Expense transactions.");
-                if (incomeCategory != null) throw new IllegalArgumentException("incomeCategory must not be set for Expense transactions.");
+                if (expenseCategory == null) {
+                    throw new IllegalArgumentException("expenseCategory must be set for Expense transactions");
+                }
+                if (incomeCategory != null) {
+                    throw new IllegalArgumentException("incomeCategory must not be set for Expense transactions");
+                }
             } else if ("Income".equals(type)) {
-                if (incomeCategory == null) throw new IllegalArgumentException("incomeCategory must be set for Income transactions.");
-                if (expenseCategory != null) throw new IllegalArgumentException("expenseCategory must not be set for Income transactions.");
+                if (incomeCategory == null) {
+                    throw new IllegalArgumentException("incomeCategory must be set for Income transactions");
+                }
+                if (expenseCategory != null) {
+                    throw new IllegalArgumentException("expenseCategory must not be set for Income transactions");
+                }
             }
         }
     }
@@ -82,169 +123,216 @@ public class FinancialDocumentProcessor {
 
     public record DocumentInput(String userId, String rawText) {}
 
-    // New DTO class as requested by the user
-    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
-    public record CreateEntryResponse(
-            String userId,
-            String name,
-            String amount,
-            String type,
-            String expenseCategory,
-            String incomeCategory,
-            String currency,
-            String description
-    ) {}
-
-    // --- 3. Helper and Core Logic Methods ---
-
     /**
-     * Cleans input text by removing common problematic characters.
+     * Sanitizes input text by removing problematic characters and normalizing whitespace.
      */
     public String sanitizeText(String text) {
         if (text == null || text.isBlank()) {
             return "";
         }
-        String sanitized = text.replace("\u00A0", " ");
-        sanitized = sanitized.replaceAll("\\s+", " ").trim();
-        return sanitized;
+        return text.replace("\u00A0", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     /**
-     * Gets exchange rates for USD and INR using the Frankfurter API.
+     * Fetches exchange rates from Frankfurter API.
      */
     public Map<String, Object> getExchangeRates(String baseCurrency) {
-        if ("₹".equals(baseCurrency)) baseCurrency = "INR";
-        String targets = "USD,INR";
-        if ("USD".equalsIgnoreCase(baseCurrency)) targets = "INR";
-        if ("INR".equalsIgnoreCase(baseCurrency)) targets = "USD";
+        String normalizedCurrency = normalizeCurrency(baseCurrency);
+        String targets = determineTargetCurrencies(normalizedCurrency);
+        String apiUrl = String.format("%s?from=%s&to=%s", CURRENCY_API_URL, normalizedCurrency, targets);
 
-        String currencyApiUrl = "https://api.frankfurter.app/latest";
-        String apiUrl = String.format("%s?from=%s&to=%s", currencyApiUrl, baseCurrency.toUpperCase(), targets);
-        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(apiUrl)).GET().build();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(apiUrl))
+                .GET()
+                .build();
 
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
             if (response.statusCode() == 200) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> result = objectMapper.readValue(response.body(), Map.class);
                 return result;
             } else {
-                logger.log(Level.SEVERE, "Currency API request failed with status code: " + response.statusCode());
+                logger.log(Level.WARNING, "Currency API request failed with status: " + response.statusCode());
             }
         } catch (IOException | InterruptedException e) {
             logger.log(Level.SEVERE, "Error calling currency API", e);
-            Thread.currentThread().interrupt();
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
         }
-        return Map.of("rates", Map.of("USD", 0.0, "INR", 0.0), "date", LocalDate.now().toString());
+
+        // Return default values on error
+        return Map.of(
+                "rates", Map.of("USD", 0.0, "INR", 0.0),
+                "date", LocalDate.now().toString()
+        );
+    }
+
+    private String normalizeCurrency(String currency) {
+        if ("₹".equals(currency)) {
+            return "INR";
+        }
+        return currency.toUpperCase();
+    }
+
+    private String determineTargetCurrencies(String baseCurrency) {
+        return switch (baseCurrency) {
+            case "USD" -> "INR";
+            case "INR" -> "USD";
+            default -> "USD,INR";
+        };
     }
 
     /**
-     * Uses the Gemini model to extract financial data from text.
+     * Extracts financial data using Gemini REST API.
      */
     public FinancialDocument extractFinancialDataWithGemini(String text, String userId) {
-        // --- MODIFIED PROMPT ---
-        String prompt = """
-        You are an expert financial data entry assistant. Analyze the raw text from a financial document.
+        String prompt = buildExtractionPrompt(text);
 
-        **Crucial Instructions:**
-        1.  Identify the transaction 'type' and return it in a field named "transactionType".
-        2.  Based on the 'type', you MUST categorize it.
-            - If 'type' is 'Expense', for 'expenseCategory' you MUST choose one of: [FOOD_AND_DINING, TRANSPORTATION, SHOPPING, ENTERTAINMENT, BILLS_AND_UTILITIES, HEALTHCARE, TRAVEL, EDUCATION, OTHERS]. 'incomeCategory' must be null.
-            - If 'type' is 'Income', for 'incomeCategory' you MUST choose one of: [SALARY, BUSINESS, INVESTMENTS, GIFTS, FREELANCE, RENTAL_INCOME, INTEREST, OTHERS]. 'expenseCategory' must be null.
-        3.  Identify the 'name' of the vendor or source and return it in a field named "vendor".
-        4.  Identify the total 'amount' and the 'currency' (use 3-letter ISO code like INR for ₹).
-        5.  Create a brief 'description' summarizing the transaction (e.g., "Grocery shopping at Reliance Fresh Mart").
-
-        **Output Format:**
-        Provide the output ONLY in valid JSON format, with camelCase keys. Do not include 'userId'.
-
-        ---
-        Raw Text to Analyze:
-        %s
-        ---
-        """.formatted(text);
-
-        // FIXED: Updated API URL format for newer Gemini models
-        String geminiModelName = "gemini-2.5-flash-lite";
-        String geminiApiUrl = String.format("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s",
-                geminiModelName, geminiApiKey);
-
-        String requestBody;
-        try {
-            requestBody = objectMapper.writeValueAsString(Map.of(
-                    "contents", List.of(Map.of(
-                            "parts", List.of(Map.of("text", prompt))
-                    ))
-            ));
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to create Gemini request body", e);
-        }
+        // Prepare JSON body for Gemini REST API with simple escaping
+        String escapedPrompt = prompt.replace("\\", "\\\\")
+                                     .replace("\"", "\\\"")
+                                     .replace("\n", "\\n")
+                                     .replace("\r", "\\r")
+                                     .replace("\t", "\\t");
+                                     
+        String jsonBody = "{\"contents\": [{\"parts\": [{\"text\": \"" + escapedPrompt + "\"}]}]}";
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(geminiApiUrl))
+                .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + geminiApiKey))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .timeout(Duration.ofSeconds(30))
                 .build();
 
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            
             if (response.statusCode() != 200) {
-                // IMPROVED: Better error logging with response details
-                String errorMessage = String.format("Gemini API request failed with status: %d%nRequest URL: %s%nResponse Body: %s",
-                        response.statusCode(), geminiApiUrl, response.body());
-                logger.log(Level.SEVERE, errorMessage);
-                throw new IOException(errorMessage);
+                logger.log(Level.SEVERE, "Gemini API returned status {0}: {1}", new Object[]{response.statusCode(), response.body()});
+                throw new IOException("Gemini API error: " + response.statusCode() + " Details: " + response.body());
             }
 
-            JsonNode rootNode = objectMapper.readTree(response.body());
-            String llmResponseText = rootNode.at("/candidates/0/content/parts/0/text").asText();
+            JsonNode root = objectMapper.readTree(response.body());
+            String responseText = root.path("candidates")
+                    .get(0)
+                    .path("content")
+                    .path("parts")
+                    .get(0)
+                    .path("text")
+                    .asText();
 
-            String cleanJson = llmResponseText.strip().replaceFirst("```json", "").replaceFirst("```", "").strip();
-            JsonNode dataNode = objectMapper.readTree(cleanJson);
-
-            if (!dataNode.isObject()) {
-                throw new IOException("LLM returned non-object JSON: " + cleanJson);
+            if (responseText == null || responseText.isBlank()) {
+                throw new IOException("Empty response text from Gemini REST API");
             }
 
-            ObjectNode objectDataNode = (ObjectNode) dataNode;
-            objectDataNode.put("userId", userId);
+            return parseFinancialDocument(responseText, userId);
 
-            return objectMapper.treeToValue(objectDataNode, FinancialDocument.class);
-
-        } catch (IOException | InterruptedException e) {
-            logger.log(Level.SEVERE, "Failed to process text with LLM", e);
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-            throw new RuntimeException("Failed to process text with LLM", e);
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, "Failed to extract financial data with Gemini REST API", e);
+            throw new RuntimeException("Failed to extract financial data with Gemini REST API", e);
         }
+    }
+
+
+    private String buildExtractionPrompt(String text) {
+        return """
+                You are an expert financial data entry assistant. Analyze the raw text from a financial document.
+                
+                **Crucial Instructions:**
+                1. Identify the transaction 'type' and return it in a field named "transactionType".
+                2. Based on the 'type', you MUST categorize it:
+                   - If 'type' is 'Expense', for 'expenseCategory' choose one of: [FOOD_AND_DINING, TRANSPORTATION, SHOPPING, ENTERTAINMENT, BILLS_AND_UTILITIES, HEALTHCARE, TRAVEL, EDUCATION, OTHERS]. 'incomeCategory' must be null.
+                   - If 'type' is 'Income', for 'incomeCategory' choose one of: [SALARY, BUSINESS, INVESTMENTS, GIFTS, FREELANCE, RENTAL_INCOME, INTEREST, OTHERS]. 'expenseCategory' must be null.
+                3. Identify the 'name' of the vendor or source and return it in a field named "vendor".
+                4. Identify the total 'amount' and the 'currency' (use 3-letter ISO code like INR for ₹).
+                5. Create a brief 'description' summarizing the transaction.
+                
+                **Output Format:**
+                Provide the output ONLY in valid JSON format with camelCase keys. Do not include 'userId'. Do not include markdown code blocks.
+                
+                ---
+                Raw Text to Analyze:
+                %s
+                ---
+                """.formatted(text);
+    }
+
+    private FinancialDocument parseFinancialDocument(String responseText, String userId) throws JsonProcessingException {
+
+        // Clean JSON response (remove Markdown code blocks if present)
+        String cleanJson = responseText.strip()
+                .replaceFirst("(?s)^```json\\s*", "")
+                .replaceFirst("(?s)\\s*```$", "")
+                .strip();
+
+        JsonNode dataNode = objectMapper.readTree(cleanJson);
+
+        if (!dataNode.isObject()) {
+            throw new IllegalArgumentException("LLM returned non-object JSON: " + cleanJson);
+        }
+
+        // Add userId to the JSON
+        ObjectNode objectDataNode = (ObjectNode) dataNode;
+        objectDataNode.put("userId", userId);
+
+        return objectMapper.treeToValue(objectDataNode, FinancialDocument.class);
     }
 
     /**
      * Main processing function orchestrating the full workflow.
      */
     public ProcessedFinancialDocument processDocumentAndConvert(DocumentInput data) {
+        // Validate and sanitize input
         String cleanText = sanitizeText(data.rawText());
         if (cleanText.length() < 10) {
-            throw new IllegalArgumentException("Sanitized text is too short to process.");
+            throw new IllegalArgumentException("Sanitized text is too short to process (minimum 10 characters)");
         }
 
+        // Extract financial data using Gemini
         FinancialDocument extractedData = extractFinancialDataWithGemini(cleanText, data.userId());
 
+        // Get exchange rates
         Map<String, Object> exchangeData = getExchangeRates(extractedData.currency());
+
+        // Calculate amounts in USD and INR
+        CurrencyConversion conversion = calculateCurrencyConversion(
+                extractedData.amount(),
+                extractedData.currency(),
+                exchangeData
+        );
+
+        return new ProcessedFinancialDocument(
+                extractedData,
+                conversion.amountInr(),
+                conversion.amountUsd(),
+                (String) exchangeData.get("date")
+        );
+    }
+
+    private record CurrencyConversion(double amountInr, double amountUsd) {}
+
+    private CurrencyConversion calculateCurrencyConversion(
+            double originalAmount,
+            String currency,
+            Map<String, Object> exchangeData
+    ) {
         @SuppressWarnings("unchecked")
-        Map<String, Number> rates = (Map<String, Number>) exchangeData.get("rates");
+        Map<String, Number> rates = (Map<String, Number>) exchangeData.getOrDefault("rates", Map.of());
 
         double rateUsd = rates.getOrDefault("USD", 0.0).doubleValue();
         double rateInr = rates.getOrDefault("INR", 0.0).doubleValue();
-        double originalAmount = extractedData.amount();
 
         double amountUsd, amountInr;
 
-        if ("USD".equalsIgnoreCase(extractedData.currency())) {
+        if ("USD".equalsIgnoreCase(currency)) {
             amountUsd = originalAmount;
             amountInr = originalAmount * rateInr;
-        } else if ("INR".equalsIgnoreCase(extractedData.currency())) {
+        } else if ("INR".equalsIgnoreCase(currency)) {
             amountInr = originalAmount;
             amountUsd = originalAmount * rateUsd;
         } else {
@@ -252,12 +340,9 @@ public class FinancialDocumentProcessor {
             amountInr = originalAmount * rateInr;
         }
 
-        return new ProcessedFinancialDocument(
-                extractedData,
+        return new CurrencyConversion(
                 Math.round(amountInr * 100.0) / 100.0,
-                Math.round(amountUsd * 100.0) / 100.0,
-                (String) exchangeData.get("date")
+                Math.round(amountUsd * 100.0) / 100.0
         );
     }
-
 }

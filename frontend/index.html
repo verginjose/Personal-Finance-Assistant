@@ -1,258 +1,491 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Typeface India - Financial Management</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finance Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Login Screen -->
-    <div id="loginScreen" class="screen active">
-        <div class="login-container">
-            <div class="login-card">
-                <h1>Typeface India</h1>
-                <h2>Financial Management System</h2>
-                <form id="loginForm">
-                    <div class="form-group">
-                        <label for="email">Email</label>
-                        <input type="email" id="email" name="email" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Password</label>
-                        <input type="password" id="password" name="password" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="role">Role</label>
-                        <select id="role" name="role" required>
-                            <option value="USER">User</option>
-                            <option value="ADMIN">Admin</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Login</button>
-                </form>
-                <div id="loginError" class="error-message"></div>
-            </div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- AUTH -->
+<div id="authScreen" class="screen active">
+  <div class="auth-left">
+    <div class="auth-deco">
+      <div class="auth-deco-brand">
+        <div class="brand-mark">F</div>
+        <span class="brand-name" style="color:#fff">Finance Assistant</span>
+      </div>
+      <h2>Know exactly where your money goes.</h2>
+      <p>Professional income, expense tracking and analytics — built for clarity.</p>
+      <div class="auth-deco-features">
+        <div class="deco-feat"><div class="deco-feat-icon">📊</div> Real-time analytics</div>
+        <div class="deco-feat"><div class="deco-feat-icon">🔍</div> Full-text search</div>
+        <div class="deco-feat"><div class="deco-feat-icon">📄</div> OCR bill parsing</div>
+        <div class="deco-feat"><div class="deco-feat-icon">📤</div> CSV export</div>
+      </div>
+    </div>
+  </div>
+  <div class="auth-right">
+    <div class="auth-right-inner">
+      <div id="loginPanel" class="auth-panel visible">
+        <h1>Sign in</h1>
+        <p class="auth-sub">Enter your credentials to continue.</p>
+        <div id="loginError" class="alert alert-error" style="display:none"></div>
+        <form id="loginForm" novalidate>
+          <div class="field">
+            <label for="loginEmail">Email</label>
+            <input id="loginEmail" name="email" type="email" placeholder="you@example.com" required autocomplete="email">
+          </div>
+          <div class="field">
+            <label for="loginPassword">Password</label>
+            <input id="loginPassword" name="password" type="password" placeholder="••••••••" required autocomplete="current-password">
+          </div>
+          <div class="field">
+            <label for="loginRole">Role</label>
+            <select id="loginRole" name="role">
+              <option value="USER">User</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">Sign in</button>
+        </form>
+        <p class="auth-toggle">No account? <a href="#" id="goToRegister">Create one →</a></p>
+      </div>
+
+      <div id="registerPanel" class="auth-panel">
+        <h1>Create account</h1>
+        <p class="auth-sub">Get started in under a minute.</p>
+        <div id="registerError"   class="alert alert-error"   style="display:none"></div>
+        <div id="registerSuccess" class="alert alert-success" style="display:none"></div>
+        <form id="registerForm" novalidate>
+          <div class="field">
+            <label for="regEmail">Email</label>
+            <input id="regEmail" name="email" type="email" placeholder="you@example.com" required autocomplete="email">
+          </div>
+          <div class="field">
+            <label for="regPassword">Password</label>
+            <input id="regPassword" name="password" type="password" placeholder="Min 6 characters" required autocomplete="new-password">
+          </div>
+          <div class="field">
+            <label for="regRole">Role</label>
+            <select id="regRole" name="role">
+              <option value="USER">User</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">Create account</button>
+        </form>
+        <p class="auth-toggle">Already signed up? <a href="#" id="goToLogin">← Sign in</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboardScreen" class="screen">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-mark">F</div>
+      <span class="brand-name">Finance</span>
+    </div>
+    <nav class="sidebar-nav">
+      <span class="sidebar-section-label">Main</span>
+      <button class="nav-item active" data-tab="overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Overview
+      </button>
+      <button class="nav-item" data-tab="transactions">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        Transactions
+      </button>
+      <button class="nav-item" data-tab="add">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        Add Entry
+      </button>
+      <span class="sidebar-section-label">Insights</span>
+      <button class="nav-item" data-tab="analytics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Analytics
+      </button>
+      <button class="nav-item" data-tab="groups">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Groups & Split
+      </button>
+      <span class="sidebar-section-label">Tools</span>
+      <button class="nav-item" data-tab="upload">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Bill Upload
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <span class="user-email" id="userEmail"></span>
+      </div>
+      <button id="logoutBtn" class="btn btn-ghost btn-sm btn-full">Sign out</button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- OVERVIEW -->
+    <section id="overview" class="tab-panel active">
+      <div class="page-header">
+        <h2>Overview</h2>
+        <p class="page-sub">Your financial snapshot</p>
+      </div>
+      <div class="quick-dates" id="overviewQuickDates">
+        <button class="quick-date-btn active" data-period="month">This Month</button>
+        <button class="quick-date-btn" data-period="lastmonth">Last Month</button>
+        <button class="quick-date-btn" data-period="quarter">Quarter</button>
+        <button class="quick-date-btn" data-period="year">This Year</button>
+        <button class="quick-date-btn" data-period="all">All Time</button>
+        <button class="btn btn-secondary btn-sm" id="exportCsvBtn" style="margin-left:auto">⬇ Export CSV</button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-card-top"><div class="stat-icon green">💰</div><span class="stat-badge up" id="incomeBadge">—</span></div>
+          <div class="stat-label">Total Income</div>
+          <div id="totalIncome" class="stat-value income">₹—</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-card-top"><div class="stat-icon red">💸</div><span class="stat-badge down" id="expenseBadge">—</span></div>
+          <div class="stat-label">Total Expenses</div>
+          <div id="totalExpenses" class="stat-value expense">₹—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-top"><div class="stat-icon blue">⚖️</div><span class="stat-badge neu" id="netBadge">Net</span></div>
+          <div class="stat-label">Net Balance</div>
+          <div id="netBalance" class="stat-value brand">₹—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-top"><div class="stat-icon slate">🔢</div></div>
+          <div class="stat-label">Transactions</div>
+          <div id="txCount" class="stat-value">—</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="section-card">
+          <div class="section-card-header">
+            <h3>Recent Transactions</h3>
+            <button class="btn btn-ghost btn-xs" onclick="switchTab('transactions')">View all →</button>
+          </div>
+          <div id="recentTransactions" class="tx-list"><div class="empty-state"><p>No transactions yet.</p></div></div>
+        </div>
+        <div class="section-card">
+          <div class="section-card-header"><h3>Top Expense Categories</h3></div>
+          <div id="categoryBars" class="category-bars"><div class="empty-state"><p>No data yet.</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRANSACTIONS -->
+    <section id="transactions" class="tab-panel">
+      <div class="page-header">
+        <h2>Transactions</h2>
+        <p class="page-sub">All entries, searchable and filterable</p>
+      </div>
+      <div class="section-card">
+        <div class="search-wrap">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="txSearch" type="text" placeholder="Search by name or description…">
+        </div>
+        <div class="filter-pills">
+          <button class="pill active" data-type="">All</button>
+          <button class="pill" data-type="INCOME">Income</button>
+          <button class="pill" data-type="EXPENSE">Expense</button>
+        </div>
+        <div id="allTransactions" class="tx-list"><div class="empty-state"><p>No transactions yet.</p></div></div>
+        <div class="pagination" id="txPagination" style="display:none">
+          <span class="pagination-info" id="txPageInfo"></span>
+          <div class="pagination-btns">
+            <button class="btn btn-secondary btn-sm" id="txPrevBtn">← Prev</button>
+            <button class="btn btn-secondary btn-sm" id="txNextBtn">Next →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ADD ENTRY -->
+    <section id="add" class="tab-panel">
+      <div class="page-header">
+        <h2>Add Entry</h2>
+        <p class="page-sub">Record a new income or expense</p>
+      </div>
+      <div class="section-card form-card">
+        <div id="entryError"   class="alert alert-error"   style="display:none"></div>
+        <div id="entrySuccess" class="alert alert-success" style="display:none"></div>
+        <form id="entryForm" novalidate>
+          <div class="form-row">
+            <div class="field">
+              <label for="entryType">Type</label>
+              <select id="entryType" name="type" required>
+                <option value="">Select type</option>
+                <option value="INCOME">📈 Income</option>
+                <option value="EXPENSE">📉 Expense</option>
+              </select>
+            </div>
+            <div class="field">
+              <label id="categoryLabel" for="entryCategory">Category</label>
+              <select id="entryCategory" name="category" required>
+                <option value="">Select type first</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="entryName">Name</label>
+              <input id="entryName" name="name" type="text" placeholder="e.g. Grocery shopping" required maxlength="100">
+            </div>
+            <div class="field">
+              <label for="entryAmount">Amount</label>
+              <input id="entryAmount" name="amount" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="entryCurrency">Currency</label>
+              <select id="entryCurrency" name="currency">
+                <option value="INR">🇮🇳 INR</option>
+                <option value="USD">🇺🇸 USD</option>
+                <option value="EUR">🇪🇺 EUR</option>
+                <option value="GBP">🇬🇧 GBP</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="entryDescription">Description <span class="optional">(optional)</span></label>
+              <input id="entryDescription" name="description" type="text" placeholder="Additional notes…" maxlength="500">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button type="submit" class="btn btn-primary">Save Entry</button>
+            <button type="reset" class="btn btn-secondary">Clear</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ANALYTICS -->
+    <section id="analytics" class="tab-panel">
+      <div class="page-header">
+        <h2>Analytics</h2>
+        <p class="page-sub">Deep-dive into spending patterns</p>
+      </div>
+      <div class="quick-dates" id="analyticsQuickDates">
+        <button class="quick-date-btn active" data-period="month">This Month</button>
+        <button class="quick-date-btn" data-period="lastmonth">Last Month</button>
+        <button class="quick-date-btn" data-period="quarter">Quarter</button>
+        <button class="quick-date-btn" data-period="year">This Year</button>
+        <button class="quick-date-btn" data-period="all">All Time</button>
+      </div>
+      <div class="filters-bar">
+        <div class="field field-inline">
+          <label>Type</label>
+          <select id="analyticsType"><option value="">All</option><option value="INCOME">Income</option><option value="EXPENSE">Expense</option></select>
+        </div>
+        <div class="field field-inline">
+          <label>Period</label>
+          <select id="timelineType"><option value="MONTHLY">Monthly</option><option value="DAILY">Daily</option><option value="YEARLY">Yearly</option></select>
+        </div>
+        <div class="field field-inline"><label>From</label><input id="startDate" type="date"></div>
+        <div class="field field-inline"><label>To</label><input id="endDate" type="date"></div>
+        <button id="applyFilters" class="btn btn-primary">Apply</button>
+      </div>
+      <div class="analytics-stats" id="comprehensiveStats"></div>
+      <div class="charts-grid">
+        <div class="section-card">
+          <div class="section-card-header"><h3>Spend by Category</h3></div>
+          <div class="chart-wrap"><canvas id="categoryChart"></canvas></div>
+        </div>
+        <div class="section-card">
+          <div class="section-card-header"><h3>Income vs Expenses</h3></div>
+          <div class="chart-wrap"><canvas id="timelineChart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── GROUPS & SPLIT PANEL ── -->
+    <section id="groups" class="tab-panel">
+      <div class="page-header">
+        <h2>Expense Groups</h2>
+        <p class="page-sub">Split bills and manage shared expenses with friends.</p>
+        <div style="margin-top: 16px;">
+          <button class="btn btn-primary" onclick="showCreateGroupModal()">+ New Group</button>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="section-card">
+          <div class="section-card-header"><h3>Your Groups</h3></div>
+          <div id="groupList" class="tx-list">
+            <!-- Groups rendered here -->
+          </div>
+        </div>
+
+        <div id="groupDetailArea" class="section-card" style="display: none;">
+          <div class="section-card-header">
+            <h3 id="currentGroupName">Select a Group</h3>
+            <button class="btn btn-xs btn-secondary" onclick="showAddMemberModal()">+ Add Member</button>
+          </div>
+          <div id="groupBalances" style="margin-bottom: 24px;">
+            <!-- Balances rendered here -->
+          </div>
+          <div class="divider"></div>
+          <div class="section-card-header">
+            <h3>Shared Expenses</h3>
+            <button class="btn btn-xs btn-primary" onclick="showAddSharedExpenseModal()">Add Expense</button>
+          </div>
+          <div id="groupExpenseList" class="tx-list">
+            <!-- Group expenses rendered here -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── BILL UPLOAD PANEL ── -->
+    <section id="upload" class="tab-panel">
+      <div class="page-header">
+        <h2>Bill Upload</h2>
+        <p class="page-sub">Scan receipts with OCR — auto-fill entries</p>
+      </div>
+      <div class="section-card form-card">
+        <div id="uploadError"   class="alert alert-error"   style="display:none"></div>
+        <div id="uploadSuccess" class="alert alert-success" style="display:none"></div>
+        <form id="billUploadForm" novalidate>
+          <div class="field">
+            <label for="billFile">Receipt / Invoice</label>
+            <input id="billFile" type="file" name="file" accept="image/*,application/pdf">
+            <span class="field-hint">PNG, JPG, or PDF. OCR extracts amount, merchant, and category.</span>
+          </div>
+          <button type="submit" class="btn btn-primary">Process Bill</button>
+        </form>
+        <div id="ocrResults" class="ocr-panel" style="display:none">
+          <h3>Detected Information</h3>
+          <div class="alert alert-info">Review and confirm the extracted data before saving.</div>
+          <div class="form-row">
+            <div class="field"><label for="ocrName">Name</label><input id="ocrName" type="text"></div>
+            <div class="field"><label for="ocrAmount">Amount</label><input id="ocrAmount" type="text"></div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="ocrType">Type</label>
+              <select id="ocrType"><option value="EXPENSE">Expense</option><option value="INCOME">Income</option></select>
+            </div>
+            <div class="field"><label for="ocrCategory">Category</label><input id="ocrCategory" type="text"></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label for="ocrCurrency">Currency</label><input id="ocrCurrency" type="text"></div>
+            <div class="field"><label for="ocrDescription">Description</label><input id="ocrDescription" type="text"></div>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button id="confirmOcrEntry" class="btn btn-primary">✓ Confirm & Save</button>
+            <button type="button" onclick="document.getElementById('ocrResults').style.display='none'" class="btn btn-secondary">Discard</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+  <!-- ── MODALS ── -->
+  <div id="createGroupModal" class="loading-overlay" style="background: rgba(0,0,0,.4)">
+    <div class="section-card form-card">
+      <div class="section-card-header"><h3>Create New Group</h3></div>
+      <form id="createGroupForm">
+        <div class="field">
+          <label>Group Name</label>
+          <input type="text" name="name" placeholder="e.g. Trip to Goa, Flatmates" required>
+        </div>
+        <div class="field">
+          <label>Description <span class="optional">(Optional)</span></label>
+          <input type="text" name="description" placeholder="What is this group for?">
+        </div>
+        <div class="field">
+          <label>Base Currency</label>
+          <select name="currency">
+            <option value="INR">INR (₹)</option>
+            <option value="USD">USD ($)</option>
+          </select>
+        </div>
+        <div class="divider"></div>
+        <div class="topbar-actions">
+          <button type="button" class="btn btn-secondary" onclick="hideModal('createGroupModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Group</button>
+        </div>
+      </form>
     </div>
+  </div>
 
-    <!-- Main Dashboard -->
-    <div id="dashboardScreen" class="screen">
-        <header class="header">
-            <div class="header-content">
-                <h1>Financial Dashboard</h1>
-                <div class="user-info">
-                    <span id="userEmail"></span>
-                    <button id="logoutBtn" class="btn btn-secondary">Logout</button>
-                </div>
-            </div>
-        </header>
-
-        <nav class="nav-tabs">
-            <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
-            <button class="nav-tab" data-tab="add-entry">Add Entry</button>
-            <button class="nav-tab" data-tab="upload-bill">Upload Bill</button>
-            <button class="nav-tab" data-tab="analytics">Analytics</button>
-        </nav>
-
-        <main class="main-content">
-            <!-- Dashboard Tab -->
-            <div id="dashboard" class="tab-content active">
-                <div class="dashboard-grid">
-                    <div class="card">
-                        <h3>Recent Transactions</h3>
-                        <div id="recentTransactions" class="transaction-list">
-                            <!-- Recent transactions will be loaded here -->
-                        </div>
-                    </div>
-                    <div class="card">
-                        <h3>Quick Stats</h3>
-                        <div class="stats-grid">
-                            <div class="stat-item">
-                                <span class="stat-label">Total Income</span>
-                                <span id="totalIncome" class="stat-value income">₹0</span>
-                            </div>
-                            <div class="stat-item">
-                                <span class="stat-label">Total Expenses</span>
-                                <span id="totalExpenses" class="stat-value expense">₹0</span>
-                            </div>
-                            <div class="stat-item">
-                                <span class="stat-label">Net Balance</span>
-                                <span id="netBalance" class="stat-value">₹0</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Add Entry Tab -->
-            <div id="add-entry" class="tab-content">
-                <div class="form-container">
-                    <h2>Add New Entry</h2>
-                    <form id="entryForm">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="entryName">Name *</label>
-                                <input type="text" id="entryName" name="name" required maxlength="100">
-                            </div>
-                            <div class="form-group">
-                                <label for="entryAmount">Amount *</label>
-                                <input type="number" id="entryAmount" name="amount" step="0.01" min="0.01" required>
-                            </div>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="entryType">Transaction Type *</label>
-                                <select id="entryType" name="type" required>
-                                    <option value="">Select Type</option>
-                                    <option value="INCOME">Income</option>
-                                    <option value="EXPENSE">Expense</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="entryCurrency">Currency *</label>
-                                <select id="entryCurrency" name="currency" required>
-                                    <option value="INR">INR (₹)</option>
-                                    <option value="USD">USD ($)</option>
-                                    <option value="EUR">EUR (€)</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="form-group" id="categoryGroup">
-                            <label id="categoryLabel">Category *</label>
-                            <select id="entryCategory" name="category" required>
-                                <option value="">Select Category</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="entryDescription">Description</label>
-                            <textarea id="entryDescription" name="description" maxlength="500" rows="3"></textarea>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary">Add Entry</button>
-                    </form>
-                    <div id="entryError" class="error-message"></div>
-                    <div id="entrySuccess" class="success-message"></div>
-                </div>
-            </div>
-
-            <!-- Upload Bill Tab -->
-            <div id="upload-bill" class="tab-content">
-                <div class="form-container">
-                    <h2>Upload Bill for OCR Processing</h2>
-                    <form id="billUploadForm" enctype="multipart/form-data">
-                        <div class="form-group">
-                            <label for="billFile">Select Bill (Image or PDF) *</label>
-                            <input type="file" id="billFile" name="file" accept="image/*,.pdf" required>
-                            <div class="file-info">
-                                <p>Supported formats: PNG, JPG, PDF</p>
-                                <p>Maximum file size: 10MB</p>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Process Bill</button>
-                    </form>
-                    <div id="uploadError" class="error-message"></div>
-                    <div id="uploadSuccess" class="success-message"></div>
-                    
-                    <!-- OCR Results -->
-                    <div id="ocrResults" class="ocr-results" style="display: none;">
-                        <h3>Extracted Information</h3>
-                        <div class="extracted-data">
-                            <div class="form-group">
-                                <label>Name</label>
-                                <input type="text" id="ocrName" readonly>
-                            </div>
-                            <div class="form-group">
-                                <label>Amount</label>
-                                <input type="text" id="ocrAmount" readonly>
-                            </div>
-                            <div class="form-group">
-                                <label>Type</label>
-                                <input type="text" id="ocrType" readonly>
-                            </div>
-                            <div class="form-group">
-                                <label>Category</label>
-                                <input type="text" id="ocrCategory" readonly>
-                            </div>
-                            <div class="form-group">
-                                <label>Currency</label>
-                                <input type="text" id="ocrCurrency" readonly>
-                            </div>
-                            <div class="form-group">
-                                <label>Description</label>
-                                <textarea id="ocrDescription" readonly rows="3"></textarea>
-                            </div>
-                            <button id="confirmOcrEntry" class="btn btn-success">Confirm & Add Entry</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Analytics Tab -->
-            <div id="analytics" class="tab-content">
-                <div class="analytics-container">
-                    <h2>Financial Analytics</h2>
-                    
-                    <div class="analytics-filters">
-                        <div class="filter-group">
-                            <label for="analyticsType">Transaction Type</label>
-                            <select id="analyticsType">
-                                <option value="">All</option>
-                                <option value="INCOME">Income</option>
-                                <option value="EXPENSE">Expense</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label for="timelineType">Timeline</label>
-                            <select id="timelineType">
-                                <option value="MONTHLY">Monthly</option>
-                                <option value="DAILY">Daily</option>
-                                <option value="YEARLY">Yearly</option>
-                            </select>
-                        </div>
-                        <div class="filter-group">
-                            <label for="startDate">Start Date</label>
-                            <input type="date" id="startDate">
-                        </div>
-                        <div class="filter-group">
-                            <label for="endDate">End Date</label>
-                            <input type="date" id="endDate">
-                        </div>
-                        <button id="applyFilters" class="btn btn-primary">Apply Filters</button>
-                    </div>
-
-                    <div class="charts-container">
-                        <div class="chart-card">
-                            <h3>Category Distribution</h3>
-                            <canvas id="categoryChart"></canvas>
-                        </div>
-                        <div class="chart-card">
-                            <h3>Timeline Analysis</h3>
-                            <canvas id="timelineChart"></canvas>
-                        </div>
-                    </div>
-
-                    <div class="comprehensive-stats">
-                        <h3>Comprehensive Statistics</h3>
-                        <div id="comprehensiveStats" class="stats-grid">
-                            <!-- Comprehensive stats will be loaded here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
+  <div id="addMemberModal" class="loading-overlay" style="background: rgba(0,0,0,.4)">
+    <div class="section-card form-card">
+      <div class="section-card-header"><h3>Add Member</h3></div>
+      <form id="addMemberForm">
+        <div class="alert alert-info" style="font-size: 11px;">Note: Members must be added for collective splitting.</div>
+        <div class="field">
+          <label>User Name / Display Name</label>
+          <input type="text" name="name" placeholder="e.g. John Doe" required>
+        </div>
+        <div class="field">
+          <label>User ID <span class="optional">(Optional - defaults to UUID)</span></label>
+          <input type="text" name="userId" placeholder="Leave empty for guest member">
+        </div>
+        <div class="divider"></div>
+        <div class="topbar-actions">
+          <button type="button" class="btn btn-secondary" onclick="hideModal('addMemberModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Member</button>
+        </div>
+      </form>
     </div>
+  </div>
 
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay" class="loading-overlay">
-        <div class="loading-spinner"></div>
-        <p>Processing...</p>
+  <div id="addSharedExpenseModal" class="loading-overlay" style="background: rgba(0,0,0,.4)">
+    <div class="section-card form-card" style="max-width: 500px;">
+      <div class="section-card-header"><h3>Add Shared Expense</h3></div>
+      <form id="sharedExpenseForm">
+        <div class="field">
+          <label>Description</label>
+          <input type="text" name="description" placeholder="e.g. Dinner, Rent" required>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>Amount</label>
+            <input type="number" name="amount" step="0.01" required>
+          </div>
+          <div class="field">
+            <label>Paid By</label>
+            <select name="paidBy" id="expensePayerSelect" required>
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Split Type</label>
+          <select name="splitType" id="splitTypeSelect">
+            <option value="EQUAL">Split Equally</option>
+            <option value="PERCENTAGE">By Percentage</option>
+            <option value="EXACT">By Exact Amount</option>
+          </select>
+        </div>
+        <div id="splitDetailsArea" style="margin-top: 10px;">
+          <!-- Dynamic split details based on type -->
+        </div>
+        <div class="divider"></div>
+        <div class="topbar-actions">
+          <button type="button" class="btn btn-secondary" onclick="hideModal('addSharedExpenseModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Expense</button>
+        </div>
+      </form>
     </div>
+  </div>
 
-    <script src="script.js"></script>
+  <div id="loadingOverlay" class="loading-overlay"><div class="spinner"></div></div>
+<script src="script.js"></script>
 </body>
 </html>

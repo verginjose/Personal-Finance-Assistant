@@ -8,12 +8,6 @@ import com.finance.analytics.model.IncomeCategory;
 import com.finance.analytics.model.TransactionEntry;
 import com.finance.analytics.model.TransactionType;
 import com.finance.analytics.repository.TransactionEntryRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -21,27 +15,22 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @Transactional(readOnly = true)
+@RequiredArgsConstructor
 public class AnalyticsService {
 
     private final TransactionEntryRepository repository;
-
-    // Color palettes for charts
-    private final List<String> PIE_CHART_COLORS = Arrays.asList(
-            "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF",
-            "#FF9F40", "#FF6384", "#C9CBCF", "#4BC0C0", "#FF6384"
-    );
-
-    private final List<String> LINE_CHART_COLORS = Arrays.asList(
-            "#36A2EB", "#FF6384", "#4BC0C0"
-    );
-
-    @Autowired
-    public AnalyticsService(TransactionEntryRepository repository) {
-        this.repository = repository;
-    }
 
     public ChartData getCategoryAnalytics(AnalyticsRequest request) {
         List<Object[]> results = getCategoryAnalyticsResults(request);
@@ -49,17 +38,15 @@ public class AnalyticsService {
         List<CategoryAnalytics> categoryData = new ArrayList<>();
         BigDecimal totalAmount = BigDecimal.ZERO;
 
-        // Process results
         for (Object[] result : results) {
             String category = result[0] != null ? result[0].toString() : "Unknown";
             BigDecimal amount = (BigDecimal) result[1];
-            Long count = ((Number) result[2]).longValue(); // Handle potential Integer/Long conversion
+            Long count = ((Number) result[2]).longValue();
 
             categoryData.add(new CategoryAnalytics(category, amount, count));
             totalAmount = totalAmount.add(amount);
         }
 
-        // Calculate percentages
         for (CategoryAnalytics data : categoryData) {
             if (totalAmount.compareTo(BigDecimal.ZERO) > 0) {
                 double percentage = data.getTotalAmount()
@@ -70,7 +57,6 @@ public class AnalyticsService {
             }
         }
 
-        // Create chart data
         List<String> labels = categoryData.stream()
                 .map(CategoryAnalytics::getCategory)
                 .collect(Collectors.toList());
@@ -84,10 +70,8 @@ public class AnalyticsService {
             title = request.getTransactionFilter().toString() + " Category Distribution";
         }
 
-        ChartData.DataSet dataset = new ChartData.DataSet(
-                "Amount", amounts, PIE_CHART_COLORS.subList(0, Math.min(labels.size(), PIE_CHART_COLORS.size()))
-        );
-
+        // Return raw data only — frontend handles colors
+        ChartData.DataSet dataset = new ChartData.DataSet("Amount", amounts, null);
         return new ChartData("pie", title, labels, List.of(dataset));
     }
 
@@ -98,7 +82,6 @@ public class AnalyticsService {
         LocalDateTime startDate = request.getStartDate();
         LocalDateTime endDate = request.getEndDate();
 
-        // Use appropriate repository method based on parameters
         if (transactionType != null && startDate != null && endDate != null) {
             return repository.getCategoryAnalyticsByTypeAndDateRange(userId, transactionType, startDate, endDate);
         } else if (transactionType != null) {
@@ -152,8 +135,7 @@ public class AnalyticsService {
                     TimelineAnalytics analytics = new TimelineAnalytics(
                             date.format(DateTimeFormatter.ISO_LOCAL_DATE),
                             date.atStartOfDay(),
-                            date.atTime(23, 59, 59)
-                    );
+                            date.atTime(23, 59, 59));
                     analytics.setIncomeAmount(income != null ? income : BigDecimal.ZERO);
                     analytics.setExpenseAmount(expense != null ? expense : BigDecimal.ZERO);
                     analytics.setTotalTransactions(count);
@@ -173,7 +155,6 @@ public class AnalyticsService {
 
         return results.stream()
                 .map(result -> {
-                    // Handle potential Double/Integer conversion from EXTRACT function
                     int year = ((Number) result[0]).intValue();
                     int month = ((Number) result[1]).intValue();
                     BigDecimal income = (BigDecimal) result[2];
@@ -184,12 +165,13 @@ public class AnalyticsService {
                     LocalDateTime periodStart = LocalDateTime.of(year, month, 1, 0, 0);
                     LocalDateTime periodEnd = periodStart.plusMonths(1).minusSeconds(1);
 
-                    return getTimelineAnalytics(income, expense, count, timePeriod, periodStart, periodEnd);
+                    return buildTimelineAnalytics(income, expense, count, timePeriod, periodStart, periodEnd);
                 })
                 .collect(Collectors.toList());
     }
 
-    private TimelineAnalytics getTimelineAnalytics(BigDecimal income, BigDecimal expense, Long count, String timePeriod, LocalDateTime periodStart, LocalDateTime periodEnd) {
+    private TimelineAnalytics buildTimelineAnalytics(BigDecimal income, BigDecimal expense, Long count,
+                                                     String timePeriod, LocalDateTime periodStart, LocalDateTime periodEnd) {
         TimelineAnalytics analytics = new TimelineAnalytics(timePeriod, periodStart, periodEnd);
         analytics.setIncomeAmount(income != null ? income : BigDecimal.ZERO);
         analytics.setExpenseAmount(expense != null ? expense : BigDecimal.ZERO);
@@ -217,7 +199,7 @@ public class AnalyticsService {
                     LocalDateTime periodStart = LocalDateTime.of(year, 1, 1, 0, 0);
                     LocalDateTime periodEnd = LocalDateTime.of(year, 12, 31, 23, 59, 59);
 
-                    return getTimelineAnalytics(income, expense, count, timePeriod, periodStart, periodEnd);
+                    return buildTimelineAnalytics(income, expense, count, timePeriod, periodStart, periodEnd);
                 }).collect(Collectors.toList());
     }
 
@@ -232,33 +214,22 @@ public class AnalyticsService {
             List<Double> incomeData = timelineData.stream()
                     .map(data -> data.getIncomeAmount().doubleValue())
                     .collect(Collectors.toList());
-
-            datasets.add(new ChartData.DataSet("Income", incomeData, List.of("#36A2EB")));
+            datasets.add(new ChartData.DataSet("Income", incomeData, null));
         }
 
         if (filter == null || filter == TransactionType.EXPENSE) {
             List<Double> expenseData = timelineData.stream()
                     .map(data -> data.getExpenseAmount().doubleValue())
                     .collect(Collectors.toList());
-
-            datasets.add(new ChartData.DataSet("Expense", expenseData, List.of("#FF6384")));
-        }
-
-        if (filter == null) {
-            List<Double> netData = timelineData.stream()
-                    .map(data -> data.getNetAmount().doubleValue())
-                    .collect(Collectors.toList());
-
-            datasets.add(new ChartData.DataSet("Net Amount", netData, List.of("#4BC0C0")));
+            datasets.add(new ChartData.DataSet("Expense", expenseData, null));
         }
 
         return new ChartData("line", title, labels, datasets);
     }
 
     public Map<String, Object> getComprehensiveAnalytics(AnalyticsRequest request) {
-        Map<String, Object> analytics = new HashMap<>();
+        Map<String, Object> analytics = new LinkedHashMap<>();
 
-        // Get summary statistics
         BigDecimal totalIncome = getTotalAmountByType(request, TransactionType.INCOME);
         BigDecimal totalExpense = getTotalAmountByType(request, TransactionType.EXPENSE);
 
@@ -266,10 +237,9 @@ public class AnalyticsService {
         analytics.put("totalExpense", totalExpense != null ? totalExpense : BigDecimal.ZERO);
         analytics.put("netAmount",
                 (totalIncome != null ? totalIncome : BigDecimal.ZERO)
-                        .subtract(totalExpense != null ? totalExpense : BigDecimal.ZERO)
-        );
+                        .subtract(totalExpense != null ? totalExpense : BigDecimal.ZERO));
 
-        // Get category charts
+        // Category charts
         AnalyticsRequest incomeRequest = new AnalyticsRequest();
         incomeRequest.setUserId(request.getUserId());
         incomeRequest.setTransactionFilter(TransactionType.INCOME);
@@ -285,7 +255,7 @@ public class AnalyticsService {
         analytics.put("incomeByCategory", getCategoryAnalytics(incomeRequest));
         analytics.put("expenseByCategory", getCategoryAnalytics(expenseRequest));
 
-        // Get timeline chart
+        // Timeline chart
         AnalyticsRequest timelineRequest = new AnalyticsRequest();
         timelineRequest.setUserId(request.getUserId());
         timelineRequest.setStartDate(request.getStartDate());
@@ -293,6 +263,15 @@ public class AnalyticsService {
         timelineRequest.setTimelineType(request.getTimelineType());
 
         analytics.put("timelineTrends", getTimelineAnalytics(timelineRequest));
+
+        // Recent transactions
+        Page<TransactionEntry> recentPage = repository.findByUserId(
+                request.getUserId(),
+                PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "createdAt")));
+        analytics.put("recentTransactions", recentPage.getContent());
+
+        // Transaction count
+        analytics.put("transactionCount", recentPage.getTotalElements());
 
         return analytics;
     }
@@ -309,37 +288,22 @@ public class AnalyticsService {
             return repository.getTotalAmountByType(userId, typeString);
         }
     }
+
     public Page<TransactionEntry> getTransactionEntriesByUserId(UUID userId, Pageable pageable) {
         return repository.findByUserId(userId, pageable);
     }
+
     public Page<TransactionEntry> findIncomeByCategoryAndDate(
-            UUID userId,
-            IncomeCategory incomeCategory,
-            LocalDateTime start,
-            LocalDateTime end,
-            Pageable pageable) {
-
+            UUID userId, IncomeCategory incomeCategory,
+            LocalDateTime start, LocalDateTime end, Pageable pageable) {
         return repository.findByUserIdAndIncomeCategoryAndCreatedAtBetween(
-                userId,
-                incomeCategory,
-                start,
-                end,
-                pageable
-        );
+                userId, incomeCategory, start, end, pageable);
     }
-    public Page<TransactionEntry> findTransactionsByTypeAndDate(
-            UUID userId,
-            TransactionType type,
-            LocalDateTime start,
-            LocalDateTime end,
-            Pageable pageable) {
 
+    public Page<TransactionEntry> findTransactionsByTypeAndDate(
+            UUID userId, TransactionType type,
+            LocalDateTime start, LocalDateTime end, Pageable pageable) {
         return repository.findByUserIdAndTypeAndCreatedAtBetween(
-                userId,
-                type,
-                start,
-                end,
-                pageable
-        );
+                userId, type, start, end, pageable);
     }
 }

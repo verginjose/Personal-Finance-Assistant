@@ -4,10 +4,13 @@ import com.upsertservice.model.ExpenseCategory;
 import com.upsertservice.model.IncomeCategory;
 import com.upsertservice.model.TransactionType;
 import jakarta.validation.constraints.*;
-
 import java.math.BigDecimal;
 import java.util.UUID;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
+@Data
+@NoArgsConstructor
 public class CreateEntryRequest {
 
     @NotNull(message = "User ID is required")
@@ -26,7 +29,6 @@ public class CreateEntryRequest {
     private TransactionType type;
 
     private ExpenseCategory expenseCategory;
-
     private IncomeCategory incomeCategory;
 
     @NotBlank(message = "Currency is required")
@@ -35,33 +37,4 @@ public class CreateEntryRequest {
 
     @Size(max = 500, message = "Description cannot exceed 500 characters")
     private String description;
-
-    // Constructors
-    public CreateEntryRequest() {}
-
-    // Getters and Setters
-    public UUID getUserId() { return userId; }
-    public void setUserId(UUID userId) { this.userId = userId; }
-
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-
-    public BigDecimal getAmount() { return amount; }
-    public void setAmount(BigDecimal amount) { this.amount = amount; }
-
-    public TransactionType getType() { return type; }
-    public void setType(TransactionType type) { this.type = type; }
-
-    public ExpenseCategory getExpenseCategory() { return expenseCategory; }
-    public void setExpenseCategory(ExpenseCategory expenseCategory) { this.expenseCategory = expenseCategory; }
-
-    public IncomeCategory getIncomeCategory() { return incomeCategory; }
-    public void setIncomeCategory(IncomeCategory incomeCategory) { this.incomeCategory = incomeCategory; }
-
-    public String getCurrency() { return currency; }
-    public void setCurrency(String currency) { this.currency = currency; }
-
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
 }
-

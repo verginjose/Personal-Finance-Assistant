@@ -133,6 +133,20 @@ services:
     networks:
       - finance-network
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "8000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+    depends_on:
+      - api-gateway
+    networks:
+      - finance-network
+
 volumes:
   postgres_upsert_data:
   postgres_auth_data:

@@ -10,9 +10,11 @@ import java.security.Key;
 import java.util.Base64;
 import java.util.Date;
 import javax.crypto.SecretKey;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 public class JwtUtil {
 
@@ -27,23 +29,18 @@ public class JwtUtil {
 
   private Key createSecretKey(String secret) {
     try {
-      // Try to decode as Base64 first
       byte[] decodedKey = Base64.getDecoder().decode(secret);
-      // Check if decoded key is long enough (minimum 32 bytes for HS256)
       if (decodedKey.length >= 32) {
         return Keys.hmacShaKeyFor(decodedKey);
       } else {
-        // If too short, treat as plain text
         return createKeyFromPlainText(secret);
       }
     } catch (IllegalArgumentException e) {
-      // If Base64 decoding fails, treat as plain text
       return createKeyFromPlainText(secret);
     }
   }
 
   private Key createKeyFromPlainText(String secret) {
-    // Ensure minimum length for HS256 (32 bytes)
     if (secret.length() < 32) {
       secret = secret + "0".repeat(32 - secret.length());
     }
@@ -68,10 +65,10 @@ public class JwtUtil {
               .parseSignedClaims(token);
       return true;
     } catch (SignatureException e) {
-      System.err.println("Invalid JWT signature: " + e.getMessage());
+      log.warn("Invalid JWT signature: {}", e.getMessage());
       return false;
     } catch (JwtException e) {
-      System.err.println("Invalid JWT: " + e.getMessage());
+      log.warn("Invalid JWT: {}", e.getMessage());
       return false;
     }
   }

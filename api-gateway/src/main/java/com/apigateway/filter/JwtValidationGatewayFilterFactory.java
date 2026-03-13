@@ -10,9 +10,13 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Component
 public class JwtValidationGatewayFilterFactory extends AbstractGatewayFilterFactory<JwtValidationGatewayFilterFactory.Config> {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtValidationGatewayFilterFactory.class);
 
     private final WebClient webClient;
 
@@ -30,7 +34,8 @@ public class JwtValidationGatewayFilterFactory extends AbstractGatewayFilterFact
             String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
 
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return onError(exchange, "Missing or invalid Authorization header", HttpStatus.UNAUTHORIZED);
+                log.warn("Missing or invalid Authorization header from {}", exchange.getRequest().getRemoteAddress());
+                return onError(exchange, HttpStatus.UNAUTHORIZED);
             }
 
             String token = authHeader.substring(7);
@@ -40,21 +45,24 @@ public class JwtValidationGatewayFilterFactory extends AbstractGatewayFilterFact
                         if (isValid) {
                             return chain.filter(exchange);
                         } else {
-                            return onError(exchange, "Invalid token", HttpStatus.UNAUTHORIZED);
+                            log.warn("Invalid token for request: {}", exchange.getRequest().getPath());
+                            return onError(exchange, HttpStatus.UNAUTHORIZED);
                         }
                     })
                     .onErrorResume(throwable -> {
                         if (throwable instanceof WebClientResponseException.Unauthorized) {
-                            return onError(exchange, "Token validation failed", HttpStatus.UNAUTHORIZED);
+                            log.warn("Token validation returned 401");
+                            return onError(exchange, HttpStatus.UNAUTHORIZED);
                         }
-                        return onError(exchange, "Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
+                        log.error("Token validation error", throwable);
+                        return onError(exchange, HttpStatus.INTERNAL_SERVER_ERROR);
                     });
         };
     }
 
     private Mono<Boolean> validateToken(String token) {
         return webClient.get()
-                .uri(authServiceUrl + "/auth/validate")  // Changed from "/api/auth/validate" to "/auth/validate"
+                .uri(authServiceUrl + "/auth/validate")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve()
                 .toBodilessEntity()
@@ -62,12 +70,11 @@ public class JwtValidationGatewayFilterFactory extends AbstractGatewayFilterFact
                 .onErrorReturn(false);
     }
 
-    private Mono<Void> onError(ServerWebExchange exchange, String err, HttpStatus httpStatus) {
+    private Mono<Void> onError(ServerWebExchange exchange, HttpStatus httpStatus) {
         exchange.getResponse().setStatusCode(httpStatus);
         return exchange.getResponse().setComplete();
     }
 
     public static class Config {
-        // Configuration properties if needed
     }
 }

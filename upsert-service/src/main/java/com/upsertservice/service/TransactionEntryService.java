@@ -3,135 +3,115 @@ package com.upsertservice.service;
 import com.upsertservice.dto.CreateEntryRequest;
 import com.upsertservice.dto.CreateEntryResponse;
 import com.upsertservice.dto.UpdateEntryRequest;
-import com.upsertservice.model.ExpenseCategory;
-import com.upsertservice.model.IncomeCategory;
 import com.upsertservice.model.TransactionEntry;
 import com.upsertservice.model.TransactionType;
 import com.upsertservice.repository.TransactionEntryRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
-
+@Slf4j
 @Service
 @Transactional
+@RequiredArgsConstructor
 public class TransactionEntryService {
 
     private final TransactionEntryRepository repository;
 
-    @Autowired
-    public TransactionEntryService(TransactionEntryRepository repository) {
-        this.repository = repository;
-    }
-
     public CreateEntryResponse createEntry(CreateEntryRequest request) {
-        // Validate category consistency
-        validateCategoryConsistency(request.getType(),
-                request.getExpenseCategory(), request.getIncomeCategory());
-
-        // Create new transaction entry
         TransactionEntry entry = new TransactionEntry(
-                request.getUserId(),
-                request.getName(),
-                request.getAmount(),
-                request.getType(),
-                request.getCurrency()
+                request.getUserId(), request.getName(),
+                request.getAmount(), request.getType(), request.getCurrency()
         );
-
-        // Set appropriate category based on type
         if (request.getType() == TransactionType.EXPENSE) {
             entry.setExpenseCategory(request.getExpenseCategory());
         } else {
             entry.setIncomeCategory(request.getIncomeCategory());
         }
-
         entry.setDescription(request.getDescription());
-
-        // Save to database
-        TransactionEntry savedEntry = repository.save(entry);
-
-        // Convert to response DTO
-
-        return convertToResponse(savedEntry);
+        TransactionEntry saved = repository.save(entry);
+        log.info("Transaction created: id={}, user={}", saved.getId(), saved.getUserId());
+        return convertToResponse(saved);
     }
 
     public CreateEntryResponse updateEntry(UpdateEntryRequest request) {
-        // Validate category consistency
-        validateCategoryConsistency(request.getType(),
-                request.getExpenseCategory(), request.getIncomeCategory());
-
-        // Find existing entry
-        Optional<TransactionEntry> existingEntryOpt = repository.findById(request.getId());
-        if (existingEntryOpt.isEmpty()) {
-            throw new IllegalArgumentException("Transaction entry with ID " + request.getId() + " not found");
+        TransactionEntry existing = repository.findById(request.getId())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Transaction entry with ID " + request.getId() + " not found"));
+        if (!existing.getUserId().equals(request.getUserId())) {
+            throw new SecurityException("User is not authorized to update this transaction");
         }
-
-        TransactionEntry existingEntry = existingEntryOpt.get();
-
-        // Verify user ownership
-        if (!existingEntry.getUserId().equals(request.getUserId())) {
-            throw new IllegalArgumentException("User is not authorized to update this transaction");
-        }
-
-        // Update fields
-        existingEntry.setName(request.getName());
-        existingEntry.setAmount(request.getAmount());
-        existingEntry.setType(request.getType());
-        existingEntry.setCurrency(request.getCurrency());
-        existingEntry.setDescription(request.getDescription());
-
-        // Clear both categories first, then set the appropriate one
-        existingEntry.setExpenseCategory(null);
-        existingEntry.setIncomeCategory(null);
-
+        existing.setName(request.getName());
+        existing.setAmount(request.getAmount());
+        existing.setType(request.getType());
+        existing.setCurrency(request.getCurrency());
+        existing.setDescription(request.getDescription());
+        existing.setExpenseCategory(null);
+        existing.setIncomeCategory(null);
         if (request.getType() == TransactionType.EXPENSE) {
-            existingEntry.setExpenseCategory(request.getExpenseCategory());
+            existing.setExpenseCategory(request.getExpenseCategory());
         } else {
-            existingEntry.setIncomeCategory(request.getIncomeCategory());
+            existing.setIncomeCategory(request.getIncomeCategory());
         }
-
-        // Save updated entry
-        TransactionEntry updatedEntry = repository.save(existingEntry);
-
-        // Convert to response DTO
-        return convertToResponse(updatedEntry);
+        TransactionEntry updated = repository.save(existing);
+        log.info("Transaction updated: id={}", updated.getId());
+        return convertToResponse(updated);
     }
 
-    private void validateCategoryConsistency(TransactionType type,
-                                             ExpenseCategory expenseCategory,
-                                             IncomeCategory incomeCategory) {
-
-        if (type == TransactionType.EXPENSE) {
-            if (expenseCategory == null) {
-                throw new IllegalArgumentException("Expense category is required for expense transactions");
-            }
-            if (incomeCategory != null) {
-                throw new IllegalArgumentException("Income category should not be provided for expense transactions");
-            }
-        } else if (type == TransactionType.INCOME) {
-            if (incomeCategory == null) {
-                throw new IllegalArgumentException("Income category is required for income transactions");
-            }
-            if (expenseCategory != null) {
-                throw new IllegalArgumentException("Expense category should not be provided for income transactions");
-            }
+    public void deleteEntry(Long id, UUID userId) {
+        TransactionEntry entry = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Transaction entry with ID " + id + " not found"));
+        if (!entry.getUserId().equals(userId)) {
+            throw new SecurityException("User is not authorized to delete this transaction");
         }
+        repository.delete(entry);
+        log.info("Transaction deleted: id={}, user={}", id, userId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TransactionEntry> getEntriesByUserId(UUID userId, TransactionType type, int page, int size) {
+        PageRequest pr = PageRequest.of(page, size);
+        if (type != null) {
+            return repository.findByUserIdAndTypeOrderByCreatedAtDesc(userId, type, pr);
+        }
+        return repository.findByUserIdOrderByCreatedAtDesc(userId, pr);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TransactionEntry> searchEntries(UUID userId, String query, int page, int size) {
+        return repository.searchByUserId(userId, query, PageRequest.of(page, size));
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getSummary(UUID userId) {
+        List<TransactionEntry> all = repository.findByUserIdOrderByCreatedAtDesc(userId);
+        BigDecimal income  = all.stream().filter(e -> e.getType() == TransactionType.INCOME)
+                .map(TransactionEntry::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal expense = all.stream().filter(e -> e.getType() == TransactionType.EXPENSE)
+                .map(TransactionEntry::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("totalIncome",  income);
+        summary.put("totalExpense", expense);
+        summary.put("netBalance",   income.subtract(expense));
+        summary.put("totalCount",   all.size());
+        return summary;
     }
 
     private CreateEntryResponse convertToResponse(TransactionEntry entry) {
         return new CreateEntryResponse(
-                entry.getId(),
-                entry.getUserId(),
-                entry.getName(),
-                entry.getAmount(),
-                entry.getType(),
-                entry.getExpenseCategory(),
-                entry.getIncomeCategory(),
-                entry.getCurrency(),
-                entry.getDescription(),
-                entry.getCreatedAt(),
-                entry.getUpdatedAt()
+                entry.getId(), entry.getUserId(), entry.getName(), entry.getAmount(),
+                entry.getType(), entry.getExpenseCategory(), entry.getIncomeCategory(),
+                entry.getCurrency(), entry.getDescription(),
+                entry.getCreatedAt(), entry.getUpdatedAt()
         );
     }
 }

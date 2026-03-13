@@ -48,8 +48,16 @@ public class BillOcrService {
         else {
                 extractedText = extractTextFromImage(file);
         }
+        
+        logger.info("Raw extracted text: [{}]", extractedText);
+
+        if (extractedText == null || extractedText.isBlank() || extractedText.length() < 10) {
+            logger.warn("Extracted text is too short or empty. Skipping Gemini processing.");
+            return createEntryResponse;
+        }
+
         try {
-             ProcessedFinancialDocument result =financialDocumentProcessor.processDocumentAndConvert(new DocumentInput(userId, extractedText));
+             ProcessedFinancialDocument result = financialDocumentProcessor.processDocumentAndConvert(new DocumentInput(userId, extractedText));
 
             FinancialDocument doc = result.originalData();
             createEntryResponse = new CreateEntryResponse(
@@ -61,9 +69,10 @@ public class BillOcrService {
                     doc.incomeCategory() != null ? doc.incomeCategory().name() : null,
                     doc.currency(),
                     doc.description()
-            );        }
+            );
+        }
         catch (Exception e) {
-            logger.error(e.getMessage());
+            logger.error("Gemini processing failed: {}", e.getMessage(), e);
         }
         return createEntryResponse;
     }

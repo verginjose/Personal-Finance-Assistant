@@ -29,7 +29,7 @@
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
       <module name="analytics-service" options="-parameters" />
-      <module name="api-gateway" options="-parameters" />
+      <module name="api-gateway" options="" />
       <module name="finance-service" options="-parameters" />
       <module name="ocr-parser-service" options="-parameters --add-opens jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED" />
       <module name="upsert-service" options="-parameters" />

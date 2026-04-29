@@ -10,7 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "transaction_entries")
+@Table(name = "transaction_entries", schema = "finance")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -62,6 +62,9 @@ public class TransactionEntry {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @PrePersist
     protected void onCreate() {

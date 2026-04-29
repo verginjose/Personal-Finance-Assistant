@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dev Console — Finance Assistant</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="dev.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="dev-shell">
+  <aside class="dev-sidebar">
+    <div class="dev-brand">
+      <div class="dev-brand-icon">⚙</div>
+      <div>
+        <div class="dev-brand-title">Dev Console</div>
+        <div class="dev-brand-sub">Finance Assistant</div>
+      </div>
+    </div>
+
+    <nav class="dev-nav">
+      <div class="dev-nav-section">SYSTEM</div>
+      <button class="dev-nav-item active" data-panel="health">
+        <span class="nav-icon">🏥</span> Service Health
+      </button>
+      <button class="dev-nav-item" data-panel="logs">
+        <span class="nav-icon">📋</span> Logs per Service
+      </button>
+      <button class="dev-nav-item" data-panel="requests">
+        <span class="nav-icon">📊</span> Request Counts
+      </button>
+
+      <div class="dev-nav-section">DATABASES</div>
+      <button class="dev-nav-item" data-panel="clickhouse">
+        <span class="nav-icon">🔶</span> ClickHouse Console
+      </button>
+      <button class="dev-nav-item" data-panel="postgres">
+        <span class="nav-icon">🐘</span> Postgres Console
+      </button>
+
+      <div class="dev-nav-section">ANALYTICS</div>
+      <button class="dev-nav-item" data-panel="errors">
+        <span class="nav-icon">🚨</span> Error Tracker
+      </button>
+      <button class="dev-nav-item" data-panel="livelogs">
+        <span class="nav-icon">📡</span> Live Log Stream
+      </button>
+      <button class="dev-nav-item" data-panel="tables">
+        <span class="nav-icon">🗃</span> CH Table Explorer
+      </button>
+      <button class="dev-nav-item" data-panel="grafana">
+        <span class="nav-icon">📈</span> Grafana Dashboards
+      </button>
+    </nav>
+
+    <div class="dev-sidebar-footer">
+      <div class="dev-ch-status" id="chConnectionStatus">
+        <span class="status-dot" id="chDot"></span>
+        <span id="chStatusLabel">Connecting…</span>
+      </div>
+      <div class="dev-links">
+        <a href="/dev-health/grafana/" target="_blank">Grafana</a>
+        <a href="/dev-health/prometheus/" target="_blank">Prometheus</a>
+        <a href="/dev-health/clickhouse/play" target="_blank">CH Play</a>
+        <a href="index.html" target="_blank">App →</a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="dev-main">
+
+    <!-- ── HEALTH ── -->
+    <div id="panel-health" class="dev-panel active">
+      <div class="dev-page-header">
+        <div>
+          <h1>Service Health</h1>
+          <p>Live container &amp; service status checks</p>
+        </div>
+        <div class="header-actions">
+          <select id="healthRefreshRate" class="dev-select">
+            <option value="0">Manual</option>
+            <option value="10">Every 10s</option>
+            <option value="30" selected>Every 30s</option>
+            <option value="60">Every 60s</option>
+          </select>
+          <button class="dev-btn dev-btn-primary" onclick="loadHealth()">↺ Refresh</button>
+        </div>
+      </div>
+
+      <div class="health-grid" id="healthGrid">
+        <div class="loading-skeleton"></div>
+      </div>
+
+      <div class="dev-section-title" style="margin-top:28px">Infrastructure Services</div>
+      <div class="health-grid" id="infraGrid">
+        <div class="loading-skeleton"></div>
+      </div>
+    </div>
+
+    <!-- ── LOGS PER SERVICE ── -->
+    <div id="panel-logs" class="dev-panel">
+      <div class="dev-page-header">
+        <div>
+          <h1>Logs per Service</h1>
+          <p>Filter and inspect logs by container from ClickHouse</p>
+        </div>
+        <div class="header-actions">
+          <select id="logsServiceFilter" class="dev-select">
+            <option value="">All Services</option>
+          </select>
+          <select id="logsLevelFilter" class="dev-select">
+            <option value="">All Levels</option>
+            <option value="ERROR">ERROR</option>
+            <option value="WARN">WARN</option>
+            <option value="INFO">INFO</option>
+          </select>
+          <select id="logsTimeFilter" class="dev-select">
+            <option value="1">Last 1h</option>
+            <option value="6">Last 6h</option>
+            <option value="24" selected>Last 24h</option>
+            <option value="168">Last 7d</option>
+          </select>
+          <input id="logsSearch" class="dev-input" type="text" placeholder="Search log text…">
+          <button class="dev-btn dev-btn-primary" onclick="loadServiceLogs()">Search</button>
+        </div>
+      </div>
+
+      <!-- Log volume chart per service -->
+      <div class="dev-card" style="margin-bottom:20px">
+        <div class="dev-card-header">
+          <span>Log Volume by Service (selected window)</span>
+          <span id="logVolumeTotal" class="dev-badge">—</span>
+        </div>
+        <div class="chart-container" style="height:200px">
+          <canvas id="logVolumeChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Logs table -->
+      <div class="dev-card">
+        <div class="dev-card-header">
+          <span>Log Entries</span>
+          <span id="logTableCount" class="dev-badge">0 rows</span>
+        </div>
+        <div class="table-wrap">
+          <table class="dev-table" id="logsTable">
+            <thead>
+              <tr>
+                <th style="width:160px">Timestamp</th>
+                <th style="width:130px">Service</th>
+                <th style="width:60px">Level</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="logsTableBody">
+              <tr><td colspan="4" class="empty-cell">Run a search to view logs</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <button class="dev-btn dev-btn-ghost dev-btn-sm" id="logsPrevBtn" disabled onclick="logsPage--; loadServiceLogs()">← Prev</button>
+          <span id="logsPageInfo" class="dev-badge">Page 1</span>
+          <button class="dev-btn dev-btn-ghost dev-btn-sm" id="logsNextBtn" disabled onclick="logsPage++; loadServiceLogs()">Next →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── REQUEST COUNTS ── -->
+    <div id="panel-requests" class="dev-panel">
+      <div class="dev-page-header">
+        <div>
+          <h1>Request Counts</h1>
+          <p>Log volume by service with error breakdown — derived from container logs</p>
+        </div>
+        <div class="header-actions">
+          <select id="reqTimeFilter" class="dev-select">
+            <option value="1">Last 1h</option>
+            <option value="6">Last 6h</option>
+            <option value="24" selected>Last 24h</option>
+            <option value="168">Last 7d</option>
+          </select>
+          <button class="dev-btn dev-btn-primary" onclick="loadRequestCounts()">↺ Refresh</button>
+        </div>
+      </div>
+
+      <div class="stats-row" id="reqStatRow"></div>
+
+      <div class="dev-two-col">
+        <div class="dev-card">
+          <div class="dev-card-header"><span>Hourly Log Volume Timeline</span></div>
+          <div class="chart-container" style="height:250px">
+            <canvas id="reqTimelineChart"></canvas>
+          </div>
+        </div>
+        <div class="dev-card">
+          <div class="dev-card-header"><span>Logs per Container</span></div>
+          <div class="chart-container" style="height:250px">
+            <canvas id="reqPerServiceChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="dev-card">
+        <div class="dev-card-header"><span>Hourly Rollup Table</span></div>
+        <div class="table-wrap">
+          <table class="dev-table">
+            <thead>
+              <tr><th>Hour</th><th>Service</th><th>Total Logs</th><th>Error Logs</th><th>Error Rate</th><th>Trend</th></tr>
+            </thead>
+            <tbody id="reqRollupBody">
+              <tr><td colspan="6" class="empty-cell">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CLICKHOUSE CONSOLE ── -->
+    <div id="panel-clickhouse" class="dev-panel">
+      <div class="dev-page-header">
+        <div>
+          <h1>ClickHouse Console</h1>
+          <p>Run SQL queries against ClickHouse — results displayed inline</p>
+        </div>
+        <div class="header-actions">
+          <span class="dev-badge" id="chQueryTime">—</span>
+          <button class="dev-btn dev-btn-primary" onclick="runChQuery()" id="chRunBtn">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="dev-card" style="margin-bottom:16px">
+        <div class="dev-card-header">
+          <span>Preset Queries</span>
+        </div>
+        <div class="preset-grid" id="chPresets"></div>
+      </div>
+
+      <div class="dev-card" style="margin-bottom:16px">
+        <div class="dev-card-header">
+          <span>SQL Editor</span>
+          <div style="display:flex;gap:8px">
+            <button class="dev-btn dev-btn-ghost dev-btn-sm" onclick="formatChQuery()">Format</button>
+            <button class="dev-btn dev-btn-ghost dev-btn-sm" onclick="clearChQuery()">Clear</button>
+          </div>
+        </div>
+        <div class="editor-wrap">
+          <textarea id="chQueryEditor" class="dev-editor" spellcheck="false" placeholder="SELECT * FROM observability_logs.container_logs LIMIT 10"></textarea>
+        </div>
+        <div style="padding:8px 16px;display:flex;gap:8px;border-top:1px solid var(--border)">
+          <select id="chFormat" class="dev-select">
+            <option value="JSONCompact">JSONCompact</option>
+            <option value="TabSeparated">TabSeparated</option>
+            <option value="CSV">CSV</option>
+          </select>
+          <button class="dev-btn dev-btn-primary" onclick="runChQuery()">▶ Run Query (Ctrl+Enter)</button>
+          <button class="dev-btn dev-btn-secondary" onclick="exportChResult()">⬇ Export CSV</button>
+        </div>
+      </div>
+
+      <div class="dev-card" id="chResultCard">
+        <div class="dev-card-header">
+          <span>Results</span>
+          <span id="chResultMeta" class="dev-badge">—</span>
+        </div>
+        <div class="table-wrap" id="chResultWrap">
+          <div class="empty-cell" style="padding:32px;text-align:center">Run a query to see results</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── POSTGRES CONSOLE ── -->
+    <div id="panel-postgres" class="dev-panel">
+      <div class="dev-page-header">
+        <div>
+          <h1>Postgres Console</h1>
+          <p>View schema, tables, and run read queries via the analytics service</p>
+        </div>
+        <div class="header-actions">
+          <select id="pgSchemaSelect" class="dev-select" onchange="loadPgTables()">
+            <option value="finance">finance</option>
+            <option value="auth">auth</option>
+            <option value="public">public</option>
+          </select>
+          <button class="dev-btn dev-btn-primary" onclick="runPgQuery()">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="dev-two-col" style="margin-bottom:16px">
+        <!-- Table Browser -->
+        <div class="dev-card">
+          <div class="dev-card-header"><span>Tables</span></div>
+          <div id="pgTableList" class="pg-table-list">
+            <div class="empty-cell">Select a schema</div>
+          </div>
+        </div>
+
+        <!-- Column Inspector -->
+        <div class="dev-card">
+          <div class="dev-card-header">
+            <span>Columns — <span id="pgSelectedTable">none</span></span>
+            <button class="dev-btn dev-btn-ghost dev-btn-sm" onclick="loadPgSelectQuery()">SELECT *</button>
+          </div>
+          <div class="table-wrap">
+            <table class="dev-table">
+              <thead><tr><th>Column</th><th>Type</th><th>Nullable</th></tr></thead>
+              <tbody id="pgColumnBody"><tr><td colspan="3" class="empty-cell">Click a table</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="dev-card" style="margin-bottom:16px">
+        <div class="dev-card-header">
+          <span>Preset Queries</span>
+        </div>
+        <div class="preset-grid" id="pgPresets"></div>
+      </div>
+
+      <div class="dev-card" style="margin-bottom:16px">
+        <div class="dev-card-header">
+          <span>SQL Editor</span>
+          <span class="dev-badge" style="background:rgba(220,38,38,.15);color:#ef4444">Read-Only</span>
+        </div>
+        <div class="editor-wrap">
+          <textarea id="pgQueryEditor" class="dev-editor" spellcheck="false" placeholder="SELECT * FROM finance.entries LIMIT 10"></textarea>
+        </div>
+        <div style="padding:8px 16px;display:flex;gap:8px;border-top:1px solid var(--border)">
+          <button class="dev-btn dev-btn-primary" onclick="runPgQuery()">▶ Run Query</button>
+          <button class="dev-btn dev-btn-secondary" onclick="exportPgResult()">⬇ Export CSV</button>
+        </div>
+      </div>
+
+      <div class="dev-card" id="pgResultCard">
+        <div class="dev-card-header">
+          <span>Results</span>
+          <span id="pgResultMeta" class="dev-badge">—</span>
+        </div>
+        <div class="table-wrap" id="pgResultWrap">
+          <div class="empty-cell" style="padding:32px;text-align:center">Run a query to see results</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ERROR TRACKER ── -->
+    <div id="panel-errors" class="dev-panel">
+      <div class="dev-page-header">
+        <div>
+          <h1>Error Tracker</h1>
+          <p>Errors and exceptions extracted from container logs</p>
+        </div>
+        <div class="header-actions">
+          <select id="errTimeFilter" class="dev-select">
+            <option value="1">Last 1h</option>
+            <option value="6">Last 6h</option>
+            <option value="24" selected>Last 24h</option>
+            <option value="168">Last 7d</option>
+          </select>
+          <select id="errServiceFilter" class="dev-select">
+            <option value="">All Services</option>
+          </select>
+          <button class="dev-btn dev-btn-primary" onclick="loadErrors()">↺ Refresh</button>
+        </div>
+      </div>
+
+      <div class="stats-row" id="errStatRow"></div>
+
+      <div class="dev-two-col" style="margin-bottom:16px">
+        <div class="dev-card">
+          <div class="dev-card-header"><span>Errors Over Time</span></div>
+          <div class="chart-container" style="height:220px">
+            <canvas id="errTimelineChart"></canvas>
+          </div>
+        </div>
+        <div class="dev-card">
+          <div class="dev-card-header"><span>Errors by Service</span></div>
+          <div class="chart-container" style="height:220px">
+            <canvas id="errByServiceChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="dev-card">
+        <div class="dev-card-header">
+          <span>Error Log Entries</span>
+          <span id="errTableCount" class="dev-badge">0 rows</span>
+        </div>
+        <div class="table-wrap">
+          <table class="dev-table">
+            <thead>
+              <tr><th style="width:160px">Timestamp</th><th style="width:130px">Service</th><th style="width:70px">Level</th><th>Message</th></tr>
+            </thead>
+            <tbody id="errTableBody">
+              <tr><td colspan="4" class="empty-cell">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── LIVE LOGS ── -->
+    <div id="panel-livelogs" class="dev-panel">
+      <div class="dev-page-header">
+        <div>
+          <h1>Live Log Stream</h1>
+          <p>Auto-refreshing last N lines from all containers</p>
+        </div>
+        <div class="header-actions">
+          <select id="liveServiceFilter" class="dev-select">
+            <option value="">All Services</option>
+          </select>
+          <select id="liveLimit" class="dev-select">
+            <option value="20">20 lines</option>
+            <option value="50" selected>50 lines</option>
+            <option value="100">100 lines</option>
+          </select>
+          <select id="liveRefreshRate" class="dev-select">
+            <option value="0">Paused</option>
+            <option value="3">Every 3s</option>
+            <option value="5" selected>Every 5s</option>
+            <option value="10">Every 10s</option>
+          </select>
+          <button class="dev-btn dev-btn-primary" id="liveToggleBtn" onclick="toggleLiveLogs()">⏸ Pause</button>
+        </div>
+      </div>
+
+      <div class="dev-card">
+        <div class="dev-card-header">
+          <span>Log Stream</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span id="liveLogCount" class="dev-badge">0 lines</span>
+            <span id="liveLastUpdate" style="font-size:11px;color:var(--muted)">Never</span>
+            <button class="dev-btn dev-btn-ghost dev-btn-sm" onclick="clearLiveLogs()">Clear</button>
+          </div>
+        </div>
+        <div id="liveLogStream" class="log-stream">
+          <div class="log-stream-empty">Waiting for logs…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TABLE EXPLORER ── -->
+    <div id="panel-tables" class="dev-panel">
+      <div class="dev-page-header">
+        <div>
+          <h1>CH Table Explorer</h1>
+          <p>Browse ClickHouse databases, tables, and row counts</p>
+        </div>
+        <div class="header-actions">
+          <button class="dev-btn dev-btn-primary" onclick="loadChTables()">↺ Refresh</button>
+        </div>
+      </div>
+
+      <div class="dev-two-col" style="margin-bottom:16px">
+        <!-- Database list -->
+        <div class="dev-card">
+          <div class="dev-card-header"><span>Databases</span></div>
+          <div id="chDbList" class="pg-table-list">
+            <div class="empty-cell">Loading…</div>
+          </div>
+        </div>
+
+        <!-- Table list -->
+        <div class="dev-card">
+          <div class="dev-card-header">
+            <span>Tables — <span id="chSelectedDb">none</span></span>
+          </div>
+          <div class="table-wrap">
+            <table class="dev-table">
+              <thead><tr><th>Table</th><th>Engine</th><th>Rows (approx)</th><th>Size</th><th></th></tr></thead>
+              <tbody id="chTableListBody"><tr><td colspan="5" class="empty-cell">Select a database</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Column inspector -->
+      <div class="dev-card" style="margin-bottom:16px" id="chColumnCard" style="display:none">
+        <div class="dev-card-header">
+          <span>Columns — <span id="chSelectedTable">none</span></span>
+          <button class="dev-btn dev-btn-ghost dev-btn-sm" onclick="previewChTable()">Preview 10 rows</button>
+        </div>
+        <div class="table-wrap">
+          <table class="dev-table">
+            <thead><tr><th>Column</th><th>Type</th><th>Default</th><th>Compression</th></tr></thead>
+            <tbody id="chColumnBody"><tr><td colspan="4" class="empty-cell">Click a table</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Preview results -->
+      <div class="dev-card" id="chPreviewCard" style="display:none">
+        <div class="dev-card-header">
+          <span>Preview — <span id="chPreviewLabel">—</span></span>
+          <span id="chPreviewMeta" class="dev-badge">—</span>
+        </div>
+        <div class="table-wrap" id="chPreviewWrap"></div>
+      </div>
+    </div>
+
+    <!-- ── GRAFANA DASHBOARDS ── -->
+    <div id="panel-grafana" class="dev-panel">
+      <div class="dev-page-header">
+        <div>
+          <h1>Grafana Dashboards</h1>
+          <p>Embedded metrics dashboards — <a href="/dev-health/grafana/" target="_blank">Open full Grafana ↗</a></p>
+        </div>
+        <div class="header-actions">
+          <button class="dev-btn dev-btn-secondary" onclick="openGrafana('/dashboards')">All Dashboards ↗</button>
+          <button class="dev-btn dev-btn-secondary" onclick="openPrometheus()">Prometheus ↗</button>
+          <button class="dev-btn dev-btn-secondary" onclick="openChPlay()">CH Play ↗</button>
+        </div>
+      </div>
+
+      <!-- Quick link cards -->
+      <div class="stats-row" style="margin-bottom:20px">
+        <div class="stat-item" style="cursor:pointer" onclick="openGrafana()">
+          <div class="stat-item-label">Grafana</div>
+          <div class="stat-item-value" style="font-size:16px">📊 Open</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">localhost:3000</div>
+        </div>
+        <div class="stat-item" style="cursor:pointer" onclick="openPrometheus('up')">
+          <div class="stat-item-label">Prometheus</div>
+          <div class="stat-item-value" style="font-size:16px">🔥 Metrics</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">localhost:9090</div>
+        </div>
+        <div class="stat-item" style="cursor:pointer" onclick="openChPlay('SELECT count() FROM observability_logs.container_logs')">
+          <div class="stat-item-label">CH Play</div>
+          <div class="stat-item-value" style="font-size:16px">🔶 Query</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">localhost:8123/play</div>
+        </div>
+        <div class="stat-item" style="cursor:pointer" onclick="openGrafana('/explore')">
+          <div class="stat-item-label">Explore</div>
+          <div class="stat-item-value" style="font-size:16px">🔍 Explore</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Grafana Explore</div>
+        </div>
+      </div>
+
+      <!-- Prometheus quick queries -->
+      <div class="dev-card" style="margin-bottom:16px">
+        <div class="dev-card-header"><span>Prometheus Quick Queries</span></div>
+        <div class="preset-grid">
+          <button class="preset-btn" onclick="openPrometheus('up')">All targets up</button>
+          <button class="preset-btn" onclick="openPrometheus('process_cpu_seconds_total')">CPU usage</button>
+          <button class="preset-btn" onclick="openPrometheus('jvm_memory_used_bytes')">JVM memory</button>
+          <button class="preset-btn" onclick="openPrometheus('http_server_requests_seconds_count')">HTTP requests</button>
+          <button class="preset-btn" onclick="openPrometheus('http_server_requests_seconds_sum/http_server_requests_seconds_count')">Avg latency</button>
+          <button class="preset-btn" onclick="openPrometheus('process_open_fds')">Open file descriptors</button>
+          <button class="preset-btn" onclick="openPrometheus('jvm_threads_live_threads')">JVM threads</button>
+          <button class="preset-btn" onclick="openPrometheus('hikaricp_connections_active')">DB connections</button>
+        </div>
+      </div>
+
+      <!-- Grafana Links -->
+      <div class="dev-card" style="text-align:center; padding:40px 20px;">
+        <h2 style="margin-bottom:12px; font-weight:500;">Metrics & Dashboards</h2>
+        <p style="color:var(--muted); margin-bottom:24px;">The Grafana embedded view has been removed. Please open Grafana in a new tab to view full dashboards, alerts, and explore metrics natively.</p>
+        <div style="display:flex; gap:16px; justify-content:center;">
+          <button class="dev-btn dev-btn-primary" style="padding:12px 24px; font-size:16px;" onclick="openGrafana('/')">
+            <svg style="width:18px;height:18px;vertical-align:-4px;margin-right:6px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            Open Grafana
+          </button>
+          <button class="dev-btn dev-btn-secondary" style="padding:12px 24px; font-size:16px;" onclick="openGrafana('/dashboards')">Dashboards</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div id="devToastContainer" class="dev-toast-container"></div>
+
+<script src="dev.js"></script>
+</body>
+</html>

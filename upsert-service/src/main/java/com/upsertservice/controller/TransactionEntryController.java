@@ -28,8 +28,10 @@ public class TransactionEntryController {
 
     @PostMapping("/create")
     @Operation(summary = "Create a new financial entry")
-    public ResponseEntity<CreateEntryResponse> createEntry(@Valid @RequestBody CreateEntryRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.createEntry(request));
+    public ResponseEntity<CreateEntryResponse> createEntry(
+            @Valid @RequestBody CreateEntryRequest request,
+            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createEntry(request, idempotencyKey));
     }
 
     @PutMapping("/update")
@@ -45,6 +47,15 @@ public class TransactionEntryController {
             @RequestParam UUID userId) {
         service.deleteEntry(id, userId);
         return ResponseEntity.ok(Map.of("message", "Entry deleted successfully"));
+    }
+
+    @PostMapping("/delete/bulk")
+    @Operation(summary = "Bulk delete financial entries")
+    public ResponseEntity<Map<String, Object>> bulkDelete(
+            @RequestParam UUID userId,
+            @RequestBody List<Long> ids) {
+        ids.forEach(id -> service.deleteEntry(id, userId));
+        return ResponseEntity.ok(Map.of("message", "Entries deleted successfully", "count", ids.size()));
     }
 
     /** Paginated entries for a user, optionally filtered by type */

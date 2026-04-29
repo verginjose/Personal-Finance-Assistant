@@ -5,6 +5,17 @@ let categoryChart = null, timelineChart = null;
 /* pagination state */
 let txPage = 0, txSize = 20, txTotal = 0, txType = '', txQuery = '';
 let txSearchTimer = null;
+let confirmResolver = null;
+let filteredTransactionsCache = [];
+const selectedTxIds = new Set();
+const SAVED_SEARCHES_KEY = 'savedTransactionSearches';
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
+const ALLOWED_UPLOAD_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf'
+]);
 
 /* Groups state */
 let currentGroupId = null;
@@ -82,6 +93,12 @@ function bindEvents() {
     }, 350);
   });
 
+  document.getElementById('txApplyAdvancedFilters').addEventListener('click', () => { txPage = 0; loadTransactions(); });
+  document.getElementById('txClearAdvancedFilters').addEventListener('click', clearAdvancedTxFilters);
+  document.getElementById('saveCurrentSearchBtn').addEventListener('click', saveCurrentSearchPreset);
+  document.getElementById('savedSearchSelect').addEventListener('change', applySavedSearchPreset);
+  document.getElementById('bulkDeleteBtn').addEventListener('click', handleBulkDelete);
+
   // Type filter pills
   document.querySelectorAll('.filter-pills .pill').forEach(p =>
     p.addEventListener('click', () => {
@@ -113,6 +130,26 @@ function bindEvents() {
     renderSplitDetails();
     document.getElementById('addSharedExpenseModal').style.display = 'flex';
   };
+
+  // Custom confirm modal
+  document.getElementById('confirmCancelBtn').addEventListener('click', () => resolveConfirm(false));
+  document.getElementById('confirmOkBtn').addEventListener('click', () => resolveConfirm(true));
+  document.getElementById('confirmModal').addEventListener('click', (e) => {
+    if (e.target.id === 'confirmModal') resolveConfirm(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    const modalOpen = document.getElementById('confirmModal').classList.contains('active');
+    if (!modalOpen) return;
+    if (e.key === 'Escape') resolveConfirm(false);
+    if (e.key === 'Enter') resolveConfirm(true);
+  });
+  document.addEventListener('keydown', handleShortcuts);
+
+  const refreshOpsBtn = document.getElementById('refreshOpsBtn');
+  if (refreshOpsBtn) {
+    refreshOpsBtn.addEventListener('click', loadOperationsHealth);
+  }
+  loadSavedSearchPresets();
 }
 
 /* ═══════════ PANEL HELPERS ═══════════ */
@@ -183,6 +220,7 @@ function switchTab(tab) {
   if (tab === 'overview')     loadOverview('month');
   if (tab === 'transactions') { txPage = 0; loadTransactions(); }
   if (tab === 'analytics')    loadAnalytics();
+  if (tab === 'operations')   loadOperationsHealth();
   if (tab === 'groups')       loadGroups();
 }
 
@@ -194,6 +232,7 @@ async function api(path, method = 'GET', body = null, isForm = false) {
   const res = await fetch(`${API}${path}`, opts);
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
+    if (res.status === 413) msg = 'Upload is too large. Please use a file under 10MB.';
     try { const j = await res.json(); msg = j.message || j.error || msg; } catch {}
     throw new Error(msg);
   }
@@ -300,10 +339,12 @@ function renderRecentTx(transactions, containerId, showDelete) {
       </div>
       <div class="tx-right">
         <span class="tx-amount ${isExp ? 'expense' : 'income'}">${isExp ? '−' : '+'}${fmt(tx.amount)}</span>
+        ${showDelete ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2)"><input type="checkbox" class="tx-select-checkbox" data-id="${tx.id}" ${selectedTxIds.has(tx.id) ? 'checked' : ''}/>Select</label>` : ''}
         ${showDelete ? `<button class="delete-btn" onclick="deleteTransaction(${tx.id})">Delete</button>` : ''}
       </div>
     </div>`;
   }).join('');
+  if (showDelete) bindSelectionCheckboxes();
 }
 
 /* ═══════════ LOAD ALL TRANSACTIONS (paginated) ═══════════ */
@@ -317,17 +358,20 @@ async function loadTransactions() {
       data = await api(`/upsert/entries?userId=${userId}${typeParam}&page=${txPage}&size=${txSize}`);
     }
 
-    txTotal = data.totalElements ?? 0;
-    renderRecentTx(data.content ?? [], 'allTransactions', true);
+    const baseData = data.content ?? [];
+    filteredTransactionsCache = applyAdvancedTransactionFilters(baseData);
+    txTotal = filteredTransactionsCache.length;
+    renderRecentTx(filteredTransactionsCache, 'allTransactions', true);
+    updateBulkDeleteButton();
 
     // Pagination controls
     const pgEl = document.getElementById('txPagination');
-    if (txTotal > txSize) {
+    if ((data.totalElements ?? 0) > txSize) {
       pgEl.style.display = 'flex';
       document.getElementById('txPageInfo').textContent =
-        `Showing ${txPage * txSize + 1}–${Math.min((txPage+1)*txSize, txTotal)} of ${txTotal}`;
+        `Showing ${txPage * txSize + 1}–${Math.min((txPage+1)*txSize, (data.totalElements ?? 0))} of ${data.totalElements ?? 0}`;
       document.getElementById('txPrevBtn').disabled = txPage === 0;
-      document.getElementById('txNextBtn').disabled = (txPage + 1) * txSize >= txTotal;
+      document.getElementById('txNextBtn').disabled = (txPage + 1) * txSize >= (data.totalElements ?? 0);
     } else {
       pgEl.style.display = 'none';
     }
@@ -335,13 +379,28 @@ async function loadTransactions() {
 }
 
 async function deleteTransaction(id) {
-  if (!confirm('Delete this transaction?')) return;
+  const ok = await showConfirm('Delete transaction', 'This action cannot be undone. Delete this transaction?');
+  if (!ok) return;
   try {
     await api(`/upsert/delete/${id}?userId=${userId}`, 'DELETE');
-    document.getElementById(`tx-row-${id}`)?.remove();
+    selectedTxIds.delete(id);
     toast('Transaction deleted', 'success');
-    loadOverview('month');
+    await Promise.all([loadTransactions(), loadOverview('month')]);
   } catch (err) { toast('Delete failed: ' + err.message, 'error'); }
+}
+
+async function handleBulkDelete() {
+  if (!selectedTxIds.size) return;
+  const ok = await showConfirm('Bulk delete', `Delete ${selectedTxIds.size} selected transactions?`);
+  if (!ok) return;
+  try {
+    await api(`/upsert/delete/bulk?userId=${userId}`, 'POST', Array.from(selectedTxIds));
+    selectedTxIds.clear();
+    toast('Selected transactions deleted', 'success');
+    await Promise.all([loadTransactions(), loadOverview('month')]);
+  } catch (err) {
+    toast('Bulk delete failed: ' + err.message, 'error');
+  }
 }
 
 /* ═══════════ CSV EXPORT ═══════════ */
@@ -385,6 +444,27 @@ async function handleEntrySubmit(e) {
   e.preventDefault();
   const form = e.target;
   const type = form.type.value;
+  const amount = parseFloat(form.amount.value);
+  const name = form.name.value.trim();
+  const category = form.category.value;
+
+  if (!type) {
+    showInlineAlert('entryError', 'Please select transaction type.', 'error');
+    return;
+  }
+  if (!category) {
+    showInlineAlert('entryError', 'Please select a category.', 'error');
+    return;
+  }
+  if (!name) {
+    showInlineAlert('entryError', 'Name is required.', 'error');
+    return;
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showInlineAlert('entryError', 'Amount must be greater than 0.', 'error');
+    return;
+  }
+
   const body = { userId, name: form.name.value.trim(), amount: parseFloat(form.amount.value),
     type, currency: form.currency.value, description: form.description.value.trim() || null };
   if (type === 'INCOME') body.incomeCategory  = form.category.value;
@@ -405,6 +485,14 @@ async function handleBillUpload(e) {
   e.preventDefault();
   const file = document.getElementById('billFile').files[0];
   if (!file) { showInlineAlert('uploadError', 'Please select a file.', 'error'); return; }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    showInlineAlert('uploadError', 'File too large. Maximum allowed size is 10MB.', 'error');
+    return;
+  }
+  if (!ALLOWED_UPLOAD_TYPES.has(file.type)) {
+    showInlineAlert('uploadError', 'Only JPG, PNG, WEBP, or PDF files are allowed.', 'error');
+    return;
+  }
   const fd = new FormData(); fd.append('file', file);
   setLoading(true);
   try {
@@ -423,12 +511,36 @@ async function handleBillUpload(e) {
 
 async function handleOcrConfirm() {
   const type = document.getElementById('ocrType').value;
-  const cat  = document.getElementById('ocrCategory').value;
+  const cat  = document.getElementById('ocrCategory').value.trim();
+  const name = document.getElementById('ocrName').value.trim();
+  const amount = parseFloat(document.getElementById('ocrAmount').value);
+  const currency = document.getElementById('ocrCurrency').value.trim();
+  const description = document.getElementById('ocrDescription').value.trim();
+
+  if (!name) {
+    showInlineAlert('uploadError', 'Name is required before saving OCR data.', 'error');
+    return;
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showInlineAlert('uploadError', 'Amount must be greater than 0 before saving.', 'error');
+    return;
+  }
+  if (!cat) {
+    showInlineAlert('uploadError', 'Category is required before saving OCR data.', 'error');
+    return;
+  }
+  if (!currency || currency.length !== 3) {
+    showInlineAlert('uploadError', 'Currency must be a valid 3-letter code (e.g. INR, USD).', 'error');
+    return;
+  }
+
   const body = { userId,
-    name:        document.getElementById('ocrName').value,
-    amount:      parseFloat(document.getElementById('ocrAmount').value),
-    type, currency: document.getElementById('ocrCurrency').value,
-    description: document.getElementById('ocrDescription').value };
+    name,
+    amount,
+    type,
+    currency: currency.toUpperCase(),
+    description
+  };
   if (type === 'INCOME') body.incomeCategory  = cat;
   else                   body.expenseCategory = cat;
   setLoading(true);
@@ -716,7 +828,8 @@ async function loadGroupExpenses() {
 }
 
 async function settleDebt(from, to) {
-  if (!confirm('Mark this debt as settled?')) return;
+  const ok = await showConfirm('Mark as settled', 'Confirm this settlement entry?');
+  if (!ok) return;
   try {
     await api(`/upsert/groups/${currentGroupId}/settle?fromUserId=${from}&toUserId=${to}`, 'POST');
     toast('Debt settled!', 'success');
@@ -759,4 +872,146 @@ function toast(msg, type = 'info') {
     t.style.animation = 'toastOut .25s ease forwards';
     setTimeout(() => t.remove(), 260);
   }, 3000);
+}
+
+function applyAdvancedTransactionFilters(rows) {
+  const min = parseFloat(document.getElementById('txAmountMin').value);
+  const max = parseFloat(document.getElementById('txAmountMax').value);
+  const from = document.getElementById('txDateFrom').value;
+  const to = document.getElementById('txDateTo').value;
+  return rows.filter(row => {
+    const amount = Number(row.amount || 0);
+    const created = row.createdAt ? new Date(row.createdAt) : null;
+    if (Number.isFinite(min) && amount < min) return false;
+    if (Number.isFinite(max) && amount > max) return false;
+    if (from && created && created < new Date(`${from}T00:00:00`)) return false;
+    if (to && created && created > new Date(`${to}T23:59:59`)) return false;
+    return true;
+  });
+}
+
+function clearAdvancedTxFilters() {
+  ['txAmountMin', 'txAmountMax', 'txDateFrom', 'txDateTo'].forEach(id => { document.getElementById(id).value = ''; });
+  txPage = 0;
+  loadTransactions();
+}
+
+function loadSavedSearchPresets() {
+  const select = document.getElementById('savedSearchSelect');
+  if (!select) return;
+  const presets = JSON.parse(localStorage.getItem(SAVED_SEARCHES_KEY) || '[]');
+  select.innerHTML = '<option value="">Saved searches</option>' + presets.map((p, idx) => `<option value="${idx}">${esc(p.name)}</option>`).join('');
+}
+
+function saveCurrentSearchPreset() {
+  const name = prompt('Name this search preset:');
+  if (!name) return;
+  const presets = JSON.parse(localStorage.getItem(SAVED_SEARCHES_KEY) || '[]');
+  presets.push({
+    name: name.trim(),
+    q: document.getElementById('txSearch').value.trim(),
+    type: txType,
+    min: document.getElementById('txAmountMin').value,
+    max: document.getElementById('txAmountMax').value,
+    from: document.getElementById('txDateFrom').value,
+    to: document.getElementById('txDateTo').value
+  });
+  localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(presets.slice(-10)));
+  loadSavedSearchPresets();
+  toast('Search preset saved', 'success');
+}
+
+function applySavedSearchPreset(e) {
+  const value = e.target.value;
+  if (value === '') return;
+  const presets = JSON.parse(localStorage.getItem(SAVED_SEARCHES_KEY) || '[]');
+  const preset = presets[Number(value)];
+  if (!preset) return;
+  document.getElementById('txSearch').value = preset.q || '';
+  txQuery = preset.q || '';
+  txType = preset.type || '';
+  document.querySelectorAll('.filter-pills .pill').forEach(btn => {
+    btn.classList.toggle('active', (btn.dataset.type || '') === txType);
+  });
+  document.getElementById('txAmountMin').value = preset.min || '';
+  document.getElementById('txAmountMax').value = preset.max || '';
+  document.getElementById('txDateFrom').value = preset.from || '';
+  document.getElementById('txDateTo').value = preset.to || '';
+  txPage = 0;
+  loadTransactions();
+}
+
+function bindSelectionCheckboxes() {
+  document.querySelectorAll('.tx-select-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const id = Number(cb.dataset.id);
+      if (cb.checked) selectedTxIds.add(id);
+      else selectedTxIds.delete(id);
+      updateBulkDeleteButton();
+    });
+  });
+}
+
+function updateBulkDeleteButton() {
+  const bulkBtn = document.getElementById('bulkDeleteBtn');
+  if (!bulkBtn) return;
+  bulkBtn.style.display = selectedTxIds.size ? 'inline-flex' : 'none';
+  bulkBtn.textContent = `Delete Selected (${selectedTxIds.size})`;
+}
+
+async function loadOperationsHealth() {
+  const container = document.getElementById('opsServiceHealth');
+  if (!container) return;
+  const services = [
+    { key: 'Gateway', url: '/auth/health', method: 'GET' },
+    { key: 'Auth', url: '/auth/health', method: 'GET' },
+    { key: 'Upsert', url: '/upsert/health', method: 'GET' },
+    { key: 'Analytics', url: '/analytics/actuator/health', method: 'GET' },
+    { key: 'OCR', url: '/bill/actuator/health', method: 'GET' }
+  ];
+  container.innerHTML = '<div class="empty-state"><p>Checking service health...</p></div>';
+  const results = await Promise.all(services.map(async s => {
+    try {
+      await api(s.url, s.method);
+      return { name: s.key, status: 'UP' };
+    } catch {
+      return { name: s.key, status: 'DOWN' };
+    }
+  }));
+  container.innerHTML = results.map(r => `
+    <div class="analytics-stat-item">
+      <div class="stat-label">${esc(r.name)}</div>
+      <div class="stat-value ${r.status === 'UP' ? 'income' : 'expense'}">${r.status}</div>
+    </div>
+  `).join('');
+}
+
+function handleShortcuts(e) {
+  if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  if (e.key === '/') {
+    e.preventDefault();
+    switchTab('transactions');
+    document.getElementById('txSearch')?.focus();
+  }
+  if (e.altKey && e.key === '1') switchTab('overview');
+  if (e.altKey && e.key === '2') switchTab('transactions');
+  if (e.altKey && e.key === '3') switchTab('operations');
+}
+
+/* Custom confirm dialog */
+function showConfirm(title, message) {
+  const modal = document.getElementById('confirmModal');
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMessage').textContent = message;
+  modal.classList.add('active');
+  return new Promise(resolve => { confirmResolver = resolve; });
+}
+
+function resolveConfirm(value) {
+  if (!confirmResolver) return;
+  const modal = document.getElementById('confirmModal');
+  modal.classList.remove('active');
+  const resolver = confirmResolver;
+  confirmResolver = null;
+  resolver(value);
 }

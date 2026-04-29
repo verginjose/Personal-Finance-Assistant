@@ -11,7 +11,8 @@ This application follows a microservices architecture with the following compone
 - **Upsert Service** - Manages financial transactions (income/expenses)
 - **OCR Parser Service** - Processes bill images using Tesseract OCR
 - **Analytics Service** - Provides transaction analysis and reporting
-- **PostgreSQL Databases** - Separate databases for finance and auth data
+- **PostgreSQL (Single Instance)** - Unified database with `auth` and `finance` schemas
+- **Observability Stack** - Prometheus + Grafana + ClickHouse + Fluent Bit
 
 ## 🚀 Features
 
@@ -66,8 +67,10 @@ docker-compose ps
 | Auth Service | 8082 | Authentication service |
 | OCR Parser | 8083 | Bill processing service |
 | Analytics Service | 8084 | Data analytics service |
-| PostgreSQL (Finance) | 5432 | Finance database |
-| PostgreSQL (Auth) | 5433 | Authentication database |
+| PostgreSQL (Unified) | 5432 | Unified DB (`auth` and `finance` schemas) |
+| Grafana | 3000 | Metrics and logs dashboards |
+| Prometheus | 9090 | Metrics scraping and querying |
+| ClickHouse | 8123 | Log storage query endpoint |
 
 ### Environment Variables
 The application uses environment-specific configurations for:
@@ -147,12 +150,12 @@ Content-Type: multipart/form-data
 
 ## 🗃️ Database Schema
 
-### Finance Database
+### Finance Schema
 - **Transactions Table**: Stores all income and expense records
 - **Categories**: Predefined expense and income categories
 - **Users**: User financial profiles
 
-### Auth Database
+### Auth Schema
 - **Users Table**: User authentication information
 - **Roles**: User role definitions
 
@@ -198,20 +201,23 @@ The OCR Parser Service uses Tesseract OCR to:
 
 The application consists of the following Docker services:
 
-- `postgres-upsert`: Finance data database
-- `postgres-auth`: Authentication database
+- `postgres`: Unified Postgres service with schema-level isolation
 - `upsert-service`: Transaction management microservice
 - `auth-service`: Authentication microservice
 - `ocr-parser-service`: Bill processing microservice
 - `analytics-service`: Data analytics microservice
 - `api-gateway`: API Gateway for routing requests
+- `prometheus`: Metrics scraper
+- `grafana`: Visualization dashboards
+- `clickhouse`: Observability log store
+- `fluent-bit`: Log shipper to ClickHouse
 
 ## 🛠️ Development
 
 ### Local Development Setup
-1. Start only the databases:
+1. Start the unified database:
    ```bash
-   docker-compose up postgres-upsert postgres-auth -d
+   docker compose up postgres -d
    ```
 
 2. Run services locally:
@@ -227,8 +233,21 @@ The application consists of the following Docker services:
 docker-compose build
 
 # Build specific service
-docker-compose build upsert-service
+docker compose build upsert-service
 ```
+
+## Observability Quick Checks
+
+```bash
+docker compose ps
+curl http://localhost:9090/-/healthy
+curl http://localhost:3000/api/health
+curl http://localhost:8123/ping
+```
+
+- Grafana dashboards are provisioned from `observability/grafana/dashboards`.
+- Prometheus scrape config is at `observability/prometheus/prometheus.yml`.
+- Fluent Bit pipeline config is at `observability/fluent-bit/fluent-bit.conf`.
 
 ## 🔒 Security
 

@@ -3,15 +3,19 @@ package com.upsertservice.service;
 import com.upsertservice.dto.CreateEntryRequest;
 import com.upsertservice.dto.CreateEntryResponse;
 import com.upsertservice.dto.UpdateEntryRequest;
+import com.upsertservice.model.IdempotencyRecord;
 import com.upsertservice.model.TransactionEntry;
 import com.upsertservice.model.TransactionType;
+import com.upsertservice.repository.IdempotencyRecordRepository;
 import com.upsertservice.repository.TransactionEntryRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -21,12 +25,36 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 @Transactional
-@RequiredArgsConstructor
 public class TransactionEntryService {
 
     private final TransactionEntryRepository repository;
+    private final IdempotencyRecordRepository idempotencyRecordRepository;
+    private final Counter createCounter;
+    private final Counter deleteCounter;
 
-    public CreateEntryResponse createEntry(CreateEntryRequest request) {
+    public TransactionEntryService(
+            TransactionEntryRepository repository,
+            IdempotencyRecordRepository idempotencyRecordRepository,
+            MeterRegistry meterRegistry
+    ) {
+        this.repository = repository;
+        this.idempotencyRecordRepository = idempotencyRecordRepository;
+        this.createCounter = meterRegistry.counter("transactions.create.success");
+        this.deleteCounter = meterRegistry.counter("transactions.delete.success");
+    }
+
+    public CreateEntryResponse createEntry(CreateEntryRequest request, String idempotencyKey) {
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            IdempotencyRecord existing = idempotencyRecordRepository
+                    .findByUserIdAndIdempotencyKey(request.getUserId(), idempotencyKey.trim())
+                    .orElse(null);
+            if (existing != null && existing.getTransactionId() != null) {
+                TransactionEntry existingEntry = repository.findByIdAndDeletedAtIsNull(existing.getTransactionId())
+                        .orElseThrow(() -> new IllegalStateException("Idempotency key points to a missing transaction"));
+                return convertToResponse(existingEntry);
+            }
+        }
+
         TransactionEntry entry = new TransactionEntry(
                 request.getUserId(), request.getName(),
                 request.getAmount(), request.getType(), request.getCurrency()
@@ -38,12 +66,22 @@ public class TransactionEntryService {
         }
         entry.setDescription(request.getDescription());
         TransactionEntry saved = repository.save(entry);
+        createCounter.increment();
+
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            IdempotencyRecord record = new IdempotencyRecord();
+            record.setUserId(request.getUserId());
+            record.setIdempotencyKey(idempotencyKey.trim());
+            record.setTransactionId(saved.getId());
+            idempotencyRecordRepository.save(record);
+        }
+
         log.info("Transaction created: id={}, user={}", saved.getId(), saved.getUserId());
         return convertToResponse(saved);
     }
 
     public CreateEntryResponse updateEntry(UpdateEntryRequest request) {
-        TransactionEntry existing = repository.findById(request.getId())
+        TransactionEntry existing = repository.findByIdAndDeletedAtIsNull(request.getId())
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Transaction entry with ID " + request.getId() + " not found"));
         if (!existing.getUserId().equals(request.getUserId())) {
@@ -67,13 +105,15 @@ public class TransactionEntryService {
     }
 
     public void deleteEntry(Long id, UUID userId) {
-        TransactionEntry entry = repository.findById(id)
+        TransactionEntry entry = repository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Transaction entry with ID " + id + " not found"));
         if (!entry.getUserId().equals(userId)) {
             throw new SecurityException("User is not authorized to delete this transaction");
         }
-        repository.delete(entry);
+        entry.setDeletedAt(LocalDateTime.now());
+        repository.save(entry);
+        deleteCounter.increment();
         log.info("Transaction deleted: id={}, user={}", id, userId);
     }
 
@@ -81,9 +121,9 @@ public class TransactionEntryService {
     public Page<TransactionEntry> getEntriesByUserId(UUID userId, TransactionType type, int page, int size) {
         PageRequest pr = PageRequest.of(page, size);
         if (type != null) {
-            return repository.findByUserIdAndTypeOrderByCreatedAtDesc(userId, type, pr);
+            return repository.findByUserIdAndTypeAndDeletedAtIsNullOrderByCreatedAtDesc(userId, type, pr);
         }
-        return repository.findByUserIdOrderByCreatedAtDesc(userId, pr);
+        return repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId, pr);
     }
 
     @Transactional(readOnly = true)
@@ -93,7 +133,7 @@ public class TransactionEntryService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getSummary(UUID userId) {
-        List<TransactionEntry> all = repository.findByUserIdOrderByCreatedAtDesc(userId);
+        List<TransactionEntry> all = repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
         BigDecimal income  = all.stream().filter(e -> e.getType() == TransactionType.INCOME)
                 .map(TransactionEntry::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal expense = all.stream().filter(e -> e.getType() == TransactionType.EXPENSE)

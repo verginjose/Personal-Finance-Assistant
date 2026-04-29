@@ -113,6 +113,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         Analytics
       </button>
+      <button class="nav-item" data-tab="operations">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h3l2-6 4 12 2-6h5"/></svg>
+        Operations
+      </button>
       <button class="nav-item" data-tab="groups">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
         Groups & Split
@@ -195,6 +199,21 @@
         <div class="search-wrap">
           <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input id="txSearch" type="text" placeholder="Search by name or description…">
+        </div>
+        <div class="filters-bar" style="margin-bottom:14px">
+          <div class="field field-inline"><label>Amount Min</label><input id="txAmountMin" type="number" min="0" step="0.01" placeholder="0"></div>
+          <div class="field field-inline"><label>Amount Max</label><input id="txAmountMax" type="number" min="0" step="0.01" placeholder="5000"></div>
+          <div class="field field-inline"><label>From</label><input id="txDateFrom" type="date"></div>
+          <div class="field field-inline"><label>To</label><input id="txDateTo" type="date"></div>
+          <button id="txApplyAdvancedFilters" class="btn btn-secondary btn-sm">Apply Filters</button>
+          <button id="txClearAdvancedFilters" class="btn btn-ghost btn-sm">Clear</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <select id="savedSearchSelect" class="btn btn-secondary btn-sm" style="padding:7px 10px;min-width:220px">
+            <option value="">Saved searches</option>
+          </select>
+          <button id="saveCurrentSearchBtn" class="btn btn-secondary btn-sm">Save Current Search</button>
+          <button id="bulkDeleteBtn" class="btn btn-danger btn-sm" style="margin-left:auto;display:none">Delete Selected</button>
         </div>
         <div class="filter-pills">
           <button class="pill active" data-type="">All</button>
@@ -306,6 +325,34 @@
         <div class="section-card">
           <div class="section-card-header"><h3>Income vs Expenses</h3></div>
           <div class="chart-wrap"><canvas id="timelineChart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- OPERATIONS -->
+    <section id="operations" class="tab-panel">
+      <div class="page-header">
+        <h2>Operations</h2>
+        <p class="page-sub">Service health, metrics and log dashboards</p>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+        <button id="refreshOpsBtn" class="btn btn-primary btn-sm">Refresh Health</button>
+        <a class="btn btn-secondary btn-sm" href="http://localhost:3000" target="_blank" rel="noopener noreferrer">Open Grafana</a>
+        <a class="btn btn-secondary btn-sm" href="http://localhost:9090" target="_blank" rel="noopener noreferrer">Open Prometheus</a>
+        <a class="btn btn-secondary btn-sm" href="http://localhost:8123" target="_blank" rel="noopener noreferrer">Open ClickHouse</a>
+      </div>
+      <div class="section-card">
+        <div class="section-card-header"><h3>Service Status</h3></div>
+        <div id="opsServiceHealth" class="analytics-stats"></div>
+      </div>
+      <div class="charts-grid">
+        <div class="section-card">
+          <div class="section-card-header"><h3>Metrics Dashboard</h3></div>
+          <iframe src="http://localhost:3000/d/service-health" title="Metrics Dashboard" style="width:100%;height:380px;border:0;border-radius:8px"></iframe>
+        </div>
+        <div class="section-card">
+          <div class="section-card-header"><h3>Logs Dashboard</h3></div>
+          <iframe src="http://localhost:3000/d/log-overview" title="Logs Dashboard" style="width:100%;height:380px;border:0;border-radius:8px"></iframe>
         </div>
       </div>
     </section>
@@ -486,6 +533,16 @@
   </div>
 
   <div id="loadingOverlay" class="loading-overlay"><div class="spinner"></div></div>
+  <div id="confirmModal" class="confirm-modal-overlay">
+    <div class="confirm-modal">
+      <h3 id="confirmTitle">Confirm action</h3>
+      <p id="confirmMessage">Are you sure?</p>
+      <div class="confirm-actions">
+        <button id="confirmCancelBtn" type="button" class="btn btn-secondary">Cancel</button>
+        <button id="confirmOkBtn" type="button" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
 <script src="script.js"></script>
 </body>
 </html>

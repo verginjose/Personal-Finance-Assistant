@@ -12,7 +12,7 @@ import lombok.Setter;
 import java.util.UUID;
 
 @Entity
-@Table(name="users")
+@Table(name = "users", schema = "auth")
 @Getter
 @Setter
 public class User {

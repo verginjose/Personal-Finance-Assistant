@@ -52,7 +52,7 @@ public class BillOcrService {
         logger.info("Raw extracted text: [{}]", extractedText);
 
         if (extractedText == null || extractedText.isBlank() || extractedText.length() < 10) {
-            logger.warn("Extracted text is too short or empty. Skipping Gemini processing.");
+            logger.warn("Extracted text is too short or empty. Skipping AI processing.");
             return createEntryResponse;
         }
 
@@ -72,7 +72,7 @@ public class BillOcrService {
             );
         }
         catch (Exception e) {
-            logger.error("Gemini processing failed: {}", e.getMessage(), e);
+            logger.error("Document processing failed: {}", e.getMessage(), e);
         }
         return createEntryResponse;
     }

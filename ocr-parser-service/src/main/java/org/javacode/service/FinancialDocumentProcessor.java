@@ -7,10 +7,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.genai.Client;
-import com.google.genai.types.Content;
-import com.google.genai.types.GenerateContentResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -31,14 +29,15 @@ import java.util.logging.Logger;
 public class FinancialDocumentProcessor {
 
     private static final Logger logger = Logger.getLogger(FinancialDocumentProcessor.class.getName());
-    private static final String GEMINI_MODEL = "gemini-2.0-flash";
+    private static final String GROQ_MODEL = "llama-3.3-70b-versatile";
+    private static final String GROQ_CHAT_COMPLETIONS_URL = "https://api.groq.com/openai/v1/chat/completions";
     private static final String CURRENCY_API_URL = "https://api.frankfurter.app/latest";
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
-    @Value("${GOOGLE_API_KEY}")
-    private String geminiApiKey;
+    @Value("${GROQ_API_KEY}")
+    private String groqApiKey;
 
     public FinancialDocumentProcessor() {
         this.httpClient = HttpClient.newBuilder()
@@ -49,8 +48,8 @@ public class FinancialDocumentProcessor {
     }
 
     @PostConstruct
-    public void initializeGeminiClient() {
-        logger.info("Gemini initialized for REST API usage");
+    public void initializeLlmClient() {
+        logger.info("Groq initialized for REST API usage");
     }
 
     // --- Enums and Records ---
@@ -188,24 +187,24 @@ public class FinancialDocumentProcessor {
     }
 
     /**
-     * Extracts financial data using Gemini REST API.
+     * Extracts financial data using Groq Chat Completions API.
      */
-    public FinancialDocument extractFinancialDataWithGemini(String text, String userId) {
+    public FinancialDocument extractFinancialDataWithGroq(String text, String userId) {
         String prompt = buildExtractionPrompt(text);
+        ObjectNode requestBody = objectMapper.createObjectNode();
+        requestBody.put("model", GROQ_MODEL);
+        requestBody.put("temperature", 0.1);
 
-        // Prepare JSON body for Gemini REST API with simple escaping
-        String escapedPrompt = prompt.replace("\\", "\\\\")
-                                     .replace("\"", "\\\"")
-                                     .replace("\n", "\\n")
-                                     .replace("\r", "\\r")
-                                     .replace("\t", "\\t");
-                                     
-        String jsonBody = "{\"contents\": [{\"parts\": [{\"text\": \"" + escapedPrompt + "\"}]}]}";
+        ArrayNode messages = requestBody.putArray("messages");
+        ObjectNode userMessage = messages.addObject();
+        userMessage.put("role", "user");
+        userMessage.put("content", prompt);
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL + ":generateContent?key=" + geminiApiKey))
+                .uri(URI.create(GROQ_CHAT_COMPLETIONS_URL))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .header("Authorization", "Bearer " + groqApiKey)
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody.toString()))
                 .timeout(Duration.ofSeconds(30))
                 .build();
 
@@ -213,28 +212,26 @@ public class FinancialDocumentProcessor {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             
             if (response.statusCode() != 200) {
-                logger.log(Level.SEVERE, "Gemini API returned status {0}: {1}", new Object[]{response.statusCode(), response.body()});
-                throw new IOException("Gemini API error: " + response.statusCode() + " Details: " + response.body());
+                logger.log(Level.SEVERE, "Groq API returned status {0}: {1}", new Object[]{response.statusCode(), response.body()});
+                throw new IOException("Groq API error: " + response.statusCode() + " Details: " + response.body());
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            String responseText = root.path("candidates")
-                    .get(0)
+            String responseText = root.path("choices")
+                    .path(0)
+                    .path("message")
                     .path("content")
-                    .path("parts")
-                    .get(0)
-                    .path("text")
                     .asText();
 
             if (responseText == null || responseText.isBlank()) {
-                throw new IOException("Empty response text from Gemini REST API");
+                throw new IOException("Empty response text from Groq API");
             }
 
             return parseFinancialDocument(responseText, userId);
 
         } catch (Exception e) {
-            logger.log(Level.SEVERE, "Failed to extract financial data with Gemini REST API", e);
-            throw new RuntimeException("Failed to extract financial data with Gemini REST API", e);
+            logger.log(Level.SEVERE, "Failed to extract financial data with Groq API", e);
+            throw new RuntimeException("Failed to extract financial data with Groq API", e);
         }
     }
 
@@ -293,8 +290,8 @@ public class FinancialDocumentProcessor {
             throw new IllegalArgumentException("Sanitized text is too short to process (minimum 10 characters)");
         }
 
-        // Extract financial data using Gemini
-        FinancialDocument extractedData = extractFinancialDataWithGemini(cleanText, data.userId());
+        // Extract financial data using Groq
+        FinancialDocument extractedData = extractFinancialDataWithGroq(cleanText, data.userId());
 
         // Get exchange rates
         Map<String, Object> exchangeData = getExchangeRates(extractedData.currency());

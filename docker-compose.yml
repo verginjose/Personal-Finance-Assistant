@@ -1,29 +1,21 @@
 services:
-  postgres-upsert:
+  postgres:
     image: postgres:15
-    container_name: postgres-upsert-db
+    container_name: postgres-db
     environment:
-      POSTGRES_DB: ${UPSERT_DB_NAME}
-      POSTGRES_USER: ${UPSERT_DB_USER}
-      POSTGRES_PASSWORD: ${UPSERT_DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "${UPSERT_DB_HOST_PORT}:5432"
+      - "${DB_HOST_PORT}:5432"
     volumes:
-      - postgres_upsert_data:/var/lib/postgresql/data
-    networks:
-      - finance-network
-
-  postgres-auth:
-    image: postgres:15
-    container_name: postgres-auth-db
-    environment:
-      POSTGRES_DB: ${AUTH_DB_NAME}
-      POSTGRES_USER: ${AUTH_DB_USER}
-      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD}
-    ports:
-      - "${AUTH_DB_HOST_PORT}:5432"
-    volumes:
-      - postgres_auth_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
     networks:
       - finance-network
 
@@ -33,13 +25,16 @@ services:
       dockerfile: Dockerfile
     container_name: upsert-service
     depends_on:
-      - postgres-upsert
+      - postgres
+    restart: on-failure
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-upsert:5432/${UPSERT_DB_NAME}
-      SPRING_DATASOURCE_USERNAME: ${UPSERT_DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${UPSERT_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${FINANCE_DB_SCHEMA}
+      SPRING_DATASOURCE_HIKARI_SCHEMA: ${FINANCE_DB_SCHEMA}
     ports:
       - "${UPSERT_SERVICE_PORT}:8081"
     networks:
@@ -51,13 +46,16 @@ services:
       dockerfile: Dockerfile
     container_name: auth-service
     depends_on:
-      - postgres-auth
+      - postgres
+    restart: on-failure
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-auth:5432/${AUTH_DB_NAME}
-      SPRING_DATASOURCE_USERNAME: ${AUTH_DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${AUTH_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${AUTH_DB_SCHEMA}
+      SPRING_DATASOURCE_HIKARI_SCHEMA: ${AUTH_DB_SCHEMA}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRATION: ${JWT_EXPIRATION}
     ports:
@@ -70,8 +68,11 @@ services:
       context: ./ocr-parser-service
       dockerfile: Dockerfile
     container_name: ocr-parser-service
+    restart: on-failure
     ports:
       - "${OCR_SERVICE_PORT}:8083"
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY}
     networks:
       - finance-network
 
@@ -81,13 +82,16 @@ services:
       dockerfile: Dockerfile
     container_name: analytics-service
     depends_on:
-      - postgres-upsert
+      - postgres
+    restart: on-failure
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-upsert:5432/${UPSERT_DB_NAME}
-      SPRING_DATASOURCE_USERNAME: ${UPSERT_DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${UPSERT_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${FINANCE_DB_SCHEMA}
+      SPRING_DATASOURCE_HIKARI_SCHEMA: ${FINANCE_DB_SCHEMA}
     ports:
       - "${ANALYTICS_SERVICE_PORT}:8084"
     networks:
@@ -103,6 +107,7 @@ services:
       - auth-service
       - ocr-parser-service
       - analytics-service
+    restart: on-failure
     environment:
       SPRING_CLOUD_GATEWAY_ROUTES_0_ID: upsert-service
       SPRING_CLOUD_GATEWAY_ROUTES_0_URI: http://upsert-service:8081
@@ -147,9 +152,81 @@ services:
     networks:
       - finance-network
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./observability/clickhouse/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - finance-network
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - finance-network
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      # Allow embedding in the dev panel iframe
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      # Anonymous read-only access so the iframe doesn't show a login prompt
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      # Disable login form for anonymous sessions (optional, cleaner UX)
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      # Subpath configuration for reverse proxy
+      GF_SERVER_ROOT_URL: "http://localhost:8000/dev-health/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    restart: on-failure
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - clickhouse
+      - prometheus
+    networks:
+      - finance-network
+
+  fluent-bit:
+    image: fluent/fluent-bit:3.1
+    container_name: fluent-bit
+    command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+    volumes:
+      - ./observability/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./observability/fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      - ./observability/fluent-bit/docker_name.lua:/fluent-bit/etc/docker_name.lua:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - clickhouse
+    restart: on-failure
+    networks:
+      - finance-network
+
 volumes:
-  postgres_upsert_data:
-  postgres_auth_data:
+  postgres_data:
+  clickhouse_data:
+  grafana_data:
 
 networks:
   finance-network:

@@ -1,5 +1,6 @@
 package com.apigateway.exception;
 
+import lombok.NonNull;
 import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -9,13 +10,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+import reactor.util.annotation.NonNullApi;
 
 @Component
 @Order(-1)
 public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
 
     @Override
-    public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
+    public Mono<Void> handle(@NonNull ServerWebExchange exchange, @NonNull Throwable ex) {
         if (ex instanceof WebClientResponseException.Unauthorized) {
             return handleUnauthorized(exchange);
         }

@@ -146,6 +146,11 @@ public class FinancialDocumentProcessor {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("model", groqModel);
         body.put("temperature", 0.1);
+        
+        ObjectNode responseFormat = objectMapper.createObjectNode();
+        responseFormat.put("type", "json_object");
+        body.set("response_format", responseFormat);
+
         ArrayNode messages = body.putArray("messages");
         messages.addObject().put("role", "user").put("content", buildPrompt(text));
 

@@ -1,31 +1,73 @@
 package com.authservice.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.Setter;
+import jakarta.persistence.*;
+import lombok.*;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
+/**
+ * Implements UserDetails so Spring Security can use this entity directly
+ * without any adapter layer. This is the canonical approach for JPA-backed auth.
+ */
 @Entity
-@Table(name = "users", schema = "auth")
+@Table(name = "users", schema = "auth",
+        uniqueConstraints = @UniqueConstraint(columnNames = "email"))
 @Getter
 @Setter
-public class User {
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class User implements UserDetails {
+
   @Id
-  @GeneratedValue(strategy = GenerationType.AUTO)
+  @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
 
-  @Column(unique = true, nullable = false)
+  @Column(nullable = false, unique = true)
   private String email;
 
   @Column(nullable = false)
   private String password;
 
+  @Enumerated(EnumType.STRING)
   @Column(nullable = false)
-  private String role;
+  private Role role;
+
+  @Column(nullable = false)
+  @Builder.Default
+  private boolean enabled = true;
+
+  @Column(nullable = false)
+  @Builder.Default
+  private boolean accountNonLocked = true;
+
+  // ── UserDetails contract ──────────────────────────────────────────────────
+
+  @Override
+  public Collection<? extends GrantedAuthority> getAuthorities() {
+    // Produces "ROLE_USER", "ROLE_ADMIN", etc.
+    return List.of(new SimpleGrantedAuthority(role.toAuthority()));
+  }
+
+  @Override
+  public String getUsername() {
+    return email;
+  }
+
+  @Override
+  public boolean isAccountNonExpired() { return true; }
+
+  @Override
+  public boolean isAccountNonLocked() { return accountNonLocked; }
+
+  @Override
+  public boolean isCredentialsNonExpired() { return true; }
+
+  @Override
+  public boolean isEnabled() { return enabled; }
 }

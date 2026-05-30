@@ -1,0 +1,54 @@
+package com.authservice.dto;
+
+import com.authservice.model.Role;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+// ── Inbound ───────────────────────────────────────────────────────────────────
+
+public class AuthDtos {
+
+    public record LoginRequest(
+            @Email(message = "Must be a valid email")
+            @NotBlank
+            String email,
+
+            @NotBlank
+            String password
+    ) {}
+
+    public record RegisterRequest(
+            @Email(message = "Must be a valid email")
+            @NotBlank
+            String email,
+
+            @NotBlank
+            @Size(min = 8, message = "Password must be at least 8 characters")
+            String password,
+
+            @NotNull(message = "Role is required")
+            Role role
+    ) {}
+
+    // ── Outbound ──────────────────────────────────────────────────────────────
+
+    public record LoginResponse(
+            String token,
+            String userId,
+            String email,
+            String role
+    ) {}
+
+    public record RegisterResponse(
+            String userId,
+            String email,
+            String role
+    ) {}
+
+    public record ErrorResponse(
+            String error,
+            String message
+    ) {}
+}

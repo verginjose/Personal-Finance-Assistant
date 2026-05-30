@@ -1,0 +1,66 @@
+server:
+  port: 8080
+
+jwt:
+  secret: KJt4OtYB78HEbSHGwYYQICd5Rz26jhy1LlDwpoervzJ
+  expiration: 86400000
+
+auth:
+  service:
+    url: http://localhost:8082
+
+spring:
+  codec:
+    max-in-memory-size: 12MB
+  webflux:
+    multipart:
+      max-in-memory-size: 12MB
+  cloud:
+    gateway:
+      routes:
+        - id: upsert-service
+          uri: http://upsert-service:8081
+          predicates:
+            - Path=/api/upsert/**
+          filters:
+            - StripPrefix=1
+
+        - id: auth-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - StripPrefix=1
+
+        - id: analytics-service
+          uri: http://analytics-service:8084
+          predicates:
+            - Path=/api/analytics/**
+          filters:
+            - StripPrefix=1
+
+        - id: ocr-parser-service
+          uri: http://ocr-parser-service:8083
+          predicates:
+            - Path=/api/bill/**
+          filters:
+            - StripPrefix=1
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    reactor.netty.http.client: DEBUG
+    org.springframework.security: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: api-gateway

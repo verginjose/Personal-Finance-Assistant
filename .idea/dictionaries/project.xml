@@ -2,6 +2,8 @@
   <dictionary name="project">
     <words>
       <w>postgre</w>
+      <w>prometheus</w>
+      <w>webflux</w>
     </words>
   </dictionary>
 </component>

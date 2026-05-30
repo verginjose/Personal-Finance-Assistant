@@ -2,6 +2,10 @@ services:
   postgres:
     image: postgres:15
     container_name: postgres-db
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -22,6 +26,10 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     ports:
       - "6379:6379"
     volumes:
@@ -45,6 +53,10 @@ services:
       postgres:
         condition: service_healthy
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
@@ -57,6 +69,7 @@ services:
       JWT_EXPIRATION: ${JWT_EXPIRATION}
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
     ports:
       - "${AUTH_SERVICE_PORT}:8082"
     networks:
@@ -71,6 +84,10 @@ services:
       postgres:
         condition: service_healthy
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
@@ -79,6 +96,7 @@ services:
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
       SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${FINANCE_DB_SCHEMA}
       SPRING_DATASOURCE_HIKARI_SCHEMA: ${FINANCE_DB_SCHEMA}
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
     ports:
       - "${UPSERT_SERVICE_PORT}:8081"
     networks:
@@ -93,6 +111,10 @@ services:
       postgres:
         condition: service_healthy
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
@@ -101,6 +123,7 @@ services:
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
       SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${FINANCE_DB_SCHEMA}
       SPRING_DATASOURCE_HIKARI_SCHEMA: ${FINANCE_DB_SCHEMA}
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
     ports:
       - "${ANALYTICS_SERVICE_PORT}:8084"
     networks:
@@ -112,10 +135,15 @@ services:
       dockerfile: Dockerfile
     container_name: ocr-parser-service
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     ports:
       - "${OCR_SERVICE_PORT}:8083"
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY}
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
     networks:
       - finance-network
 
@@ -136,6 +164,10 @@ services:
       analytics-service:
         condition: service_started
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       # JWT
       JWT_SECRET: ${JWT_SECRET}
@@ -147,6 +179,7 @@ services:
 
       # Auth service URL
       AUTH_SERVICE_URL: http://auth-service:8082
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
     ports:
       - "${API_GATEWAY_PORT}:8080"
     networks:
@@ -156,6 +189,10 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: clickhouse
+    deploy:
+      resources:
+        limits:
+          memory: 1G
     ports:
       - "8123:8123"
       - "9000:9000"
@@ -171,6 +208,10 @@ services:
   prometheus:
     image: prom/prometheus:v2.55.0
     container_name: prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     ports:
       - "9090:9090"
     volumes:
@@ -181,6 +222,10 @@ services:
   grafana:
     image: grafana/grafana:11.1.4
     container_name: grafana
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     ports:
       - "3000:3000"
     environment:
@@ -210,6 +255,10 @@ services:
     image: grafana/loki:3.1.0
     container_name: loki
     user: root
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     ports:
       - "3100:3100"
     command: -config.file=/etc/loki/loki-config.yaml
@@ -224,6 +273,10 @@ services:
   promtail:
     image: grafana/promtail:3.1.0
     container_name: promtail
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     command: -config.file=/etc/promtail/promtail-config.yaml
     volumes:
       - ./observability/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro

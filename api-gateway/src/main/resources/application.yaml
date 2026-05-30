@@ -10,6 +10,9 @@ auth:
     url: http://auth-service:8082
 
 spring:
+  threads:
+    virtual:
+      enabled: true
   codec:
     max-in-memory-size: 12MB
   webflux:

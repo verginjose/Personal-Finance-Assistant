@@ -105,4 +105,4 @@ public class RateLimiterConfig {
 
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
-}
+}   

@@ -24,25 +24,41 @@ import java.util.UUID;
 public class JwtService {
 
   private final SecretKey secretKey;
-  private final long expirationMs;
+  private final long accessExpirationMs;
 
   public JwtService(
           @Value("${jwt.secret}") String secret,
-          @Value("${jwt.expiration-ms}") long expirationMs) {
+          @Value("${jwt.access-expiration-ms:900000}") long accessExpirationMs) {
     this.secretKey = resolveKey(secret);
-    this.expirationMs = expirationMs;
+    this.accessExpirationMs = accessExpirationMs;
   }
 
   // ── Token generation ──────────────────────────────────────────────────────
 
+  /**
+   * Used on initial LOGIN — reads from a fully loaded User JPA entity.
+   */
   public String generateToken(User user) {
+    return buildToken(user.getEmail(), user.getId().toString(), user.getRole().name());
+  }
+
+  /**
+   * Used on REFRESH — builds a new access token purely from Redis-stored strings.
+   * NO database query is required. This is the whole point of storing session
+   * data (userId, email, role) in Redis alongside the refresh token.
+   */
+  public String generateToken(String email, String userId, String role) {
+    return buildToken(email, userId, role);
+  }
+
+  private String buildToken(String email, String userId, String role) {
     return Jwts.builder()
-            .subject(user.getEmail())
-            .claim("userId", user.getId().toString())
-            .claim("role", user.getRole().name())        // stored WITHOUT "ROLE_" prefix
+            .subject(email)
+            .claim("userId", userId)
+            .claim("role", role)                          // stored WITHOUT "ROLE_" prefix
             .id(UUID.randomUUID().toString())             // jti: makes each token unique
             .issuedAt(new Date())
-            .expiration(new Date(System.currentTimeMillis() + expirationMs))
+            .expiration(new Date(System.currentTimeMillis() + accessExpirationMs))
             .signWith(secretKey)
             .compact();
   }

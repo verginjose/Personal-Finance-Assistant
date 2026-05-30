@@ -1,0 +1,90 @@
+### ══════════════════════════════════════════════════════════════════
+###  OCR PARSER SERVICE — Full API Verification
+###  Base URL routed through API Gateway: http://localhost:8080
+###
+###  Requires: a sample image or PDF file on your filesystem.
+###  Set @sampleImage to an absolute path to a receipt/bill image.
+### ══════════════════════════════════════════════════════════════════
+
+@baseUrl     = http://localhost:8080/api/ocr
+@sampleImage = /path/to/sample-receipt.jpg
+@samplePdf   = /path/to/sample-invoice.pdf
+
+### ─────────────────────────────────────────────────────────────────
+###  SETUP: Login to get token and userId
+### ─────────────────────────────────────────────────────────────────
+# @name login
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@gmail.com",
+  "password": "password123"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  1. PROCESS IMAGE — upload a JPG/PNG receipt
+###     Expected: 200 with extracted financial data
+###     (userId, name, amount, type, category, currency, description)
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/bill/process/{{login.response.body.userId}}
+Content-Type: multipart/form-data; boundary=----boundary
+Authorization: Bearer {{login.response.body.token}}
+
+------boundary
+Content-Disposition: form-data; name="file"; filename="receipt.jpg"
+Content-Type: image/jpeg
+
+< {{sampleImage}}
+------boundary--
+
+### ─────────────────────────────────────────────────────────────────
+###  2. PROCESS PDF — upload a PDF invoice
+###     Expected: 200 with extracted financial data
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/bill/process/{{login.response.body.userId}}
+Content-Type: multipart/form-data; boundary=----boundary
+Authorization: Bearer {{login.response.body.token}}
+
+------boundary
+Content-Disposition: form-data; name="file"; filename="invoice.pdf"
+Content-Type: application/pdf
+
+< {{samplePdf}}
+------boundary--
+
+### ─────────────────────────────────────────────────────────────────
+###  3. VALIDATION — missing file param
+###     Expected: 400 Bad Request with message about missing 'file'
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/bill/process/{{login.response.body.userId}}
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  4. VALIDATION — wrong content type (send JSON, not multipart)
+###     Expected: 400 Bad Request — not image or PDF
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/bill/process/{{login.response.body.userId}}
+Content-Type: multipart/form-data; boundary=----boundary
+Authorization: Bearer {{login.response.body.token}}
+
+------boundary
+Content-Disposition: form-data; name="file"; filename="data.json"
+Content-Type: application/json
+
+{"invalid": "file"}
+------boundary--
+
+### ─────────────────────────────────────────────────────────────────
+###  5. UNAUTHENTICATED — no token
+###     Expected: 401 Unauthorized from API Gateway
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/bill/process/some-user-id
+Content-Type: multipart/form-data; boundary=----boundary
+
+------boundary
+Content-Disposition: form-data; name="file"; filename="receipt.jpg"
+Content-Type: image/jpeg
+
+< {{sampleImage}}
+------boundary--

@@ -43,14 +43,16 @@ public class SecurityConfig {
                 .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
 
                 .authorizeExchange(exchanges -> exchanges
+                        // Prometheus scraping — must be public
+                        .pathMatchers("/actuator/**").permitAll()
+
                         // Public: auth endpoints (login, register, etc.)
                         .pathMatchers("/api/auth/**").permitAll()
 
                         // RBAC: route-level role restrictions
-                        // Adjust roles to match what your auth service issues
                         .pathMatchers("/api/upsert/**").hasAnyRole("USER", "ADMIN")
                         .pathMatchers("/api/bill/**").hasAnyRole("USER", "ADMIN")
-                        .pathMatchers("/api/analytics/**").hasRole("ADMIN")
+                        .pathMatchers("/api/analytics/**").hasAnyRole("USER", "ADMIN")
 
                         // Everything else requires authentication
                         .anyExchange().authenticated()

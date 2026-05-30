@@ -1,0 +1,62 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          # Only scrape containers that are part of this compose project
+          - name: label
+            values: ["com.docker.compose.project=personal-finance-assistant"]
+
+    relabel_configs:
+      # Use the Docker Compose service name as the primary label (e.g. auth-service, upsert-service)
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: service
+
+      # Also keep the full container name
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: container
+
+      # Keep the Docker Compose project label
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_project"]
+        target_label: compose_project
+
+    pipeline_stages:
+      # Stage 1: Parse the Docker JSON log wrapper (Docker writes logs as JSON)
+      - json:
+          expressions:
+            output: log
+            stream: stream
+
+      # Stage 2: Try to parse Spring Boot log format from the output field
+      # Format: 2026-05-30T17:00:01.234Z  INFO 1 --- [service] [thread] com.example.Cls : Message
+      - regex:
+          expression: '^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s+(?P<level>ERROR|WARN|INFO|DEBUG|TRACE)\s+\d+\s+---\s+\[(?P<app>[^\]]*)\]\s+\[(?P<thread>[^\]]*)\]\s+(?P<logger>\S+)\s+:\s+(?P<message>.+)$'
+          source: output
+
+      # Stage 3: Use the parsed timestamp if available, else use Docker time
+      - timestamp:
+          source: ts
+          format: RFC3339Nano
+          fallback_formats:
+            - "2006-01-02T15:04:05.999999999Z"
+
+      # Stage 4: Promote level to a label so Grafana can filter by it
+      - labels:
+          level:
+          logger:
+
+      # Stage 5: Set the log line to the actual message (or full output if not Spring)
+      - output:
+          source: output

@@ -36,6 +36,7 @@ public class AuthDtos {
 
     public record LoginResponse(
             String token,
+            String refreshToken,
             String userId,
             String email,
             String role
@@ -50,5 +51,39 @@ public class AuthDtos {
     public record ErrorResponse(
             String error,
             String message
+    ) {}
+
+    // ── Additional Inbound ─────────────────────────────────────────────────────
+
+    public record RefreshTokenRequest(
+            @NotBlank
+            String refreshToken
+    ) {}
+
+    public record LogoutRequest(
+            @NotBlank
+            String refreshToken
+    ) {}
+
+    public record AdminCreateUserRequest(
+            @Email(message = "Must be a valid email")
+            @NotBlank
+            String email,
+
+            @NotBlank
+            @Size(min = 8, message = "Password must be at least 8 characters")
+            String password,
+
+            @NotNull(message = "Role is required")
+            Role role
+    ) {}
+
+    public record ChangePasswordRequest(
+            @NotBlank
+            String currentPassword,
+
+            @NotBlank
+            @Size(min = 8, message = "New password must be at least 8 characters")
+            String newPassword
     ) {}
 }

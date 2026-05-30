@@ -19,13 +19,57 @@ services:
     networks:
       - finance-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - finance-network
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${AUTH_DB_SCHEMA}
+      SPRING_DATASOURCE_HIKARI_SCHEMA: ${AUTH_DB_SCHEMA}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "${AUTH_SERVICE_PORT}:8082"
+    networks:
+      - finance-network
+
   upsert-service:
     build:
       context: ./upsert-service
       dockerfile: Dockerfile
     container_name: upsert-service
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: on-failure
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
@@ -40,13 +84,14 @@ services:
     networks:
       - finance-network
 
-  auth-service:
+  analytics-service:
     build:
-      context: ./auth-service
+      context: ./analytics-service
       dockerfile: Dockerfile
-    container_name: auth-service
+    container_name: analytics-service
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: on-failure
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
@@ -54,12 +99,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
-      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${AUTH_DB_SCHEMA}
-      SPRING_DATASOURCE_HIKARI_SCHEMA: ${AUTH_DB_SCHEMA}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${FINANCE_DB_SCHEMA}
+      SPRING_DATASOURCE_HIKARI_SCHEMA: ${FINANCE_DB_SCHEMA}
     ports:
-      - "${AUTH_SERVICE_PORT}:8082"
+      - "${ANALYTICS_SERVICE_PORT}:8084"
     networks:
       - finance-network
 
@@ -76,81 +119,39 @@ services:
     networks:
       - finance-network
 
-  analytics-service:
-    build:
-      context: ./analytics-service
-      dockerfile: Dockerfile
-    container_name: analytics-service
-    depends_on:
-      - postgres
-    restart: on-failure
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
-      SPRING_DATASOURCE_USERNAME: ${DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
-      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${FINANCE_DB_SCHEMA}
-      SPRING_DATASOURCE_HIKARI_SCHEMA: ${FINANCE_DB_SCHEMA}
-    ports:
-      - "${ANALYTICS_SERVICE_PORT}:8084"
-    networks:
-      - finance-network
-
   api-gateway:
     build:
       context: ./api-gateway
       dockerfile: Dockerfile
     container_name: api-gateway
     depends_on:
-      - upsert-service
-      - auth-service
-      - ocr-parser-service
-      - analytics-service
+      redis:
+        condition: service_healthy
+      upsert-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      ocr-parser-service:
+        condition: service_started
+      analytics-service:
+        condition: service_started
     restart: on-failure
     environment:
-      SPRING_CLOUD_GATEWAY_ROUTES_0_ID: upsert-service
-      SPRING_CLOUD_GATEWAY_ROUTES_0_URI: http://upsert-service:8081
-      SPRING_CLOUD_GATEWAY_ROUTES_0_PREDICATES_0: Path=/api/upsert/**
-      SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_0: StripPrefix=1
-      SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_1: JwtValidation
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
 
-      SPRING_CLOUD_GATEWAY_ROUTES_1_ID: auth-service
-      SPRING_CLOUD_GATEWAY_ROUTES_1_URI: http://auth-service:8082
-      SPRING_CLOUD_GATEWAY_ROUTES_1_PREDICATES_0: Path=/api/auth/**
-      SPRING_CLOUD_GATEWAY_ROUTES_1_FILTERS_0: StripPrefix=1
+      # Redis — picked up by spring.data.redis.* in application.yml
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
 
-      SPRING_CLOUD_GATEWAY_ROUTES_2_ID: analytics-service
-      SPRING_CLOUD_GATEWAY_ROUTES_2_URI: http://analytics-service:8084
-      SPRING_CLOUD_GATEWAY_ROUTES_2_PREDICATES_0: Path=/api/analytics/**
-      SPRING_CLOUD_GATEWAY_ROUTES_2_FILTERS_0: StripPrefix=1
-      SPRING_CLOUD_GATEWAY_ROUTES_2_FILTERS_1: JwtValidation
-
-      SPRING_CLOUD_GATEWAY_ROUTES_3_ID: ocr-parser-service
-      SPRING_CLOUD_GATEWAY_ROUTES_3_URI: http://ocr-parser-service:8083
-      SPRING_CLOUD_GATEWAY_ROUTES_3_PREDICATES_0: Path=/api/bill/**
-      SPRING_CLOUD_GATEWAY_ROUTES_3_FILTERS_0: StripPrefix=1
-      SPRING_CLOUD_GATEWAY_ROUTES_3_FILTERS_1: JwtValidation
-
+      # Auth service URL
       AUTH_SERVICE_URL: http://auth-service:8082
     ports:
       - "${API_GATEWAY_PORT}:8080"
     networks:
       - finance-network
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: frontend
-    ports:
-      - "8000:80"
-    volumes:
-      - ./frontend:/usr/share/nginx/html
-    depends_on:
-      - api-gateway
-    networks:
-      - finance-network
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
@@ -186,16 +187,12 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
-      # Allow embedding in the dev panel iframe
       GF_SECURITY_ALLOW_EMBEDDING: "true"
-      # Anonymous read-only access so the iframe doesn't show a login prompt
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
-      # Disable login form for anonymous sessions (optional, cleaner UX)
       GF_AUTH_DISABLE_LOGIN_FORM: "false"
-      # Subpath configuration for reverse proxy
-      GF_SERVER_ROOT_URL: "http://localhost:8000/dev-health/grafana/"
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SERVER_ROOT_URL: "http://localhost:3000/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
     restart: on-failure
     volumes:
       - grafana_data:/var/lib/grafana
@@ -204,21 +201,36 @@ services:
     depends_on:
       - clickhouse
       - prometheus
+      - loki
     networks:
       - finance-network
 
-  fluent-bit:
-    image: fluent/fluent-bit:3.1
-    container_name: fluent-bit
-    command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+  # ── Loki: log storage backend ─────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.1.0
+    container_name: loki
+    user: root
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki-config.yaml
     volumes:
-      - ./observability/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
-      - ./observability/fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
-      - ./observability/fluent-bit/docker_name.lua:/fluent-bit/etc/docker_name.lua:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./observability/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    restart: on-failure
+    networks:
+      - finance-network
+
+  # ── Promtail: ships Docker logs → Loki with auto service-name labels ───────
+  promtail:
+    image: grafana/promtail:3.1.0
+    container_name: promtail
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./observability/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
     depends_on:
-      - clickhouse
+      - loki
     restart: on-failure
     networks:
       - finance-network
@@ -227,6 +239,8 @@ volumes:
   postgres_data:
   clickhouse_data:
   grafana_data:
+  redis-data:
+  loki_data:
 
 networks:
   finance-network:

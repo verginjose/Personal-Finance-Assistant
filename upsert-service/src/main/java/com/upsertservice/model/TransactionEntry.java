@@ -1,5 +1,6 @@
 package com.upsertservice.model;
 
+import com.upsertservice.model.RecurringPeriod;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
@@ -65,6 +66,18 @@ public class TransactionEntry {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    /** Whether this is a recurring transaction. Default false. */
+    @Column(name = "recurring", nullable = false)
+    private boolean recurring = false;
+
+    /**
+     * Recurrence period — only meaningful when {@code recurring = true}.
+     * Hibernate adds this as a nullable VARCHAR column automatically.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "recurring_period")
+    private RecurringPeriod recurringPeriod;
 
     @PrePersist
     protected void onCreate() {

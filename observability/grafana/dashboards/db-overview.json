@@ -1,0 +1,117 @@
+{
+  "uid": "db-overview",
+  "title": "Database",
+  "tags": ["finance-assistant"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 4,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+
+    { "id": 1, "title": "Users",
+      "type": "stat",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },
+      "targets": [{ "queryType": "sql", "rawSql": "SELECT count() AS v FROM pg_auth.users", "refId": "A", "format": "table" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 } },
+
+    { "id": 2, "title": "Transactions",
+      "type": "stat",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },
+      "targets": [{ "queryType": "sql", "rawSql": "SELECT count() AS v FROM pg_finance.transaction_entries WHERE deleted_at IS NULL", "refId": "A", "format": "table" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 } },
+
+    { "id": 3, "title": "Expense Groups",
+      "type": "stat",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },
+      "targets": [{ "queryType": "sql", "rawSql": "SELECT count() AS v FROM pg_finance.expense_groups", "refId": "A", "format": "table" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 } },
+
+    { "id": 4, "title": "ClickHouse",
+      "type": "stat",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },
+      "targets": [{ "queryType": "sql", "rawSql": "SELECT 1 AS status", "refId": "A", "format": "table" }],
+      "fieldConfig": { "defaults": { "mappings": [{ "type": "value", "options": { "1": { "text": "UP", "color": "green" } } }], "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "background" },
+      "gridPos": { "h": 4, "w": 3, "x": 12, "y": 0 } },
+
+    { "id": 5, "title": "Avg Query (ms)",
+      "type": "stat",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },
+      "targets": [{ "queryType": "sql", "rawSql": "SELECT round(avg(query_duration_ms)) AS latency FROM system.query_log WHERE type = 'QueryFinish' AND event_time > now() - INTERVAL 1 HOUR", "refId": "A", "format": "table" }],
+      "fieldConfig": { "defaults": { "unit": "ms", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 100 }, { "color": "red", "value": 500 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 3, "x": 15, "y": 0 } },
+
+    { "id": 6, "title": "CH Queries (1h)",
+      "type": "stat",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },
+      "targets": [{ "queryType": "sql", "rawSql": "SELECT count() AS v FROM system.query_log WHERE type = 'QueryFinish' AND event_time > now() - INTERVAL 1 HOUR", "refId": "A", "format": "table" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 3, "x": 18, "y": 0 } },
+
+    { "id": 7, "title": "Idempotency Records",
+      "type": "stat",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },
+      "targets": [{ "queryType": "sql", "rawSql": "SELECT count() AS v FROM pg_finance.idempotency_records", "refId": "A", "format": "table" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 3, "x": 21, "y": 0 } },
+
+    { "id": 10, "title": "Postgres — Users",
+      "type": "table",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },
+      "targets": [{ "queryType": "sql", "rawSql": "SELECT id, email, role, enabled FROM pg_auth.users ORDER BY email ASC LIMIT 50", "refId": "A", "format": "table" }],
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "id" },      "properties": [{ "id": "custom.width", "value": 60 }] },
+        { "matcher": { "id": "byName", "options": "email" },   "properties": [{ "id": "custom.width", "value": 220 }] },
+        { "matcher": { "id": "byName", "options": "role" },    "properties": [{ "id": "custom.width", "value": 90 }] },
+        { "matcher": { "id": "byName", "options": "enabled" }, "properties": [{ "id": "custom.width", "value": 70 }] }
+      ]},
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 } },
+
+    { "id": 11, "title": "Postgres — Transactions",
+      "type": "table",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },
+      "targets": [{ "queryType": "sql", "rawSql": "SELECT id, name, type, amount, currency, expense_category, income_category, recurring, recurring_period, created_at FROM pg_finance.transaction_entries WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 50", "refId": "A", "format": "table" }],
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "id" },               "properties": [{ "id": "custom.width", "value": 50 }] },
+        { "matcher": { "id": "byName", "options": "name" },             "properties": [{ "id": "custom.width", "value": 130 }] },
+        { "matcher": { "id": "byName", "options": "type" },             "properties": [{ "id": "custom.width", "value": 75 }] },
+        { "matcher": { "id": "byName", "options": "amount" },           "properties": [{ "id": "custom.width", "value": 80 }] },
+        { "matcher": { "id": "byName", "options": "currency" },         "properties": [{ "id": "custom.width", "value": 70 }] },
+        { "matcher": { "id": "byName", "options": "expense_category" }, "properties": [{ "id": "custom.width", "value": 130 }] },
+        { "matcher": { "id": "byName", "options": "income_category" },  "properties": [{ "id": "custom.width", "value": 110 }] }
+      ]},
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 } },
+
+    { "id": 20, "title": "Postgres — Logs",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "loki-ds" },
+      "targets": [{ "expr": "{service=\"postgres\"}", "refId": "A" }],
+      "options": { "showTime": true, "showLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 } },
+
+    { "id": 21, "title": "Redis — Logs",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "loki-ds" },
+      "targets": [{ "expr": "{service=\"redis\"}", "refId": "A" }],
+      "options": { "showTime": true, "showLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 } },
+
+    { "id": 30, "title": "ClickHouse — Logs",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "loki-ds" },
+      "targets": [{ "expr": "{service=\"clickhouse\"}", "refId": "A" }],
+      "options": { "showTime": true, "showLabels": false, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 21 } }
+
+  ]
+}

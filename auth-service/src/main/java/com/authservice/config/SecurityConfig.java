@@ -53,8 +53,9 @@ public class SecurityConfig {
                     .requestMatchers(
                             "/auth/login",
                             "/auth/register",
+                            "/auth/refresh",
                             "/auth/health",
-                            "/actuator/health"
+                            "/actuator/**"
                     ).permitAll()
 
                     // Admin-only management endpoints

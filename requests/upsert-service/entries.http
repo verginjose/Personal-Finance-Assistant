@@ -1,0 +1,226 @@
+### ══════════════════════════════════════════════════════════════════
+###  UPSERT SERVICE — Full API Verification
+###  Base URL routed through API Gateway: http://localhost:8080
+###
+###  Run auth.http first to populate {{adminLogin}} variables,
+###  OR replace {{token}} and {{userId}} with real values below.
+### ══════════════════════════════════════════════════════════════════
+
+@baseUrl    = http://localhost:8080/api/upsert
+@token      = REPLACE_WITH_JWT_TOKEN
+@userId     = REPLACE_WITH_USER_UUID
+
+### ─────────────────────────────────────────────────────────────────
+###  SETUP: Login to get token (run this first, then copy values above)
+### ─────────────────────────────────────────────────────────────────
+# @name login
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@gmail.com",
+  "password": "password123"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  1. CREATE — EXPENSE transaction
+###     Expected: 201 with generated id
+### ─────────────────────────────────────────────────────────────────
+# @name createExpense
+POST {{baseUrl}}/create
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "userId": "{{login.response.body.userId}}",
+  "name": "Swiggy Food Order",
+  "amount": 450.00,
+  "type": "EXPENSE",
+  "currency": "INR",
+  "expenseCategory": "FOOD_AND_DINING",
+  "description": "Dinner order from Swiggy"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  2. CREATE — INCOME transaction
+###     Expected: 201 with generated id
+### ─────────────────────────────────────────────────────────────────
+# @name createIncome
+POST {{baseUrl}}/create
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "userId": "{{login.response.body.userId}}",
+  "name": "Monthly Salary",
+  "amount": 75000.00,
+  "type": "INCOME",
+  "currency": "INR",
+  "incomeCategory": "SALARY",
+  "description": "June 2026 salary credit"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  3. CREATE — with idempotency key (duplicate safe)
+###     Send twice — both should return same response
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/create
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+Idempotency-Key: order-unique-key-abc123
+
+{
+  "userId": "{{login.response.body.userId}}",
+  "name": "Netflix Subscription",
+  "amount": 649.00,
+  "type": "EXPENSE",
+  "currency": "INR",
+  "expenseCategory": "ENTERTAINMENT",
+  "description": "Monthly Netflix plan"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  4. UPDATE — modify the expense transaction
+###     Expected: 200
+### ─────────────────────────────────────────────────────────────────
+PUT {{baseUrl}}/update
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "id": {{createExpense.response.body.id}},
+  "userId": "{{login.response.body.userId}}",
+  "name": "Zomato Food Order",
+  "amount": 520.00,
+  "type": "EXPENSE",
+  "currency": "INR",
+  "expenseCategory": "FOOD_AND_DINING",
+  "description": "Updated dinner order from Zomato"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  5. LIST all entries (paginated)
+###     Expected: 200 with page of entries
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/entries?userId={{login.response.body.userId}}&page=0&size=10
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  6. LIST — filter by EXPENSE type only
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/entries?userId={{login.response.body.userId}}&type=EXPENSE&page=0&size=10
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  7. LIST — filter by INCOME type only
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/entries?userId={{login.response.body.userId}}&type=INCOME&page=0&size=10
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  8. SEARCH entries by keyword
+###     Expected: 200 page containing matching entries
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/search?userId={{login.response.body.userId}}&query=salary&page=0&size=10
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  9. SUMMARY — total income, expense, net balance
+###     Expected: 200 with totalIncome, totalExpense, netBalance, totalCount
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/summary?userId={{login.response.body.userId}}
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  NEW: GET SINGLE ENTRY BY ID
+###     Expected: 200 with entry details
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/entries/{{createIncome.response.body.id}}?userId={{login.response.body.userId}}
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  NEW: LIST — with date range filter
+###     Expected: 200 page with entries created in date range
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/entries?userId={{login.response.body.userId}}&startDate=2026-01-01&endDate=2026-12-31&page=0&size=10
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  NEW: PATCH AMOUNT — correct an entry's amount without full PUT
+###     Expected: 200 with updated entry
+### ─────────────────────────────────────────────────────────────────
+PATCH {{baseUrl}}/entries/{{createExpense.response.body.id}}/amount?userId={{login.response.body.userId}}
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "amount": 999.99
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  NEW: CREATE RECURRING transaction
+###     Expected: 201 with recurring=true, recurringPeriod=MONTHLY
+### ─────────────────────────────────────────────────────────────────
+# @name createRecurring
+POST {{baseUrl}}/create
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "userId": "{{login.response.body.userId}}",
+  "name": "Gym Membership",
+  "amount": 1200.00,
+  "type": "EXPENSE",
+  "currency": "INR",
+  "expenseCategory": "HEALTHCARE",
+  "description": "Monthly gym membership",
+  "recurring": true,
+  "recurringPeriod": "MONTHLY"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  NEW: LIST RECURRING entries
+###     Expected: 200 array of all recurring transactions
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/recurring?userId={{login.response.body.userId}}
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  NEW: EXPORT as CSV
+###     Expected: 200 text/csv with Content-Disposition: attachment
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/entries/export?userId={{login.response.body.userId}}
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  10. BULK DELETE — delete multiple entries at once
+###      Expected: 204 No Content
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/delete/bulk
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "userId": "{{login.response.body.userId}}",
+  "ids": [{{createExpense.response.body.id}}]
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  11. SOFT DELETE — single entry
+###      Expected: 204 No Content
+### ─────────────────────────────────────────────────────────────────
+DELETE {{baseUrl}}/delete/{{createIncome.response.body.id}}?userId={{login.response.body.userId}}
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  12. Verify deleted entry no longer appears in list
+###      Expected: 200 with totalElements not including deleted entry
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/entries?userId={{login.response.body.userId}}&page=0&size=10
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  13. HEALTH CHECK
+###      Expected: 200 {"status": "UP"}
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/health

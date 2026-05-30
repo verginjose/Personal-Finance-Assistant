@@ -1,0 +1,163 @@
+### ══════════════════════════════════════════════════════════════════
+###  AUTH SERVICE — Full API Verification
+###  Base URL routed through API Gateway: http://localhost:8080
+### ══════════════════════════════════════════════════════════════════
+
+@baseUrl = http://localhost:8080/api/auth
+@adminEmail = admin@gmail.com
+@adminPassword = password123
+@userEmail = testverify@gmail.com
+@userPassword = tempPass123
+@newPassword = securePass999
+
+### ─────────────────────────────────────────────────────────────────
+###  1. REGISTER a new regular user (may conflict if already exists)
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/register
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "role": "USER"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  2. LOGIN as Admin → captures token and refreshToken
+### ─────────────────────────────────────────────────────────────────
+# @name adminLogin
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  3. ADMIN — create a new user
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/admin/users
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.token}}
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "role": "USER"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  4. LOGIN as the new user → captures user token + refresh token
+### ─────────────────────────────────────────────────────────────────
+# @name userLogin
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  5. GET /me — verify the user access token works
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/me
+Authorization: Bearer {{userLogin.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  6. REFRESH — get new access + refresh token pair (rotation)
+###     Expected: 200 with new token and refreshToken; old token invalid
+### ─────────────────────────────────────────────────────────────────
+# @name refreshed
+POST {{baseUrl}}/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{userLogin.response.body.refreshToken}}"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  7. Verify OLD refresh token is now invalid (rotation)
+###     Expected: 401 Unauthorized
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{userLogin.response.body.refreshToken}}"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  8. CHANGE PASSWORD
+###     Expected: 200, all active sessions revoked
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/change-password
+Content-Type: application/json
+Authorization: Bearer {{refreshed.response.body.token}}
+
+{
+  "currentPassword": "{{userPassword}}",
+  "newPassword": "{{newPassword}}"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  9. Verify OLD password login fails after change
+###     Expected: 401 Unauthorized
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  10. LOGIN with NEW password
+### ─────────────────────────────────────────────────────────────────
+# @name userLogin2
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{newPassword}}"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  11. LOGOUT — revoke refresh token
+###     Expected: 200
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/logout
+Content-Type: application/json
+Authorization: Bearer {{userLogin2.response.body.token}}
+
+{
+  "refreshToken": "{{userLogin2.response.body.refreshToken}}"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  12. Verify refresh token is dead after logout
+###     Expected: 401 Unauthorized
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{userLogin2.response.body.refreshToken}}"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  13. ADMIN — try to access admin endpoint with USER token
+###     Expected: 403 Forbidden
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/admin/users
+Authorization: Bearer {{userLogin2.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  14. ADMIN — access admin endpoint with ADMIN token
+###     Expected: 200
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/admin/users
+Authorization: Bearer {{adminLogin.response.body.token}}

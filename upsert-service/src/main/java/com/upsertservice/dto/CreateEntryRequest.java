@@ -2,6 +2,7 @@ package com.upsertservice.dto;
 
 import com.upsertservice.model.ExpenseCategory;
 import com.upsertservice.model.IncomeCategory;
+import com.upsertservice.model.RecurringPeriod;
 import com.upsertservice.model.TransactionType;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
@@ -37,4 +38,10 @@ public class CreateEntryRequest {
 
     @Size(max = 500, message = "Description cannot exceed 500 characters")
     private String description;
+
+    /** Set to true for a recurring transaction. Defaults to false. */
+    private boolean recurring = false;
+
+    /** Required when recurring = true. */
+    private RecurringPeriod recurringPeriod;
 }

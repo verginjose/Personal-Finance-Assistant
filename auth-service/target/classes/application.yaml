@@ -4,29 +4,34 @@ server:
 spring:
   application:
     name: auth-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      password: ${REDIS_PASSWORD:}
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/finance_assistant
-    username: finance_user
-    password: finance_pass
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/finance_assistant}
+    username: ${SPRING_DATASOURCE_USERNAME:finance_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:finance_pass}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
 
   jpa:
     hibernate:
-      ddl-auto: create          # use Flyway/Liquibase in prod; never auto-create
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
     show-sql: false
     properties:
       hibernate:
-        default_schema: auth
+        default_schema: ${SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA:auth}
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
 jwt:
-  # In prod: inject via environment variable / Vault / Kubernetes secret
-  # Must be base64-encoded 256-bit key OR a plaintext string >= 32 chars
-  secret: KJt4OtYB78HEbSHGwYYQICd5Rz26jhy1LlDwpoervzJ
-  expiration-ms: 86400000   # 24h
+  secret: ${JWT_SECRET:KJt4OtYB78HEbSHGwYYQICd5Rz26jhy1LlDwpoervzJ}
+  expiration-ms: ${JWT_EXPIRATION:86400000}
+  access-expiration-ms: ${JWT_ACCESS_EXPIRATION:900000}
+  refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION:604800000}
 
 management:
   endpoints:
@@ -41,4 +46,4 @@ management:
 logging:
   level:
     com.auth: DEBUG
-    org.springframework.security: INFO   # set to DEBUG to trace security decisions
+    org.springframework.security: INFO

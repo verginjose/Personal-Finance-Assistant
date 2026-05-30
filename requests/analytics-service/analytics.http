@@ -1,0 +1,113 @@
+### ══════════════════════════════════════════════════════════════════
+###  ANALYTICS SERVICE — Full API Verification
+###  Base URL routed through API Gateway: http://localhost:8080
+### ══════════════════════════════════════════════════════════════════
+
+@baseUrl = http://localhost:8080/api/analytics
+
+### ─────────────────────────────────────────────────────────────────
+###  SETUP: Login first to get token and userId
+### ─────────────────────────────────────────────────────────────────
+# @name login
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@gmail.com",
+  "password": "password123"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  1. HEALTH CHECK
+###     Expected: 200 {"status": "UP", "service": "analytics-service"}
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/health
+
+### ─────────────────────────────────────────────────────────────────
+###  2. CATEGORY PIE CHART — all transactions
+###     Expected: 200 with ChartData (labels + datasets)
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/category-pie-chart?userId={{login.response.body.userId}}
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  3. CATEGORY PIE CHART — EXPENSE only
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/category-pie-chart?userId={{login.response.body.userId}}&transactionFilter=EXPENSE
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  4. CATEGORY PIE CHART — INCOME only
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/category-pie-chart?userId={{login.response.body.userId}}&transactionFilter=INCOME
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  5. CATEGORY PIE CHART — date range filtered (last 30 days)
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/category-pie-chart?userId={{login.response.body.userId}}&startDate=2026-05-01T00:00:00&endDate=2026-05-31T23:59:59
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  6. TIMELINE CHART — monthly (default)
+###     Expected: 200 with monthly time series data
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/timeline-chart?userId={{login.response.body.userId}}&timelineType=MONTHLY
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  7. TIMELINE CHART — weekly breakdown
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/timeline-chart?userId={{login.response.body.userId}}&timelineType=WEEKLY
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  8. COMPREHENSIVE ANALYTICS — full report
+###     Expected: 200 with summary, pie charts, and timeline combined
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/comprehensive?userId={{login.response.body.userId}}&timelineType=MONTHLY
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  9. CUSTOM ANALYTICS — POST body (same as comprehensive but flexible)
+### ─────────────────────────────────────────────────────────────────
+POST {{baseUrl}}/custom-analytics
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "userId": "{{login.response.body.userId}}",
+  "timelineType": "MONTHLY",
+  "startDate": "2026-01-01T00:00:00",
+  "endDate": "2026-12-31T23:59:59"
+}
+
+### ─────────────────────────────────────────────────────────────────
+###  10. LIST ALL TRANSACTION ENTRIES (paginated, analytics read-view)
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/transaction-entries?userId={{login.response.body.userId}}&page=0&size=10
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  11. INCOME BY CATEGORY — SALARY transactions
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/transactions/income-by-category?userId={{login.response.body.userId}}&incomeCategory=SALARY
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  12. TRANSACTIONS BY TYPE — all EXPENSE
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/transactions/by-type?userId={{login.response.body.userId}}&type=EXPENSE
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  13. TRANSACTIONS BY TYPE — all INCOME
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/transactions/by-type?userId={{login.response.body.userId}}&type=INCOME
+Authorization: Bearer {{login.response.body.token}}
+
+### ─────────────────────────────────────────────────────────────────
+###  14. TRANSACTIONS BY TYPE — with date range
+### ─────────────────────────────────────────────────────────────────
+GET {{baseUrl}}/transactions/by-type?userId={{login.response.body.userId}}&type=EXPENSE&startDate=2026-01-01&endDate=2026-12-31
+Authorization: Bearer {{login.response.body.token}}

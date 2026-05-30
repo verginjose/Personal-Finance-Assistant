@@ -1,0 +1,155 @@
+{
+  "uid": "finance-assistant",
+  "title": "Finance Assistant",
+  "tags": ["finance-assistant"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "custom",
+        "query": "api-gateway,auth-service,upsert-service,analytics-service,ocr-parser-service",
+        "current": { "text": "api-gateway", "value": "api-gateway" },
+        "options": [
+          { "text": "api-gateway",        "value": "api-gateway",        "selected": true },
+          { "text": "auth-service",       "value": "auth-service",       "selected": false },
+          { "text": "upsert-service",     "value": "upsert-service",     "selected": false },
+          { "text": "analytics-service",  "value": "analytics-service",  "selected": false },
+          { "text": "ocr-parser-service", "value": "ocr-parser-service", "selected": false }
+        ],
+        "includeAll": false,
+        "multi": false
+      },
+      {
+        "name": "search",
+        "label": "Search",
+        "type": "textbox",
+        "current": { "text": "", "value": "" },
+        "query": ""
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "api-gateway",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [{ "expr": "up{job=\"api-gateway\"}", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red"   } } },
+            { "type": "value", "options": { "1": { "text": "UP",   "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "background" },
+      "gridPos": { "h": 3, "w": 4, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "title": "auth-service",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [{ "expr": "up{job=\"auth-service\"}", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red"   } } },
+            { "type": "value", "options": { "1": { "text": "UP",   "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "background" },
+      "gridPos": { "h": 3, "w": 4, "x": 4, "y": 0 }
+    },
+    {
+      "id": 3,
+      "title": "upsert-service",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [{ "expr": "up{job=\"upsert-service\"}", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red"   } } },
+            { "type": "value", "options": { "1": { "text": "UP",   "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "background" },
+      "gridPos": { "h": 3, "w": 4, "x": 8, "y": 0 }
+    },
+    {
+      "id": 4,
+      "title": "analytics-service",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [{ "expr": "up{job=\"analytics-service\"}", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red"   } } },
+            { "type": "value", "options": { "1": { "text": "UP",   "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "background" },
+      "gridPos": { "h": 3, "w": 4, "x": 12, "y": 0 }
+    },
+    {
+      "id": 5,
+      "title": "ocr-parser-service",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [{ "expr": "up{job=\"ocr-parser-service\"}", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red"   } } },
+            { "type": "value", "options": { "1": { "text": "UP",   "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "background" },
+      "gridPos": { "h": 3, "w": 4, "x": 16, "y": 0 }
+    },
+    {
+      "id": 10,
+      "title": "Logs — $service  |  search: $search",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "loki-ds" },
+      "targets": [{
+        "expr": "{service=\"$service\"} |~ `(?i)$search`",
+        "refId": "A",
+        "queryType": "range"
+      }],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "gridPos": { "h": 25, "w": 24, "x": 0, "y": 3 }
+    }
+  ]
+}

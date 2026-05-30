@@ -10,17 +10,20 @@ import com.upsertservice.repository.IdempotencyRecordRepository;
 import com.upsertservice.repository.TransactionEntryRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -42,6 +45,8 @@ public class TransactionEntryService {
         this.createCounter = meterRegistry.counter("transactions.create.success");
         this.deleteCounter = meterRegistry.counter("transactions.delete.success");
     }
+
+    // ── Create ────────────────────────────────────────────────────────────────
 
     public CreateEntryResponse createEntry(CreateEntryRequest request, String idempotencyKey) {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
@@ -65,6 +70,9 @@ public class TransactionEntryService {
             entry.setIncomeCategory(request.getIncomeCategory());
         }
         entry.setDescription(request.getDescription());
+        entry.setRecurring(request.isRecurring());
+        entry.setRecurringPeriod(request.getRecurringPeriod());
+
         TransactionEntry saved = repository.save(entry);
         createCounter.increment();
 
@@ -76,9 +84,11 @@ public class TransactionEntryService {
             idempotencyRecordRepository.save(record);
         }
 
-        log.info("Transaction created: id={}, user={}", saved.getId(), saved.getUserId());
+        log.info("Transaction created: id={}, user={}, recurring={}", saved.getId(), saved.getUserId(), saved.isRecurring());
         return convertToResponse(saved);
     }
+
+    // ── Update (full) ─────────────────────────────────────────────────────────
 
     public CreateEntryResponse updateEntry(UpdateEntryRequest request) {
         TransactionEntry existing = repository.findByIdAndDeletedAtIsNull(request.getId())
@@ -104,6 +114,20 @@ public class TransactionEntryService {
         return convertToResponse(updated);
     }
 
+    // ── Patch amount (partial update) ─────────────────────────────────────────
+
+    public CreateEntryResponse patchAmount(Long id, UUID userId, BigDecimal newAmount) {
+        TransactionEntry entry = repository.findByIdAndUserIdAndDeletedAtIsNull(id, userId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Transaction entry with ID " + id + " not found for user " + userId));
+        entry.setAmount(newAmount);
+        TransactionEntry saved = repository.save(entry);
+        log.info("Transaction amount patched: id={}, newAmount={}", id, newAmount);
+        return convertToResponse(saved);
+    }
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+
     public void deleteEntry(Long id, UUID userId) {
         TransactionEntry entry = repository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -117,19 +141,38 @@ public class TransactionEntryService {
         log.info("Transaction deleted: id={}, user={}", id, userId);
     }
 
+    // ── Read — single entry ───────────────────────────────────────────────────
+
     @Transactional(readOnly = true)
-    public Page<TransactionEntry> getEntriesByUserId(UUID userId, TransactionType type, int page, int size) {
-        PageRequest pr = PageRequest.of(page, size);
-        if (type != null) {
-            return repository.findByUserIdAndTypeAndDeletedAtIsNullOrderByCreatedAtDesc(userId, type, pr);
-        }
-        return repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId, pr);
+    public CreateEntryResponse getEntryById(Long id, UUID userId) {
+        TransactionEntry entry = repository.findByIdAndUserIdAndDeletedAtIsNull(id, userId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Transaction entry with ID " + id + " not found"));
+        return convertToResponse(entry);
     }
+
+    // ── Read — paginated list with optional date range ────────────────────────
+
+    @Transactional(readOnly = true)
+    public Page<TransactionEntry> getEntriesByUserId(
+            UUID userId, TransactionType type,
+            LocalDate startDate, LocalDate endDate,
+            int page, int size) {
+
+        LocalDateTime start = startDate != null ? startDate.atStartOfDay()          : null;
+        LocalDateTime end   = endDate   != null ? endDate.atTime(23, 59, 59) : null;
+
+        return repository.findByUserIdAndFilters(userId, type, start, end, PageRequest.of(page, size));
+    }
+
+    // ── Read — search ─────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public Page<TransactionEntry> searchEntries(UUID userId, String query, int page, int size) {
         return repository.searchByUserId(userId, query, PageRequest.of(page, size));
     }
+
+    // ── Read — summary ────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public Map<String, Object> getSummary(UUID userId) {
@@ -144,6 +187,46 @@ public class TransactionEntryService {
         summary.put("netBalance",   income.subtract(expense));
         summary.put("totalCount",   all.size());
         return summary;
+    }
+
+    // ── Read — recurring transactions ─────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<TransactionEntry> getRecurringEntries(UUID userId) {
+        return repository.findByUserIdAndRecurringTrueAndDeletedAtIsNull(userId);
+    }
+
+    // ── CSV export ────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public String exportCsv(UUID userId) {
+        List<TransactionEntry> all = repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
+        StringBuilder csv = new StringBuilder();
+        csv.append("id,name,amount,type,expenseCategory,incomeCategory,currency,description,recurring,recurringPeriod,createdAt\n");
+        for (TransactionEntry e : all) {
+            csv.append(e.getId()).append(',')
+               .append(escapeCsv(e.getName())).append(',')
+               .append(e.getAmount()).append(',')
+               .append(e.getType()).append(',')
+               .append(e.getExpenseCategory() != null ? e.getExpenseCategory() : "").append(',')
+               .append(e.getIncomeCategory()  != null ? e.getIncomeCategory()  : "").append(',')
+               .append(e.getCurrency()).append(',')
+               .append(escapeCsv(e.getDescription())).append(',')
+               .append(e.isRecurring()).append(',')
+               .append(e.getRecurringPeriod() != null ? e.getRecurringPeriod() : "").append(',')
+               .append(e.getCreatedAt()).append('\n');
+        }
+        return csv.toString();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private String escapeCsv(String value) {
+        if (value == null) return "";
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
     }
 
     private CreateEntryResponse convertToResponse(TransactionEntry entry) {

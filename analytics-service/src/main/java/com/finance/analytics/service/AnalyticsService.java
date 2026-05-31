@@ -23,6 +23,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.cache.annotation.Cacheable;
 
 @Slf4j
 @Service
@@ -32,6 +33,7 @@ public class AnalyticsService {
 
     private final TransactionEntryRepository repository;
 
+    @Cacheable(value = "category-analytics", key = "#request.toString()")
     public ChartData getCategoryAnalytics(AnalyticsRequest request) {
         List<Object[]> results = getCategoryAnalyticsResults(request);
 
@@ -93,6 +95,7 @@ public class AnalyticsService {
         }
     }
 
+    @Cacheable(value = "timeline-analytics", key = "#request.toString()")
     public ChartData getTimelineAnalytics(AnalyticsRequest request) {
         String timelineType = request.getTimelineType() != null ?
                 request.getTimelineType().toUpperCase() : "MONTHLY";
@@ -227,6 +230,7 @@ public class AnalyticsService {
         return new ChartData("line", title, labels, datasets);
     }
 
+    @Cacheable(value = "comprehensive-analytics", key = "#request.toString()")
     public Map<String, Object> getComprehensiveAnalytics(AnalyticsRequest request) {
         Map<String, Object> analytics = new LinkedHashMap<>();
 

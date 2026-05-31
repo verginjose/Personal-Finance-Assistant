@@ -58,6 +58,15 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse("Validation failed", errors, HttpStatus.BAD_REQUEST.value()));
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(org.springframework.web.server.ResponseStatusException ex) {
+        log.warn("Response status exception: {}", ex.getMessage());
+        recordError(ex.getStatusCode().value());
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(new ErrorResponse(ex.getReason() != null ? ex.getReason() : "Error",
+                        List.of(ex.getMessage()), ex.getStatusCode().value()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGlobalException(Exception ex) {
         log.error("Unexpected error", ex);

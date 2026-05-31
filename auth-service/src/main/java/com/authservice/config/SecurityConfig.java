@@ -59,10 +59,10 @@ public class SecurityConfig {
                     ).permitAll()
 
                     // Admin-only management endpoints
-                    .requestMatchers("/admin/**").hasRole("ADMIN")
+                    .requestMatchers("/auth/admin/**").hasRole("ADMIN")
 
                     // Moderator and Admin
-                    .requestMatchers("/moderation/**").hasAnyRole("MODERATOR", "ADMIN")
+                    .requestMatchers("/auth/moderation/**").hasAnyRole("MODERATOR", "ADMIN")
 
                     // Any authenticated user
                     .requestMatchers("/api/**").authenticated()

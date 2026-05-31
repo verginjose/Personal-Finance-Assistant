@@ -180,6 +180,68 @@ do_upsert() {
     export INCOME_ID EXPENSE_ID
 }
 
+# ── Group Shared Expenses & Debt Settlement ───────────────────────────────────
+
+do_group_split_tests() {
+    section "GROUP SHARED EXPENSES & DEBT SETTLEMENT"
+    [[ -z "${TOKEN:-}" ]] && { echo -e "  ${YELLOW}⚠ No token — run auth first${NC}"; return; }
+
+    # 1. Register a second user to be a member of the group
+    local member_email="member_group_$$@example.com"
+    local member_password="Password123!"
+    resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/auth/register" \
+        -H "Content-Type: application/json" \
+        -d "{\"email\":\"$member_email\",\"password\":\"$member_password\",\"role\":\"USER\"}")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "POST /api/auth/register (group member)" "201" "$code" "$body"
+    local member_id=$(echo "$body" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('userId',''))" 2>/dev/null || echo "")
+
+    # 2. Create Group
+    resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/upsert/groups" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $TOKEN" \
+        -d "{\"name\":\"Paris Trip\",\"description\":\"Paris holiday shared expenses\",\"createdBy\":\"$USER_ID\",\"currency\":\"EUR\"}")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "POST /upsert/groups (create group)" "201" "$code" "$body"
+    local group_id=$(echo "$body" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || echo "")
+
+    if [[ -n "$group_id" && -n "$member_id" ]]; then
+        # 3. Add Member to Group
+        resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/upsert/groups/$group_id/members" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d "{\"userId\":\"$member_id\",\"name\":\"Friend Member\"}")
+        body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+        check "POST /upsert/groups/{id}/members (add group member)" "201" "$code" "$body"
+
+        # 4. Add Shared Expense
+        resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/upsert/groups/$group_id/expenses" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d "{\"description\":\"Hotel Booking\",\"amount\":200,\"currency\":\"EUR\",\"paidBy\":\"$USER_ID\",\"splitType\":\"EQUAL\",\"expenseCategory\":\"LODGING\"}")
+        body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+        check "POST /upsert/groups/{id}/expenses (add shared expense)" "201" "$code" "$body"
+
+        # 5. Get Group Balances (should suggest settlement)
+        resp=$(curl -s -w "\n%{http_code}" "$GW/api/upsert/groups/$group_id/balances" \
+            -H "Authorization: Bearer $TOKEN")
+        body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+        check "GET /upsert/groups/{id}/balances" "200" "$code" "$body"
+
+        # 6. Settle Debt between member and owner
+        resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/upsert/groups/$group_id/settle?fromUserId=$member_id&toUserId=$USER_ID" \
+            -H "Authorization: Bearer $TOKEN")
+        body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+        check "POST /upsert/groups/{id}/settle (settle debt)" "200" "$code" "$body"
+
+        # 7. Check Balances again (should show 0/settled suggestions)
+        resp=$(curl -s -w "\n%{http_code}" "$GW/api/upsert/groups/$group_id/balances" \
+            -H "Authorization: Bearer $TOKEN")
+        body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+        check "GET /upsert/groups/{id}/balances (after settlement)" "200" "$code" "$body"
+    fi
+}
+
 # ── Analytics ─────────────────────────────────────────────────────────────────
 
 do_analytics() {
@@ -192,6 +254,202 @@ do_analytics() {
         body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
         check "GET /analytics/$endpoint" "200" "$code" "$body"
     done
+}
+
+# ── Redis Caching ─────────────────────────────────────────────────────────────
+
+do_caching_tests() {
+    section "REDIS CACHING & INVALIDATION SCENARIOS"
+    [[ -z "${TOKEN:-}" ]] && { echo -e "  ${YELLOW}⚠ No token — run auth first${NC}"; return; }
+
+    # Ensure Redis starts clean of our cache namespace
+    docker exec redis redis-cli -a "${REDIS_PASSWORD:-}" flushall > /dev/null 2>&1 || true
+
+    # 1. Warm up cache by performing comprehensive analytics query
+    echo -e "  Warming up cache via GET /analytics/comprehensive..."
+    resp=$(curl -s -w "\n%{http_code}" "$GW/api/analytics/comprehensive?userId=$USER_ID" \
+        -H "Authorization: Bearer $TOKEN")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "GET /analytics/comprehensive" "200" "$code" "$body"
+
+    # Verify keys are populated in Redis
+    local keys_after_warmup=$(docker exec redis redis-cli keys "*analytics::*" | tr -d '\r' | grep -v '^$' | wc -l | xargs)
+    if [[ "$keys_after_warmup" -gt 0 ]]; then
+        echo -e "  ${GREEN}✔${NC} Cache populated successfully (keys count=$keys_after_warmup)"
+        PASS=$((PASS+1))
+    else
+        echo -e "  ${RED}✗${NC} Cache population failed (keys count=0)"
+        FAIL=$((FAIL+1))
+    fi
+
+    # 2. Test Eviction on Create Transaction
+    echo -e "  Testing eviction on Create Transaction..."
+    resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/upsert/create" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $TOKEN" \
+        -d "{\"userId\":\"$USER_ID\",\"name\":\"Salary Cache Test\",\"amount\":5000,\"type\":\"INCOME\",\"incomeCategory\":\"SALARY\",\"currency\":\"INR\",\"description\":\"Cache test\"}")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "POST /create (for cache eviction check)" "201" "$code" "$body"
+    local created_id=$(echo "$body" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || echo "")
+
+    # Verify keys are evicted from Redis
+    local keys_after_create=$(docker exec redis redis-cli keys "*analytics::*" | tr -d '\r' | grep -v '^$' | wc -l | xargs)
+    if [[ "$keys_after_create" -eq 0 ]]; then
+        echo -e "  ${GREEN}✔${NC} Cache evicted successfully after Create Transaction (keys count=0)"
+        PASS=$((PASS+1))
+    else
+        echo -e "  ${RED}✗${NC} Cache eviction failed after Create Transaction (keys count=$keys_after_create)"
+        FAIL=$((FAIL+1))
+    fi
+
+    # 3. Warm up cache again
+    echo -e "  Warming up cache again..."
+    resp=$(curl -s -w "\n%{http_code}" "$GW/api/analytics/comprehensive?userId=$USER_ID" \
+        -H "Authorization: Bearer $TOKEN")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "GET /analytics/comprehensive (rewarm)" "200" "$code" "$body"
+
+    # 4. Test Eviction on Update Transaction
+    if [[ -n "$created_id" ]]; then
+        echo -e "  Testing eviction on Update Transaction..."
+        resp=$(curl -s -w "\n%{http_code}" -X PUT "$GW/api/upsert/update" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d "{\"id\":$created_id,\"userId\":\"$USER_ID\",\"name\":\"Salary Cache Test Updated\",\"amount\":6000,\"type\":\"INCOME\",\"incomeCategory\":\"SALARY\",\"currency\":\"INR\",\"description\":\"Cache test updated\"}")
+        body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+        check "PUT /update (for cache eviction check)" "200" "$code" "$body"
+
+        # Verify keys are evicted from Redis
+        local keys_after_update=$(docker exec redis redis-cli keys "*analytics::*" | tr -d '\r' | grep -v '^$' | wc -l | xargs)
+        if [[ "$keys_after_update" -eq 0 ]]; then
+            echo -e "  ${GREEN}✔${NC} Cache evicted successfully after Update Transaction (keys count=0)"
+            PASS=$((PASS+1))
+        else
+            echo -e "  ${RED}✗${NC} Cache eviction failed after Update Transaction (keys count=$keys_after_update)"
+            FAIL=$((FAIL+1))
+        fi
+    fi
+
+    # 5. Warm up cache again
+    echo -e "  Warming up cache again..."
+    resp=$(curl -s -w "\n%{http_code}" "$GW/api/analytics/comprehensive?userId=$USER_ID" \
+        -H "Authorization: Bearer $TOKEN")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "GET /analytics/comprehensive (rewarm 2)" "200" "$code" "$body"
+
+    # 6. Test Eviction on Patch Transaction
+    if [[ -n "$created_id" ]]; then
+        echo -e "  Testing eviction on Patch Transaction..."
+        resp=$(curl -s -w "\n%{http_code}" -X PATCH "$GW/api/upsert/entries/$created_id/amount?userId=$USER_ID" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $TOKEN" \
+            -d '{"amount":7000}')
+        body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+        check "PATCH /entries/{id}/amount (for cache eviction check)" "200" "$code" "$body"
+
+        # Verify keys are evicted from Redis
+        local keys_after_patch=$(docker exec redis redis-cli keys "*analytics::*" | tr -d '\r' | grep -v '^$' | wc -l | xargs)
+        if [[ "$keys_after_patch" -eq 0 ]]; then
+            echo -e "  ${GREEN}✔${NC} Cache evicted successfully after Patch Transaction (keys count=0)"
+            PASS=$((PASS+1))
+        else
+            echo -e "  ${RED}✗${NC} Cache eviction failed after Patch Transaction (keys count=$keys_after_patch)"
+            FAIL=$((FAIL+1))
+        fi
+    fi
+
+    # 7. Warm up cache again
+    echo -e "  Warming up cache again..."
+    resp=$(curl -s -w "\n%{http_code}" "$GW/api/analytics/comprehensive?userId=$USER_ID" \
+        -H "Authorization: Bearer $TOKEN")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "GET /analytics/comprehensive (rewarm 3)" "200" "$code" "$body"
+
+    # 8. Test Eviction on Delete Transaction
+    if [[ -n "$created_id" ]]; then
+        echo -e "  Testing eviction on Delete Transaction..."
+        resp=$(curl -s -w "\n%{http_code}" -X DELETE "$GW/api/upsert/delete/$created_id?userId=$USER_ID" \
+            -H "Authorization: Bearer $TOKEN")
+        body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+        check "DELETE /delete/{id} (for cache eviction check)" "200" "$code" "$body"
+
+        # Verify keys are evicted from Redis
+        local keys_after_delete=$(docker exec redis redis-cli keys "*analytics::*" | tr -d '\r' | grep -v '^$' | wc -l | xargs)
+        if [[ "$keys_after_delete" -eq 0 ]]; then
+            echo -e "  ${GREEN}✔${NC} Cache evicted successfully after Delete Transaction (keys count=0)"
+            PASS=$((PASS+1))
+        else
+            echo -e "  ${RED}✗${NC} Cache eviction failed after Delete Transaction (keys count=$keys_after_delete)"
+            FAIL=$((FAIL+1))
+        fi
+    fi
+}
+
+# ── Security & BOLA Checks ───────────────────────────────────────────────────
+
+do_security_tests() {
+    section "SECURITY AUDIT & BOLA HARDENING SCENARIOS"
+    [[ -z "${TOKEN:-}" ]] && { echo -e "  ${YELLOW}⚠ No token — run auth first${NC}"; return; }
+
+    # Random fake UUID for testing unauthorized access
+    local fake_user="d3b07384-d113-49cd-a5d6-8ee3dc54c000"
+
+    echo -e "  Testing BOLA: Accessing different user's analytics via query param..."
+    resp=$(curl -s -w "\n%{http_code}" "$GW/api/analytics/comprehensive?userId=$fake_user" \
+        -H "Authorization: Bearer $TOKEN")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "GET /analytics/comprehensive?userId=fake_user (expect 403)" "403" "$code" "$body"
+
+    echo -e "  Testing BOLA: Accessing different user's transactions via query param..."
+    resp=$(curl -s -w "\n%{http_code}" "$GW/api/upsert/entries?userId=$fake_user" \
+        -H "Authorization: Bearer $TOKEN")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "GET /upsert/entries?userId=fake_user (expect 403)" "403" "$code" "$body"
+
+    echo -e "  Testing BOLA: Mutating transaction (Create) for different user..."
+    resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/upsert/create" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $TOKEN" \
+        -d "{\"userId\":\"$fake_user\",\"name\":\"BOLA Hack\",\"amount\":9999,\"type\":\"EXPENSE\",\"expenseCategory\":\"BILLS_AND_UTILITIES\",\"currency\":\"USD\"}")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "POST /create with different user ID in body (expect 403)" "403" "$code" "$body"
+
+    echo -e "  Testing BOLA: Custom analytics with different user ID in body..."
+    resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/analytics/custom-analytics" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $TOKEN" \
+        -d "{\"userId\":\"$fake_user\",\"timelineType\":\"MONTHLY\"}")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "POST /analytics/custom-analytics with different user ID in body (expect 403)" "403" "$code" "$body"
+
+    # Admin RBAC Tests
+    echo -e "  Testing Admin RBAC: Registering admin user..."
+    local admin_email="admin_$(date +%s)@example.com"
+    resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/auth/register" \
+        -H "Content-Type: application/json" \
+        -d "{\"email\":\"$admin_email\",\"password\":\"Password123!\",\"role\":\"ADMIN\"}")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "POST /auth/register (admin)" "201" "$code" "$body"
+
+    echo -e "  Testing Admin RBAC: Logging in admin user..."
+    resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/auth/login" \
+        -H "Content-Type: application/json" \
+        -d "{\"email\":\"$admin_email\",\"password\":\"Password123!\"}")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "POST /auth/login (admin)" "200" "$code" "$body"
+    local admin_token=$(echo "$body" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
+
+    echo -e "  Testing Admin RBAC: Accessing admin endpoint with admin token..."
+    resp=$(curl -s -w "\n%{http_code}" "$GW/api/auth/admin/users" \
+        -H "Authorization: Bearer $admin_token")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "GET /auth/admin/users (as admin)" "200" "$code" "$body"
+
+    echo -e "  Testing Admin RBAC: Accessing admin endpoint with normal user token..."
+    resp=$(curl -s -w "\n%{http_code}" "$GW/api/auth/admin/users" \
+        -H "Authorization: Bearer $TOKEN")
+    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
+    check "GET /auth/admin/users (as normal user)" "403" "$code" "$body"
 }
 
 # ── OCR Parser ────────────────────────────────────────────────────────────────
@@ -272,22 +530,45 @@ do_db() {
 MODE="${1:-all}"
 
 case "$MODE" in
+    clean)
+        echo "Cleaning databases..."
+        docker exec postgres-db psql -U finance_user -d finance_assistant -c "
+            SET search_path TO finance;
+            TRUNCATE TABLE transaction_entries CASCADE;
+            TRUNCATE TABLE expense_splits CASCADE;
+            TRUNCATE TABLE shared_expenses CASCADE;
+            TRUNCATE TABLE group_members CASCADE;
+            TRUNCATE TABLE expense_groups CASCADE;
+            TRUNCATE TABLE idempotency_records CASCADE;
+        " > /dev/null 2>&1
+        docker exec redis redis-cli flushall > /dev/null 2>&1 || true
+        for tbl in container_logs error_events hourly_log_counts service_metrics; do
+            docker exec clickhouse clickhouse-client --user default --password clickhouse -q "TRUNCATE TABLE IF EXISTS observability_logs.$tbl" > /dev/null 2>&1 || true
+        done
+        echo "Databases cleaned successfully."
+        exit 0
+        ;;
     health)    do_health ;;
     auth)      do_auth ;;
-    upsert)    do_auth; do_upsert ;;
+    upsert)    do_auth; do_upsert; do_group_split_tests ;;
     ocr)       do_auth; do_ocr ;;
     analytics) do_auth; do_upsert; do_analytics ;;
+    cache)     do_auth; do_caching_tests ;;
+    security)  do_auth; do_security_tests ;;
     db)        do_db ;;
     all)
         do_health
         do_auth
         do_upsert
+        do_group_split_tests
         do_ocr
         do_analytics
+        do_caching_tests
+        do_security_tests
         do_db
         ;;
     *)
-        echo "Usage: $0 [all|health|auth|upsert|ocr|analytics|db]"
+        echo "Usage: $0 [all|health|auth|upsert|ocr|analytics|cache|security|db|clean]"
         exit 1
         ;;
 esac

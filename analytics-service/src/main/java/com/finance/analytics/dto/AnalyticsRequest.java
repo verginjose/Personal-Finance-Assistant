@@ -5,12 +5,18 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Setter
 @Getter
-public class AnalyticsRequest {
+@EqualsAndHashCode
+@ToString
+public class AnalyticsRequest implements Serializable {
+    private static final long serialVersionUID = 1L;
 
     // Getters and Setters
     @NotNull(message = "User ID is required")

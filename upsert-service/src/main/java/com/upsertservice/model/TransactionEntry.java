@@ -11,7 +11,10 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "transaction_entries", schema = "finance")
+@Table(name = "transaction_entries", schema = "finance", indexes = {
+    @Index(name = "idx_transaction_user_deleted", columnList = "user_id, deleted_at"),
+    @Index(name = "idx_transaction_user_type_created", columnList = "user_id, type, created_at")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

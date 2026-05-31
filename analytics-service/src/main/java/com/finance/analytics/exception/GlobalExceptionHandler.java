@@ -36,6 +36,15 @@ public class GlobalExceptionHandler {
                 "timestamp", LocalDateTime.now()));
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatusException(org.springframework.web.server.ResponseStatusException ex) {
+        log.warn("Response status exception: {}", ex.getMessage());
+        return ResponseEntity.status(ex.getStatusCode()).body(Map.of(
+                "error", ex.getReason() != null ? ex.getReason() : "Error",
+                "message", ex.getMessage(),
+                "timestamp", LocalDateTime.now()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
         log.error("Unexpected error in analytics-service", ex);

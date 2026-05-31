@@ -17,11 +17,12 @@ done
 echo -e "\n${YELLOW}── Postgres ──${NC}"
 docker exec postgres-db psql -U finance_user -d finance_assistant << 'PSQL'
 SET search_path TO finance;
-TRUNCATE TABLE entries           CASCADE;
-TRUNCATE TABLE expense_groups    CASCADE;
-TRUNCATE TABLE group_members     CASCADE;
-TRUNCATE TABLE group_expenses    CASCADE;
-TRUNCATE TABLE group_settlements CASCADE;
+TRUNCATE TABLE transaction_entries CASCADE;
+TRUNCATE TABLE expense_splits       CASCADE;
+TRUNCATE TABLE shared_expenses      CASCADE;
+TRUNCATE TABLE group_members       CASCADE;
+TRUNCATE TABLE expense_groups       CASCADE;
+TRUNCATE TABLE idempotency_records  CASCADE;
 SELECT 'finance schema truncated' AS status;
 PSQL
 

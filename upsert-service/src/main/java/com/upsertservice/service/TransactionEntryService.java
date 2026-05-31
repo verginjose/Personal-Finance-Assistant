@@ -16,6 +16,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.cache.annotation.CacheEvict;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -48,6 +49,7 @@ public class TransactionEntryService {
 
     // ── Create ────────────────────────────────────────────────────────────────
 
+    @CacheEvict(value = { "category-analytics", "timeline-analytics", "comprehensive-analytics" }, allEntries = true)
     public CreateEntryResponse createEntry(CreateEntryRequest request, String idempotencyKey) {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             IdempotencyRecord existing = idempotencyRecordRepository
@@ -90,6 +92,7 @@ public class TransactionEntryService {
 
     // ── Update (full) ─────────────────────────────────────────────────────────
 
+    @CacheEvict(value = { "category-analytics", "timeline-analytics", "comprehensive-analytics" }, allEntries = true)
     public CreateEntryResponse updateEntry(UpdateEntryRequest request) {
         TransactionEntry existing = repository.findByIdAndDeletedAtIsNull(request.getId())
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -116,6 +119,7 @@ public class TransactionEntryService {
 
     // ── Patch amount (partial update) ─────────────────────────────────────────
 
+    @CacheEvict(value = { "category-analytics", "timeline-analytics", "comprehensive-analytics" }, allEntries = true)
     public CreateEntryResponse patchAmount(Long id, UUID userId, BigDecimal newAmount) {
         TransactionEntry entry = repository.findByIdAndUserIdAndDeletedAtIsNull(id, userId)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -128,6 +132,7 @@ public class TransactionEntryService {
 
     // ── Delete ────────────────────────────────────────────────────────────────
 
+    @CacheEvict(value = { "category-analytics", "timeline-analytics", "comprehensive-analytics" }, allEntries = true)
     public void deleteEntry(Long id, UUID userId) {
         TransactionEntry entry = repository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new IllegalArgumentException(

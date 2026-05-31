@@ -21,8 +21,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/analytics")
@@ -87,7 +89,12 @@ public class AnalyticsController {
 
     @PostMapping("/custom-analytics")
     @Operation(summary = "Get custom analytics with POST body")
-    public ResponseEntity<Map<String, Object>> getCustomAnalytics(@Valid @RequestBody AnalyticsRequest request) {
+    public ResponseEntity<Map<String, Object>> getCustomAnalytics(
+            @RequestHeader("X-User-Id") String xUserId,
+            @Valid @RequestBody AnalyticsRequest request) {
+        if (request.getUserId() == null || !request.getUserId().toString().equalsIgnoreCase(xUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: User ID mismatch");
+        }
         return ResponseEntity.ok(analyticsService.getComprehensiveAnalytics(request));
     }
 

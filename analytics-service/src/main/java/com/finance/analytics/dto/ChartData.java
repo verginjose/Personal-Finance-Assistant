@@ -3,11 +3,14 @@ package com.finance.analytics.dto;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.io.Serializable;
 import java.util.List;
 
 @Setter
 @Getter
-public class ChartData {
+public class ChartData implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     // Getters and Setters
     private String chartType; // "pie", "line", "bar"
     private String title;
@@ -24,7 +27,8 @@ public class ChartData {
         this.datasets = datasets;
     }
 
-    public static class DataSet {
+    public static class DataSet implements Serializable {
+        private static final long serialVersionUID = 1L;
         private String label;
         private List<Double> data;
         private List<String> backgroundColor;

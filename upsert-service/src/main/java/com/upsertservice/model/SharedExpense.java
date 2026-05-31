@@ -11,7 +11,9 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "shared_expenses", schema = "finance")
+@Table(name = "shared_expenses", schema = "finance", indexes = {
+    @Index(name = "idx_shared_expense_group", columnList = "group_id")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

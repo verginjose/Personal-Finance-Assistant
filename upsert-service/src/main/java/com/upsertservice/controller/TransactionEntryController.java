@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -37,8 +38,12 @@ public class TransactionEntryController {
     @PostMapping("/create")
     @Operation(summary = "Create a new financial entry")
     public ResponseEntity<CreateEntryResponse> createEntry(
+            @RequestHeader("X-User-Id") String xUserId,
             @Valid @RequestBody CreateEntryRequest request,
             @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey) {
+        if (!request.getUserId().toString().equalsIgnoreCase(xUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: User ID mismatch");
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(service.createEntry(request, idempotencyKey));
     }
 
@@ -46,7 +51,12 @@ public class TransactionEntryController {
 
     @PutMapping("/update")
     @Operation(summary = "Update an existing financial entry (all fields)")
-    public ResponseEntity<CreateEntryResponse> updateEntry(@Valid @RequestBody UpdateEntryRequest request) {
+    public ResponseEntity<CreateEntryResponse> updateEntry(
+            @RequestHeader("X-User-Id") String xUserId,
+            @Valid @RequestBody UpdateEntryRequest request) {
+        if (!request.getUserId().toString().equalsIgnoreCase(xUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: User ID mismatch");
+        }
         return ResponseEntity.ok(service.updateEntry(request));
     }
 

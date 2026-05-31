@@ -55,37 +55,7 @@ public class AuthController {
     ));
   }
 
-  // ── MODERATOR or ADMIN only ───────────────────────────────────────────────
 
-  @GetMapping("/moderation/dashboard")
-  @PreAuthorize("hasAnyRole('MODERATOR', 'ADMIN')")
-  public ResponseEntity<Map<String, String>> moderationDashboard() {
-    return ResponseEntity.ok(Map.of("message", "Welcome to the moderation dashboard"));
-  }
-
-  // ── ADMIN only ────────────────────────────────────────────────────────────
-
-  @GetMapping("/admin/users")
-  @PreAuthorize("hasRole('ADMIN')")
-  public ResponseEntity<Map<String, String>> adminUsers() {
-    return ResponseEntity.ok(Map.of("message", "Admin: full user list would be here"));
-  }
-
-  @PostMapping("/admin/users")
-  @PreAuthorize("hasRole('ADMIN')")
-  public ResponseEntity<RegisterResponse> adminCreateUser(@Valid @RequestBody AdminCreateUserRequest request) {
-    return ResponseEntity.status(HttpStatus.CREATED)
-            .body(authService.adminCreateUser(request));
-  }
-
-  @DeleteMapping("/admin/users/{userId}")
-  @PreAuthorize("hasRole('ADMIN')")
-  public ResponseEntity<Void> deleteUser(@PathVariable String userId) {
-    // Admin-only delete logic would go here
-    return ResponseEntity.noContent().build();
-  }
-
-  // ── Extra public / authenticated mappings ───────────────────────────────
 
   @PostMapping("/refresh")
   public ResponseEntity<LoginResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {

@@ -6,9 +6,11 @@
 ###  Set @sampleImage to an absolute path to a receipt/bill image.
 ### ══════════════════════════════════════════════════════════════════
 
-@baseUrl     = http://localhost:8080/api/ocr
-@sampleImage = /path/to/sample-receipt.jpg
-@samplePdf   = /path/to/sample-invoice.pdf
+@baseUrl     = http://localhost:8080/api
+@sampleImage = /home/vergin_jose/IdeaProjects/Personal-Finance-Assistant/requests/ocr-parser/image3.png
+@samplePdf   = /home/vergin_jose/IdeaProjects/Personal-Finance-Assistant/requests/ocr-parser/Receipt.pdf
+@userEmail = testverify@gmail.com
+@userPassword = tempPass123
 
 ### ─────────────────────────────────────────────────────────────────
 ###  SETUP: Login to get token and userId
@@ -18,8 +20,8 @@ POST http://localhost:8080/api/auth/login
 Content-Type: application/json
 
 {
-  "email": "admin@gmail.com",
-  "password": "password123"
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
 }
 
 ### ─────────────────────────────────────────────────────────────────

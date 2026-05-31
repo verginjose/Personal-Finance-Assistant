@@ -18,21 +18,31 @@ NC='\033[0m'
 cd "$(dirname "$0")"
 
 show_usage() {
-    echo -e "Usage: $0 [flag]"
+    echo -e "Usage: $0 [flag] [options]"
     echo ""
     echo "Flags:"
-    echo "  --start      Builds and starts the stack, waiting for all services to become healthy"
-    echo "  --test       Runs the integration test suite"
-    echo "  --clean      Wipes all data in ClickHouse + Postgres with confirmation (keeps schemas/users)"
-    echo "  --shutdown   Stops and shuts down the Docker compose stack"
-    echo "  --all        Starts the stack, runs all integration tests, and then shuts down the stack automatically"
+    echo "  --freshStart         Builds and starts the stack from scratch using start.sh"
+    echo "  --start              Starts the existing stack containers"
+    echo "  --test               Runs the integration test suite"
+    echo "  --clean              Wipes all data in ClickHouse + Postgres with confirmation (keeps schemas/users)"
+    echo "  --shutdown           Stops and shuts down the Docker compose stack (--remove-orphans)"
+    echo "  --stop               Stops the stack without removing containers"
+    echo "  --all                Starts the stack, runs all integration tests, and then stops the stack automatically"
+    echo "  --restart <service>  Rebuilds and restarts a specific service"
+    echo "                       (Options: api-gateway, auth-service, upsert-service, analytics-service, ocr-parser-service)"
     echo ""
     echo "If no flag is passed, defaults to --all."
 }
 
-start_stack() {
+fresh_stack() {
     echo -e "\n${CYAN}══ STARTING STACK ══${NC}"
     ./start.sh
+}
+
+start_stack() {
+    echo -e "\n${CYAN}══ STARTING STACK ══${NC}"
+    docker compose start
+    echo -e "  ${GREEN}✔ Stack started successfully${NC}"
 }
 
 run_tests() {
@@ -46,11 +56,24 @@ shutdown_stack() {
     echo -e "  ${GREEN}✔ Stack stopped successfully${NC}"
 }
 
+stop_stack() {
+    echo -e "\n${CYAN}══ STOPPING STACK ══${NC}"
+    docker compose stop
+    echo -e "  ${GREEN}✔ Stack stopped successfully${NC}"
+}
+
+restart_service() {
+    local service=$1
+    echo -e "\n${CYAN}══ REBUILDING & RESTARTING $service ══${NC}"
+    docker compose up -d --build "$service"
+    echo -e "  ${GREEN}✔ $service restarted successfully${NC}"
+}
+
 MODE="${1:-}"
 
 case "$MODE" in
-    --start|start)
-        start_stack
+    --freshStart|freshStart)
+        fresh_stack
         ;;
     --test|test)
         run_tests
@@ -58,8 +81,19 @@ case "$MODE" in
     --clean|clean)
         ./truncate-all.sh
         ;;
-    --shutdown|shutdown|stop|down)
+    --shutdown|shutdown|down)
         shutdown_stack
+        ;;
+    --stop|stop)
+        stop_stack
+        ;;
+    --restart|restart)
+        if [ -z "${2:-}" ]; then
+            echo -e "${RED}Error: Service name required for restart (e.g., ./run.sh --restart api-gateway)${NC}"
+            show_usage
+            exit 1
+        fi
+        restart_service "$2"
         ;;
     --all|all|"")
         start_stack
@@ -67,8 +101,11 @@ case "$MODE" in
         run_tests
         TEST_EXIT_CODE=$?
         set -e
-        shutdown_stack
+        stop_stack
         exit $TEST_EXIT_CODE
+        ;;
+    --start|start)
+        start_stack
         ;;
     --help|-h|help)
         show_usage

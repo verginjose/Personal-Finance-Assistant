@@ -8,20 +8,29 @@
 ### ─────────────────────────────────────────────────────────────────
 ###  SETUP: Login first to get token and userId
 ### ─────────────────────────────────────────────────────────────────
+@baseUrl1 = http://localhost:8080/api/auth
+@userEmail = testverify@gmail.com
+@userPassword = tempPass123
+@newPassword = securePass999
+
+### ─────────────────────────────────────────────────────────────────
+###  1. REGISTER a new regular user (may conflict if already exists)
+### ─────────────────────────────────────────────────────────────────
 # @name login
-POST http://localhost:8080/api/auth/login
+POST {{baseUrl1}}/login
 Content-Type: application/json
 
 {
-  "email": "admin@gmail.com",
-  "password": "password123"
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "role": "USER"
 }
-
 ### ─────────────────────────────────────────────────────────────────
 ###  1. HEALTH CHECK
 ###     Expected: 200 {"status": "UP", "service": "analytics-service"}
 ### ─────────────────────────────────────────────────────────────────
 GET {{baseUrl}}/health
+Authorization: Bearer {{login.response.body.token}}
 
 ### ─────────────────────────────────────────────────────────────────
 ###  2. CATEGORY PIE CHART — all transactions

@@ -422,34 +422,7 @@ do_security_tests() {
     body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
     check "POST /analytics/custom-analytics with different user ID in body (expect 403)" "403" "$code" "$body"
 
-    # Admin RBAC Tests
-    echo -e "  Testing Admin RBAC: Registering admin user..."
-    local admin_email="admin_$(date +%s)@example.com"
-    resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/auth/register" \
-        -H "Content-Type: application/json" \
-        -d "{\"email\":\"$admin_email\",\"password\":\"Password123!\",\"role\":\"ADMIN\"}")
-    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
-    check "POST /auth/register (admin)" "201" "$code" "$body"
 
-    echo -e "  Testing Admin RBAC: Logging in admin user..."
-    resp=$(curl -s -w "\n%{http_code}" -X POST "$GW/api/auth/login" \
-        -H "Content-Type: application/json" \
-        -d "{\"email\":\"$admin_email\",\"password\":\"Password123!\"}")
-    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
-    check "POST /auth/login (admin)" "200" "$code" "$body"
-    local admin_token=$(echo "$body" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)
-
-    echo -e "  Testing Admin RBAC: Accessing admin endpoint with admin token..."
-    resp=$(curl -s -w "\n%{http_code}" "$GW/api/auth/admin/users" \
-        -H "Authorization: Bearer $admin_token")
-    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
-    check "GET /auth/admin/users (as admin)" "200" "$code" "$body"
-
-    echo -e "  Testing Admin RBAC: Accessing admin endpoint with normal user token..."
-    resp=$(curl -s -w "\n%{http_code}" "$GW/api/auth/admin/users" \
-        -H "Authorization: Bearer $TOKEN")
-    body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)
-    check "GET /auth/admin/users (as normal user)" "403" "$code" "$body"
 }
 
 # ── OCR Parser ────────────────────────────────────────────────────────────────

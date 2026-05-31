@@ -10,9 +10,7 @@ package com.authservice.model;
  *   @PreAuthorize("hasAnyRole('ADMIN','USER')") -> matches ROLE_ADMIN or ROLE_USER
  */
 public enum Role {
-    USER,
-    MODERATOR,
-    ADMIN;
+    USER;
 
     /** Returns the Spring Security GrantedAuthority string. */
     public String toAuthority() {

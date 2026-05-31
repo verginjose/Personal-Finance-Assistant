@@ -4,8 +4,6 @@
 ### ══════════════════════════════════════════════════════════════════
 
 @baseUrl = http://localhost:8080/api/auth
-@adminEmail = admin@gmail.com
-@adminPassword = password123
 @userEmail = testverify@gmail.com
 @userPassword = tempPass123
 @newPassword = securePass999
@@ -22,30 +20,7 @@ Content-Type: application/json
   "role": "USER"
 }
 
-### ─────────────────────────────────────────────────────────────────
-###  2. LOGIN as Admin → captures token and refreshToken
-### ─────────────────────────────────────────────────────────────────
-# @name adminLogin
-POST {{baseUrl}}/login
-Content-Type: application/json
 
-{
-  "email": "{{adminEmail}}",
-  "password": "{{adminPassword}}"
-}
-
-### ─────────────────────────────────────────────────────────────────
-###  3. ADMIN — create a new user
-### ─────────────────────────────────────────────────────────────────
-POST {{baseUrl}}/admin/users
-Content-Type: application/json
-Authorization: Bearer {{adminLogin.response.body.token}}
-
-{
-  "email": "{{userEmail}}",
-  "password": "{{userPassword}}",
-  "role": "USER"
-}
 
 ### ─────────────────────────────────────────────────────────────────
 ###  4. LOGIN as the new user → captures user token + refresh token
@@ -147,17 +122,3 @@ Content-Type: application/json
 {
   "refreshToken": "{{userLogin2.response.body.refreshToken}}"
 }
-
-### ─────────────────────────────────────────────────────────────────
-###  13. ADMIN — try to access admin endpoint with USER token
-###     Expected: 403 Forbidden
-### ─────────────────────────────────────────────────────────────────
-GET {{baseUrl}}/admin/users
-Authorization: Bearer {{userLogin2.response.body.token}}
-
-### ─────────────────────────────────────────────────────────────────
-###  14. ADMIN — access admin endpoint with ADMIN token
-###     Expected: 200
-### ─────────────────────────────────────────────────────────────────
-GET {{baseUrl}}/admin/users
-Authorization: Bearer {{adminLogin.response.body.token}}

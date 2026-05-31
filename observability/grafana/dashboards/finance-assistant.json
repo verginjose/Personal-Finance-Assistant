@@ -31,6 +31,23 @@
         "type": "textbox",
         "current": { "text": "", "value": "" },
         "query": ""
+      },
+      {
+        "name": "level",
+        "label": "Log Level",
+        "type": "custom",
+        "query": "INFO,WARN,ERROR,DEBUG",
+        "current": { "text": "All", "value": "$__all" },
+        "options": [
+          { "text": "All", "value": "$__all", "selected": true },
+          { "text": "INFO", "value": "INFO", "selected": false },
+          { "text": "WARN", "value": "WARN", "selected": false },
+          { "text": "ERROR", "value": "ERROR", "selected": false },
+          { "text": "DEBUG", "value": "DEBUG", "selected": false }
+        ],
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": false
       }
     ]
   },
@@ -136,7 +153,7 @@
       "type": "logs",
       "datasource": { "type": "loki", "uid": "loki-ds" },
       "targets": [{
-        "expr": "{service=\"$service\"} |~ `(?i)$search`",
+        "expr": "{service=\"$service\"} |~ `(?i)$level` |~ `(?i)$search`",
         "refId": "A",
         "queryType": "range"
       }],

@@ -58,11 +58,6 @@ public class SecurityConfig {
                             "/actuator/**"
                     ).permitAll()
 
-                    // Admin-only management endpoints
-                    .requestMatchers("/auth/admin/**").hasRole("ADMIN")
-
-                    // Moderator and Admin
-                    .requestMatchers("/auth/moderation/**").hasAnyRole("MODERATOR", "ADMIN")
 
                     // Any authenticated user
                     .requestMatchers("/api/**").authenticated()

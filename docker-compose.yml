@@ -16,7 +16,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
       interval: 5s
       timeout: 3s
       retries: 15
@@ -37,7 +37,7 @@ services:
     command: redis-server --appendonly yes
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -56,7 +56,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
@@ -87,7 +87,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
@@ -116,7 +116,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
@@ -142,7 +142,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
     ports:
       - "${OCR_SERVICE_PORT}:8083"
     environment:
@@ -171,7 +171,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
     environment:
       # JWT
       JWT_SECRET: ${JWT_SECRET}
@@ -189,14 +189,13 @@ services:
     networks:
       - finance-network
 
-
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: clickhouse
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2G
     ports:
       - "8123:8123"
       - "9000:9000"

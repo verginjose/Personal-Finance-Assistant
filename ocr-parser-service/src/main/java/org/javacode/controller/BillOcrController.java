@@ -61,6 +61,8 @@ public class BillOcrController {
         } catch (TesseractException | java.io.IOException e) {
             // Re-throw as unchecked — GlobalExceptionHandler maps it to 502
             throw new RuntimeException("OCR extraction failed: " + e.getMessage(), e);
+        } catch (InterruptedException e) {
+            throw new RuntimeException("OCR extraction failed: " + e.getMessage(), e);
         }
     }
 }

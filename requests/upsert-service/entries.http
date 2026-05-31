@@ -7,8 +7,8 @@
 ### ══════════════════════════════════════════════════════════════════
 
 @baseUrl    = http://localhost:8080/api/upsert
-@token      = REPLACE_WITH_JWT_TOKEN
-@userId     = REPLACE_WITH_USER_UUID
+@token      = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0dmVyaWZ5QGdtYWlsLmNvbSIsInVzZXJJZCI6IjJlMDRmNjU3LTU4ZDUtNGNmOC1hNzMwLWVkYmNmNTRhMmJjMiIsInJvbGUiOiJVU0VSIiwianRpIjoiN2JkODY4ZDktNWM1MS00N2UxLWIxMjUtZjIwYzlhNTNjMzNiIiwiaWF0IjoxNzgwMjIwMzQ0LCJleHAiOjE3ODAyMjEyNDR9.S0GSubUyEoX5HR6HsaAk-5vvmo4t1-PlLy_5vq3g0gw
+@userId     = e04f657-58d5-4cf8-a730-edbcf54a2bc2
 
 ### ─────────────────────────────────────────────────────────────────
 ###  SETUP: Login to get token (run this first, then copy values above)
@@ -18,8 +18,8 @@ POST http://localhost:8080/api/auth/login
 Content-Type: application/json
 
 {
-  "email": "admin@gmail.com",
-  "password": "password123"
+  "email": "testverify@gmail.com",
+  "password": "tempPass123"
 }
 
 ### ─────────────────────────────────────────────────────────────────

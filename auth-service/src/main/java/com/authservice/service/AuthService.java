@@ -126,27 +126,7 @@ public class AuthService {
         }
     }
 
-    // ── Admin Create User ─────────────────────────────────────────────────────
 
-    @Transactional
-    public RegisterResponse adminCreateUser(AdminCreateUserRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
-            throw new EmailAlreadyExistsException(request.email());
-        }
-
-        User user = User.builder()
-                .email(request.email())
-                .password(passwordEncoder.encode(request.password()))
-                .role(request.role())
-                .build();
-
-        User saved = userRepository.save(user);
-        log.info("Admin created new user: {} [{}]", saved.getEmail(), saved.getRole());
-
-        return new RegisterResponse(saved.getId().toString(), saved.getEmail(), saved.getRole().name());
-    }
-
-    // ── Change Password ───────────────────────────────────────────────────────
 
     @Transactional
     public void changePassword(String email, ChangePasswordRequest request) {

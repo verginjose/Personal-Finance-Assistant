@@ -65,18 +65,6 @@ public class AuthDtos {
             String refreshToken
     ) {}
 
-    public record AdminCreateUserRequest(
-            @Email(message = "Must be a valid email")
-            @NotBlank
-            String email,
-
-            @NotBlank
-            @Size(min = 8, message = "Password must be at least 8 characters")
-            String password,
-
-            @NotNull(message = "Role is required")
-            Role role
-    ) {}
 
     public record ChangePasswordRequest(
             @NotBlank

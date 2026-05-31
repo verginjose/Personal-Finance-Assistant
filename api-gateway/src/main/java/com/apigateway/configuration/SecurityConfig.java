@@ -49,10 +49,6 @@ public class SecurityConfig {
                         // Public: auth endpoints (login, register, etc.)
                         .pathMatchers("/api/auth/**").permitAll()
 
-                        // RBAC: route-level role restrictions
-                        .pathMatchers("/api/upsert/**").hasAnyRole("USER", "ADMIN")
-                        .pathMatchers("/api/bill/**").hasAnyRole("USER", "ADMIN")
-                        .pathMatchers("/api/analytics/**").hasAnyRole("USER", "ADMIN")
 
                         // Everything else requires authentication
                         .anyExchange().authenticated()

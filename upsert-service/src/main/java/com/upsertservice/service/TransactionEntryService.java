@@ -62,18 +62,7 @@ public class TransactionEntryService {
             }
         }
 
-        TransactionEntry entry = new TransactionEntry(
-                request.getUserId(), request.getName(),
-                request.getAmount(), request.getType(), request.getCurrency()
-        );
-        if (request.getType() == TransactionType.EXPENSE) {
-            entry.setExpenseCategory(request.getExpenseCategory());
-        } else {
-            entry.setIncomeCategory(request.getIncomeCategory());
-        }
-        entry.setDescription(request.getDescription());
-        entry.setRecurring(request.isRecurring());
-        entry.setRecurringPeriod(request.getRecurringPeriod());
+        TransactionEntry entry = getTransactionEntry(request);
 
         TransactionEntry saved = repository.save(entry);
         createCounter.increment();
@@ -88,6 +77,22 @@ public class TransactionEntryService {
 
         log.info("Transaction created: id={}, user={}, recurring={}", saved.getId(), saved.getUserId(), saved.isRecurring());
         return convertToResponse(saved);
+    }
+
+    private static TransactionEntry getTransactionEntry(CreateEntryRequest request) {
+        TransactionEntry entry = new TransactionEntry(
+                request.getUserId(), request.getName(),
+                request.getAmount(), request.getType(), request.getCurrency()
+        );
+        if (request.getType() == TransactionType.EXPENSE) {
+            entry.setExpenseCategory(request.getExpenseCategory());
+        } else {
+            entry.setIncomeCategory(request.getIncomeCategory());
+        }
+        entry.setDescription(request.getDescription());
+        entry.setRecurring(request.isRecurring());
+        entry.setRecurringPeriod(request.getRecurringPeriod());
+        return entry;
     }
 
     // ── Update (full) ─────────────────────────────────────────────────────────

@@ -9,10 +9,10 @@
         <relativePath/>
     </parent>
     <groupId>javacode</groupId>
-    <artifactId>ocr-parser-service</artifactId>
+    <artifactId>bill-parser-service</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>ocr-parser-service</name>
-    <description>Bill OCR Service using Tesseract and PDFBox</description>
+    <name>bill-parser-service</name>
+    <description>Bill Parser Service using OCR and PDFBox</description>
 
     <properties>
         <java.version>21</java.version>
@@ -22,11 +22,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>net.sourceforge.tess4j</groupId>
-            <artifactId>tess4j</artifactId>
-            <version>5.8.0</version>
         </dependency>
 
         <dependency>
@@ -46,7 +41,19 @@
             <artifactId>pdfbox-tools</artifactId>
             <version>3.0.1</version>
         </dependency>
-
+        <!-- Source: https://mvnrepository.com/artifact/org.springframework/spring-webflux -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+            <scope>compile</scope>
+        </dependency>
+        <!-- Source: https://mvnrepository.com/artifact/commons-codec/commons-codec -->
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.22.0</version>
+            <scope>compile</scope>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
@@ -79,16 +86,7 @@
             <version>3.1.8</version>
             <scope>compile</scope>
         </dependency>
-
-        <!-- Source: https://mvnrepository.com/artifact/commons-codec/commons-codec -->
-        <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <version>1.22.0</version>
-            <scope>compile</scope>
-        </dependency>
     </dependencies>
-
     <!-- This entire build section has been added and configured -->
     <build>
         <plugins>

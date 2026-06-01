@@ -137,6 +137,16 @@ for i in $(seq 1 20); do
     if [[ $i -eq 20 ]]; then echo -e " ${RED}timeout${NC}"; fi
 done
 
+# Wait for OCR
+echo -n "  Waiting for OCR service..."
+for i in $(seq 1 30); do
+    if curl -sf http://localhost:8100/health > /dev/null 2>&1; then
+        echo -e " ${GREEN}ready${NC}"; break
+    fi
+    sleep 3; echo -n "."
+    if [[ $i -eq 30 ]]; then echo -e " ${RED}timeout${NC}"; fi
+done
+
 # ─── Kafka topic info ─────────────────────────────────────────────────────────
 echo -e "\n${YELLOW}[3/4] Kafka topics:${NC}"
 TOPICS=$(docker exec kafka kafka-topics --bootstrap-server localhost:9092 --list 2>/dev/null || echo "unavailable")
@@ -152,7 +162,7 @@ fi
 echo -e "\n${YELLOW}[4/4] Service status:${NC}"
 echo ""
 
-SERVICES=(api-gateway auth-service upsert-service analytics-service ocr-parser-service)
+SERVICES=(api-gateway auth-service upsert-service analytics-service bill-parser-service ocr-service)
 for svc in "${SERVICES[@]}"; do
     running=$(docker inspect --format='{{.State.Running}}' "$svc" 2>/dev/null || echo "false")
     if [[ "$running" == "true" ]]; then
@@ -188,6 +198,7 @@ echo -e ""
 echo -e "  ${CYAN}Grafana     →  http://localhost:3000${NC}  (admin / admin)"
 echo -e "  ${CYAN}Prometheus  →  http://localhost:9090${NC}"
 echo -e "  ${CYAN}Loki        →  http://localhost:3100/ready${NC}"
+echo -e "  ${CYAN}OCR Service →  http://localhost:8100/health${NC}"
 echo -e "  ${CYAN}Kafka       →  localhost:9092${NC}"
 echo -e "  ${CYAN}Zookeeper   →  localhost:2181${NC}"
 echo -e ""

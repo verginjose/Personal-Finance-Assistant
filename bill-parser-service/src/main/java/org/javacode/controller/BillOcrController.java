@@ -2,7 +2,6 @@ package org.javacode.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.sourceforge.tess4j.TesseractException;
 import org.javacode.dto.CreateEntryResponse;
 import org.javacode.service.BillOcrService;
 import org.springframework.http.ResponseEntity;
@@ -58,10 +57,8 @@ public class BillOcrController {
         try {
             CreateEntryResponse result = billOcrService.processFile(userId, file);
             return ResponseEntity.ok(result);
-        } catch (TesseractException | java.io.IOException e) {
+        } catch ( java.io.IOException e) {
             // Re-throw as unchecked — GlobalExceptionHandler maps it to 502
-            throw new RuntimeException("OCR extraction failed: " + e.getMessage(), e);
-        } catch (InterruptedException e) {
             throw new RuntimeException("OCR extraction failed: " + e.getMessage(), e);
         }
     }

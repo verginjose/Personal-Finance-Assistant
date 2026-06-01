@@ -27,15 +27,28 @@ schema_config:
         period: 24h
 
 limits_config:
-  ingestion_rate_mb: 16
-  ingestion_burst_size_mb: 32
+  ingestion_rate_mb: 32
+  ingestion_burst_size_mb: 64
   max_label_names_per_series: 30
   reject_old_samples: true
   reject_old_samples_max_age: 168h
+  # Allow large multiline entries (stack traces can be big)
+  max_line_size: 256kb
+  max_line_size_truncate: false
+  # Longer query window so you can scroll back far
+  max_query_lookback: 720h
+  max_query_length: 721h
 
 query_range:
   results_cache:
     cache:
       embedded_cache:
         enabled: true
-        max_size_mb: 100
+        max_size_mb: 256
+
+querier:
+  # More results per query — needed for smooth infinite scroll
+  max_concurrent: 8
+
+frontend:
+  max_outstanding_per_tenant: 2048

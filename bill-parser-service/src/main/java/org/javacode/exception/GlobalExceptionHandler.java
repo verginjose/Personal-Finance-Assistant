@@ -11,7 +11,7 @@ import java.net.URI;
 import java.time.Instant;
 
 /**
- * Centralised error handling for ocr-parser-service.
+ * Centralised error handling for bill-parser-service.
  * Uses RFC 7807 ProblemDetail (built into Spring Boot 3) for structured responses.
  */
 @Slf4j

@@ -35,8 +35,8 @@ public class FallbackController {
         return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of(
                         "error", "Service Unavailable",
-                        "message", "OCR service is temporarily unavailable.",
-                        "service", "ocr-parser-service"
+                        "message", "bill parser service is temporarily unavailable.",
+                        "service", "bill-parser-service"
                 )));
     }
 }

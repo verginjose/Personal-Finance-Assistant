@@ -469,7 +469,7 @@ do_ocr() {
 
 do_health() {
     section "HEALTH CHECKS"
-    for svc_port in "api-gateway:8080" "auth-service:8082" "upsert-service:8081" "analytics-service:8084" "ocr-parser-service:8083"; do
+    for svc_port in "api-gateway:8080" "auth-service:8082" "upsert-service:8081" "analytics-service:8084" "bill-parser-service:8083"; do
         svc="${svc_port%%:*}"; port="${svc_port##*:}"
         resp=$(curl -s -w "\n%{http_code}" "http://localhost:$port/actuator/health")
         body=$(echo "$resp" | head -1); code=$(echo "$resp" | tail -1)

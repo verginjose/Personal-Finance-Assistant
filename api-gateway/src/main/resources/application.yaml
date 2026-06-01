@@ -76,8 +76,8 @@ spring:
                 name: analytics-cb
                 fallbackUri: forward:/fallback/analytics
 
-        - id: ocr-parser-service
-          uri: http://ocr-parser-service:8083
+        - id: bill-parser-service
+          uri: http://bill-parser-service:8083
           predicates:
             - Path=/api/bill/**
           filters:

@@ -13,14 +13,14 @@
         "name": "service",
         "label": "Service",
         "type": "custom",
-        "query": "api-gateway,auth-service,upsert-service,analytics-service,ocr-parser-service",
+        "query": "api-gateway,auth-service,upsert-service,analytics-service,bill-parser-service",
         "current": { "text": "api-gateway", "value": "api-gateway" },
         "options": [
           { "text": "api-gateway",        "value": "api-gateway",        "selected": true  },
           { "text": "auth-service",       "value": "auth-service",       "selected": false },
           { "text": "upsert-service",     "value": "upsert-service",     "selected": false },
           { "text": "analytics-service",  "value": "analytics-service",  "selected": false },
-          { "text": "ocr-parser-service", "value": "ocr-parser-service", "selected": false }
+          { "text": "bill-parser-service", "value": "bill-parser-service", "selected": false }
         ],
         "includeAll": false,
         "multi": false

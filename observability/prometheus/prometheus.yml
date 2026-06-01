@@ -23,7 +23,7 @@ scrape_configs:
     static_configs:
       - targets: ['analytics-service:8084']
 
-  - job_name: ocr-parser-service
+  - job_name: bill-parser-service
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['ocr-parser-service:8083']
+      - targets: ['bill-parser-service:8083']

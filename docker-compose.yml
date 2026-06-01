@@ -135,11 +135,14 @@ services:
     networks:
       - finance-network
 
-  ocr-parser-service:
+  bill-parser-service:
     build:
-      context: ./ocr-parser-service
+      context: ./bill-parser-service
       dockerfile: Dockerfile
-    container_name: ocr-parser-service
+    container_name: bill-parser-service
+    depends_on:
+      ocr-service:
+        condition: service_healthy
     restart: on-failure
     deploy:
       resources:
@@ -150,8 +153,38 @@ services:
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+      OCR_SERVICE_URL: http://ocr-service:8100   # add this
     networks:
       - finance-network
+
+  ocr-service:
+    build:
+      context: ./ocr-service
+    container_name: ocr-service
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    volumes:
+       - paddle-model-cache:/root/.paddleocr    # ← add this
+    ports:
+      - "8100:8100"
+    environment:
+      FLAGS_fraction_of_gpu_memory_to_use: "0.65"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    networks:
+      - finance-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8100/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
 
   api-gateway:
     build:
@@ -165,7 +198,7 @@ services:
         condition: service_started
       auth-service:
         condition: service_started
-      ocr-parser-service:
+      bill-parser-service:
         condition: service_started
       analytics-service:
         condition: service_started
@@ -335,6 +368,7 @@ volumes:
   zookeeper-data:
   zookeeper-logs:
   kafka-data:
+  paddle-model-cache:    # ← add to volumes section
 
 networks:
   finance-network:

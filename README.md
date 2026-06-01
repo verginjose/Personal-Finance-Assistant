@@ -204,7 +204,7 @@ The application consists of the following Docker services:
 - `postgres`: Unified Postgres service with schema-level isolation
 - `upsert-service`: Transaction management microservice
 - `auth-service`: Authentication microservice
-- `ocr-parser-service`: Bill processing microservice
+- `bill-parser-service`: Bill processing microservice
 - `analytics-service`: Data analytics microservice
 - `api-gateway`: API Gateway for routing requests
 - `prometheus`: Metrics scraper

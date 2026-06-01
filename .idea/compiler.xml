@@ -12,14 +12,14 @@
         <module name="analytics-service" />
         <module name="auth-service" />
       </profile>
-      <profile name="Annotation profile for ocr-parser-service" enabled="true">
+      <profile name="Annotation profile for bill-parser-service" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <processorPath useClasspath="false">
           <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.36/lombok-1.18.36.jar" />
         </processorPath>
-        <module name="ocr-parser-service" />
+        <module name="bill-parser-service" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
@@ -32,8 +32,8 @@
       <module name="analytics-service" options="-parameters" />
       <module name="api-gateway" options="-parameters" />
       <module name="auth-service" options="-parameters" />
+      <module name="bill-parser-service" options="-parameters --add-opens jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED" />
       <module name="finance-service" options="-parameters" />
-      <module name="ocr-parser-service" options="-parameters --add-opens jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED" />
       <module name="upsert-service" options="-parameters" />
     </option>
   </component>

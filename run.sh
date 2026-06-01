@@ -35,7 +35,7 @@ show_usage() {
     echo "  --all                     Starts the stack, runs all integration tests, then stops the stack automatically"
     echo "  --restart <service>       Rebuilds and restarts a specific service"
     echo "                            (Options: api-gateway, auth-service, upsert-service, analytics-service,"
-    echo "                                      ocr-parser-service, kafka, zookeeper)"
+    echo "                                      bill-parser-service, kafka, zookeeper)"
     echo "  --restart-kafka           Restarts only Zookeeper + Kafka in the correct order (keeps everything else running)"
     echo ""
     echo "If no flag is passed, defaults to --all."
@@ -79,7 +79,7 @@ clean_data() {
 # ─── Service restart ──────────────────────────────────────────────────────────
 restart_service() {
     local service=$1
-    local valid_services=(api-gateway auth-service upsert-service analytics-service ocr-parser-service kafka zookeeper)
+    local valid_services=(api-gateway auth-service upsert-service analytics-service bill-parser-service kafka zookeeper)
 
     # Validate service name
     local valid=false

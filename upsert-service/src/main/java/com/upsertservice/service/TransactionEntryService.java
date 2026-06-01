@@ -56,11 +56,14 @@ public class TransactionEntryService {
             IdempotencyRecord existing = idempotencyRecordRepository
                     .findByUserIdAndIdempotencyKey(request.getUserId(), idempotencyKey.trim())
                     .orElse(null);
+            log.info("Trying to find the IdempotencyRecord for this key {}",idempotencyKey);
             if (existing != null && existing.getTransactionId() != null) {
+                log.info("Found existing IdempotencyRecord for this key {}",existing.getId());
                 TransactionEntry existingEntry = repository.findByIdAndDeletedAtIsNull(existing.getTransactionId())
                         .orElseThrow(() -> new IllegalStateException("Idempotency key points to a missing transaction"));
                 return convertToResponse(existingEntry);
             }
+            log.info("Creating the IdempotencyRecord for this key {}",request.getUserId());
         }
 
         TransactionEntry entry = getTransactionEntry(request);
@@ -68,13 +71,14 @@ public class TransactionEntryService {
         TransactionEntry saved = repository.save(entry);
         cacheEvictPublisher.publish(request.getUserId(), "CREATE", saved.getId());
         createCounter.increment();
-
+        log.info("Idempotency key {}",idempotencyKey);
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             IdempotencyRecord record = new IdempotencyRecord();
             record.setUserId(request.getUserId());
             record.setIdempotencyKey(idempotencyKey.trim());
             record.setTransactionId(saved.getId());
-            idempotencyRecordRepository.save(record);
+            record=idempotencyRecordRepository.save(record);
+            log.info("Created IdempotencyRecord for this key {}",record.getId());
         }
 
         log.info("Transaction created: id={}, user={}, recurring={}", saved.getId(), saved.getUserId(), saved.isRecurring());

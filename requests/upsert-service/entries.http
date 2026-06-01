@@ -67,7 +67,7 @@ Authorization: Bearer {{login.response.body.token}}
 POST {{baseUrl}}/create
 Content-Type: application/json
 Authorization: Bearer {{login.response.body.token}}
-Idempotency-Key: order-unique-key-abc123
+X-Idempotency-Key: order-unique-key-abc123
 
 {
   "userId": "{{login.response.body.userId}}",

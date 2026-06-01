@@ -4,7 +4,7 @@
   "tags": ["finance-assistant"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "time": { "from": "now-1h", "to": "now" },
   "templating": {
@@ -13,24 +13,19 @@
         "name": "service",
         "label": "Service",
         "type": "custom",
-        "query": "api-gateway,auth-service,upsert-service,analytics-service,ocr-parser-service",
-        "current": { "text": "api-gateway", "value": "api-gateway" },
+        "query": "api-gateway,auth-service,upsert-service,analytics-service,bill-parser-service",
+        "current": { "text": "All", "value": "$__all" },
         "options": [
-          { "text": "api-gateway",        "value": "api-gateway",        "selected": true },
-          { "text": "auth-service",       "value": "auth-service",       "selected": false },
-          { "text": "upsert-service",     "value": "upsert-service",     "selected": false },
-          { "text": "analytics-service",  "value": "analytics-service",  "selected": false },
-          { "text": "ocr-parser-service", "value": "ocr-parser-service", "selected": false }
+          { "text": "All",                 "value": "$__all",           "selected": true  },
+          { "text": "api-gateway",         "value": "api-gateway",        "selected": false },
+          { "text": "auth-service",        "value": "auth-service",       "selected": false },
+          { "text": "upsert-service",      "value": "upsert-service",     "selected": false },
+          { "text": "analytics-service",   "value": "analytics-service",  "selected": false },
+          { "text": "bill-parser-service", "value": "bill-parser-service","selected": false }
         ],
-        "includeAll": false,
+        "includeAll": true,
+        "allValue": ".+",
         "multi": false
-      },
-      {
-        "name": "search",
-        "label": "Search",
-        "type": "textbox",
-        "current": { "text": "", "value": "" },
-        "query": ""
       },
       {
         "name": "level",
@@ -39,15 +34,22 @@
         "query": "INFO,WARN,ERROR,DEBUG",
         "current": { "text": "All", "value": "$__all" },
         "options": [
-          { "text": "All", "value": "$__all", "selected": true },
-          { "text": "INFO", "value": "INFO", "selected": false },
-          { "text": "WARN", "value": "WARN", "selected": false },
-          { "text": "ERROR", "value": "ERROR", "selected": false },
-          { "text": "DEBUG", "value": "DEBUG", "selected": false }
+          { "text": "All",   "value": "$__all", "selected": true  },
+          { "text": "INFO",  "value": "INFO",   "selected": false },
+          { "text": "WARN",  "value": "WARN",   "selected": false },
+          { "text": "ERROR", "value": "ERROR",  "selected": false },
+          { "text": "DEBUG", "value": "DEBUG",  "selected": false }
         ],
         "includeAll": true,
         "allValue": ".*",
         "multi": false
+      },
+      {
+        "name": "search",
+        "label": "Search",
+        "type": "textbox",
+        "current": { "text": "", "value": "" },
+        "query": ""
       }
     ]
   },
@@ -130,10 +132,10 @@
     },
     {
       "id": 5,
-      "title": "ocr-parser-service",
+      "title": "bill-parser-service",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
-      "targets": [{ "expr": "up{job=\"ocr-parser-service\"}", "refId": "A" }],
+      "targets": [{ "expr": "up{job=\"bill-parser-service\"}", "refId": "A" }],
       "fieldConfig": {
         "defaults": {
           "mappings": [
@@ -147,26 +149,77 @@
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "background" },
       "gridPos": { "h": 3, "w": 4, "x": 16, "y": 0 }
     },
+
+    {
+      "id": 20,
+      "title": "Error Rate — last 1h",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [
+        {
+          "expr": "sum by (job) (rate(http_server_requests_seconds_count{status=~\"5..\"}[2m]))",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "reqps"
+        }
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 3 }
+    },
+    {
+      "id": 21,
+      "title": "ERROR log count by service — last 1h",
+      "type": "timeseries",
+      "datasource": { "type": "loki", "uid": "loki-ds" },
+      "targets": [
+        {
+          "expr": "sum by (service) (count_over_time({level=\"ERROR\"}[2m]))",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 3 }
+    },
+
     {
       "id": 10,
-      "title": "Logs — $service  |  search: $search",
+      "title": "Logs — $service  |  level: $level  |  search: $search",
       "type": "logs",
       "datasource": { "type": "loki", "uid": "loki-ds" },
-      "targets": [{
-        "expr": "{service=\"$service\"} |~ `(?i)$level` |~ `(?i)$search`",
-        "refId": "A",
-        "queryType": "range"
-      }],
+      "targets": [
+        {
+          "expr": "{service=~\"$service\"} | level=~\"$level\" |= `${search:raw}`",
+          "refId": "A",
+          "queryType": "range",
+          "maxLines": 500
+        }
+      ],
       "options": {
         "showTime": true,
-        "showLabels": false,
+        "showLabels": true,
+        "showCommonLabels": false,
         "wrapLogMessage": true,
         "prettifyLogMessage": false,
         "enableLogDetails": true,
         "dedupStrategy": "none",
-        "sortOrder": "Descending"
+        "sortOrder": "Descending",
+
+        "scrollToBottom": false
       },
-      "gridPos": { "h": 25, "w": 24, "x": 0, "y": 3 }
+      "transformations": [],
+      "gridPos": { "h": 35, "w": 24, "x": 0, "y": 9 }
     }
   ]
 }

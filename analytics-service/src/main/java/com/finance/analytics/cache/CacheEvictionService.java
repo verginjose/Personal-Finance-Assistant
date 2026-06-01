@@ -32,7 +32,7 @@ public class CacheEvictionService {
 
             Set<String> keys = redisTemplate.keys(pattern);
 
-            if (keys != null && !keys.isEmpty()) {
+            if (!keys.isEmpty()) {
                 redisTemplate.delete(keys);
                 totalEvicted += keys.size();
                 log.debug("Evicted {} keys from {} for user={}",

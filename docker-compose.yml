@@ -99,6 +99,7 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     ports:
       - "${UPSERT_SERVICE_PORT}:8081"
     networks:
@@ -127,6 +128,7 @@ services:
       SPRING_DATASOURCE_HIKARI_SCHEMA: ${FINANCE_DB_SCHEMA}
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
     ports:
       - "${ANALYTICS_SERVICE_PORT}:8084"
@@ -290,6 +292,39 @@ services:
     restart: on-failure
     networks:
       - finance-network
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    networks:
+      - finance-network        # ← was missing
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: false
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_RETENTION_BYTES: 1073741824
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - finance-network        # ← was missing        # message storage
 
 volumes:
   postgres_data:
@@ -297,6 +332,9 @@ volumes:
   grafana_data:
   redis-data:
   loki_data:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-data:
 
 networks:
   finance-network:

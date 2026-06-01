@@ -1,6 +1,7 @@
 package com.upsertservice.service;
 
 import com.upsertservice.dto.*;
+import com.upsertservice.events.CacheEvictPublisher;
 import com.upsertservice.model.*;
 import com.upsertservice.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class SplitService {
     private final GroupMemberRepository memberRepo;
     private final SharedExpenseRepository expenseRepo;
     private final ExpenseSplitRepository splitRepo;
+    private final CacheEvictPublisher cacheEvictPublisher;  // ADD THIS
 
     /* ─── GROUPS ─── */
 

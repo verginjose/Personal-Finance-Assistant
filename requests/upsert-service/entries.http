@@ -168,12 +168,12 @@ Authorization: Bearer {{login.response.body.token}}
 
 {
   "userId": "{{login.response.body.userId}}",
-  "name": "Gym Membership",
-  "amount": 1200.00,
+  "name": "Swimming Membership",
+  "amount": 2000.00,
   "type": "EXPENSE",
   "currency": "INR",
   "expenseCategory": "HEALTHCARE",
-  "description": "Monthly gym membership",
+  "description": "Monthly swimming membership",
   "recurring": true,
   "recurringPeriod": "MONTHLY"
 }

@@ -3,6 +3,7 @@ package com.upsertservice.service;
 import com.upsertservice.dto.CreateEntryRequest;
 import com.upsertservice.dto.CreateEntryResponse;
 import com.upsertservice.dto.UpdateEntryRequest;
+import com.upsertservice.events.CacheEvictPublisher;
 import com.upsertservice.model.IdempotencyRecord;
 import com.upsertservice.model.TransactionEntry;
 import com.upsertservice.model.TransactionType;
@@ -35,21 +36,21 @@ public class TransactionEntryService {
     private final IdempotencyRecordRepository idempotencyRecordRepository;
     private final Counter createCounter;
     private final Counter deleteCounter;
-
+    private final CacheEvictPublisher cacheEvictPublisher;
     public TransactionEntryService(
             TransactionEntryRepository repository,
             IdempotencyRecordRepository idempotencyRecordRepository,
-            MeterRegistry meterRegistry
+            MeterRegistry meterRegistry, CacheEvictPublisher cacheEvictPublisher
     ) {
         this.repository = repository;
         this.idempotencyRecordRepository = idempotencyRecordRepository;
         this.createCounter = meterRegistry.counter("transactions.create.success");
         this.deleteCounter = meterRegistry.counter("transactions.delete.success");
+        this.cacheEvictPublisher = cacheEvictPublisher;
     }
 
     // ── Create ────────────────────────────────────────────────────────────────
 
-    @CacheEvict(value = { "category-analytics", "timeline-analytics", "comprehensive-analytics" }, allEntries = true)
     public CreateEntryResponse createEntry(CreateEntryRequest request, String idempotencyKey) {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             IdempotencyRecord existing = idempotencyRecordRepository
@@ -65,6 +66,7 @@ public class TransactionEntryService {
         TransactionEntry entry = getTransactionEntry(request);
 
         TransactionEntry saved = repository.save(entry);
+        cacheEvictPublisher.publish(request.getUserId(), "CREATE", saved.getId());
         createCounter.increment();
 
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
@@ -97,7 +99,6 @@ public class TransactionEntryService {
 
     // ── Update (full) ─────────────────────────────────────────────────────────
 
-    @CacheEvict(value = { "category-analytics", "timeline-analytics", "comprehensive-analytics" }, allEntries = true)
     public CreateEntryResponse updateEntry(UpdateEntryRequest request) {
         TransactionEntry existing = repository.findByIdAndDeletedAtIsNull(request.getId())
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -118,26 +119,26 @@ public class TransactionEntryService {
             existing.setIncomeCategory(request.getIncomeCategory());
         }
         TransactionEntry updated = repository.save(existing);
+        cacheEvictPublisher.publish(request.getUserId(), "UPDATE", updated.getId()); // ADD THIS
         log.info("Transaction updated: id={}", updated.getId());
         return convertToResponse(updated);
     }
 
     // ── Patch amount (partial update) ─────────────────────────────────────────
 
-    @CacheEvict(value = { "category-analytics", "timeline-analytics", "comprehensive-analytics" }, allEntries = true)
     public CreateEntryResponse patchAmount(Long id, UUID userId, BigDecimal newAmount) {
         TransactionEntry entry = repository.findByIdAndUserIdAndDeletedAtIsNull(id, userId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Transaction entry with ID " + id + " not found for user " + userId));
         entry.setAmount(newAmount);
         TransactionEntry saved = repository.save(entry);
+        cacheEvictPublisher.publish(userId, "PATCH", id); // ADD THIS
         log.info("Transaction amount patched: id={}, newAmount={}", id, newAmount);
         return convertToResponse(saved);
     }
 
     // ── Delete ────────────────────────────────────────────────────────────────
 
-    @CacheEvict(value = { "category-analytics", "timeline-analytics", "comprehensive-analytics" }, allEntries = true)
     public void deleteEntry(Long id, UUID userId) {
         TransactionEntry entry = repository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -147,6 +148,7 @@ public class TransactionEntryService {
         }
         entry.setDeletedAt(LocalDateTime.now());
         repository.save(entry);
+        cacheEvictPublisher.publish(userId, "DELETE", id); // ADD THIS
         deleteCounter.increment();
         log.info("Transaction deleted: id={}, user={}", id, userId);
     }

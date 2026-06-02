@@ -1,0 +1,65 @@
+# vector.yaml
+api:
+  enabled: true
+  address: 0.0.0.0:8686
+
+sources:
+  docker_logs:
+    type: docker_logs
+    include_labels:
+      - "com.docker.compose.project=personal-finance-assistant"
+    exclude_containers:
+      - "vector"
+
+transforms:
+  parse_logs:
+    type: remap
+    inputs: ["docker_logs"]
+    source: |
+      .service         = string(.label."com.docker.compose.service")  ?? "unknown"
+      .compose_project = string(.label."com.docker.compose.project")  ?? "unknown"
+      .container       = string(.container_name)                       ?? "unknown"
+
+      parsed, err = parse_regex(.message, r'(?P<level>TRACE|DEBUG|INFO|WARN|ERROR)')
+      .level = if err == null { parsed.level } else { "INFO" }
+
+      ts, err = parse_regex(.message, r'(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})')
+      if err == null {
+        .log_timestamp = ts.ts
+      }
+
+      .timestamp = format_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S%.3f")
+
+      del(.label)
+      del(.container_id)
+      del(.source_type)
+      del(.stream)
+      del(.host)
+
+  merge_multiline:
+    type: reduce
+    inputs: ["parse_logs"]
+    group_by:
+      - container
+      - service
+    merge_strategies:
+      message: concat_newline
+    starts_when: match(string!(.message), r'^\d{4}-\d{2}-\d{2}')
+    expire_after_ms: 2000
+    flush_period_ms: 500
+
+sinks:
+  clickhouse_logs:
+    type: clickhouse
+    inputs: ["merge_multiline"]   # ← changed from parse_logs
+    endpoint: "http://clickhouse:8123"
+    database: "default"
+    table: "logs"
+    auth:
+      strategy: basic
+      user: default
+      password: clickhouse
+    batch:
+      max_bytes: 1048576
+      timeout_secs: 5
+    compression: gzip

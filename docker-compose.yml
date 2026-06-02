@@ -284,44 +284,19 @@ services:
     depends_on:
       - clickhouse
       - prometheus
-      - loki
+      - vector
     networks:
       - finance-network
 
-  # ── Loki: log storage backend ─────────────────────────────────────────────
-  loki:
-    image: grafana/loki:3.1.0
-    container_name: loki
-    user: root
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    ports:
-      - "3100:3100"
-    command: -config.file=/etc/loki/loki-config.yaml
+  vector:
+    image: timberio/vector:0.41.1-debian
+    container_name: vector
     volumes:
-      - ./observability/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
-      - loki_data:/loki
-    restart: on-failure
-    networks:
-      - finance-network
-
-  # ── Promtail: ships Docker logs → Loki with auto service-name labels ───────
-  promtail:
-    image: grafana/promtail:3.1.0
-    container_name: promtail
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-    command: -config.file=/etc/promtail/promtail-config.yaml
-    volumes:
-      - ./observability/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - ./observability/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: [ "--config", "/etc/vector/vector.yaml" ]
     depends_on:
-      - loki
+      - clickhouse
     restart: on-failure
     networks:
       - finance-network

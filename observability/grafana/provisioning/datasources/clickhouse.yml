@@ -10,7 +10,7 @@ datasources:
       host: clickhouse
       port: 8123
       protocol: http
-      defaultDatabase: observability_logs
+      defaultDatabase: default
       username: default
       tlsSkipVerify: true
     secureJsonData:

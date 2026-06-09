@@ -1,4 +1,5 @@
 import { api, Auth, toast } from '../utils/api.js';
+import { icon } from '../utils/icons.js';
 import { esc, pageHeader } from '../utils/ui.js';
 
 export async function renderProfile(container) {
@@ -30,7 +31,7 @@ export async function renderProfile(container) {
       <div class="card">
         <div class="card-header"><h3>Session</h3></div>
         <p style="color:var(--text-dim);font-size:.88rem;margin-bottom:16px">Sign out from this device. Your data remains saved.</p>
-        <button class="btn btn-danger" id="p-logout" style="width:100%">🚪 Logout</button>
+        <button class="btn btn-danger" id="p-logout" style="width:100%">${icon('log-out', 'sm')} Sign Out</button>
       </div>
     </div>`;
 

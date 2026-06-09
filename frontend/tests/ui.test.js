@@ -63,8 +63,9 @@ describe('ui utilities', () => {
   });
 
   it('builds empty state HTML', () => {
-    const html = emptyState('🧾', 'No data', 'Try again');
+    const html = emptyState('receipt', 'No data', 'Try again');
     expect(html).toContain('No data');
+    expect(html).toContain('icon-svg');
     expect(html).toContain('Try again');
   });
 

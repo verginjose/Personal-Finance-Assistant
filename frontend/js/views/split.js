@@ -9,7 +9,7 @@ export async function renderSplit(container) {
   container.innerHTML = `
     ${pageHeader('Split Expenses', 'Manage shared expenses with groups', '<button class="btn btn-primary btn-sm" id="sp-create">+ New Group</button>')}
     <div style="margin-bottom:16px">
-      <button class="btn btn-secondary btn-sm" id="sp-back" style="display:none">← Back to Groups</button>
+      <button class="btn btn-secondary btn-sm" id="sp-back" style="display:none">Back to Groups</button>
     </div>
     <div id="sp-content" class="fade-up"></div>`;
 
@@ -26,7 +26,7 @@ async function loadGroups(userId) {
   try {
     const groups = await api.get('/upsert/groups', { userId });
     if (!groups.length) {
-      el.innerHTML = emptyState('👥', 'No groups yet', 'Create a group to start splitting expenses.');
+      el.innerHTML = emptyState('users', 'No groups yet', 'Create a group to start splitting expenses.');
       return;
     }
     el.innerHTML = `<div class="card-grid card-grid-3">${groups.map(g => `
@@ -75,7 +75,7 @@ async function loadGroupDetail(groupId, userId) {
               <span>${esc(e.description || 'Expense')}</span>
               <span style="font-weight:600;color:var(--accent)">${formatCurrency(e.amount)}</span>
             </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem">No expenses yet</p>'}
-          <button class="btn btn-primary btn-sm" style="margin-top:12px;width:100%" id="sp-add-expense">+ Add Expense</button>
+          <button class="btn btn-primary btn-sm" style="margin-top:12px;width:100%" id="sp-add-expense" ${members.length ? '' : 'disabled'}>+ Add Expense</button>
         </div>
         <div class="card">
           <div class="card-header"><h3>Balances</h3></div>
@@ -89,7 +89,7 @@ async function loadGroupDetail(groupId, userId) {
         </div>
       </div>
       <div class="card settlement-card">
-        <div class="card-header"><h3>🤝 Simplified Settlements</h3></div>
+        <div class="card-header"><h3>Simplified Settlements</h3></div>
         ${balances?.simplifiedDebts?.length ? balances.simplifiedDebts.map(s => `
           <div class="settlement-row">
             <div>
@@ -101,7 +101,7 @@ async function loadGroupDetail(groupId, userId) {
               data-from-name="${esc(s.fromUserName)}" data-to-name="${esc(s.toUserName)}">
               Record Payment
             </button>
-          </div>`).join('') : '<p style="color:var(--text-dim);margin:0">Everyone is fully settled up! 🎉</p>'}
+          </div>`).join('') : '<p style="color:var(--text-dim);margin:0">All balances are settled.</p>'}
       </div>`;
 
     document.getElementById('sp-add-member').onclick = () => addMemberModal(groupId, userId);
@@ -124,15 +124,17 @@ async function loadGroupDetail(groupId, userId) {
 function createGroupModal(userId) {
   openModal('Create Group', `
     <form id="cg-form">
-      <div class="form-group"><label for="cg-name">Group Name</label><input class="form-input" id="cg-name" required></div>
-      <div class="form-group"><label for="cg-desc">Description</label><textarea class="form-textarea" id="cg-desc"></textarea></div>
+      <div class="form-group"><label for="cg-name">Group Name</label><input class="form-input" id="cg-name" required maxlength="100"></div>
+      <div class="form-group"><label for="cg-desc">Description</label><textarea class="form-textarea" id="cg-desc" maxlength="300"></textarea></div>
+      <div class="form-group"><label for="cg-currency">Currency</label><input class="form-input" id="cg-currency" value="INR" maxlength="3" required></div>
       ${modalActions('Cancel', 'Create')}
     </form>`, {
     onSubmit: async () => {
       await api.post('/upsert/groups', {
-        name: document.getElementById('cg-name').value,
-        description: document.getElementById('cg-desc').value,
-        createdByUserId: userId
+        name: document.getElementById('cg-name').value.trim(),
+        description: document.getElementById('cg-desc').value.trim() || undefined,
+        createdBy: userId,
+        currency: document.getElementById('cg-currency').value.trim().toUpperCase()
       });
       toast('Group created', 'success');
       loadGroups(userId);
@@ -140,17 +142,27 @@ function createGroupModal(userId) {
   });
 }
 
+function resolveMemberUserId(input) {
+  const trimmed = (input || '').trim();
+  if (trimmed) return trimmed;
+  return crypto.randomUUID();
+}
+
 function addMemberModal(groupId, userId) {
   openModal('Add Member', `
     <form id="am-form">
-      <div class="form-group"><label for="am-name">Member Name</label><input class="form-input" id="am-name" required></div>
-      <div class="form-group"><label for="am-uid">User ID (optional)</label><input class="form-input" id="am-uid" placeholder="UUID"></div>
+      <div class="form-group"><label for="am-name">Member Name</label><input class="form-input" id="am-name" required maxlength="150"></div>
+      <div class="form-group">
+        <label for="am-uid">User ID</label>
+        <input class="form-input" id="am-uid" placeholder="UUID of registered user (optional)">
+        <p style="font-size:.78rem;color:var(--text-muted);margin-top:6px">Leave blank for a guest member — a temporary ID will be assigned.</p>
+      </div>
       ${modalActions('Cancel', 'Add')}
     </form>`, {
     onSubmit: async () => {
       await api.post(`/upsert/groups/${groupId}/members`, {
-        name: document.getElementById('am-name').value,
-        userId: document.getElementById('am-uid').value || null
+        name: document.getElementById('am-name').value.trim(),
+        userId: resolveMemberUserId(document.getElementById('am-uid').value)
       });
       toast('Member added', 'success');
       loadGroupDetail(groupId, userId);
@@ -159,23 +171,31 @@ function addMemberModal(groupId, userId) {
 }
 
 function addExpenseModal(groupId, members, userId) {
+  if (!members.length) {
+    toast('Add at least one member before creating an expense', 'error');
+    return;
+  }
   openModal('Add Shared Expense', `
     <form id="ae-form">
-      <div class="form-group"><label for="ae-desc">Description</label><input class="form-input" id="ae-desc" required></div>
+      <div class="form-group"><label for="ae-desc">Description</label><input class="form-input" id="ae-desc" required maxlength="100"></div>
       <div class="form-row">
-        <div class="form-group"><label for="ae-amt">Amount</label><input class="form-input" id="ae-amt" type="number" step="0.01" required></div>
+        <div class="form-group"><label for="ae-amt">Amount</label><input class="form-input" id="ae-amt" type="number" step="0.01" min="0.01" required></div>
         <div class="form-group"><label for="ae-paid">Paid By</label>
-          <select class="form-select" id="ae-paid">${members.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select>
+          <select class="form-select" id="ae-paid" required>
+            ${members.map(m => `<option value="${m.userId}">${esc(m.name)}</option>`).join('')}
+          </select>
         </div>
       </div>
+      <div class="form-group"><label for="ae-currency">Currency</label><input class="form-input" id="ae-currency" value="INR" maxlength="3" required></div>
       ${modalActions('Cancel', 'Add')}
     </form>`, {
     onSubmit: async () => {
       await api.post(`/upsert/groups/${groupId}/expenses`, {
-        description: document.getElementById('ae-desc').value,
+        description: document.getElementById('ae-desc').value.trim(),
         amount: parseFloat(document.getElementById('ae-amt').value),
-        paidByMemberId: +document.getElementById('ae-paid').value,
-        groupId
+        paidBy: document.getElementById('ae-paid').value,
+        currency: document.getElementById('ae-currency').value.trim().toUpperCase(),
+        splitType: 'EQUAL'
       });
       toast('Expense added', 'success');
       loadGroupDetail(groupId, userId);

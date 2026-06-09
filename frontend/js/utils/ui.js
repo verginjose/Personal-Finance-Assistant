@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    ui.js — Shared UI helpers, formatters, and component builders
    ═══════════════════════════════════════════════════════════════════════════ */
+import { icon } from './icons.js';
 
 export function esc(s) {
   const d = document.createElement('div');
@@ -49,10 +50,10 @@ export function pageHeader(title, subtitle, actionsHtml = '') {
     </div>`;
 }
 
-export function emptyState(icon, title, subtitle = '') {
+export function emptyState(iconName, title, subtitle = '') {
   return `
     <div class="empty-state">
-      <div class="empty-icon">${icon}</div>
+      <div class="empty-icon">${icon(iconName, 'lg')}</div>
       <h3>${esc(title)}</h3>
       ${subtitle ? `<p>${esc(subtitle)}</p>` : ''}
     </div>`;
@@ -85,9 +86,15 @@ export function typeBadge(type) {
 }
 
 export function insightIcon(type) {
-  if (type === 'WARNING') return '⚠️';
-  if (type === 'ACHIEVEMENT') return '🎉';
-  return '💡';
+  if (type === 'WARNING') return icon('warning', 'sm');
+  if (type === 'ACHIEVEMENT') return icon('award', 'sm');
+  return icon('info', 'sm');
+}
+
+export function budgetStatusBadge(status) {
+  if (status === 'EXCEEDED') return badge('Exceeded', 'expense');
+  if (status === 'WARNING') return badge('Warning', 'warning');
+  return badge('On track', 'income');
 }
 
 export function insightColor(type) {
@@ -100,7 +107,7 @@ export function healthPanelHtml(prefix) {
   return `
     <div class="card insight-card insight-card--health fade-up">
       <div class="insight-card-header">
-        <span class="insight-card-icon">🛡️</span>
+        <span class="insight-card-icon">${icon('shield')}</span>
         <h3>Financial Health Score</h3>
       </div>
       <div class="health-panel">
@@ -122,7 +129,7 @@ export function aiPanelHtml(prefix) {
   return `
     <div class="card insight-card insight-card--ai fade-up">
       <div class="insight-card-header">
-        <span class="insight-card-icon">💡</span>
+        <span class="insight-card-icon">${icon('sparkles')}</span>
         <h3>AI Financial Advisor</h3>
       </div>
       <p id="${prefix}-ai-summary" class="ai-summary">Analyzing your transactions…</p>
@@ -178,7 +185,7 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
     <div class="modal ${size}" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <div class="modal-header">
         <h2 id="modal-title">${esc(title)}</h2>
-        <button type="button" class="btn btn-icon btn-ghost modal-close" aria-label="Close">✕</button>
+        <button type="button" class="btn btn-icon btn-ghost modal-close" aria-label="Close">${icon('close', 'sm')}</button>
       </div>
       <div class="modal-body">${bodyHtml}</div>
     </div>`;

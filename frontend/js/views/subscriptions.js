@@ -15,7 +15,7 @@ export async function renderSubscriptions(container) {
     try {
       const data = await api.get('/upsert/subscriptions', { userId: uid });
       if (!data?.length) {
-        grid.innerHTML = `<div class="card">${emptyState('✅', 'No subscriptions detected', 'Mark transactions as recurring to track them here.')}</div>`;
+        grid.innerHTML = `<div class="card">${emptyState('check-circle', 'No subscriptions detected', 'Mark transactions as recurring to track them here.')}</div>`;
         return;
       }
       grid.innerHTML = `<div class="sub-grid">${data.map(subCard).join('')}</div>`;
@@ -38,9 +38,9 @@ export async function renderSubscriptions(container) {
 function subCard(sub) {
   const color = sub.daysUntilCharge <= 3 ? 'var(--accent)' :
                 sub.daysUntilCharge <= 7 ? 'var(--accent-y)' : 'var(--accent-g)';
-  const urgency = sub.daysUntilCharge === 0 ? 'TODAY' :
-                  sub.daysUntilCharge <= 3 ? `${sub.daysUntilCharge}d` :
-                  sub.daysUntilCharge <= 7 ? `${sub.daysUntilCharge}d` : `${sub.daysUntilCharge}d`;
+  const urgency = sub.daysUntilCharge === 0 ? 'Due today' :
+                  sub.daysUntilCharge === 1 ? '1 day' :
+                  `${sub.daysUntilCharge} days`;
   return `
     <div class="card sub-card" style="--sub-color:${color}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">

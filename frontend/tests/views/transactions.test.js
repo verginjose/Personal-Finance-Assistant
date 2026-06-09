@@ -51,6 +51,7 @@ describe('renderTransactions', () => {
     });
     expect(container.querySelector('.badge-expense')).toBeTruthy();
     expect(container.querySelector('.badge-recurring')).toBeTruthy();
+    expect(container.querySelector('.badge-recurring .icon-svg')).toBeTruthy();
   });
 
   it('opens add transaction modal', async () => {

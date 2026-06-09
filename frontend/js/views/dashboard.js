@@ -1,5 +1,6 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { createDoughnut, createLine, destroyChart } from '../utils/charts.js';
+import { icon } from '../utils/icons.js';
 import {
   pageHeader, skeletonKpiRow, skeletonChart,
   healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, formatCurrency
@@ -39,19 +40,19 @@ export async function renderDashboard(container) {
     document.getElementById('d-kpis').innerHTML = `
       <div class="card-grid card-grid-4 fade-up">
         <div class="card stat-card income">
-          <div class="stat-card-top"><div class="stat-label">Total Income</div><div class="stat-icon">📈</div></div>
+          <div class="stat-card-top"><div class="stat-label">Total Income</div><div class="stat-icon">${icon('trending-up')}</div></div>
           <div class="stat-value">${formatCurrency(summary.totalIncome)}</div>
         </div>
         <div class="card stat-card expense">
-          <div class="stat-card-top"><div class="stat-label">Total Expenses</div><div class="stat-icon">📉</div></div>
+          <div class="stat-card-top"><div class="stat-label">Total Expenses</div><div class="stat-icon">${icon('trending-down')}</div></div>
           <div class="stat-value">${formatCurrency(summary.totalExpense)}</div>
         </div>
         <div class="card stat-card balance">
-          <div class="stat-card-top"><div class="stat-label">Net Balance</div><div class="stat-icon">💎</div></div>
+          <div class="stat-card-top"><div class="stat-label">Net Balance</div><div class="stat-icon">${icon('wallet')}</div></div>
           <div class="stat-value">${formatCurrency(summary.netBalance)}</div>
         </div>
         <div class="card stat-card count">
-          <div class="stat-card-top"><div class="stat-label">Transactions</div><div class="stat-icon">🧾</div></div>
+          <div class="stat-card-top"><div class="stat-label">Transactions</div><div class="stat-icon">${icon('list')}</div></div>
           <div class="stat-value">${summary.totalCount ?? 0}</div>
         </div>
       </div>`;

@@ -57,7 +57,10 @@ async function request(method, path, { body, params, headers = {}, raw = false }
   try { data = JSON.parse(text); } catch { data = text; }
 
   if (!res.ok) {
-    const msg = data?.message || data?.error || `Request failed (${res.status})`;
+    let msg = data?.message || data?.error || `Request failed (${res.status})`;
+    if (Array.isArray(data?.details) && data.details.length) {
+      msg += ': ' + data.details.join('; ');
+    }
     throw new Error(msg);
   }
   return data;

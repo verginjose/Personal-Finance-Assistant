@@ -1,4 +1,5 @@
 import { api, Auth, toast } from '../utils/api.js';
+import { icon } from '../utils/icons.js';
 
 export function renderAuth(container) {
   let mode = 'login';
@@ -7,19 +8,19 @@ export function renderAuth(container) {
     container.innerHTML = `
     <div class="auth-page">
       <div class="auth-brand">
-        <h1>💰 Personal Finance Assistant</h1>
+        <h1>${icon('logo')} Personal Finance Assistant</h1>
         <p>Enterprise-grade money management with AI insights, bill scanning, split expenses, and real-time analytics.</p>
         <div class="auth-features">
           <div class="auth-feature">
-            <div class="auth-feature-icon">📊</div>
+            <div class="auth-feature-icon">${icon('analytics')}</div>
             <div><strong>Smart Analytics</strong><br>Health scores, charts, and AI-powered insights</div>
           </div>
           <div class="auth-feature">
-            <div class="auth-feature-icon">📄</div>
+            <div class="auth-feature-icon">${icon('bill-scanner')}</div>
             <div><strong>Bill Scanner</strong><br>OCR extraction from receipts and invoices</div>
           </div>
           <div class="auth-feature">
-            <div class="auth-feature-icon">🎯</div>
+            <div class="auth-feature-icon">${icon('goals')}</div>
             <div><strong>Goals & Budgets</strong><br>Track savings targets and spending limits</div>
           </div>
         </div>

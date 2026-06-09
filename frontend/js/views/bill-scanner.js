@@ -1,4 +1,5 @@
 import { api, Auth, toast } from '../utils/api.js';
+import { icon } from '../utils/icons.js';
 import { pageHeader, dataField } from '../utils/ui.js';
 
 export async function renderBillScanner(container) {
@@ -7,14 +8,14 @@ export async function renderBillScanner(container) {
     ${pageHeader('Bill Scanner', 'Upload a receipt and let AI extract the details')}
     <div class="card fade-up" style="max-width:680px">
       <div class="drop-zone" id="bs-drop" role="button" tabindex="0" aria-label="Upload receipt">
-        <div class="drop-icon">📄</div>
+        <div class="drop-icon">${icon('document', 'lg')}</div>
         <p>Drag & drop a receipt image or PDF here</p>
         <p style="margin-top:6px;font-size:.78rem;color:var(--text-muted)">JPEG, PNG, PDF — max 10 MB</p>
         <div class="file-name" id="bs-fname"></div>
       </div>
       <input type="file" id="bs-file" accept="image/*,application/pdf" hidden>
       <button class="btn btn-primary" id="bs-upload" style="width:100%;margin-top:20px" disabled>
-        🔍 Process Receipt
+        ${icon('scan', 'sm')} Process Receipt
       </button>
     </div>
     <div class="card fade-up" id="bs-result" style="max-width:680px;margin-top:20px;display:none">
@@ -59,14 +60,14 @@ export async function renderBillScanner(container) {
         ${dataField('Category', result.expenseCategory || result.incomeCategory)}
         ${dataField('Currency', result.currency)}
         ${dataField('Description', result.description)}
-        <button class="btn btn-success" style="width:100%;margin-top:12px" id="bs-save">✓ Save as Transaction</button>`;
+        <button class="btn btn-success" style="width:100%;margin-top:12px" id="bs-save">Save as Transaction</button>`;
 
       document.getElementById('bs-save').onclick = () => saveTransaction(userId, result);
     } catch (err) {
       toast('OCR failed: ' + err.message, 'error');
     }
     uploadBtn.disabled = !selectedFile;
-    uploadBtn.innerHTML = '🔍 Process Receipt';
+    uploadBtn.innerHTML = `${icon('scan', 'sm')} Process Receipt`;
   };
 }
 
@@ -104,6 +105,6 @@ async function saveTransaction(userId, result) {
     toast('Save failed: ' + err.message, 'error');
   } finally {
     saveBtn.disabled = false;
-    saveBtn.innerHTML = '✓ Save as Transaction';
+    saveBtn.textContent = 'Save as Transaction';
   }
 }

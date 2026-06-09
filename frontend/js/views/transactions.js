@@ -1,4 +1,5 @@
 import { api, Auth, toast } from '../utils/api.js';
+import { icon } from '../utils/icons.js';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
   typeBadge, openModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions
@@ -11,13 +12,13 @@ export async function renderTransactions(container) {
   container.innerHTML = `
     ${pageHeader('Transactions', 'Manage your income and expenses', '<button class="btn btn-primary btn-sm" id="t-add">+ Add Transaction</button>')}
     <div class="toolbar fade-up">
-      <div class="search-box"><input class="form-input" id="t-search" placeholder="Search by name or description…" aria-label="Search transactions"></div>
+      <div class="search-box">${icon('search', 'sm')}<input class="form-input" id="t-search" placeholder="Search by name or description…" aria-label="Search transactions"></div>
       <select class="form-select" id="t-type-filter" style="width:150px" aria-label="Filter by type">
         <option value="">All Types</option><option value="INCOME">Income</option><option value="EXPENSE">Expense</option>
       </select>
       <input class="form-input" id="t-start" type="date" style="width:160px" aria-label="Start date">
       <input class="form-input" id="t-end" type="date" style="width:160px" aria-label="End date">
-      <button class="btn btn-secondary btn-sm" id="t-export">📥 Export CSV</button>
+      <button class="btn btn-secondary btn-sm" id="t-export">${icon('download', 'sm')} Export CSV</button>
     </div>
     <div class="table-wrap fade-up">
       <table>
@@ -58,12 +59,12 @@ async function loadTransactions(userId) {
     totalPages = result.totalPages || 1;
 
     if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="6">${emptyState('🧾', 'No transactions found', 'Add a transaction or adjust your filters.')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6">${emptyState('receipt', 'No transactions found', 'Add a transaction or adjust your filters.')}</td></tr>`;
     } else {
       tbody.innerHTML = items.map(t => `<tr>
         <td>
           <strong>${esc(t.name)}</strong>
-          ${t.recurring ? `<span class="badge badge-recurring">🔁 ${esc(t.recurringPeriod)}</span>` : ''}
+          ${t.recurring ? `<span class="badge badge-recurring">${icon('repeat', 'xs')} ${esc(t.recurringPeriod)}</span>` : ''}
           ${t.description ? `<br><small style="color:var(--text-dim)">${esc(t.description)}</small>` : ''}
         </td>
         <td>${typeBadge(t.type)}</td>
@@ -73,8 +74,8 @@ async function loadTransactions(userId) {
         </td>
         <td style="font-size:.82rem;color:var(--text-dim)">${formatDate(t.createdAt)}</td>
         <td class="td-actions">
-          <button class="btn btn-secondary btn-icon btn-sm t-edit" data-id="${t.id}" title="Edit" aria-label="Edit">✏️</button>
-          <button class="btn btn-danger btn-icon btn-sm t-del" data-id="${t.id}" title="Delete" aria-label="Delete">🗑</button>
+          <button class="btn btn-secondary btn-icon btn-sm t-edit" data-id="${t.id}" title="Edit" aria-label="Edit">${icon('edit', 'sm')}</button>
+          <button class="btn btn-danger btn-icon btn-sm t-del" data-id="${t.id}" title="Delete" aria-label="Delete">${icon('trash', 'sm')}</button>
         </td>
       </tr>`).join('');
 

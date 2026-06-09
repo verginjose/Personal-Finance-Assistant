@@ -2,6 +2,7 @@
    app.js — SPA Router + Shell
    ═══════════════════════════════════════════════════════════════════════════ */
 import { Auth } from './utils/api.js';
+import { icon } from './utils/icons.js';
 import { renderAuth }          from './views/auth.js';
 import { renderDashboard }     from './views/dashboard.js';
 import { renderTransactions }  from './views/transactions.js';
@@ -13,14 +14,14 @@ import { renderSubscriptions } from './views/subscriptions.js';
 import { renderGoals }         from './views/goals.js';
 
 const NAV_ITEMS = [
-  { id: 'dashboard',      icon: '📊', label: 'Dashboard' },
-  { id: 'transactions',   icon: '💳', label: 'Transactions' },
-  { id: 'bill-scanner',   icon: '📄', label: 'Bill Scanner' },
-  { id: 'split',          icon: '👥', label: 'Split Expenses' },
-  { id: 'analytics',      icon: '📈', label: 'Analytics' },
-  { id: 'subscriptions',  icon: '🧛', label: 'Subscriptions' },
-  { id: 'goals',          icon: '🎯', label: 'Goals & Budgets' },
-  { id: 'profile',        icon: '👤', label: 'Profile' },
+  { id: 'dashboard',      icon: 'dashboard',      label: 'Dashboard' },
+  { id: 'transactions',   icon: 'transactions',   label: 'Transactions' },
+  { id: 'bill-scanner',   icon: 'bill-scanner',   label: 'Bill Scanner' },
+  { id: 'split',          icon: 'split',          label: 'Split Expenses' },
+  { id: 'analytics',      icon: 'analytics',      label: 'Analytics' },
+  { id: 'subscriptions',  icon: 'subscriptions',  label: 'Subscriptions' },
+  { id: 'goals',          icon: 'goals',          label: 'Goals & Budgets' },
+  { id: 'profile',        icon: 'profile',        label: 'Profile' },
 ];
 
 let currentView = 'dashboard';
@@ -41,11 +42,11 @@ function renderShell() {
     <div id="app-shell">
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
       <aside class="sidebar" id="sidebar">
-        <div class="logo"><span>💰</span> PFA</div>
+        <div class="logo">${icon('logo', 'sm')} PFA</div>
         <nav id="sidebar-nav" aria-label="Main navigation">
           ${NAV_ITEMS.map(n => `
             <a href="#" data-view="${n.id}" class="${n.id === currentView ? 'active' : ''}" aria-current="${n.id === currentView ? 'page' : 'false'}">
-              <span class="icon" aria-hidden="true">${n.icon}</span>${n.label}
+              <span class="icon">${icon(n.icon, 'sm')}</span>${n.label}
             </a>`).join('')}
         </nav>
         <div class="sidebar-user" id="sidebar-user" role="button" tabindex="0" aria-label="Open profile">
@@ -59,8 +60,8 @@ function renderShell() {
       </aside>
       <div class="main-content">
         <div class="mobile-header">
-          <button id="menu-toggle" aria-label="Open menu">☰</button>
-          <span style="font-weight:700;font-family:var(--font-display);background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent">PFA</span>
+          <button id="menu-toggle" aria-label="Open menu">${icon('menu')}</button>
+          <span class="mobile-logo">PFA</span>
           <span></span>
         </div>
         <div id="view-root"></div>
@@ -122,5 +123,3 @@ function renderView() {
 window.addEventListener('auth-change', () => { currentView = 'dashboard'; renderShell(); });
 window.addEventListener('auth-expired', () => renderShell());
 document.addEventListener('DOMContentLoaded', renderShell);
-
-export { navigateTo, NAV_ITEMS, currentView };

@@ -1,7 +1,9 @@
 import { api, Auth, toast } from '../utils/api.js';
+import { icon } from '../utils/icons.js';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
-  progressBar, budgetStatusColor, openModal, modalActions, EXPENSE_CATS, categoryOptions
+  progressBar, budgetStatusColor, budgetStatusBadge, badge, openModal, modalActions,
+  EXPENSE_CATS, categoryOptions
 } from '../utils/ui.js';
 
 export async function renderGoals(container) {
@@ -11,14 +13,14 @@ export async function renderGoals(container) {
     <div class="goals-layout fade-up">
       <div>
         <div class="section-header">
-          <h2>💰 Savings Goals</h2>
+          <h2>Savings Goals</h2>
           <button class="btn btn-primary btn-sm" id="add-goal-btn">+ New Goal</button>
         </div>
         <div id="goals-list"><div class="spinner-center"><span class="spinner"></span></div></div>
       </div>
       <div>
         <div class="section-header">
-          <h2>📊 Category Budgets</h2>
+          <h2>Category Budgets</h2>
           <button class="btn btn-primary btn-sm" id="add-budget-btn">+ New Budget</button>
         </div>
         <div id="budgets-list"><div class="spinner-center"><span class="spinner"></span></div></div>
@@ -34,7 +36,7 @@ async function loadGoals(uid) {
   try {
     const goals = await api.get('/upsert/goals', { userId: uid });
     el.innerHTML = goals.length ? goals.map(goalCard).join('') :
-      emptyState('🚀', 'No savings goals', 'Create a goal to start tracking progress.');
+      emptyState('target', 'No savings goals', 'Create a goal to start tracking progress.');
     goals.forEach(g => {
       document.getElementById(`del-goal-${g.id}`)?.addEventListener('click', () => deleteGoal(g.id, uid));
       document.getElementById(`contrib-goal-${g.id}`)?.addEventListener('click', () => contributeToGoal(g.id, uid));
@@ -47,7 +49,7 @@ async function loadBudgets(uid) {
   try {
     const budgets = await api.get('/upsert/budgets', { userId: uid });
     el.innerHTML = budgets.length ? budgets.map(budgetCard).join('') :
-      emptyState('📊', 'No budgets set', 'Set category limits to track spending.');
+      emptyState('bar-chart', 'No budgets set', 'Set category limits to track spending.');
     budgets.forEach(b => {
       document.getElementById(`del-budget-${b.budgetId}`)?.addEventListener('click', () => deleteBudget(b.budgetId, uid));
     });
@@ -60,10 +62,10 @@ function goalCard(g) {
   return `
     <div class="card goal-card">
       <div class="section-header" style="margin-bottom:8px">
-        <h4 style="font-weight:700">${esc(g.name)} ${g.completed ? '✅' : ''}</h4>
+        <h4 style="font-weight:700">${esc(g.name)} ${g.completed ? badge('Complete', 'income') : ''}</h4>
         <div style="display:flex;gap:6px">
-          ${!g.completed ? `<button id="contrib-goal-${g.id}" class="btn btn-success btn-sm">+ Contribute</button>` : ''}
-          <button id="del-goal-${g.id}" class="btn btn-danger btn-sm">✕</button>
+          ${!g.completed ? `<button id="contrib-goal-${g.id}" class="btn btn-success btn-sm">Contribute</button>` : ''}
+          <button id="del-goal-${g.id}" class="btn btn-danger btn-icon btn-sm" aria-label="Delete goal">${icon('trash', 'sm')}</button>
         </div>
       </div>
       ${progressBar(pct, color)}
@@ -78,15 +80,17 @@ function goalCard(g) {
 function budgetCard(b) {
   const pct = Math.min(b.utilizationPercentage, 100);
   const color = budgetStatusColor(b.status);
-  const icon = b.status === 'EXCEEDED' ? '🔴' : b.status === 'WARNING' ? '🟡' : '🟢';
   return `
     <div class="card budget-card" style="--budget-color:${color}">
       <div class="section-header" style="margin-bottom:8px">
         <div>
-          <h4 style="font-weight:700">${icon} ${esc(formatCategory(b.expenseCategory))}</h4>
-          <span style="font-size:.78rem;color:var(--text-muted)">${esc(b.period)}</span>
+          <h4 style="font-weight:700">${esc(formatCategory(b.expenseCategory))}</h4>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+            <span style="font-size:.78rem;color:var(--text-muted)">${esc(b.period)}</span>
+            ${budgetStatusBadge(b.status)}
+          </div>
         </div>
-        <button id="del-budget-${b.budgetId}" class="btn btn-danger btn-sm">✕</button>
+        <button id="del-budget-${b.budgetId}" class="btn btn-danger btn-icon btn-sm" aria-label="Delete budget">${icon('trash', 'sm')}</button>
       </div>
       ${progressBar(pct, color)}
       <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-dim);margin-top:10px">

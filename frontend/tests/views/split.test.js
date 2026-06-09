@@ -54,6 +54,7 @@ describe('renderSplit', () => {
     mockFetchJson([{ id: 1, name: 'Me', userId: memberUserId }]);
     mockFetchJson([]);
     mockFetchJson({ memberBalances: [], simplifiedDebts: [] });
+    mockFetchJson([]);
     container.querySelector('.group-card').click();
 
     await vi.waitFor(() => expect(document.getElementById('sp-add-expense')).toBeTruthy());
@@ -80,6 +81,59 @@ describe('renderSplit', () => {
       expect(body.paidBy).toBe(memberUserId);
       expect(body.splitType).toBe('EQUAL');
       expect(body).not.toHaveProperty('paidByMemberId');
+    });
+  });
+
+  it('sends splitDetails when using percentage split', async () => {
+    const memberA = 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff';
+    const memberB = 'cccccccc-dddd-eeee-ffff-000000000000';
+    mockFetchJson([{ id: 5, name: 'Trip', description: '' }]);
+    await renderSplit(container);
+    await vi.waitFor(() => expect(container.querySelector('.group-card')).toBeTruthy());
+
+    mockFetchJson({ id: 5, name: 'Trip' });
+    mockFetchJson([
+      { id: 1, name: 'alice', userId: memberA },
+      { id: 2, name: 'bob', userId: memberB }
+    ]);
+    mockFetchJson([]);
+    mockFetchJson({ memberBalances: [], simplifiedDebts: [] });
+    mockFetchJson([]);
+    container.querySelector('.group-card').click();
+
+    await vi.waitFor(() => expect(document.getElementById('sp-add-expense')).toBeTruthy());
+    document.getElementById('sp-add-expense').click();
+
+    await vi.waitFor(() => expect(document.querySelector('#ae-split-type')).toBeTruthy());
+
+    document.querySelector('#ae-desc').value = 'Hotel';
+    document.querySelector('#ae-amt').value = '1000';
+    document.querySelector('#ae-paid').value = memberA;
+    document.querySelector('#ae-split-type').value = 'PERCENTAGE';
+    document.querySelector('#ae-split-type').dispatchEvent(new Event('change'));
+
+    await vi.waitFor(() => expect(document.getElementById(`ae-split-${memberA}`)).toBeTruthy());
+
+    document.getElementById(`ae-split-${memberA}`).value = '60';
+    document.getElementById(`ae-split-${memberB}`).value = '40';
+    mockFetchJson({ id: 100 }, 201);
+
+    document.querySelector('#ae-form').requestSubmit();
+
+    await vi.waitFor(() => {
+      const expenseCall = global.fetch.mock.calls.find(([, o]) => {
+        try {
+          const b = JSON.parse(o.body);
+          return b.description === 'Hotel';
+        } catch { return false; }
+      });
+      expect(expenseCall).toBeTruthy();
+      const body = JSON.parse(expenseCall[1].body);
+      expect(body.splitType).toBe('PERCENTAGE');
+      expect(body.splitDetails).toEqual([
+        { userId: memberA, userName: 'alice', value: 60 },
+        { userId: memberB, userName: 'bob', value: 40 }
+      ]);
     });
   });
 });

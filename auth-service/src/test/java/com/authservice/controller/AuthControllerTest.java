@@ -62,9 +62,8 @@ public class AuthControllerTest {
     @Test
     @DisplayName("POST /auth/register: returns status 201 and register response on success")
     void register_succeeds_returns201() throws Exception {
-        RegisterRequest request = new RegisterRequest("new@example.com", "password", Role.USER);
-        RegisterResponse response = new RegisterResponse("user-id", "new@example.com", "USER");
-
+        RegisterRequest request = new RegisterRequest("new@example.com","summa", "password", Role.USER);
+        RegisterResponse response = new RegisterResponse("user-id", "new@example.com", "summa","USER");
         when(authService.register(any(RegisterRequest.class))).thenReturn(response);
 
         mockMvc.perform(post("/auth/register")

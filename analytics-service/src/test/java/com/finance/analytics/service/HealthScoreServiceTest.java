@@ -1,6 +1,8 @@
 package com.finance.analytics.service;
 
+import com.finance.analytics.dto.CategoryRow;
 import com.finance.analytics.dto.HealthScoreResponse;
+import com.finance.analytics.model.Category;
 import com.finance.analytics.repository.TransactionEntryRepository;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -60,14 +62,14 @@ class HealthScoreServiceTest {
     @Test
     @DisplayName("calcDiversificationScore: 5+ categories → 200 pts")
     void calcDiversificationScore_fiveCategories_returnsMax() {
-        List<Object[]> cats = buildCategories(5);
+        List<CategoryRow> cats = buildCategories(5);
         assertThat(service.calcDiversificationScore(cats)).isEqualTo(200);
     }
 
     @Test
     @DisplayName("calcDiversificationScore: 2 categories → 80 pts")
     void calcDiversificationScore_twoCategories_returns80() {
-        List<Object[]> cats = buildCategories(2);
+        List<CategoryRow> cats = buildCategories(2);
         assertThat(service.calcDiversificationScore(cats)).isEqualTo(80);
     }
 
@@ -135,11 +137,51 @@ class HealthScoreServiceTest {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private List<Object[]> buildCategories(int count) {
-        List<Object[]> list = new ArrayList<>();
+    private List<CategoryRow> buildCategories(int count) {
+        List<CategoryRow> list = new ArrayList<>();
+<<<<<<< Updated upstream
+        List<String> categories=new ArrayList<>(List.of("FOOD_AND_DINING",
+                "TRANSPORT",
+                "HOUSING",
+                "UTILITIES",
+                "HEALTHCARE",
+                "EDUCATION",
+                "ENTERTAINMENT",
+                " SHOPPING",
+                "TRAVEL",
+                " INSURANCE"));
         for (int i = 0; i < count; i++) {
-            list.add(new Object[]{"CAT_" + i, BigDecimal.valueOf(1000 * (i + 1)), (long)(i + 1)});
+            final Category category = Category.valueOf(categories.get(i));
+=======
+
+        for (int i = 0; i < count; i++) {
+            final String category = "CAT_" + i;
+>>>>>>> Stashed changes
+            final BigDecimal amount = BigDecimal.valueOf(1000L * (i + 1));
+            final Long txCount = (long) (i + 1);
+
+            list.add(new CategoryRow() {
+                @Override
+<<<<<<< Updated upstream
+                public Category getCategory() {
+=======
+                public String getCategory() {
+>>>>>>> Stashed changes
+                    return category;
+                }
+
+                @Override
+                public BigDecimal getTotalAmount() {
+                    return amount;
+                }
+
+                @Override
+                public Long getTransactionCount() {
+                    return txCount;
+                }
+            });
         }
+
         return list;
     }
 }

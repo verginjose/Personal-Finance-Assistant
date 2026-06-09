@@ -1,7 +1,5 @@
 package com.upsertservice.dto;
 
-import com.upsertservice.model.ExpenseCategory;
-import com.upsertservice.model.IncomeCategory;
 import com.upsertservice.model.TransactionType;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;

@@ -42,6 +42,7 @@ public class AuthServiceTest {
         user = User.builder()
                 .id(UUID.randomUUID())
                 .email("test@example.com")
+                .username("testuser")
                 .password("encoded_password")
                 .role(Role.USER)
                 .build();
@@ -50,7 +51,7 @@ public class AuthServiceTest {
     @Test
     @DisplayName("register: throws exception if email already exists")
     void register_emailExists_throwsException() {
-        RegisterRequest request = new RegisterRequest("test@example.com", "password", Role.USER);
+        RegisterRequest request = new RegisterRequest("test@example.com", "testuser", "password", Role.USER);
         when(userRepository.existsByEmail("test@example.com")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.register(request))
@@ -62,7 +63,7 @@ public class AuthServiceTest {
     @Test
     @DisplayName("register: saves new user when email is unique")
     void register_uniqueEmail_savesUser() {
-        RegisterRequest request = new RegisterRequest("new@example.com", "password", Role.USER);
+        RegisterRequest request = new RegisterRequest("new@example.com", "newuser", "password", Role.USER);
         when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
         when(passwordEncoder.encode("password")).thenReturn("encoded_pass");
         when(userRepository.save(any(User.class))).thenAnswer(i -> {

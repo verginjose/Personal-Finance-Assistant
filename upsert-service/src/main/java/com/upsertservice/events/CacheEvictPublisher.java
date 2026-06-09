@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
+import java.util.Collection;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -17,6 +18,11 @@ public class CacheEvictPublisher {
     private static final String TOPIC = "transaction-cache-evict";
 
     private final KafkaTemplate<String, CacheEvictEvent> kafkaTemplate;
+
+    public void publishForUsers(Collection<UUID> userIds, String operation, Long referenceId) {
+        if (userIds == null || userIds.isEmpty()) return;
+        userIds.stream().distinct().forEach(userId -> publish(userId, operation, referenceId));
+    }
 
     public void publish(UUID userId, String operation, Long transactionId) {
         CompletableFuture.runAsync(() -> {

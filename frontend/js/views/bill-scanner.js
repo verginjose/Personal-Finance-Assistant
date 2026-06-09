@@ -1,6 +1,6 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
-import { pageHeader, dataField } from '../utils/ui.js';
+import { pageHeader, EXPENSE_CATS, INCOME_CATS } from '../utils/ui.js';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
@@ -19,8 +19,8 @@ export async function renderBillScanner(container) {
       </button>
     </div>
     <div class="card fade-up" id="bs-result" style="max-width:680px;margin-top:20px;display:none">
-      <div class="card-header"><h3>Extracted Data</h3><span class="badge badge-info">OCR Preview</span></div>
-      <div id="bs-data" style="display:grid;gap:10px"></div>
+      <div class="card-header"><h3>Extracted Data</h3><span class="badge badge-info">OCR Preview — edit before saving</span></div>
+      <form id="bs-preview-form" style="display:grid;gap:10px"></form>
     </div>`;
 
   const dropZone = document.getElementById('bs-drop');
@@ -43,6 +43,79 @@ export async function renderBillScanner(container) {
     uploadBtn.disabled = false;
   }
 
+  function normalizeCategory(raw, type) {
+    const fallback = type === 'INCOME' ? 'OTHERS' : 'OTHERS';
+    let cat = (raw || fallback).toUpperCase().replace(/ /g, '_').replace(/-/g, '_');
+    if (cat === 'OTHER') cat = 'OTHERS';
+    const allowed = type === 'INCOME' ? INCOME_CATS : EXPENSE_CATS;
+    return allowed.includes(cat) ? cat : 'OTHERS';
+  }
+
+  function renderPreviewForm(result) {
+    const type = (result.type || 'EXPENSE').toUpperCase();
+    const category = normalizeCategory(
+      type === 'INCOME' ? result.incomeCategory : result.expenseCategory,
+      type
+    );
+    const amount = parseFloat((result.amount || '0').toString().replace(/[^0-9.]/g, '')) || 0;
+    let currency = (result.currency || 'INR').trim().toUpperCase();
+    if (currency.length !== 3) {
+      const map = { '₹': 'INR', RS: 'INR', 'RS.': 'INR', $: 'USD', '€': 'EUR', '£': 'GBP' };
+      currency = map[currency] || 'INR';
+    }
+
+    const form = document.getElementById('bs-preview-form');
+    form.innerHTML = `
+      <div class="form-group">
+        <label for="bs-name">Name</label>
+        <input class="form-input" id="bs-name" value="${escapeAttr(result.name || 'OCR Receipt')}" maxlength="100" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="bs-amount">Amount</label>
+          <input class="form-input" id="bs-amount" type="number" step="0.01" min="0.01" value="${amount}" required>
+        </div>
+        <div class="form-group">
+          <label for="bs-currency">Currency</label>
+          <input class="form-input" id="bs-currency" value="${escapeAttr(currency)}" maxlength="3" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="bs-type">Type</label>
+          <select class="form-select" id="bs-type">
+            <option value="EXPENSE" ${type === 'EXPENSE' ? 'selected' : ''}>Expense</option>
+            <option value="INCOME" ${type === 'INCOME' ? 'selected' : ''}>Income</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="bs-category">Category</label>
+          <select class="form-select" id="bs-category"></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="bs-desc">Description</label>
+        <textarea class="form-textarea" id="bs-desc" maxlength="500">${escapeAttr(result.description || 'Processed from bill scanner')}</textarea>
+      </div>
+      <button type="submit" class="btn btn-success" style="width:100%;margin-top:4px" id="bs-save">Save as Transaction</button>`;
+
+    const typeSelect = document.getElementById('bs-type');
+    const catSelect = document.getElementById('bs-category');
+
+    function fillCategories() {
+      const t = typeSelect.value;
+      const cats = t === 'INCOME' ? INCOME_CATS : EXPENSE_CATS;
+      const current = catSelect.value || category;
+      catSelect.innerHTML = cats.map(c =>
+        `<option value="${c}" ${c === current || (current === category && c === category) ? 'selected' : ''}>${c.replace(/_/g, ' ')}</option>`
+      ).join('');
+    }
+
+    typeSelect.onchange = fillCategories;
+    fillCategories();
+    form.onsubmit = (e) => { e.preventDefault(); saveTransaction(userId); };
+  }
+
   uploadBtn.onclick = async () => {
     if (!selectedFile) return;
     uploadBtn.disabled = true;
@@ -51,18 +124,8 @@ export async function renderBillScanner(container) {
       const fd = new FormData();
       fd.append('file', selectedFile);
       const result = await api.upload(`/bill/process/${userId}`, fd);
-      const resultEl = document.getElementById('bs-result');
-      resultEl.style.display = 'block';
-      document.getElementById('bs-data').innerHTML = `
-        ${dataField('Name', result.name)}
-        ${dataField('Amount', result.amount)}
-        ${dataField('Type', result.type)}
-        ${dataField('Category', result.expenseCategory || result.incomeCategory)}
-        ${dataField('Currency', result.currency)}
-        ${dataField('Description', result.description)}
-        <button class="btn btn-success" style="width:100%;margin-top:12px" id="bs-save">Save as Transaction</button>`;
-
-      document.getElementById('bs-save').onclick = () => saveTransaction(userId, result);
+      document.getElementById('bs-result').style.display = 'block';
+      renderPreviewForm(result);
     } catch (err) {
       toast('OCR failed: ' + err.message, 'error');
     }
@@ -71,29 +134,28 @@ export async function renderBillScanner(container) {
   };
 }
 
-async function saveTransaction(userId, result) {
+function escapeAttr(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+async function saveTransaction(userId) {
   const saveBtn = document.getElementById('bs-save');
   saveBtn.disabled = true;
   saveBtn.innerHTML = '<span class="spinner"></span> Saving…';
   try {
-    const type = (result.type || 'EXPENSE').toUpperCase();
-    const amount = parseFloat((result.amount || '0').toString().replace(/[^0-9.]/g, '')) || 0;
-    let currency = (result.currency || 'INR').trim().toUpperCase();
-    if (currency.length !== 3) {
-      const map = { '₹': 'INR', RS: 'INR', 'RS.': 'INR', $: 'USD', '€': 'EUR', '£': 'GBP' };
-      currency = map[currency] || 'INR';
-    }
+    const type = document.getElementById('bs-type').value;
+    const amount = parseFloat(document.getElementById('bs-amount').value) || 0;
+    let currency = document.getElementById('bs-currency').value.trim().toUpperCase();
+    if (currency.length !== 3) currency = 'INR';
     const payload = {
       userId,
-      name: result.name || 'OCR Receipt',
+      name: document.getElementById('bs-name').value.trim() || 'OCR Receipt',
       amount,
       type,
       currency,
-      description: result.description || 'Processed from bill scanner'
+      description: document.getElementById('bs-desc').value.trim() || 'Processed from bill scanner'
     };
-    const rawCat = (type === 'INCOME' ? result.incomeCategory : result.expenseCategory) || 'OTHERS';
-    let cat = rawCat.toUpperCase().replace(/ /g, '_').replace(/-/g, '_');
-    if (cat === 'OTHER') cat = 'OTHERS';
+    const cat = document.getElementById('bs-category').value;
     if (type === 'INCOME') payload.incomeCategory = cat;
     else payload.expenseCategory = cat;
 

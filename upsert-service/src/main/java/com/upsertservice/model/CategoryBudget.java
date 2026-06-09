@@ -30,7 +30,7 @@ public class CategoryBudget {
     @Enumerated(EnumType.STRING)
     @Column(name = "expense_category", nullable = false)
     @NotNull
-    private ExpenseCategory expenseCategory;
+    private Category expenseCategory;
 
     @Column(name = "budget_amount", nullable = false, precision = 12, scale = 2)
     @NotNull @DecimalMin("0.01")

@@ -77,7 +77,7 @@ public class AuthIntegrationTest {
     @DisplayName("End-to-End Registration, Login, Profile and Logout flow")
     void e2eAuthFlow() throws Exception {
         // 1. Register a new user
-        RegisterRequest registerRequest = new RegisterRequest("integration@example.com", "Password123!", Role.USER);
+        RegisterRequest registerRequest = new RegisterRequest("integration@example.com", "intuser", "Password123!", Role.USER);
         
         mockMvc.perform(post("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)

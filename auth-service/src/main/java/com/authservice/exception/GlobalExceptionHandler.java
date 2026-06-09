@@ -1,6 +1,7 @@
 package com.authservice.exception;
 
 import com.authservice.dto.AuthDtos.ErrorResponse;
+import com.authservice.service.AuthService;
 import com.authservice.service.AuthService.EmailAlreadyExistsException;
 import com.authservice.service.AuthService.InvalidCurrentPasswordException;
 import com.authservice.service.AuthService.InvalidRefreshTokenException;
@@ -49,6 +50,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(EmailAlreadyExistsException.class)
     public ResponseEntity<ErrorResponse> handleEmailExists(EmailAlreadyExistsException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("Conflict", ex.getMessage()));
+    }
+
+    @ExceptionHandler(AuthService.UsernameAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleUsernameExists(AuthService.UsernameAlreadyExistsException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new ErrorResponse("Conflict", ex.getMessage()));
     }

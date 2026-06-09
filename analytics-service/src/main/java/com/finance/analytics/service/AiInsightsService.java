@@ -3,6 +3,7 @@ package com.finance.analytics.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finance.analytics.dto.AiInsightResponse;
+import com.finance.analytics.dto.CategoryRow;
 import com.finance.analytics.repository.TransactionEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,7 +48,7 @@ public class AiInsightsService {
 
         BigDecimal income  = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, "INCOME",  monthStart, now));
         BigDecimal expense = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, "EXPENSE", monthStart, now));
-        List<Object[]> categories = repository.getCategoryAnalyticsByDateRange(userId, monthStart, now);
+        List<CategoryRow> categories = repository.getCategoryAnalyticsByDateRange(userId, monthStart, now);
 
         if (income.compareTo(BigDecimal.ZERO) == 0 && expense.compareTo(BigDecimal.ZERO) == 0) {
             return buildDefaultResponse();
@@ -70,7 +71,7 @@ public class AiInsightsService {
 
     // ── Prompt building ───────────────────────────────────────────────────────
 
-    String buildPrompt(BigDecimal income, BigDecimal expense, List<Object[]> categories) {
+    String buildPrompt(BigDecimal income, BigDecimal expense, List<CategoryRow> categories) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are a personal financial advisor. Analyze this user's financial data and provide 3-5 actionable, specific insights.\n\n");
         sb.append("This Month's Summary:\n");
@@ -82,8 +83,8 @@ public class AiInsightsService {
             sb.append("- Top Expense Categories:\n");
             int limit = Math.min(categories.size(), 5);
             for (int i = 0; i < limit; i++) {
-                Object[] row = categories.get(i);
-                sb.append("  ").append(row[0]).append(": ₹").append(row[1]).append("\n");
+                CategoryRow row = categories.get(i);
+                sb.append("  ").append(row.getCategory()).append(": ₹").append(row.getTotalAmount()).append("\n");
             }
         }
 

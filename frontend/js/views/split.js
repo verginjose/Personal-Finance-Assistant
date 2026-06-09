@@ -1,5 +1,5 @@
 import { api, Auth, toast } from '../utils/api.js';
-import { esc, pageHeader, emptyState, formatCurrency, openModal, modalActions } from '../utils/ui.js';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, modalActions } from '../utils/ui.js';
 
 let currentGroupId = null;
 
@@ -51,11 +51,12 @@ async function loadGroupDetail(groupId, userId) {
   document.getElementById('sp-create').style.display = 'none';
   el.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
   try {
-    const [group, members, expenses, balances] = await Promise.all([
+    const [group, members, expenses, balances, activity] = await Promise.all([
       api.get(`/upsert/groups/${groupId}`),
       api.get(`/upsert/groups/${groupId}/members`),
       api.get(`/upsert/groups/${groupId}/expenses`),
-      api.get(`/upsert/groups/${groupId}/balances`)
+      api.get(`/upsert/groups/${groupId}/balances`),
+      api.get(`/upsert/groups/${groupId}/activity`)
     ]);
     el.innerHTML = `
       <div class="card" style="margin-bottom:20px">
@@ -65,15 +66,18 @@ async function loadGroupDetail(groupId, userId) {
       <div class="card-grid card-grid-3">
         <div class="card">
           <div class="card-header"><h3>Members (${members.length})</h3></div>
-          ${members.map(m => `<div class="balance-item"><span>${esc(m.name)}</span><span style="color:var(--text-dim);font-size:.78rem">${esc(m.userId?.substring(0, 8) || '')}</span></div>`).join('')}
+          ${members.map(m => `<div class="balance-item"><span>@${esc(m.name)}</span></div>`).join('')}
           <button class="btn btn-secondary btn-sm" style="margin-top:12px;width:100%" id="sp-add-member">+ Add Member</button>
         </div>
         <div class="card">
           <div class="card-header"><h3>Expenses (${expenses.length})</h3></div>
           ${expenses.length ? expenses.slice(0, 8).map(e => `
-            <div class="balance-item">
-              <span>${esc(e.description || 'Expense')}</span>
-              <span style="font-weight:600;color:var(--accent)">${formatCurrency(e.amount)}</span>
+            <div class="balance-item expense-row">
+              <span>${esc(e.description || 'Expense')} <span class="badge badge-info" style="font-size:.68rem;margin-left:4px">${esc(splitTypeLabel(e.splitType))}</span></span>
+              <div class="expense-row-actions">
+                <span style="font-weight:600;color:var(--accent)">${formatCurrency(e.amount)}</span>
+                <button type="button" class="btn btn-danger btn-sm delete-expense-btn" data-id="${e.id}" title="Delete expense">×</button>
+              </div>
             </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem">No expenses yet</p>'}
           <button class="btn btn-primary btn-sm" style="margin-top:12px;width:100%" id="sp-add-expense" ${members.length ? '' : 'disabled'}>+ Add Expense</button>
         </div>
@@ -87,6 +91,14 @@ async function loadGroupDetail(groupId, userId) {
               </span>
             </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem">No balance data</p>'}
         </div>
+      </div>
+      <div class="card activity-card">
+        <div class="card-header"><h3>Group Activity</h3></div>
+        ${activity?.length ? activity.slice(0, 20).map(a => `
+          <div class="activity-item">
+            <div class="activity-message">${esc(a.message)}</div>
+            <div class="activity-meta">${formatDate(a.createdAt)} · ${esc(activityTypeLabel(a.activityType))}</div>
+          </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem">No activity yet</p>'}
       </div>
       <div class="card settlement-card">
         <div class="card-header"><h3>Simplified Settlements</h3></div>
@@ -106,6 +118,16 @@ async function loadGroupDetail(groupId, userId) {
 
     document.getElementById('sp-add-member').onclick = () => addMemberModal(groupId, userId);
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, members, userId);
+    el.querySelectorAll('.delete-expense-btn').forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm('Delete this shared expense? Linked personal transactions will be removed.')) return;
+        try {
+          await api.delete(`/upsert/groups/${groupId}/expenses/${btn.dataset.id}`);
+          toast('Expense deleted', 'success');
+          await loadGroupDetail(groupId, userId);
+        } catch (e) { toast(e.message, 'error'); }
+      };
+    });
     el.querySelectorAll('.settle-btn').forEach(btn => {
       btn.onclick = async () => {
         if (!confirm(`Record settlement: did ${btn.dataset.fromName} pay ${btn.dataset.toName}?`)) return;
@@ -142,32 +164,95 @@ function createGroupModal(userId) {
   });
 }
 
-function resolveMemberUserId(input) {
-  const trimmed = (input || '').trim();
-  if (trimmed) return trimmed;
-  return crypto.randomUUID();
-}
-
 function addMemberModal(groupId, userId) {
   openModal('Add Member', `
     <form id="am-form">
-      <div class="form-group"><label for="am-name">Member Name</label><input class="form-input" id="am-name" required maxlength="150"></div>
       <div class="form-group">
-        <label for="am-uid">User ID</label>
-        <input class="form-input" id="am-uid" placeholder="UUID of registered user (optional)">
-        <p style="font-size:.78rem;color:var(--text-muted);margin-top:6px">Leave blank for a guest member — a temporary ID will be assigned.</p>
+        <label for="am-search">Search by username or email</label>
+        <input class="form-input" id="am-search" placeholder="Type to search registered users…" autocomplete="off" required>
+        <div id="am-results" class="user-search-results" hidden></div>
+        <input type="hidden" id="am-uid">
+        <input type="hidden" id="am-name">
+        <p id="am-selected" style="font-size:.82rem;color:var(--text-dim);margin-top:8px"></p>
       </div>
       ${modalActions('Cancel', 'Add')}
     </form>`, {
     onSubmit: async () => {
+      const memberId = document.getElementById('am-uid').value;
+      const memberName = document.getElementById('am-name').value;
+      if (!memberId) {
+        toast('Select a registered user from the search results', 'error');
+        throw new Error('No user selected');
+      }
       await api.post(`/upsert/groups/${groupId}/members`, {
-        name: document.getElementById('am-name').value.trim(),
-        userId: resolveMemberUserId(document.getElementById('am-uid').value)
+        userId: memberId,
+        name: memberName
       });
       toast('Member added', 'success');
       loadGroupDetail(groupId, userId);
     }
   });
+
+  const searchInput = document.getElementById('am-search');
+  const resultsEl = document.getElementById('am-results');
+  const selectedEl = document.getElementById('am-selected');
+  let debounceTimer = null;
+
+  searchInput.oninput = () => {
+    clearTimeout(debounceTimer);
+    document.getElementById('am-uid').value = '';
+    document.getElementById('am-name').value = '';
+    selectedEl.textContent = '';
+    const q = searchInput.value.trim();
+    if (q.length < 2) {
+      resultsEl.hidden = true;
+      resultsEl.innerHTML = '';
+      return;
+    }
+    debounceTimer = setTimeout(async () => {
+      try {
+        const users = await api.get('/auth/users/search', { q, limit: 8 });
+        if (!users.length) {
+          resultsEl.innerHTML = '<div class="user-search-empty">No users found</div>';
+        } else {
+          resultsEl.innerHTML = users.map(u => `
+            <button type="button" class="user-search-item" data-id="${esc(u.userId)}" data-name="${esc(u.username)}">
+              <strong>@${esc(u.username)}</strong>
+              <span>${esc(u.email)}</span>
+            </button>`).join('');
+          resultsEl.querySelectorAll('.user-search-item').forEach(btn => {
+            btn.onclick = () => {
+              document.getElementById('am-uid').value = btn.dataset.id;
+              document.getElementById('am-name').value = btn.dataset.name;
+              searchInput.value = `@${btn.dataset.name}`;
+              selectedEl.textContent = `Selected: @${btn.dataset.name}`;
+              resultsEl.hidden = true;
+            };
+          });
+        }
+        resultsEl.hidden = false;
+      } catch (e) {
+        resultsEl.innerHTML = `<div class="user-search-empty">${esc(e.message)}</div>`;
+        resultsEl.hidden = false;
+      }
+    }, 300);
+  };
+}
+
+function splitTypeLabel(type) {
+  const map = { EQUAL: 'Equal', PERCENTAGE: 'Percentage', EXACT: 'By amount' };
+  return map[(type || 'EQUAL').toUpperCase()] || 'Equal';
+}
+
+function activityTypeLabel(type) {
+  const map = {
+    GROUP_CREATED: 'Group created',
+    MEMBER_ADDED: 'Member added',
+    EXPENSE_ADDED: 'Expense added',
+    EXPENSE_DELETED: 'Expense deleted',
+    SETTLEMENT_RECORDED: 'Settlement'
+  };
+  return map[(type || '').toUpperCase()] || type || 'Activity';
 }
 
 function addExpenseModal(groupId, members, userId) {
@@ -182,23 +267,126 @@ function addExpenseModal(groupId, members, userId) {
         <div class="form-group"><label for="ae-amt">Amount</label><input class="form-input" id="ae-amt" type="number" step="0.01" min="0.01" required></div>
         <div class="form-group"><label for="ae-paid">Paid By</label>
           <select class="form-select" id="ae-paid" required>
-            ${members.map(m => `<option value="${m.userId}">${esc(m.name)}</option>`).join('')}
+            ${members.map(m => `<option value="${m.userId}">@${esc(m.name)}</option>`).join('')}
           </select>
         </div>
       </div>
-      <div class="form-group"><label for="ae-currency">Currency</label><input class="form-input" id="ae-currency" value="INR" maxlength="3" required></div>
+      <div class="form-row">
+        <div class="form-group"><label for="ae-currency">Currency</label><input class="form-input" id="ae-currency" value="INR" maxlength="3" required></div>
+        <div class="form-group">
+          <label for="ae-split-type">Split Type</label>
+          <select class="form-select" id="ae-split-type">
+            <option value="EQUAL">Split equally</option>
+            <option value="PERCENTAGE">Split by percentage</option>
+            <option value="EXACT">Split by exact amount</option>
+          </select>
+        </div>
+      </div>
+      <div id="ae-split-details" hidden></div>
       ${modalActions('Cancel', 'Add')}
     </form>`, {
     onSubmit: async () => {
-      await api.post(`/upsert/groups/${groupId}/expenses`, {
+      const splitType = document.getElementById('ae-split-type').value;
+      const amount = parseFloat(document.getElementById('ae-amt').value);
+      const payload = {
         description: document.getElementById('ae-desc').value.trim(),
-        amount: parseFloat(document.getElementById('ae-amt').value),
+        amount,
         paidBy: document.getElementById('ae-paid').value,
         currency: document.getElementById('ae-currency').value.trim().toUpperCase(),
-        splitType: 'EQUAL'
-      });
+        splitType
+      };
+
+      if (splitType === 'PERCENTAGE' || splitType === 'EXACT') {
+        const splitDetails = members.map(m => ({
+          userId: m.userId,
+          userName: m.name,
+          value: parseFloat(document.getElementById(`ae-split-${m.userId}`).value) || 0
+        }));
+        const total = splitDetails.reduce((sum, d) => sum + d.value, 0);
+        if (splitType === 'PERCENTAGE' && Math.abs(total - 100) > 0.01) {
+          toast('Percentages must add up to 100%', 'error');
+          throw new Error('Invalid percentage split');
+        }
+        if (splitType === 'EXACT' && Math.abs(total - amount) > 0.01) {
+          toast(`Exact amounts must add up to ${amount}`, 'error');
+          throw new Error('Invalid exact split');
+        }
+        payload.splitDetails = splitDetails;
+      }
+
+      await api.post(`/upsert/groups/${groupId}/expenses`, payload);
       toast('Expense added', 'success');
       loadGroupDetail(groupId, userId);
     }
   });
+
+  const splitTypeSelect = document.getElementById('ae-split-type');
+  const splitDetailsEl = document.getElementById('ae-split-details');
+  const amountInput = document.getElementById('ae-amt');
+
+  function defaultSplitValue(type, amount) {
+    if (!members.length) return 0;
+    if (type === 'PERCENTAGE') return Math.round((100 / members.length) * 100) / 100;
+    return Math.round((amount / members.length) * 100) / 100;
+  }
+
+  function updateSplitSummary() {
+    const summary = document.getElementById('ae-split-summary');
+    if (!summary) return;
+    const type = splitTypeSelect.value;
+    const total = members.reduce((sum, m) => {
+      const el = document.getElementById(`ae-split-${m.userId}`);
+      return sum + (parseFloat(el?.value) || 0);
+    }, 0);
+    const amount = parseFloat(amountInput.value) || 0;
+    if (type === 'PERCENTAGE') {
+      const ok = Math.abs(total - 100) <= 0.01;
+      summary.textContent = `Total: ${total.toFixed(2)}% ${ok ? '' : '(must equal 100%)'}`;
+      summary.style.color = ok ? 'var(--accent-g)' : 'var(--accent)';
+    } else {
+      const ok = Math.abs(total - amount) <= 0.01;
+      summary.textContent = `Total: ${formatCurrency(total)} ${ok ? '' : `(must equal ${formatCurrency(amount)})`}`;
+      summary.style.color = ok ? 'var(--accent-g)' : 'var(--accent)';
+    }
+  }
+
+  function renderSplitDetails() {
+    const type = splitTypeSelect.value;
+    if (type === 'EQUAL') {
+      splitDetailsEl.hidden = true;
+      splitDetailsEl.innerHTML = '';
+      return;
+    }
+
+    const amount = parseFloat(amountInput.value) || 0;
+    const defaultVal = defaultSplitValue(type, amount);
+    const isPct = type === 'PERCENTAGE';
+
+    splitDetailsEl.hidden = false;
+    splitDetailsEl.innerHTML = `
+      <div class="form-group split-details-panel">
+        <label>${isPct ? 'Percentage per member' : 'Amount per member'}</label>
+        ${members.map(m => `
+          <div class="split-detail-row">
+            <span>@${esc(m.name)}</span>
+            <div class="split-detail-input-wrap">
+              <input class="form-input split-detail-input" id="ae-split-${m.userId}"
+                type="number" step="${isPct ? '0.01' : '0.01'}" min="0"
+                ${isPct ? 'max="100"' : ''} value="${defaultVal}" required>
+              ${isPct ? '<span class="split-detail-suffix">%</span>' : ''}
+            </div>
+          </div>`).join('')}
+        <p id="ae-split-summary" class="split-summary"></p>
+      </div>`;
+
+    members.forEach(m => {
+      document.getElementById(`ae-split-${m.userId}`).oninput = updateSplitSummary;
+    });
+    updateSplitSummary();
+  }
+
+  splitTypeSelect.onchange = renderSplitDetails;
+  amountInput.oninput = () => {
+    if (splitTypeSelect.value === 'EXACT') updateSplitSummary();
+  };
 }

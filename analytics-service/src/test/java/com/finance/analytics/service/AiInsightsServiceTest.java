@@ -1,6 +1,11 @@
 package com.finance.analytics.service;
 
 import com.finance.analytics.dto.AiInsightResponse;
+import com.finance.analytics.dto.CategoryRow;
+<<<<<<< Updated upstream
+import com.finance.analytics.model.Category;
+=======
+>>>>>>> Stashed changes
 import com.finance.analytics.repository.TransactionEntryRepository;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -80,8 +85,33 @@ class AiInsightsServiceTest {
     void buildPrompt_containsFinancialSummary() {
         BigDecimal income  = new BigDecimal("30000");
         BigDecimal expense = new BigDecimal("20000");
-        List<Object[]> cats = new ArrayList<>();
-        cats.add(new Object[]{"FOOD_AND_DINING", new BigDecimal("8000")});
+        List<CategoryRow> cats = new ArrayList<>();
+<<<<<<< Updated upstream
+        final Category category= Category.valueOf("FOOD_AND_DINING");
+        final BigDecimal amount=new BigDecimal("8000");
+        cats.add(new CategoryRow() {
+            @Override
+            public Category getCategory() {
+=======
+        final String category="FOOD_AND_DINING";
+        final BigDecimal amount=new BigDecimal("8000");
+        cats.add(new CategoryRow() {
+            @Override
+            public String getCategory() {
+>>>>>>> Stashed changes
+                return category;
+            }
+
+            @Override
+            public BigDecimal getTotalAmount() {
+                return amount;
+            }
+
+            @Override
+            public Long getTransactionCount() {
+                return 0L;
+            }
+        });
 
         String prompt = service.buildPrompt(income, expense, cats);
 

@@ -52,17 +52,10 @@ public class TransactionEntry implements Serializable {
     @Setter
     private TransactionType type;
 
-    @Column(name = "expense_category")
+    @Column(name = "category")
     @Enumerated(EnumType.STRING)
-    @Getter
-    @Setter
-    private ExpenseCategory expenseCategory;
+    private Category category;
 
-    @Column(name = "income_category")
-    @Enumerated(EnumType.STRING)
-    @Getter
-    @Setter
-    private IncomeCategory incomeCategory;
 
     @Column(nullable = false, length = 3)
     @NotBlank(message = "Currency is required")

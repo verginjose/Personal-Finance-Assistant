@@ -60,17 +60,25 @@ public class AuthService {
         if (userRepository.existsByEmail(request.email())) {
             throw new EmailAlreadyExistsException(request.email());
         }
+        if (userRepository.existsByUsername(request.username())) {
+            throw new UsernameAlreadyExistsException(request.username());
+        }
 
         User user = User.builder()
                 .email(request.email())
+                .username(request.username())
                 .password(passwordEncoder.encode(request.password()))
                 .role(request.role())
                 .build();
 
         User saved = userRepository.save(user);
-        log.info("Registered new user: {} [{}]", saved.getEmail(), saved.getRole());
+        log.info("Registered new user: {} (@{}) [{}]", saved.getEmail(), saved.getUsername(), saved.getRole());
 
-        return new RegisterResponse(saved.getId().toString(), saved.getEmail(), saved.getRole().name());
+        return new RegisterResponse(
+                saved.getId().toString(),
+                saved.getEmail(),
+                saved.getUsername(),
+                saved.getRole().name());
     }
 
     // ── Refresh Token ─────────────────────────────────────────────────────────
@@ -168,6 +176,12 @@ public class AuthService {
     public static class EmailAlreadyExistsException extends RuntimeException {
         public EmailAlreadyExistsException(String email) {
             super("Email already registered: " + email);
+        }
+    }
+
+    public static class UsernameAlreadyExistsException extends RuntimeException {
+        public UsernameAlreadyExistsException(String username) {
+            super("Username already taken: " + username);
         }
     }
 

@@ -13,7 +13,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class CacheEvictEvent {
     private UUID userId;
-    private String operation;   // CREATE, UPDATE, DELETE, PATCH
+    private String operation;   // CREATE, UPDATE, DELETE, PATCH, SPLIT_EXPENSE, SPLIT_EXPENSE_DELETE, SPLIT_SETTLE
     private Long transactionId;
     private long timestamp;
 

@@ -4,6 +4,7 @@ import com.authservice.model.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 // ── Inbound ───────────────────────────────────────────────────────────────────
@@ -23,6 +24,11 @@ public class AuthDtos {
             @Email(message = "Must be a valid email")
             @NotBlank
             String email,
+
+            @NotBlank
+            @Size(min = 3, max = 30, message = "Username must be 3–30 characters")
+            @Pattern(regexp = "^[a-zA-Z0-9_]+$", message = "Username may only contain letters, numbers, and underscores")
+            String username,
 
             @NotBlank
             @Size(min = 8, message = "Password must be at least 8 characters")
@@ -45,7 +51,14 @@ public class AuthDtos {
     public record RegisterResponse(
             String userId,
             String email,
+            String username,
             String role
+    ) {}
+
+    public record UserSearchResult(
+            String userId,
+            String username,
+            String email
     ) {}
 
     public record ErrorResponse(

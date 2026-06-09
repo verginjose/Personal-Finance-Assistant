@@ -1,6 +1,6 @@
 package com.upsertservice.dto;
 
-import com.upsertservice.model.ExpenseCategory;
+import com.upsertservice.model.Category;
 import com.upsertservice.model.RecurringPeriod;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 @Data @NoArgsConstructor @AllArgsConstructor
 public class BudgetUtilizationResponse {
     private Long budgetId;
-    private ExpenseCategory expenseCategory;
+    private Category expenseCategory;
     private BigDecimal budgetAmount;
     private BigDecimal spentAmount;
     private double utilizationPercentage;

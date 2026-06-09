@@ -1,5 +1,6 @@
 package com.finance.analytics.service;
 
+import com.finance.analytics.dto.CategoryRow;
 import com.finance.analytics.dto.HealthScoreResponse;
 import com.finance.analytics.repository.TransactionEntryRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +29,7 @@ public class HealthScoreService {
     public HealthScoreResponse calculateScore(UUID userId) {
         BigDecimal income  = safe(repository.getTotalAmountByType(userId, "INCOME"));
         BigDecimal expense = safe(repository.getTotalAmountByType(userId, "EXPENSE"));
-        List<Object[]> categories = repository.getAllCategoryAnalytics(userId);
+        List<CategoryRow> categories = repository.getAllCategoryAnalytics(userId);
         long txCount = repository.countByUserId(userId);
 
         int savingsScore       = calcSavingsScore(income, expense);      // 0–300
@@ -73,7 +74,7 @@ public class HealthScoreService {
      * Diversification = number of distinct expense categories used.
      * Max 200 pts. 5+ categories → full marks.
      */
-    int calcDiversificationScore(List<Object[]> categories) {
+    int calcDiversificationScore(List<CategoryRow> categories) {
         int count = categories.size();
         if (count == 0) return 0;
         if (count >= 5) return 200;

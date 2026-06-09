@@ -36,6 +36,12 @@ export function renderAuth(container) {
               <label for="auth-email">Email</label>
               <input class="form-input" id="auth-email" type="email" placeholder="you@example.com" required autocomplete="email">
             </div>
+            ${mode === 'register' ? `
+            <div class="form-group">
+              <label for="auth-username">Username</label>
+              <input class="form-input" id="auth-username" type="text" placeholder="johndoe" required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]+" autocomplete="username">
+              <p style="font-size:.78rem;color:var(--text-muted);margin-top:6px">Letters, numbers, and underscores only</p>
+            </div>` : ''}
             <div class="form-group">
               <label for="auth-pass">Password</label>
               <input class="form-input" id="auth-pass" type="password" placeholder="Min 8 characters" required minlength="8" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}">
@@ -66,7 +72,8 @@ export function renderAuth(container) {
 
     try {
       if (mode === 'register') {
-        await api.post('/auth/register', { email, password, role: 'USER' });
+        const username = document.getElementById('auth-username').value.trim();
+        await api.post('/auth/register', { email, username, password, role: 'USER' });
         toast('Account created! Signing in…', 'success');
       }
       const data = await api.post('/auth/login', { email, password });

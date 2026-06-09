@@ -1,157 +1,208 @@
 package com.finance.analytics.repository;
 
+import com.finance.analytics.dto.CategoryRow;
+import com.finance.analytics.dto.DailyRow;
+import com.finance.analytics.dto.MonthlyRow;
+import com.finance.analytics.dto.YearlyRow;
+<<<<<<< Updated upstream
+import com.finance.analytics.model.Category;
+=======
 import com.finance.analytics.model.IncomeCategory;
+>>>>>>> Stashed changes
 import com.finance.analytics.model.TransactionEntry;
 import com.finance.analytics.model.TransactionType;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.stereotype.Repository;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
-@Repository
 public interface TransactionEntryRepository extends JpaRepository<TransactionEntry, Long> {
 
-    // Basic queries without null parameter issues
-    @Query(value = "SELECT " +
-            "CASE WHEN t.type = 'EXPENSE' THEN t.expense_category ELSE t.income_category END as category, " +
-            "SUM(t.amount) as totalAmount, " +
-            "COUNT(t.id) as transactionCount " +
-            "FROM transaction_entries t " +
-            "WHERE t.user_id = ?1 " +
-            "GROUP BY CASE WHEN t.type = 'EXPENSE' THEN t.expense_category ELSE t.income_category END " +
-            "ORDER BY totalAmount DESC", nativeQuery = true)
-    List<Object[]> getAllCategoryAnalytics(UUID userId);
+    // ── Pagination ────────────────────────────────────────────────────────────
 
-    @Query(value = "SELECT " +
-            "CASE WHEN t.type = 'EXPENSE' THEN t.expense_category ELSE t.income_category END as category, " +
-            "SUM(t.amount) as totalAmount, " +
-            "COUNT(t.id) as transactionCount " +
-            "FROM transaction_entries t " +
-            "WHERE t.user_id = ?1 AND t.type = ?2 " +
-            "GROUP BY CASE WHEN t.type = 'EXPENSE' THEN t.expense_category ELSE t.income_category END " +
-            "ORDER BY totalAmount DESC", nativeQuery = true)
-    List<Object[]> getCategoryAnalyticsByType(UUID userId, String transactionType);
-
-    @Query(value = "SELECT " +
-            "CASE WHEN t.type = 'EXPENSE' THEN t.expense_category ELSE t.income_category END as category, " +
-            "SUM(t.amount) as totalAmount, " +
-            "COUNT(t.id) as transactionCount " +
-            "FROM transaction_entries t " +
-            "WHERE t.user_id = ?1 AND t.created_at >= ?2 AND t.created_at <= ?3 " +
-            "GROUP BY CASE WHEN t.type = 'EXPENSE' THEN t.expense_category ELSE t.income_category END " +
-            "ORDER BY totalAmount DESC", nativeQuery = true)
-    List<Object[]> getCategoryAnalyticsByDateRange(UUID userId, LocalDateTime startDate, LocalDateTime endDate);
-
-    @Query(value = "SELECT " +
-            "CASE WHEN t.type = 'EXPENSE' THEN t.expense_category ELSE t.income_category END as category, " +
-            "SUM(t.amount) as totalAmount, " +
-            "COUNT(t.id) as transactionCount " +
-            "FROM transaction_entries t " +
-            "WHERE t.user_id = ?1 AND t.type = ?2 AND t.created_at >= ?3 AND t.created_at <= ?4 " +
-            "GROUP BY CASE WHEN t.type = 'EXPENSE' THEN t.expense_category ELSE t.income_category END " +
-            "ORDER BY totalAmount DESC", nativeQuery = true)
-    List<Object[]> getCategoryAnalyticsByTypeAndDateRange(UUID userId, String transactionType,
-                                                          LocalDateTime startDate, LocalDateTime endDate);
-
-    // Timeline Analytics - All variations
-    @Query(value = "SELECT " +
-            "DATE(t.created_at) as date, " +
-            "SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END) as incomeAmount, " +
-            "SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) as expenseAmount, " +
-            "COUNT(t.id) as totalTransactions " +
-            "FROM transaction_entries t " +
-            "WHERE t.user_id = ?1 " +
-            "GROUP BY DATE(t.created_at) " +
-            "ORDER BY DATE(t.created_at)", nativeQuery = true)
-    List<Object[]> getAllDailyAnalytics(UUID userId);
-
-    @Query(value = "SELECT " +
-            "DATE(t.created_at) as date, " +
-            "SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END) as incomeAmount, " +
-            "SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) as expenseAmount, " +
-            "COUNT(t.id) as totalTransactions " +
-            "FROM transaction_entries t " +
-            "WHERE t.user_id = ?1 AND t.created_at >= ?2 AND t.created_at <= ?3 " +
-            "GROUP BY DATE(t.created_at) " +
-            "ORDER BY DATE(t.created_at)", nativeQuery = true)
-    List<Object[]> getDailyAnalyticsByDateRange(UUID userId, LocalDateTime startDate, LocalDateTime endDate);
-
-    @Query(value = "SELECT " +
-            "EXTRACT(YEAR FROM t.created_at) as year, " +
-            "EXTRACT(MONTH FROM t.created_at) as month, " +
-            "SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END) as incomeAmount, " +
-            "SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) as expenseAmount, " +
-            "COUNT(t.id) as totalTransactions " +
-            "FROM transaction_entries t " +
-            "WHERE t.user_id = ?1 " +
-            "GROUP BY EXTRACT(YEAR FROM t.created_at), EXTRACT(MONTH FROM t.created_at) " +
-            "ORDER BY EXTRACT(YEAR FROM t.created_at), EXTRACT(MONTH FROM t.created_at)", nativeQuery = true)
-    List<Object[]> getAllMonthlyAnalytics(UUID userId);
-
-    @Query(value = "SELECT " +
-            "EXTRACT(YEAR FROM t.created_at) as year, " +
-            "EXTRACT(MONTH FROM t.created_at) as month, " +
-            "SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END) as incomeAmount, " +
-            "SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) as expenseAmount, " +
-            "COUNT(t.id) as totalTransactions " +
-            "FROM transaction_entries t " +
-            "WHERE t.user_id = ?1 AND t.created_at >= ?2 AND t.created_at <= ?3 " +
-            "GROUP BY EXTRACT(YEAR FROM t.created_at), EXTRACT(MONTH FROM t.created_at) " +
-            "ORDER BY EXTRACT(YEAR FROM t.created_at), EXTRACT(MONTH FROM t.created_at)", nativeQuery = true)
-    List<Object[]> getMonthlyAnalyticsByDateRange(UUID userId, LocalDateTime startDate, LocalDateTime endDate);
-
-    @Query(value = "SELECT " +
-            "EXTRACT(YEAR FROM t.created_at) as year, " +
-            "SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END) as incomeAmount, " +
-            "SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) as expenseAmount, " +
-            "COUNT(t.id) as totalTransactions " +
-            "FROM transaction_entries t " +
-            "WHERE t.user_id = ?1 " +
-            "GROUP BY EXTRACT(YEAR FROM t.created_at) " +
-            "ORDER BY EXTRACT(YEAR FROM t.created_at)", nativeQuery = true)
-    List<Object[]> getAllYearlyAnalytics(UUID userId);
-
-    @Query(value = "SELECT " +
-            "EXTRACT(YEAR FROM t.created_at) as year, " +
-            "SUM(CASE WHEN t.type = 'INCOME' THEN t.amount ELSE 0 END) as incomeAmount, " +
-            "SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) as expenseAmount, " +
-            "COUNT(t.id) as totalTransactions " +
-            "FROM transaction_entries t " +
-            "WHERE t.user_id = ?1 AND t.created_at >= ?2 AND t.created_at <= ?3 " +
-            "GROUP BY EXTRACT(YEAR FROM t.created_at) " +
-            "ORDER BY EXTRACT(YEAR FROM t.created_at)", nativeQuery = true)
-    List<Object[]> getYearlyAnalyticsByDateRange(UUID userId, LocalDateTime startDate, LocalDateTime endDate);
-
-    // Summary queries
-    @Query(value = "SELECT SUM(t.amount) FROM transaction_entries t WHERE t.user_id = ?1 AND t.type = ?2",
-            nativeQuery = true)
-    BigDecimal getTotalAmountByType(UUID userId, String type);
-
-    @Query(value = "SELECT SUM(t.amount) FROM transaction_entries t WHERE t.user_id = ?1 AND t.type = ?2 " +
-            "AND t.created_at >= ?3 AND t.created_at <= ?4", nativeQuery = true)
-    BigDecimal getTotalAmountByTypeAndDateRange(UUID userId, String type, LocalDateTime startDate, LocalDateTime endDate);
     Page<TransactionEntry> findByUserId(UUID userId, Pageable pageable);
 
-    Page<TransactionEntry> findByUserIdAndIncomeCategoryAndCreatedAtBetween(UUID userId, IncomeCategory incomeCategory, LocalDateTime createdAtAfter, LocalDateTime createdAtBefore,
-                                                                            Pageable pageable);
-    Page<TransactionEntry> findByUserIdAndTypeAndCreatedAtBetween(
-            UUID userId,
-            TransactionType type,
-            LocalDateTime createdAtStart,
-            LocalDateTime createdAtEnd,
-            Pageable pageable
-    );
+<<<<<<< Updated upstream
+    Page<TransactionEntry> findByUserIdAndCategoryAndCreatedAtBetween(
+            UUID userId, Category incomeCategory,
+=======
+    Page<TransactionEntry> findByUserIdAndIncomeCategoryAndCreatedAtBetween(
+            UUID userId, IncomeCategory incomeCategory,
+>>>>>>> Stashed changes
+            LocalDateTime start, LocalDateTime end, Pageable pageable);
 
-    /** Count all non-deleted transactions for a user — used by HealthScoreService. */
+    Page<TransactionEntry> findByUserIdAndTypeAndCreatedAtBetween(
+            UUID userId, TransactionType type,
+            LocalDateTime start, LocalDateTime end, Pageable pageable);
+
+    // ── Totals ────────────────────────────────────────────────────────────────
+
+    @Query("""
+            SELECT COALESCE(SUM(t.amount), 0)
+            FROM TransactionEntry t
+            WHERE t.userId = :userId AND t.type = :type
+            """)
+    BigDecimal getTotalAmountByType(@Param("userId") UUID userId, @Param("type") String type);
+
+    @Query("""
+            SELECT COALESCE(SUM(t.amount), 0)
+            FROM TransactionEntry t
+            WHERE t.userId = :userId AND t.type = :type
+              AND t.createdAt BETWEEN :start AND :end
+            """)
+    BigDecimal getTotalAmountByTypeAndDateRange(
+            @Param("userId") UUID userId, @Param("type") String type,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    // ── Category analytics — typed projections replace Object[] ──────────────
+
+    @Query("""
+            SELECT t.category AS category,
+                   SUM(t.amount) AS totalAmount,
+                   COUNT(t) AS transactionCount
+            FROM TransactionEntry t
+            WHERE t.userId = :userId
+            GROUP BY t.category
+            ORDER BY totalAmount DESC
+            """)
+    List<CategoryRow> getAllCategoryAnalytics(@Param("userId") UUID userId);
+
+    @Query("""
+            SELECT t.category AS category,
+                   SUM(t.amount) AS totalAmount,
+                   COUNT(t) AS transactionCount
+            FROM TransactionEntry t
+            WHERE t.userId = :userId AND t.type = :type
+            GROUP BY t.category
+            ORDER BY totalAmount DESC
+            """)
+    List<CategoryRow> getCategoryAnalyticsByType(
+            @Param("userId") UUID userId, @Param("type") String type);
+
+    @Query("""
+            SELECT t.category AS category,
+                   SUM(t.amount) AS totalAmount,
+                   COUNT(t) AS transactionCount
+            FROM TransactionEntry t
+            WHERE t.userId = :userId
+              AND t.createdAt BETWEEN :start AND :end
+            GROUP BY t.category
+            ORDER BY totalAmount DESC
+            """)
+    List<CategoryRow> getCategoryAnalyticsByDateRange(
+            @Param("userId") UUID userId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    @Query("""
+            SELECT t.category AS category,
+                   SUM(t.amount) AS totalAmount,
+                   COUNT(t) AS transactionCount
+            FROM TransactionEntry t
+            WHERE t.userId = :userId AND t.type = :type
+              AND t.createdAt BETWEEN :start AND :end
+            GROUP BY t.category
+            ORDER BY totalAmount DESC
+            """)
+    List<CategoryRow> getCategoryAnalyticsByTypeAndDateRange(
+            @Param("userId") UUID userId, @Param("type") String type,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    // ── Daily timeline — typed projections ────────────────────────────────────
+
+    @Query(value = """
+            SELECT CAST(t.created_at AS date) AS day,
+                   SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
+                   SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
+                   COUNT(*) AS transactionCount
+            FROM transaction_entry t
+            WHERE t.user_id = :userId
+            GROUP BY day
+            ORDER BY day
+            """, nativeQuery = true)
+    List<DailyRow> getAllDailyAnalytics(@Param("userId") UUID userId);
+
+    @Query(value = """
+            SELECT CAST(t.created_at AS date) AS day,
+                   SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
+                   SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
+                   COUNT(*) AS transactionCount
+            FROM transaction_entry t
+            WHERE t.user_id = :userId
+              AND t.created_at BETWEEN :start AND :end
+            GROUP BY day
+            ORDER BY day
+            """, nativeQuery = true)
+    List<DailyRow> getDailyAnalyticsByDateRange(
+            @Param("userId") UUID userId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    // ── Monthly timeline ──────────────────────────────────────────────────────
+
+    @Query("""
+            SELECT YEAR(t.createdAt)  AS year,
+                   MONTH(t.createdAt) AS month,
+                   SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
+                   SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
+                   COUNT(t) AS transactionCount
+            FROM TransactionEntry t
+            WHERE t.userId = :userId
+            GROUP BY YEAR(t.createdAt), MONTH(t.createdAt)
+            ORDER BY year, month
+            """)
+    List<MonthlyRow> getAllMonthlyAnalytics(@Param("userId") UUID userId);
+
+    @Query("""
+            SELECT YEAR(t.createdAt)  AS year,
+                   MONTH(t.createdAt) AS month,
+                   SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
+                   SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
+                   COUNT(t) AS transactionCount
+            FROM TransactionEntry t
+            WHERE t.userId = :userId
+              AND t.createdAt BETWEEN :start AND :end
+            GROUP BY YEAR(t.createdAt), MONTH(t.createdAt)
+            ORDER BY year, month
+            """)
+    List<MonthlyRow> getMonthlyAnalyticsByDateRange(
+            @Param("userId") UUID userId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    // ── Yearly timeline ───────────────────────────────────────────────────────
+
+    @Query("""
+            SELECT YEAR(t.createdAt) AS year,
+                   SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
+                   SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
+                   COUNT(t) AS transactionCount
+            FROM TransactionEntry t
+            WHERE t.userId = :userId
+            GROUP BY YEAR(t.createdAt)
+            ORDER BY year
+            """)
+    List<YearlyRow> getAllYearlyAnalytics(@Param("userId") UUID userId);
+
+    @Query("""
+            SELECT YEAR(t.createdAt) AS year,
+                   SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
+                   SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
+                   COUNT(t) AS transactionCount
+            FROM TransactionEntry t
+            WHERE t.userId = :userId
+              AND t.createdAt BETWEEN :start AND :end
+            GROUP BY YEAR(t.createdAt)
+            ORDER BY year
+            """)
+    List<YearlyRow> getYearlyAnalyticsByDateRange(
+            @Param("userId") UUID userId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
     @Query(value = "SELECT COUNT(t.id) FROM transaction_entries t WHERE t.user_id = ?1 AND t.deleted_at IS NULL",
-           nativeQuery = true)
+            nativeQuery = true)
     long countByUserId(UUID userId);
+
 }

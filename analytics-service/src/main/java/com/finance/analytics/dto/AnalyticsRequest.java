@@ -1,36 +1,31 @@
 package com.finance.analytics.dto;
 
 import com.finance.analytics.model.TransactionType;
-import jakarta.validation.constraints.NotNull;
-import lombok.Getter;
-import lombok.Setter;
-
-import lombok.EqualsAndHashCode;
-import lombok.ToString;
-import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-@Setter
-@Getter
-@EqualsAndHashCode
-@ToString
-public class AnalyticsRequest implements Serializable {
-    private static final long serialVersionUID = 1L;
+@Data
+@Builder(toBuilder = true)
+@NoArgsConstructor
+@AllArgsConstructor
+public class AnalyticsRequest {
 
-    // Getters and Setters
-    @NotNull(message = "User ID is required")
     private UUID userId;
-
-    private TransactionType transactionFilter; // INCOME, EXPENSE, or null for both
-
+    private TransactionType transactionFilter;
+    private String timelineType;
     private LocalDateTime startDate;
     private LocalDateTime endDate;
 
-    private String timelineType; // "DAILY", "WEEKLY", "MONTHLY", "YEARLY"
+    /** Normalized cache-safe date string (date only, no time component). */
+    public String cacheStartDate() {
+        return startDate != null ? startDate.toLocalDate().toString() : "null";
+    }
 
-    // Constructors
-    public AnalyticsRequest() {}
-
+    public String cacheEndDate() {
+        return endDate != null ? endDate.toLocalDate().toString() : "null";
+    }
 }
-

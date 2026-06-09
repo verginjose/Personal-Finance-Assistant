@@ -2,7 +2,7 @@ package com.finance.analytics.controller;
 
 import com.finance.analytics.dto.AnalyticsRequest;
 import com.finance.analytics.dto.ChartData;
-import com.finance.analytics.model.IncomeCategory;
+import com.finance.analytics.model.Category;
 import com.finance.analytics.model.TransactionEntry;
 import com.finance.analytics.model.TransactionType;
 import com.finance.analytics.service.AnalyticsService;
@@ -110,7 +110,7 @@ public class AnalyticsController {
     @GetMapping("/transactions/income-by-category")
     public ResponseEntity<Page<TransactionEntry>> getIncomeTransactions(
             @RequestParam UUID userId,
-            @RequestParam IncomeCategory incomeCategory,
+            @RequestParam Category incomeCategory,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(defaultValue = "0") int page,

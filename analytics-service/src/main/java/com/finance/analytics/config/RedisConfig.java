@@ -4,7 +4,10 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.finance.analytics.cache.CacheKeyRegistry;
+import com.finance.analytics.cache.TrackingRedisCache;
 import io.lettuce.core.api.StatefulRedisConnection;
+import jakarta.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.springframework.beans.factory.SmartInitializingSingleton;
@@ -16,8 +19,10 @@ import org.springframework.cache.annotation.CachingConfigurerSupport;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
+import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisPassword;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
@@ -27,6 +32,9 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.lang.NonNull;
+import org.springframework.lang.NonNullApi;
+
 import java.util.Map;
 import java.util.HashMap;
 
@@ -55,9 +63,10 @@ public class RedisConfig {
         poolConfig.setMinIdle(2);
         poolConfig.setMaxWait(Duration.ofMillis(200));
 
-        // Validate connections before borrowing from pool
-        // Prevents using stale/dead connections
-        poolConfig.setTestOnBorrow(true);
+
+        poolConfig.setTestOnBorrow(false);
+        poolConfig.setTestWhileIdle(true);
+        poolConfig.setTimeBetweenEvictionRuns(Duration.ofSeconds(30));
 
         LettucePoolingClientConfiguration clientConfig =
                 LettucePoolingClientConfiguration.builder()
@@ -76,7 +85,7 @@ public class RedisConfig {
     }
 
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
+    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory, CacheKeyRegistry cacheKeyRegistry) {
 
         GenericJackson2JsonRedisSerializer jsonSerializer =
                 new GenericJackson2JsonRedisSerializer(redisObjectMapper());
@@ -103,34 +112,42 @@ public class RedisConfig {
         cacheConfigs.put("comprehensive-analytics",
                 defaultConfig.entryTtl(Duration.ofMinutes(5)));
 
-        return RedisCacheManager.builder(connectionFactory)
-                .cacheDefaults(defaultConfig)
-                .withInitialCacheConfigurations(cacheConfigs)
-                .enableStatistics()
-                .build();
+
+        return new RedisCacheManager(
+                RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory),
+                defaultConfig,
+                cacheConfigs
+        ) {
+            @Override
+            @NonNull
+            protected RedisCache createRedisCache(@NonNull String name,  RedisCacheConfiguration cfg) {
+                RedisCache raw = super.createRedisCache(name, cfg);
+                return new TrackingRedisCache(raw, cacheKeyRegistry);
+            }
+        };
     }
 
     // Circuit breaker — Redis down won't crash your app
     @Bean
     public CachingConfigurer cachingConfigurer() {
-        return new CachingConfigurerSupport() {
+        return new CachingConfigurer() {
             @Override
             public CacheErrorHandler errorHandler() {
                 return new CacheErrorHandler() {
                     @Override
-                    public void handleCacheGetError(RuntimeException e, Cache cache, Object key) {
+                    public void handleCacheGetError(@NonNull RuntimeException e,@NonNull Cache cache,@NonNull Object key) {
                         log.warn("Redis GET failed, hitting DB: {}", e.getMessage());
                     }
                     @Override
-                    public void handleCachePutError(RuntimeException e, Cache cache, Object key, Object value) {
+                    public void handleCachePutError(@NonNull RuntimeException e,@NonNull Cache cache,@NonNull Object key, Object value) {
                         log.warn("Redis PUT failed: {}", e.getMessage());
                     }
                     @Override
-                    public void handleCacheEvictError(RuntimeException e, Cache cache, Object key) {
+                    public void handleCacheEvictError(@NonNull RuntimeException e,@NonNull Cache cache,@NonNull Object key) {
                         log.error("Redis EVICT failed — stale data risk: {}", e.getMessage());
                     }
                     @Override
-                    public void handleCacheClearError(RuntimeException e, Cache cache) {
+                    public void handleCacheClearError(@NonNull RuntimeException e,@NonNull Cache cache) {
                         log.error("Redis CLEAR failed: {}", e.getMessage());
                     }
                 };
@@ -159,11 +176,13 @@ public class RedisConfig {
         template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper()));
         template.setHashKeySerializer(new StringRedisSerializer());
+        template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper())); // add
         template.afterPropertiesSet();
         return template;
     }
 
-    private ObjectMapper redisObjectMapper() {
+    @Bean
+    public ObjectMapper redisObjectMapper() {
         return new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .activateDefaultTyping(
@@ -171,7 +190,6 @@ public class RedisConfig {
                                 .allowIfSubType("com.finance.analytics")
                                 .allowIfSubType("java.util.")
                                 .allowIfSubType("java.time.")
-                                .allowIfBaseType(Object.class)
                                 .build(),
                         ObjectMapper.DefaultTyping.NON_FINAL,
                         JsonTypeInfo.As.PROPERTY

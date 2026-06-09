@@ -16,7 +16,14 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "users", schema = "auth",
-        uniqueConstraints = @UniqueConstraint(columnNames = "email"))
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = "email"),
+                @UniqueConstraint(columnNames = "username")
+        },
+        indexes = {
+                @Index(name = "idx_users_username", columnList = "username"),
+                @Index(name = "idx_users_email", columnList = "email")
+        })
 @Getter
 @Setter
 @Builder
@@ -30,6 +37,9 @@ public class User implements UserDetails {
 
   @Column(nullable = false, unique = true)
   private String email;
+
+  @Column(nullable = false, unique = true, length = 30)
+  private String username;
 
   @Column(nullable = false)
   private String password;

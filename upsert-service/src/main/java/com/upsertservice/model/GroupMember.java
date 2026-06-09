@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "group_members", schema = "finance",
+@Table(name = "group_members", schema = "groups",
        uniqueConstraints = @UniqueConstraint(columnNames = {"group_id", "user_id"}))
 @Data
 @NoArgsConstructor

@@ -2,7 +2,7 @@
 
 package com.finance.analytics.events;
 
-import com.finance.analytics.cache.CacheEvictionService;
+import com.finance.analytics.cache.CacheKeyRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CacheEvictConsumer {
 
-    private final CacheEvictionService cacheEvictionService;
+    private final CacheKeyRegistry cacheKeyRegistry;
 
     @KafkaListener(
             topics = "transaction-cache-evict",
@@ -32,7 +32,7 @@ public class CacheEvictConsumer {
                 event.getUserId(), event.getOperation(), partition, offset);
 
         try {
-            cacheEvictionService.evictForUser(event.getUserId());
+            cacheKeyRegistry.evictForUser(event.getUserId());
 
             log.info("Cache evicted for user={}, operation={}",
                     event.getUserId(), event.getOperation());

@@ -9,6 +9,7 @@ export const Auth = {
   getRefresh()     { return localStorage.getItem('pfa_refresh'); },
   getUserId()      { return localStorage.getItem('pfa_userId'); },
   getEmail()       { return localStorage.getItem('pfa_email'); },
+  getName()               { return localStorage.getItem('pfa_name');},
   isLoggedIn()     { return !!this.getToken(); },
 
   save(data) {
@@ -16,6 +17,7 @@ export const Auth = {
     localStorage.setItem('pfa_refresh', data.refreshToken);
     localStorage.setItem('pfa_userId',  data.userId);
     localStorage.setItem('pfa_email',   data.email);
+    localStorage.setItem('pfa_name', data.name);
   },
 
   clear() {

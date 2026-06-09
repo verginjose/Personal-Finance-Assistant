@@ -52,6 +52,10 @@ public class TransactionEntryService {
     // ── Create ────────────────────────────────────────────────────────────────
 
     public CreateEntryResponse createEntry(CreateEntryRequest request, String idempotencyKey) {
+        return createEntry(request, idempotencyKey, true);
+    }
+
+    public CreateEntryResponse createEntry(CreateEntryRequest request, String idempotencyKey, boolean publishCacheEvict) {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             IdempotencyRecord existing = idempotencyRecordRepository
                     .findByUserIdAndIdempotencyKey(request.getUserId(), idempotencyKey.trim())
@@ -69,7 +73,9 @@ public class TransactionEntryService {
         TransactionEntry entry = getTransactionEntry(request);
 
         TransactionEntry saved = repository.save(entry);
-        cacheEvictPublisher.publish(request.getUserId(), "CREATE", saved.getId());
+        if (publishCacheEvict) {
+            cacheEvictPublisher.publish(request.getUserId(), "CREATE", saved.getId());
+        }
         createCounter.increment();
         log.info("Idempotency key {}",idempotencyKey);
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {

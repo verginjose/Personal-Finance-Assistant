@@ -1,7 +1,6 @@
 package com.upsertservice.dto;
 
-import com.upsertservice.model.ExpenseCategory;
-import com.upsertservice.model.IncomeCategory;
+import com.upsertservice.model.Category;
 import com.upsertservice.model.RecurringPeriod;
 import com.upsertservice.model.TransactionType;
 import jakarta.validation.constraints.*;
@@ -29,8 +28,7 @@ public class CreateEntryRequest {
     @NotNull(message = "Transaction type is required")
     private TransactionType type;
 
-    private ExpenseCategory expenseCategory;
-    private IncomeCategory incomeCategory;
+    private Category category;
 
     @NotBlank(message = "Currency is required")
     @Size(min = 3, max = 3, message = "Currency must be 3 characters")

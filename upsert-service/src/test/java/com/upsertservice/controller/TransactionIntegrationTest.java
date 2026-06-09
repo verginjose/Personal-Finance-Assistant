@@ -3,7 +3,7 @@ package com.upsertservice.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.upsertservice.dto.CreateEntryRequest;
 import com.upsertservice.dto.CreateEntryResponse;
-import com.upsertservice.model.IncomeCategory;
+import com.upsertservice.model.Category;
 import com.upsertservice.model.TransactionType;
 import com.upsertservice.repository.TransactionEntryRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,11 +12,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -80,7 +80,7 @@ public class TransactionIntegrationTest {
     @Autowired
     private TransactionEntryRepository repository;
 
-    @MockBean
+    @MockitoBean
     private KafkaTemplate<String, com.upsertservice.events.CacheEvictEvent> kafkaTemplate;
 
     @BeforeEach
@@ -102,7 +102,7 @@ public class TransactionIntegrationTest {
         request.setName("Salary payment");
         request.setAmount(new BigDecimal("5000.00"));
         request.setType(TransactionType.INCOME);
-        request.setIncomeCategory(IncomeCategory.SALARY);
+        request.setCategory(Category.SALARY);
         request.setCurrency("INR");
         request.setDescription("E2E Test salary entry");
 

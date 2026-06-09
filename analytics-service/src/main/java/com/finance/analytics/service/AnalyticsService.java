@@ -1,11 +1,8 @@
 package com.finance.analytics.service;
 
 import com.finance.analytics.dto.*;
-<<<<<<< Updated upstream
 import com.finance.analytics.model.Category;
-=======
-import com.finance.analytics.model.IncomeCategory;
->>>>>>> Stashed changes
+
 import com.finance.analytics.model.TransactionEntry;
 import com.finance.analytics.model.TransactionType;
 import com.finance.analytics.repository.TransactionEntryRepository;
@@ -127,9 +124,9 @@ public class AnalyticsService {
         LocalDateTime endDate   = request.getEndDate();
 
         if (type != null && startDate != null && endDate != null) {
-            return repository.getCategoryAnalyticsByTypeAndDateRange(userId, type, startDate, endDate);
+            return repository.getCategoryAnalyticsByTypeAndDateRange(userId, TransactionType.valueOf(type), startDate, endDate);
         } else if (type != null) {
-            return repository.getCategoryAnalyticsByType(userId, type);
+            return repository.getCategoryAnalyticsByType(userId, TransactionType.valueOf(type));
         } else if (startDate != null && endDate != null) {
             return repository.getCategoryAnalyticsByDateRange(userId, startDate, endDate);
         } else {
@@ -276,8 +273,8 @@ public class AnalyticsService {
         LocalDateTime endDate   = request.getEndDate();
 
         return (startDate != null && endDate != null)
-                ? repository.getTotalAmountByTypeAndDateRange(userId, type.name(), startDate, endDate)
-                : repository.getTotalAmountByType(userId, type.name());
+                ? repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.valueOf(type.name()), startDate, endDate)
+                : repository.getTotalAmountByType(userId, TransactionType.valueOf(type.name()));
     }
 
     private BigDecimal zeroIfNull(BigDecimal value) {

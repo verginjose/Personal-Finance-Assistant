@@ -68,7 +68,7 @@ async function loadTransactions(userId) {
           ${t.description ? `<br><small style="color:var(--text-dim)">${esc(t.description)}</small>` : ''}
         </td>
         <td>${typeBadge(t.type)}</td>
-        <td>${esc(formatCategory(t.expenseCategory || t.incomeCategory))}</td>
+        <td>${esc(t.category)}</td>  
         <td style="font-weight:600;color:${t.type === 'INCOME' ? 'var(--accent-g)' : 'var(--accent)'}">
           ${t.type === 'INCOME' ? '+' : '−'}${formatCurrency(t.amount, t.currency)}
         </td>
@@ -144,7 +144,7 @@ function showModal(userId, existing, onDone) {
         type,
         currency: document.getElementById('m-currency').value.toUpperCase(),
         description: document.getElementById('m-desc').value,
-        [type === 'INCOME' ? 'incomeCategory' : 'expenseCategory']: document.getElementById('m-cat').value,
+        category: document.getElementById('m-cat').value,
         recurring,
         recurringPeriod: recurring ? document.getElementById('m-recurring-period').value : null
       };
@@ -167,11 +167,10 @@ function showModal(userId, existing, onDone) {
   const updateCats = () => {
     const type = document.getElementById('m-type').value;
     const cats = type === 'INCOME' ? INCOME_CATS : EXPENSE_CATS;
-    const sel = existing?.type === type
-      ? (existing.expenseCategory || existing.incomeCategory)
-      : null;
+    const sel = existing?.type === type ? existing.category : null;  // ✅ single field
     document.getElementById('m-cat').innerHTML = categoryOptions(cats, sel);
   };
+
   updateCats();
   document.getElementById('m-type').onchange = updateCats;
 }

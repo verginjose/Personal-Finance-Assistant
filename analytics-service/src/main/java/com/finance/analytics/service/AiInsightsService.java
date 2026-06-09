@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finance.analytics.dto.AiInsightResponse;
 import com.finance.analytics.dto.CategoryRow;
+import com.finance.analytics.model.TransactionType;
 import com.finance.analytics.repository.TransactionEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,8 +47,8 @@ public class AiInsightsService {
         LocalDateTime monthStart = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
         LocalDateTime now = LocalDateTime.now();
 
-        BigDecimal income  = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, "INCOME",  monthStart, now));
-        BigDecimal expense = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, "EXPENSE", monthStart, now));
+        BigDecimal income  = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.valueOf("INCOME"),  monthStart, now));
+        BigDecimal expense = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.valueOf("EXPENSE"), monthStart, now));
         List<CategoryRow> categories = repository.getCategoryAnalyticsByDateRange(userId, monthStart, now);
 
         if (income.compareTo(BigDecimal.ZERO) == 0 && expense.compareTo(BigDecimal.ZERO) == 0) {

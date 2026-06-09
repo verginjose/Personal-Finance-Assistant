@@ -1,8 +1,7 @@
 package com.finance.analytics.service;
 
 import com.finance.analytics.dto.AiInsightResponse;
-import com.finance.analytics.model.ExpenseCategory;
-import com.finance.analytics.model.IncomeCategory;
+import com.finance.analytics.model.Category;
 import com.finance.analytics.model.TransactionEntry;
 import com.finance.analytics.model.TransactionType;
 import com.finance.analytics.repository.TransactionEntryRepository;
@@ -96,15 +95,15 @@ public class AiInsightsIntegrationTest {
 
         // Save some dummy transaction entries for the current month
         TransactionEntry income = new TransactionEntry(userId, "Salary Payment", new BigDecimal("50000.00"), TransactionType.INCOME, "INR");
-        income.setIncomeCategory(IncomeCategory.SALARY);
+        income.setCategory(Category.SALARY);
         repository.save(income);
 
         TransactionEntry rent = new TransactionEntry(userId, "Flat Rent", new BigDecimal("15000.00"), TransactionType.EXPENSE, "INR");
-        rent.setExpenseCategory(ExpenseCategory.BILLS_AND_UTILITIES);
+        rent.setCategory(Category.BILLS_AND_UTILITIES);
         repository.save(rent);
 
         TransactionEntry food = new TransactionEntry(userId, "Restaurant Dinner", new BigDecimal("3500.00"), TransactionType.EXPENSE, "INR");
-        food.setExpenseCategory(ExpenseCategory.FOOD_AND_DINING);
+        food.setCategory(Category.FOOD_AND_DINING);
         repository.save(food);
 
         System.out.println("Calling generateInsights using Groq API key: " + System.getProperty("GROQ_API_KEY"));

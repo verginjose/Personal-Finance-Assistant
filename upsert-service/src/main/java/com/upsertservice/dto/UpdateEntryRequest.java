@@ -1,12 +1,17 @@
 package com.upsertservice.dto;
 
+import com.upsertservice.model.Category;
 import com.upsertservice.model.TransactionType;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.util.UUID;
 
 import com.upsertservice.model.RecurringPeriod;
+import lombok.Getter;
+import lombok.Setter;
 
+@Getter
+@Setter
 public class UpdateEntryRequest {
 
     @NotNull(message = "Transaction ID is required")
@@ -27,9 +32,7 @@ public class UpdateEntryRequest {
     @NotNull(message = "Transaction type is required")
     private TransactionType type;
 
-    private ExpenseCategory expenseCategory;
-
-    private IncomeCategory incomeCategory;
+    private Category category;
 
     @NotBlank(message = "Currency is required")
     @Size(min = 3, max = 3, message = "Currency must be 3 characters")
@@ -42,41 +45,6 @@ public class UpdateEntryRequest {
 
     private RecurringPeriod recurringPeriod;
 
-    // Constructors
     public UpdateEntryRequest() {}
-
-    // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public UUID getUserId() { return userId; }
-    public void setUserId(UUID userId) { this.userId = userId; }
-
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-
-    public BigDecimal getAmount() { return amount; }
-    public void setAmount(BigDecimal amount) { this.amount = amount; }
-
-    public TransactionType getType() { return type; }
-    public void setType(TransactionType type) { this.type = type; }
-
-    public ExpenseCategory getExpenseCategory() { return expenseCategory; }
-    public void setExpenseCategory(ExpenseCategory expenseCategory) { this.expenseCategory = expenseCategory; }
-
-    public IncomeCategory getIncomeCategory() { return incomeCategory; }
-    public void setIncomeCategory(IncomeCategory incomeCategory) { this.incomeCategory = incomeCategory; }
-
-    public String getCurrency() { return currency; }
-    public void setCurrency(String currency) { this.currency = currency; }
-
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-
-    public boolean isRecurring() { return recurring; }
-    public void setRecurring(boolean recurring) { this.recurring = recurring; }
-
-    public RecurringPeriod getRecurringPeriod() { return recurringPeriod; }
-    public void setRecurringPeriod(RecurringPeriod recurringPeriod) { this.recurringPeriod = recurringPeriod; }
 }
 

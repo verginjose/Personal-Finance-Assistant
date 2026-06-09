@@ -2,8 +2,7 @@ package com.upsertservice.model;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
@@ -52,8 +51,10 @@ public class TransactionEntry implements Serializable {
     @Setter
     private TransactionType type;
 
-    @Column(name = "category")
+    @Column(name = "category", nullable = false)
     @Enumerated(EnumType.STRING)
+    @Setter
+    @Getter
     private Category category;
 
 
@@ -91,6 +92,26 @@ public class TransactionEntry implements Serializable {
         updatedAt = LocalDateTime.now();
     }
 
+    /** Whether this is a recurring transaction. Default false. */
+    @Getter
+    @Column(name = "recurring", nullable = false)
+    @Setter
+    private boolean recurring = false;
+
+    /**
+     * Recurrence period — only meaningful when {@code recurring = true}.
+     * Hibernate adds this as a nullable VARCHAR column automatically.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "recurring_period")
+    @Getter
+    @Setter
+    private RecurringPeriod recurringPeriod;
+
+    @Setter
+    @Getter
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
     // Constructors
     public TransactionEntry() {}
 

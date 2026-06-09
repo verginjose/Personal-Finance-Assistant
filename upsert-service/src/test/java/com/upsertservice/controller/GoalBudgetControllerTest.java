@@ -1,7 +1,7 @@
 package com.upsertservice.controller;
 
 import com.upsertservice.dto.*;
-import com.upsertservice.model.ExpenseCategory;
+import com.upsertservice.model.Category;
 import com.upsertservice.model.RecurringPeriod;
 import com.upsertservice.service.GoalBudgetService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -36,10 +36,10 @@ public class GoalBudgetControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private GoalBudgetService service;
 
-    @MockBean
+    @MockitoBean
     private MeterRegistry meterRegistry;
 
     @Test
@@ -93,13 +93,13 @@ public class GoalBudgetControllerTest {
         UUID userId = UUID.randomUUID();
         CategoryBudgetRequest request = new CategoryBudgetRequest();
         request.setUserId(userId);
-        request.setExpenseCategory(ExpenseCategory.FOOD_AND_DINING);
+        request.setExpenseCategory(Category.FOOD_AND_DINING);
         request.setBudgetAmount(new BigDecimal("500"));
         request.setPeriod(RecurringPeriod.MONTHLY);
         request.setCurrency("INR");
 
         BudgetUtilizationResponse response = new BudgetUtilizationResponse(
-                1L, ExpenseCategory.FOOD_AND_DINING, new BigDecimal("500"),
+                1L, Category.FOOD_AND_DINING, new BigDecimal("500"),
                 BigDecimal.ZERO, 0.0, RecurringPeriod.MONTHLY, "INR", "SAFE"
         );
 

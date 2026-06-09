@@ -154,7 +154,7 @@ class SubscriptionDetectorServiceTest {
         e.setAmount(amount);
         e.setCurrency("INR");
         e.setType(TransactionType.EXPENSE);
-        e.setExpenseCategory(ExpenseCategory.ENTERTAINMENT);
+        e.setCategory(Category.ENTERTAINMENT);
         e.setRecurring(true);
         e.setRecurringPeriod(period);
         e.setCreatedAt(LocalDateTime.now().minusDays(5));

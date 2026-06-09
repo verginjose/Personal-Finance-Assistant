@@ -2,7 +2,7 @@ package com.upsertservice.controller;
 
 import com.upsertservice.dto.CreateEntryRequest;
 import com.upsertservice.dto.CreateEntryResponse;
-import com.upsertservice.model.IncomeCategory;
+import com.upsertservice.model.Category;
 import com.upsertservice.model.TransactionType;
 import com.upsertservice.service.TransactionEntryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,8 +12,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -37,10 +37,10 @@ public class TransactionEntryControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @MockBean
+    @MockitoBean
     private TransactionEntryService service;
 
-    @MockBean
+    @MockitoBean
     private MeterRegistry meterRegistry;
 
     @Test
@@ -52,12 +52,12 @@ public class TransactionEntryControllerTest {
         request.setName("Salary");
         request.setAmount(new BigDecimal("5000.00"));
         request.setType(TransactionType.INCOME);
-        request.setIncomeCategory(IncomeCategory.SALARY);
+        request.setCategory(Category.SALARY);
         request.setCurrency("INR");
 
         CreateEntryResponse response = new CreateEntryResponse(
                 1L, userId, "Salary", new BigDecimal("5000.00"),
-                TransactionType.INCOME, null, IncomeCategory.SALARY, "INR", "Monthly salary",
+                TransactionType.INCOME, Category.SALARY, "INR", "Monthly salary",
                 LocalDateTime.now(), LocalDateTime.now()
         );
 
@@ -82,7 +82,7 @@ public class TransactionEntryControllerTest {
         request.setName("Salary");
         request.setAmount(new BigDecimal("5000.00"));
         request.setType(TransactionType.INCOME);
-        request.setIncomeCategory(IncomeCategory.SALARY);
+        request.setCategory(Category.SALARY);
         request.setCurrency("INR");
 
         mockMvc.perform(post("/upsert/create")

@@ -2,10 +2,8 @@ package com.finance.analytics.service;
 
 import com.finance.analytics.dto.AiInsightResponse;
 import com.finance.analytics.dto.CategoryRow;
-<<<<<<< Updated upstream
 import com.finance.analytics.model.Category;
-=======
->>>>>>> Stashed changes
+import com.finance.analytics.model.TransactionType;
 import com.finance.analytics.repository.TransactionEntryRepository;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -86,19 +84,11 @@ class AiInsightsServiceTest {
         BigDecimal income  = new BigDecimal("30000");
         BigDecimal expense = new BigDecimal("20000");
         List<CategoryRow> cats = new ArrayList<>();
-<<<<<<< Updated upstream
         final Category category= Category.valueOf("FOOD_AND_DINING");
         final BigDecimal amount=new BigDecimal("8000");
         cats.add(new CategoryRow() {
             @Override
             public Category getCategory() {
-=======
-        final String category="FOOD_AND_DINING";
-        final BigDecimal amount=new BigDecimal("8000");
-        cats.add(new CategoryRow() {
-            @Override
-            public String getCategory() {
->>>>>>> Stashed changes
                 return category;
             }
 
@@ -134,9 +124,9 @@ class AiInsightsServiceTest {
     @Test
     @DisplayName("generateInsights: returns default response when user has no transactions")
     void generateInsights_noTransactions_returnsDefaultMessage() {
-        when(repository.getTotalAmountByTypeAndDateRange(any(), eq("INCOME"), any(), any()))
+        when(repository.getTotalAmountByTypeAndDateRange(any(), TransactionType.valueOf(ArgumentMatchers.eq("INCOME")), any(), any()))
                 .thenReturn(null);
-        when(repository.getTotalAmountByTypeAndDateRange(any(), eq("EXPENSE"), any(), any()))
+        when(repository.getTotalAmountByTypeAndDateRange(any(), TransactionType.valueOf(ArgumentMatchers.eq("EXPENSE")), any(), any()))
                 .thenReturn(null);
         when(repository.getCategoryAnalyticsByDateRange(any(), any(), any()))
                 .thenReturn(Collections.emptyList());

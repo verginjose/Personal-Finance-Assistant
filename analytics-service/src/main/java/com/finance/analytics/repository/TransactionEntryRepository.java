@@ -4,11 +4,7 @@ import com.finance.analytics.dto.CategoryRow;
 import com.finance.analytics.dto.DailyRow;
 import com.finance.analytics.dto.MonthlyRow;
 import com.finance.analytics.dto.YearlyRow;
-<<<<<<< Updated upstream
 import com.finance.analytics.model.Category;
-=======
-import com.finance.analytics.model.IncomeCategory;
->>>>>>> Stashed changes
 import com.finance.analytics.model.TransactionEntry;
 import com.finance.analytics.model.TransactionType;
 import java.math.BigDecimal;
@@ -27,13 +23,8 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
 
     Page<TransactionEntry> findByUserId(UUID userId, Pageable pageable);
 
-<<<<<<< Updated upstream
     Page<TransactionEntry> findByUserIdAndCategoryAndCreatedAtBetween(
             UUID userId, Category incomeCategory,
-=======
-    Page<TransactionEntry> findByUserIdAndIncomeCategoryAndCreatedAtBetween(
-            UUID userId, IncomeCategory incomeCategory,
->>>>>>> Stashed changes
             LocalDateTime start, LocalDateTime end, Pageable pageable);
 
     Page<TransactionEntry> findByUserIdAndTypeAndCreatedAtBetween(
@@ -47,7 +38,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             FROM TransactionEntry t
             WHERE t.userId = :userId AND t.type = :type
             """)
-    BigDecimal getTotalAmountByType(@Param("userId") UUID userId, @Param("type") String type);
+    BigDecimal getTotalAmountByType(@Param("userId") UUID userId, @Param("type") TransactionType type);
 
     @Query("""
             SELECT COALESCE(SUM(t.amount), 0)
@@ -56,7 +47,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
               AND t.createdAt BETWEEN :start AND :end
             """)
     BigDecimal getTotalAmountByTypeAndDateRange(
-            @Param("userId") UUID userId, @Param("type") String type,
+            @Param("userId") UUID userId, @Param("type") TransactionType type,
             @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     // ── Category analytics — typed projections replace Object[] ──────────────
@@ -82,7 +73,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             ORDER BY totalAmount DESC
             """)
     List<CategoryRow> getCategoryAnalyticsByType(
-            @Param("userId") UUID userId, @Param("type") String type);
+            @Param("userId") UUID userId, @Param("type") TransactionType type);
 
     @Query("""
             SELECT t.category AS category,
@@ -109,7 +100,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             ORDER BY totalAmount DESC
             """)
     List<CategoryRow> getCategoryAnalyticsByTypeAndDateRange(
-            @Param("userId") UUID userId, @Param("type") String type,
+            @Param("userId") UUID userId, @Param("type") TransactionType type,
             @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     // ── Daily timeline — typed projections ────────────────────────────────────

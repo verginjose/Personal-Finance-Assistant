@@ -3,6 +3,7 @@ package com.finance.analytics.service;
 import com.finance.analytics.dto.CategoryRow;
 import com.finance.analytics.dto.HealthScoreResponse;
 import com.finance.analytics.model.Category;
+import com.finance.analytics.model.TransactionType;
 import com.finance.analytics.repository.TransactionEntryRepository;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -100,8 +101,8 @@ class HealthScoreServiceTest {
     @Test
     @DisplayName("calculateScore: excellent financials → score ≥ 700, grade A or higher")
     void calculateScore_excellentFinancials_highScore() {
-        when(repository.getTotalAmountByType(userId, "INCOME")).thenReturn(new BigDecimal("100000"));
-        when(repository.getTotalAmountByType(userId, "EXPENSE")).thenReturn(new BigDecimal("30000"));
+        when(repository.getTotalAmountByType(userId, TransactionType.valueOf("INCOME"))).thenReturn(new BigDecimal("100000"));
+        when(repository.getTotalAmountByType(userId, TransactionType.valueOf("EXPENSE"))).thenReturn(new BigDecimal("30000"));
         when(repository.getAllCategoryAnalytics(userId)).thenReturn(buildCategories(6));
         when(repository.countByUserId(userId)).thenReturn(60L);
 
@@ -115,8 +116,8 @@ class HealthScoreServiceTest {
     @Test
     @DisplayName("calculateScore: poor financials (over-spender) → score ≤ 400")
     void calculateScore_poorFinancials_lowScore() {
-        when(repository.getTotalAmountByType(userId, "INCOME")).thenReturn(new BigDecimal("10000"));
-        when(repository.getTotalAmountByType(userId, "EXPENSE")).thenReturn(new BigDecimal("30000"));
+        when(repository.getTotalAmountByType(userId, TransactionType.valueOf("INCOME"))).thenReturn(new BigDecimal("10000"));
+        when(repository.getTotalAmountByType(userId, TransactionType.valueOf("EXPENSE"))).thenReturn(new BigDecimal("30000"));
         when(repository.getAllCategoryAnalytics(userId)).thenReturn(buildCategories(1));
         when(repository.countByUserId(userId)).thenReturn(2L);
 
@@ -139,7 +140,6 @@ class HealthScoreServiceTest {
 
     private List<CategoryRow> buildCategories(int count) {
         List<CategoryRow> list = new ArrayList<>();
-<<<<<<< Updated upstream
         List<String> categories=new ArrayList<>(List.of("FOOD_AND_DINING",
                 "TRANSPORT",
                 "HOUSING",
@@ -151,22 +151,12 @@ class HealthScoreServiceTest {
                 "TRAVEL",
                 " INSURANCE"));
         for (int i = 0; i < count; i++) {
-            final Category category = Category.valueOf(categories.get(i));
-=======
-
-        for (int i = 0; i < count; i++) {
-            final String category = "CAT_" + i;
->>>>>>> Stashed changes
             final BigDecimal amount = BigDecimal.valueOf(1000L * (i + 1));
             final Long txCount = (long) (i + 1);
-
+            final Category category= Category.valueOf(categories.get(i));
             list.add(new CategoryRow() {
                 @Override
-<<<<<<< Updated upstream
                 public Category getCategory() {
-=======
-                public String getCategory() {
->>>>>>> Stashed changes
                     return category;
                 }
 

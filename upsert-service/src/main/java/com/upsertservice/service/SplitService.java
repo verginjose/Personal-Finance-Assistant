@@ -177,11 +177,7 @@ public class SplitService {
     }
 
     private void createPersonalTransactions(SharedExpense expense, List<ExpenseSplit> splits, ExpenseGroup group) {
-<<<<<<< Updated upstream
         Category category = toTransactionCategory(expense);
-=======
-        ExpenseCategory category = toTransactionCategory(expense);
->>>>>>> Stashed changes
         String groupLabel = group.getName() != null ? group.getName() : "group";
         for (ExpenseSplit split : splits) {
             if (split.getAmount().compareTo(BigDecimal.ZERO) <= 0) continue;
@@ -191,11 +187,7 @@ public class SplitService {
             entry.setAmount(split.getAmount());
             entry.setType(TransactionType.EXPENSE);
             entry.setCurrency(expense.getCurrency());
-<<<<<<< Updated upstream
             entry.setCategory(category);
-=======
-            entry.setExpenseCategory(category);
->>>>>>> Stashed changes
             entry.setDescription("Split expense · " + groupLabel);
             CreateEntryResponse saved = transactionEntryService.createEntry(entry, null, false);
             transactionLinkRepo.save(new ExpenseTransactionLink(null, expense.getId(),
@@ -211,21 +203,12 @@ public class SplitService {
         cacheEvictPublisher.publishForUsers(affectedUsers, operation, referenceId);
     }
 
-<<<<<<< Updated upstream
     private Category toTransactionCategory(SharedExpense expense) {
         if (expense.getExpenseCategory() == null) {
             return Category.OTHERS;
         }
         return Category.valueOf(expense.getExpenseCategory().name());
-=======
-    private ExpenseCategory toTransactionCategory(SharedExpense expense) {
-        if (expense.getExpenseCategory() == null) {
-            return ExpenseCategory.OTHERS;
-        }
-        return ExpenseCategory.valueOf(expense.getExpenseCategory().name());
->>>>>>> Stashed changes
     }
-
     private void generateSplits(SharedExpense expense, CreateSharedExpenseRequest req) {
         List<GroupMember> members = memberRepo.findByGroupId(req.getGroupId());
         if (members.isEmpty()) return;

@@ -180,7 +180,7 @@ class GoalBudgetServiceTest {
         CategoryBudget b = new CategoryBudget();
         b.setId(1L);
         b.setUserId(userId);
-        b.setExpenseCategory(ExpenseCategory.FOOD_AND_DINING);
+        b.setExpenseCategory(Category.FOOD_AND_DINING);
         b.setBudgetAmount(amount);
         b.setPeriod(period);
         b.setCurrency("INR");

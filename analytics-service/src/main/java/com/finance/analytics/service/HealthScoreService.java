@@ -2,6 +2,7 @@ package com.finance.analytics.service;
 
 import com.finance.analytics.dto.CategoryRow;
 import com.finance.analytics.dto.HealthScoreResponse;
+import com.finance.analytics.model.TransactionType;
 import com.finance.analytics.repository.TransactionEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,8 +28,8 @@ public class HealthScoreService {
     // Cache score for 1 hour
     @Cacheable(value = "health-score", key = "#userId")
     public HealthScoreResponse calculateScore(UUID userId) {
-        BigDecimal income  = safe(repository.getTotalAmountByType(userId, "INCOME"));
-        BigDecimal expense = safe(repository.getTotalAmountByType(userId, "EXPENSE"));
+        BigDecimal income  = safe(repository.getTotalAmountByType(userId, TransactionType.valueOf("INCOME")));
+        BigDecimal expense = safe(repository.getTotalAmountByType(userId, TransactionType.valueOf("EXPENSE")));
         List<CategoryRow> categories = repository.getAllCategoryAnalytics(userId);
         long txCount = repository.countByUserId(userId);
 

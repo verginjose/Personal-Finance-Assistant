@@ -96,11 +96,8 @@ public class TransactionEntryService {
                 request.getUserId(), request.getName(),
                 request.getAmount(), request.getType(), request.getCurrency()
         );
-        if (request.getType() == TransactionType.EXPENSE) {
-            entry.setExpenseCategory(request.getExpenseCategory());
-        } else {
-            entry.setIncomeCategory(request.getIncomeCategory());
-        }
+        log.info("Category got from the request {}",request.getCategory());
+        entry.setCategory(request.getCategory());
         entry.setDescription(request.getDescription());
         entry.setRecurring(request.isRecurring());
         entry.setRecurringPeriod(request.getRecurringPeriod());
@@ -121,13 +118,7 @@ public class TransactionEntryService {
         existing.setType(request.getType());
         existing.setCurrency(request.getCurrency());
         existing.setDescription(request.getDescription());
-        existing.setExpenseCategory(null);
-        existing.setIncomeCategory(null);
-        if (request.getType() == TransactionType.EXPENSE) {
-            existing.setExpenseCategory(request.getExpenseCategory());
-        } else {
-            existing.setIncomeCategory(request.getIncomeCategory());
-        }
+        existing.setCategory(request.getCategory());
         existing.setRecurring(request.isRecurring());
         existing.setRecurringPeriod(request.getRecurringPeriod());
         TransactionEntry updated = repository.save(existing);
@@ -232,8 +223,7 @@ public class TransactionEntryService {
                .append(escapeCsv(e.getName())).append(',')
                .append(e.getAmount()).append(',')
                .append(e.getType()).append(',')
-               .append(e.getExpenseCategory() != null ? e.getExpenseCategory() : "").append(',')
-               .append(e.getIncomeCategory()  != null ? e.getIncomeCategory()  : "").append(',')
+               .append(e.getCategory() != null ? e.getCategory() : "").append(',')
                .append(e.getCurrency()).append(',')
                .append(escapeCsv(e.getDescription())).append(',')
                .append(e.isRecurring()).append(',')
@@ -256,7 +246,7 @@ public class TransactionEntryService {
     private CreateEntryResponse convertToResponse(TransactionEntry entry) {
         return new CreateEntryResponse(
                 entry.getId(), entry.getUserId(), entry.getName(), entry.getAmount(),
-                entry.getType(), entry.getExpenseCategory(), entry.getIncomeCategory(),
+                entry.getType(), entry.getCategory(),
                 entry.getCurrency(), entry.getDescription(),
                 entry.getCreatedAt(), entry.getUpdatedAt()
         );

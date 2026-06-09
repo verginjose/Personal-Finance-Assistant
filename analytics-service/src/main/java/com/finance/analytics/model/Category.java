@@ -21,5 +21,6 @@ public enum Category {
     SHOPPING,
     TRAVEL,
     INSURANCE,
+    BILLS_AND_UTILITIES,
     OTHER_EXPENSE
 }

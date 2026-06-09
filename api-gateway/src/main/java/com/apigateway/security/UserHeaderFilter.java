@@ -39,7 +39,10 @@ public class UserHeaderFilter implements GlobalFilter, Ordered {
                         .getPayload();
                 String userId = claims.get("userId", String.class);
                 if (userId != null) {
+                    // Remove any client-supplied X-User-Id header first (prevent injection),
+                    // then inject the trusted value extracted from the signed JWT.
                     ServerHttpRequest request = exchange.getRequest().mutate()
+                            .headers(h -> h.remove("X-User-Id"))
                             .header("X-User-Id", userId)
                             .build();
                     return chain.filter(exchange.mutate().request(request).build());

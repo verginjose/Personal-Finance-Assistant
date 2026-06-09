@@ -23,10 +23,13 @@ public class JwtReactiveAuthenticationManager
         implements ReactiveAuthenticationManager {
 
     private final SecretKey secretKey;
+    private final org.springframework.data.redis.core.ReactiveStringRedisTemplate redisTemplate;
 
     public JwtReactiveAuthenticationManager(
-            @Value("${jwt.secret}") String secret) {
+            @Value("${jwt.secret}") String secret,
+            org.springframework.data.redis.core.ReactiveStringRedisTemplate redisTemplate) {
         this.secretKey = buildKey(secret);
+        this.redisTemplate = redisTemplate;
     }
 
     @Override
@@ -37,54 +40,60 @@ public class JwtReactiveAuthenticationManager
 
         String token = authentication.getCredentials().toString();
 
-        try {
+        return redisTemplate.hasKey("token_blacklist:" + token)
+                .flatMap(isBlacklisted -> {
+                    if (isBlacklisted) {
+                        log.warn("Rejected blacklisted token: {}", token);
+                        return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Token is blacklisted"));
+                    }
+                    try {
+                        Claims claims = Jwts.parser()
+                                .verifyWith(secretKey)
+                                .build()
+                                .parseSignedClaims(token)
+                                .getPayload();
 
-            Claims claims = Jwts.parser()
-                    .verifyWith(secretKey)
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
+                        String email = claims.getSubject();
 
-            String email = claims.getSubject();
+                        Object rolesObj = claims.get("roles");
+                        List<String> rolesList = null;
+                        if (rolesObj instanceof List) {
+                            rolesList = (List<String>) rolesObj;
+                        } else if (rolesObj instanceof String) {
+                            rolesList = List.of((String) rolesObj);
+                        } else {
+                            Object roleObj = claims.get("role");
+                            if (roleObj instanceof String) {
+                                rolesList = List.of((String) roleObj);
+                            } else if (roleObj instanceof List) {
+                                rolesList = (List<String>) roleObj;
+                            }
+                        }
 
-            Object rolesObj = claims.get("roles");
-            List<String> rolesList = null;
-            if (rolesObj instanceof List) {
-                rolesList = (List<String>) rolesObj;
-            } else if (rolesObj instanceof String) {
-                rolesList = List.of((String) rolesObj);
-            } else {
-                Object roleObj = claims.get("role");
-                if (roleObj instanceof String) {
-                    rolesList = List.of((String) roleObj);
-                } else if (roleObj instanceof List) {
-                    rolesList = (List<String>) roleObj;
-                }
-            }
+                        if (rolesList == null || rolesList.isEmpty()) {
+                            log.warn("Roles list is empty for token: {}", token);
+                            return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Token has no roles"));
+                        }
 
-            if (rolesList == null || rolesList.isEmpty()) {
-                log.warn("Roles list is empty for token: {}", token);
-                return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Token has no roles"));
-            }
+                        List<SimpleGrantedAuthority> authorities = rolesList.stream()
+                                .map(role -> new SimpleGrantedAuthority(
+                                        "ROLE_" + role.toUpperCase()))
+                                .toList();
 
-            List<SimpleGrantedAuthority> authorities = rolesList.stream()
-                    .map(role -> new SimpleGrantedAuthority(
-                            "ROLE_" + role.toUpperCase()))
-                    .toList();
+                        return Mono.just(
+                                new JwtAuthenticationToken(
+                                        email,
+                                        token,
+                                        authorities));
 
-            return Mono.just(
-                    new JwtAuthenticationToken(
-                            email,
-                            token,
-                            authorities));
-
-        } catch (JwtException ex) {
-            log.error("JWT Exception while authenticating token: {}", ex.getMessage());
-            return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Invalid JWT token"));
-        } catch (Exception ex) {
-            log.error("Unexpected error authenticating token: ", ex);
-            return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Invalid JWT token"));
-        }
+                    } catch (JwtException ex) {
+                        log.error("JWT Exception while authenticating token: {}", ex.getMessage());
+                        return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Invalid JWT token"));
+                    } catch (Exception ex) {
+                        log.error("Unexpected error authenticating token: ", ex);
+                        return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Invalid JWT token"));
+                    }
+                });
     }
 
     private SecretKey buildKey(String secret) {

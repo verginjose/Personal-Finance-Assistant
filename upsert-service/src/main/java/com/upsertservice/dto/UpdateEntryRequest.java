@@ -7,6 +7,8 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import com.upsertservice.model.RecurringPeriod;
+
 public class UpdateEntryRequest {
 
     @NotNull(message = "Transaction ID is required")
@@ -38,6 +40,10 @@ public class UpdateEntryRequest {
     @Size(max = 500, message = "Description cannot exceed 500 characters")
     private String description;
 
+    private boolean recurring = false;
+
+    private RecurringPeriod recurringPeriod;
+
     // Constructors
     public UpdateEntryRequest() {}
 
@@ -68,5 +74,11 @@ public class UpdateEntryRequest {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public boolean isRecurring() { return recurring; }
+    public void setRecurring(boolean recurring) { this.recurring = recurring; }
+
+    public RecurringPeriod getRecurringPeriod() { return recurringPeriod; }
+    public void setRecurringPeriod(RecurringPeriod recurringPeriod) { this.recurringPeriod = recurringPeriod; }
 }
 

@@ -149,4 +149,9 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             LocalDateTime createdAtEnd,
             Pageable pageable
     );
+
+    /** Count all non-deleted transactions for a user — used by HealthScoreService. */
+    @Query(value = "SELECT COUNT(t.id) FROM transaction_entries t WHERE t.user_id = ?1 AND t.deleted_at IS NULL",
+           nativeQuery = true)
+    long countByUserId(UUID userId);
 }

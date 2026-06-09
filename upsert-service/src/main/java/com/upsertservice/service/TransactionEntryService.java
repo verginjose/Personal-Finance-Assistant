@@ -122,6 +122,8 @@ public class TransactionEntryService {
         } else {
             existing.setIncomeCategory(request.getIncomeCategory());
         }
+        existing.setRecurring(request.isRecurring());
+        existing.setRecurringPeriod(request.getRecurringPeriod());
         TransactionEntry updated = repository.save(existing);
         cacheEvictPublisher.publish(request.getUserId(), "UPDATE", updated.getId()); // ADD THIS
         log.info("Transaction updated: id={}", updated.getId());

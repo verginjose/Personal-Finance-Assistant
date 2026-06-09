@@ -58,5 +58,27 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
 
     // ── Recurring transactions ────────────────────────────────────────────────
 
+
     List<TransactionEntry> findByUserIdAndRecurringTrueAndDeletedAtIsNull(UUID userId);
+
+    /** Used by the daily subscription detection scheduler — system-wide scan. */
+    List<TransactionEntry> findAllByRecurringTrueAndDeletedAtIsNull();
+
+    /** Pattern-based detection: fetch EXPENSE entries after a cutoff date. */
+    List<TransactionEntry> findByUserIdAndTypeAndCreatedAtAfterAndDeletedAtIsNull(
+            UUID userId, TransactionType type, java.time.LocalDateTime after);
+
+    // ── Budget utilization ────────────────────────────────────────────────────
+
+    /** Sum of expense amounts for a specific category within a date range. */
+    @Query("SELECT COALESCE(SUM(t.amount), 0) FROM TransactionEntry t " +
+           "WHERE t.userId = :userId AND t.deletedAt IS NULL AND t.type = 'EXPENSE' " +
+           "AND t.expenseCategory = :category " +
+           "AND t.createdAt BETWEEN :start AND :end")
+    java.math.BigDecimal sumExpensesByCategory(
+            @Param("userId") UUID userId,
+            @Param("category") com.upsertservice.model.ExpenseCategory category,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end") java.time.LocalDateTime end);
 }
+

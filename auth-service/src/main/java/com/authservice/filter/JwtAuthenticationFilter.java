@@ -1,6 +1,7 @@
 package com.authservice.filter;
 
 import com.authservice.security.JwtService;
+import com.authservice.service.TokenRedisService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -32,6 +33,7 @@ import java.util.List;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final TokenRedisService tokenRedisService;
 
     @Override
     protected void doFilterInternal(
@@ -55,8 +57,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (!jwtService.isTokenValid(token)) {
-            log.warn("Invalid JWT token for request: {} {}", request.getMethod(), request.getRequestURI());
+        if (!jwtService.isTokenValid(token) || tokenRedisService.isAccessTokenBlacklisted(token)) {
+            log.warn("Invalid or blacklisted JWT token for request: {} {}", request.getMethod(), request.getRequestURI());
             filterChain.doFilter(request, response);
             return;
         }

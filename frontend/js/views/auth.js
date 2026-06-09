@@ -6,31 +6,47 @@ export function renderAuth(container) {
   function draw() {
     container.innerHTML = `
     <div class="auth-page">
-      <div class="auth-card card fade-up">
-        <div class="logo">
-          <h1>💰 PFA</h1>
-          <p>Personal Finance Assistant</p>
-        </div>
-        <div class="auth-tabs">
-          <button id="tab-login" class="${mode==='login'?'active':''}">Sign In</button>
-          <button id="tab-register" class="${mode==='register'?'active':''}">Sign Up</button>
-        </div>
-        <form id="auth-form">
-          <div class="form-group">
-            <label>Email</label>
-            <input class="form-input" id="auth-email" type="email" placeholder="you@example.com" required>
+      <div class="auth-brand">
+        <h1>💰 Personal Finance Assistant</h1>
+        <p>Enterprise-grade money management with AI insights, bill scanning, split expenses, and real-time analytics.</p>
+        <div class="auth-features">
+          <div class="auth-feature">
+            <div class="auth-feature-icon">📊</div>
+            <div><strong>Smart Analytics</strong><br>Health scores, charts, and AI-powered insights</div>
           </div>
-          <div class="form-group">
-            <label>Password</label>
-            <input class="form-input" id="auth-pass" type="password" placeholder="Min 8 characters" required minlength="8">
+          <div class="auth-feature">
+            <div class="auth-feature-icon">📄</div>
+            <div><strong>Bill Scanner</strong><br>OCR extraction from receipts and invoices</div>
           </div>
-          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px" id="auth-submit">
-            ${mode === 'login' ? 'Sign In' : 'Create Account'}
-          </button>
-        </form>
-        <p class="auth-footer">
-          ${mode === 'login' ? "Don't have an account? Click Sign Up" : 'Already have an account? Click Sign In'}
-        </p>
+          <div class="auth-feature">
+            <div class="auth-feature-icon">🎯</div>
+            <div><strong>Goals & Budgets</strong><br>Track savings targets and spending limits</div>
+          </div>
+        </div>
+      </div>
+      <div class="auth-panel">
+        <div class="auth-card card fade-up">
+          <div class="auth-tabs" role="tablist">
+            <button type="button" id="tab-login" role="tab" aria-selected="${mode === 'login'}" class="${mode === 'login' ? 'active' : ''}">Sign In</button>
+            <button type="button" id="tab-register" role="tab" aria-selected="${mode === 'register'}" class="${mode === 'register' ? 'active' : ''}">Sign Up</button>
+          </div>
+          <form id="auth-form" novalidate>
+            <div class="form-group">
+              <label for="auth-email">Email</label>
+              <input class="form-input" id="auth-email" type="email" placeholder="you@example.com" required autocomplete="email">
+            </div>
+            <div class="form-group">
+              <label for="auth-pass">Password</label>
+              <input class="form-input" id="auth-pass" type="password" placeholder="Min 8 characters" required minlength="8" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px" id="auth-submit">
+              ${mode === 'login' ? 'Sign In' : 'Create Account'}
+            </button>
+          </form>
+          <p class="auth-footer">
+            ${mode === 'login' ? "Don't have an account? Click Sign Up above." : 'Already registered? Click Sign In above.'}
+          </p>
+        </div>
       </div>
     </div>`;
 
@@ -42,7 +58,7 @@ export function renderAuth(container) {
   async function handleSubmit(e) {
     e.preventDefault();
     const btn = document.getElementById('auth-submit');
-    const email = document.getElementById('auth-email').value;
+    const email = document.getElementById('auth-email').value.trim();
     const password = document.getElementById('auth-pass').value;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>';
@@ -53,7 +69,7 @@ export function renderAuth(container) {
         toast('Account created! Signing in…', 'success');
       }
       const data = await api.post('/auth/login', { email, password });
-      Auth.save(data);
+      Auth.save({ ...data, email });
       toast('Welcome back!', 'success');
       window.dispatchEvent(new Event('auth-change'));
     } catch (err) {

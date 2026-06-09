@@ -48,6 +48,9 @@ public class SecurityConfig {
 
                         // Public: auth endpoints (login, register, etc.)
                         .pathMatchers("/api/auth/**").permitAll()
+                        .pathMatchers("/api/upsert/health").permitAll()
+                        .pathMatchers("/api/analytics/health").permitAll()
+                        .pathMatchers("/api/bill/health").permitAll()
 
 
                         // Everything else requires authentication

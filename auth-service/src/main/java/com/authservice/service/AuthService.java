@@ -126,6 +126,24 @@ public class AuthService {
         }
     }
 
+    public void logout(String refreshToken, String authHeader) {
+        logout(refreshToken);
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            try {
+                var claims = jwtService.extractAllClaims(token);
+                long expirationTime = claims.getExpiration().getTime();
+                long ttlMs = expirationTime - System.currentTimeMillis();
+                if (ttlMs > 0) {
+                    tokenRedisService.blacklistAccessToken(token, ttlMs);
+                    log.info("Blacklisted access token with TTL: {}ms", ttlMs);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to blacklist access token: {}", e.getMessage());
+            }
+        }
+    }
+
 
 
     @Transactional

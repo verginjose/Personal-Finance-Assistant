@@ -1,0 +1,1356 @@
+# openapi.yaml generated for Personal Finance Assistant API
+openapi: 3.0.3
+info:
+  title: Personal Finance Assistant API
+  version: 1.0.0
+  description: |
+    Comprehensive API for authentication, transaction management,
+    split‑bill handling, OCR bill processing, analytics, AI insights,
+    and health checks.
+servers:
+  - url: http://localhost:8080
+    description: Development API gateway
+paths:
+  /auth/login:
+    post:
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+  /auth/register:
+    post:
+      summary: User registration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+  /auth/health:
+    get:
+      summary: Auth service health check
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  service:
+                    type: string
+  /auth/me:
+    get:
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profile data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  email:
+                    type: string
+                  role:
+                    type: string
+  /auth/refresh:
+    post:
+      summary: Refresh JWT pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: New tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+  /auth/logout:
+    post:
+      summary: Logout (invalidate refresh token)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+  /auth/change-password:
+    post:
+      summary: Change password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+  /upsert/create:
+    post:
+      summary: Create a new financial entry
+      parameters:
+        - name: X-User-Id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEntryRequest'
+      responses:
+        '201':
+          description: Entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateEntryResponse'
+  /upsert/update:
+    put:
+      summary: Full update of an existing entry
+      parameters:
+        - name: X-User-Id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEntryRequest'
+      responses:
+        '200':
+          description: Entry updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateEntryResponse'
+  /upsert/entries/{id}/amount:
+    patch:
+      summary: Patch only the amount of an entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchAmountRequest'
+      responses:
+        '200':
+          description: Amount patched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateEntryResponse'
+  /upsert/delete/{id}:
+    delete:
+      summary: Soft‑delete an entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Deletion confirmation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+  /upsert/delete/bulk:
+    post:
+      summary: Bulk soft‑delete entries
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: integer
+      responses:
+        '200':
+          description: Bulk deletion result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  count:
+                    type: integer
+  /upsert/entries/{id}:
+    get:
+      summary: Retrieve a single entry by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Entry data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateEntryResponse'
+  /upsert/entries:
+    get:
+      summary: Paginated list of entries for a user
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/TransactionType'
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Page of `TransactionEntry`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionEntryPage'
+  /upsert/search:
+    get:
+      summary: Full‑text search entries
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Search results page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionEntryPage'
+  /upsert/summary:
+    get:
+      summary: Financial summary (totals)
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Summary object
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalIncome:
+                    type: number
+                  totalExpense:
+                    type: number
+                  netBalance:
+                    type: number
+  /upsert/entries/export:
+    get:
+      summary: Export all entries as CSV
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+  /upsert/goals:
+    post:
+      summary: Create a savings goal
+      parameters:
+        - name: X-User-Id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavingsGoalRequest'
+      responses:
+        '201':
+          description: Goal created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavingsGoalResponse'
+    get:
+      summary: List a user's savings goals
+      parameters:
+        - name: X-User-Id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SavingsGoalResponse'
+  /upsert/goals/{id}/contribute:
+    patch:
+      summary: Contribute to a goal
+      parameters:
+        - name: X-User-Id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: amount
+          in: query
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Updated goal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavingsGoalResponse'
+  /upsert/goals/{id}:
+    delete:
+      summary: Delete (archive) a goal
+      parameters:
+        - name: X-User-Id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Goal deleted
+  /upsert/budgets:
+    post:
+      summary: Create a category budget
+      parameters:
+        - name: X-User-Id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryBudgetRequest'
+      responses:
+        '201':
+          description: Budget created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetUtilizationResponse'
+    get:
+      summary: List a user's budgets with utilization
+      parameters:
+        - name: X-User-Id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Budgets list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BudgetUtilizationResponse'
+  /upsert/budgets/{id}:
+    delete:
+      summary: Delete a budget
+      parameters:
+        - name: X-User-Id
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Budget deleted
+  /upsert/groups:
+    post:
+      summary: Create a split‑bill group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+      responses:
+        '201':
+          description: Group created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseGroup'
+    get:
+      summary: Get groups for a user
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExpenseGroup'
+  /upsert/groups/{groupId}:
+    get:
+      summary: Get a specific group
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Group details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseGroup'
+        '404':
+          description: Not found
+  /upsert/groups/{groupId}/members:
+    post:
+      summary: Add a member to a group
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMemberRequest'
+      responses:
+        '201':
+          description: Member added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupMember'
+    get:
+      summary: List group members
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Members list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupMember'
+  /upsert/groups/{groupId}/expenses:
+    post:
+      summary: Add a shared expense
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSharedExpenseRequest'
+      responses:
+        '201':
+          description: Expense created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SharedExpense'
+    get:
+      summary: List group expenses
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Expenses list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SharedExpense'
+  /upsert/groups/{groupId}/balances:
+    get:
+      summary: Get balances & simplified debts for a group
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Balance response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupBalanceResponse'
+  /upsert/groups/{groupId}/settle:
+    post:
+      summary: Record a settlement between two members
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: fromUserId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: toUserId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Settlement recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+  /bill/process/{userId}:
+    post:
+      summary: OCR‑process a bill image / PDF
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Parsed entry data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateEntryResponse'
+  /analytics/category-pie-chart:
+    get:
+      summary: Category distribution pie chart data
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: transactionFilter
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/TransactionType'
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Chart data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChartData'
+  /analytics/timeline-chart:
+    get:
+      summary: Timeline chart (monthly, weekly…) data
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: timelineType
+          in: query
+          required: false
+          schema:
+            type: string
+            default: MONTHLY
+        - name: transactionFilter
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/TransactionType'
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Chart data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChartData'
+  /analytics/comprehensive:
+    get:
+      summary: Full analytics package for a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: timelineType
+          in: query
+          required: false
+          schema:
+            type: string
+            default: MONTHLY
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Full analytics payload
+          content:
+            application/json:
+              schema:
+                type: object
+  /analytics/custom-analytics:
+    post:
+      summary: Custom analytics via POST body
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyticsRequest'
+      responses:
+        '200':
+          description: Same as comprehensive
+          content:
+            application/json:
+              schema:
+                type: object
+  /analytics/transaction-entries:
+    get:
+      summary: Paginated transaction entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Page of entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionEntryPage'
+  /analytics/transactions/income-by-category:
+    get:
+      summary: Income transactions filtered by category/date
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: incomeCategory
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/IncomeCategory'
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Page of income entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionEntryPage'
+  /analytics/transactions/by-type:
+    get:
+      summary: Transactions filtered by type/date
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/TransactionType'
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Page of filtered transactions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionEntryPage'
+  /analytics/health-score:
+    get:
+      summary: Compute user's financial health score
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Health score payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreResponse'
+  /analytics/ai-insights:
+    get:
+      summary: Generate AI‑driven financial insights (cached)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: AI insights
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiInsightResponse'
+  /analytics/health:
+    get:
+      summary: Analytics service health check
+      responses:
+        '200':
+          description: Service health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  service:
+                    type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        refreshToken:
+          type: string
+        userId:
+          type: string
+          format: uuid
+    RegisterRequest:
+      type: object
+      required: [email, password, role]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+    RegisterResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        role:
+          type: string
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    LogoutRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+    CreateEntryRequest:
+      $ref: './upsert-service/dto/CreateEntryRequest.yaml'
+    UpdateEntryRequest:
+      $ref: './upsert-service/dto/UpdateEntryRequest.yaml'
+    PatchAmountRequest:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          type: number
+    CreateEntryResponse:
+      $ref: './upsert-service/dto/CreateEntryResponse.yaml'
+    TransactionEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        amount:
+          type: number
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        expenseCategory:
+          $ref: '#/components/schemas/ExpenseCategory'
+        incomeCategory:
+          $ref: '#/components/schemas/IncomeCategory'
+        currency:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TransactionEntryPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionEntry'
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+        number:
+          type: integer
+        size:
+          type: integer
+    TransactionType:
+      type: string
+      enum: [INCOME, EXPENSE]
+    ExpenseCategory:
+      type: string
+    IncomeCategory:
+      type: string
+    SavingsGoalRequest:
+      $ref: './upsert-service/dto/SavingsGoalRequest.yaml'
+    SavingsGoalResponse:
+      $ref: './upsert-service/dto/SavingsGoalResponse.yaml'
+    CategoryBudgetRequest:
+      $ref: './upsert-service/dto/CategoryBudgetRequest.yaml'
+    BudgetUtilizationResponse:
+      $ref: './upsert-service/dto/BudgetUtilizationResponse.yaml'
+    CreateGroupRequest:
+      $ref: './upsert-service/dto/CreateGroupRequest.yaml'
+    ExpenseGroup:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        createdBy:
+          type: string
+          format: uuid
+    AddMemberRequest:
+      $ref: './upsert-service/dto/AddMemberRequest.yaml'
+    GroupMember:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        userName:
+          type: string
+    CreateSharedExpenseRequest:
+      $ref: './upsert-service/dto/CreateSharedExpenseRequest.yaml'
+    SharedExpense:
+      type: object
+      properties:
+        id:
+          type: integer
+        amount:
+          type: number
+        description:
+          type: string
+        paidBy:
+          type: string
+          format: uuid
+        groupId:
+          type: integer
+    GroupBalanceResponse:
+      type: object
+      properties:
+        groupId:
+          type: integer
+        groupName:
+          type: string
+        memberBalances:
+          type: array
+          items:
+            type: object
+            properties:
+              userId:
+                type: string
+                format: uuid
+              userName:
+                type: string
+              netBalance:
+                type: number
+              totalPaid:
+                type: number
+              totalOwed:
+                type: number
+        simplifiedDebts:
+          type: array
+          items:
+            type: object
+            properties:
+              fromUserId:
+                type: string
+                format: uuid
+              fromUserName:
+                type: string
+              toUserId:
+                type: string
+                format: uuid
+              toUserName:
+                type: string
+              amount:
+                type: number
+              currency:
+                type: string
+    ChartData:
+      type: object
+      properties:
+        labels:
+          type: array
+          items:
+            type: string
+        datasets:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              data:
+                type: array
+                items:
+                  type: number
+    AnalyticsRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        transactionFilter:
+          $ref: '#/components/schemas/TransactionType'
+        timelineType:
+          type: string
+          enum: [DAILY, WEEKLY, MONTHLY, YEARLY]
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+    AiInsightResponse:
+      $ref: './analytics-service/dto/AiInsightResponse.yaml'
+    HealthScoreResponse:
+      $ref: './analytics-service/dto/HealthScoreResponse.yaml'

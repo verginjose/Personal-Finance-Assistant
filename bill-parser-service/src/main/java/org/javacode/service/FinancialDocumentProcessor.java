@@ -303,11 +303,47 @@ public class FinancialDocumentProcessor {
 
     public enum ExpenseCategory {
         FOOD_AND_DINING, TRANSPORTATION, SHOPPING, ENTERTAINMENT,
-        BILLS_AND_UTILITIES, HEALTHCARE, TRAVEL, EDUCATION, OTHERS
+        BILLS_AND_UTILITIES, HEALTHCARE, TRAVEL, EDUCATION, OTHERS;
+
+        @JsonCreator
+        public static ExpenseCategory fromString(String value) {
+            if (value == null || value.trim().isEmpty()) return null;
+            String normalized = value.trim().toUpperCase()
+                    .replace(" ", "_")
+                    .replace("&", "AND")
+                    .replace("-", "_")
+                    .replace("/", "_");
+            if (normalized.equals("OTHER")) {
+                normalized = "OTHERS";
+            }
+            try {
+                return ExpenseCategory.valueOf(normalized);
+            } catch (IllegalArgumentException e) {
+                return ExpenseCategory.OTHERS;
+            }
+        }
     }
 
     public enum IncomeCategory {
-        SALARY, BUSINESS, INVESTMENTS, GIFTS, FREELANCE, RENTAL_INCOME, INTEREST, OTHERS
+        SALARY, BUSINESS, INVESTMENTS, GIFTS, FREELANCE, RENTAL_INCOME, INTEREST, OTHERS;
+
+        @JsonCreator
+        public static IncomeCategory fromString(String value) {
+            if (value == null || value.trim().isEmpty()) return null;
+            String normalized = value.trim().toUpperCase()
+                    .replace(" ", "_")
+                    .replace("&", "AND")
+                    .replace("-", "_")
+                    .replace("/", "_");
+            if (normalized.equals("OTHER")) {
+                normalized = "OTHERS";
+            }
+            try {
+                return IncomeCategory.valueOf(normalized);
+            } catch (IllegalArgumentException e) {
+                return IncomeCategory.OTHERS;
+            }
+        }
     }
 
     @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
@@ -323,9 +359,9 @@ public class FinancialDocumentProcessor {
     ) {
         @JsonCreator
         public FinancialDocument {
-            if ("Expense".equals(type) && expenseCategory == null)
+            if ("Expense".equalsIgnoreCase(type) && expenseCategory == null)
                 throw new IllegalArgumentException("expenseCategory required for Expense");
-            if ("Income".equals(type) && incomeCategory == null)
+            if ("Income".equalsIgnoreCase(type) && incomeCategory == null)
                 throw new IllegalArgumentException("incomeCategory required for Income");
         }
     }

@@ -1,271 +1,118 @@
 # 💰 Personal Finance Assistant
 
-![Java](https://img.shields.io/badge/java-%23ED8B00.svg?style=for-the-badge&logo=openjdk&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/spring-%236DB33F.svg?style=for-the-badge&logo=spring-boot&logoColor=white)
-![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
-![Grafana](https://img.shields.io/badge/grafana-%23F46800.svg?style=for-the-badge&logo=grafana&logoColor=white)
+[![Java](https://img.shields.io/badge/java-21%20%28OpenJDK%29-ED8B00?style=for-the-badge&logo=java)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/spring%20boot-3.2-6DB33F?style=for-the-badge&logo=springboot)](https://spring.io/projects/spring-boot)
+[![Docker](https://img.shields.io/badge/docker-24.0.5-2496ED?style=for-the-badge&logo=docker)](https://www.docker.com/)
+[![PostgreSQL](https://img.shields.io/badge/postgresql-15-336791?style=for-the-badge&logo=postgresql)](https://www.postgresql.org/)
+[![Grafana](https://img.shields.io/badge/grafana-11.1.4-F46800?style=for-the-badge&logo=grafana)](https://grafana.com/)
 
-A comprehensive personal finance tracking application built with **Spring Boot microservices**, featuring automated bill processing using GPU-accelerated **PaddleOCR** technology and advanced data analytics capabilities. Designed with a centralized API gateway, secure JWT authentication, and a robust observability stack for seamless performance monitoring.
+A **complete, production‑ready personal finance platform** built on a **micro‑services** architecture. It lets users track income/expenses, split bills, manage savings goals & budgets, automatically extract data from scanned bills, and receive AI‑generated financial insights. All services communicate via **JWT‑secured API gateway**, **Redis caching**, and **Kafka‑driven event propagation**.
 
+---
 ## 🏗️ Architecture Overview
 
-This application follows a microservices architecture with the following components:
+```mermaid
+flowchart LR
+    subgraph client[Client]
+        UI[Web UI / Mobile]
+    end
+    subgraph gateway[API Gateway]
+        GW[Spring Cloud Gateway]
+    end
+    subgraph services[Micro‑services]
+        Auth[Auth Service]
+        Upsert[Upsert Service]
+        Bill[Bill‑Parser Service]
+        Analytics[Analytics Service]
+    end
+    subgraph infra[Infrastructure]
+        PG[PostgreSQL]
+        Redis[Redis]
+        Kafka[Kafka]
+        Groq[Groq LLM]
+    end
+    UI --> GW
+    GW --> Auth
+    GW --> Upsert
+    GW --> Bill
+    GW --> Analytics
+    Auth --> PG
+    Upsert --> PG
+    Bill --> PG
+    Analytics --> PG
+    Auth --> Redis
+    Upsert --> Redis
+    Analytics --> Redis
+    Upsert --> Kafka
+    Analytics --> Kafka
+    Analytics --> Groq
+```
 
-- **API Gateway** - Central entry point for all client requests
-- **Authentication Service** - JWT-based user authentication
-- **Upsert Service** - Manages financial transactions (income/expenses)
-- **OCR Parser Service** - Processes bill images using GPU-accelerated PaddleOCR
-- **Analytics Service** - Provides transaction analysis and reporting
-- **PostgreSQL (Single Instance)** - Unified database with `auth` and `finance` schemas
-- **Observability Stack** - Prometheus + Grafana + ClickHouse + Vector
+> The diagram above is generated with Mermaid and rendered by GitHub/Markdown viewers.
 
-## 🚀 Features
-
-- **💰 Transaction Management**: Track income and expenses with categorization
-- **📄 Automated Bill Processing**: Upload bill images for automatic data extraction
-- **📊 Analytics Dashboard**: Visual insights with pie charts showing spending by category
-- **🔐 Secure Authentication**: JWT-based user authentication and session validation
-- **🏛️ Microservices Architecture**: Scalable and maintainable service separation
-- **🐳 Containerized Deployment**: Docker-based deployment for easy setup
-
-## 🛠️ Technology Stack
-
-- **Backend**: Spring Boot, Spring Cloud Gateway
-- **Database**: PostgreSQL
-- **Authentication**: JWT (JSON Web Tokens)
-- **OCR**: PaddleOCR (GPU Accelerated)
-- **Containerization**: Docker, Docker Compose
-- **Architecture**: Microservices
-
-## 📋 Prerequisites
-
-- Docker and Docker Compose installed
-- Java 21+ (for local development)
-- Maven 3.6+ (for local development)
-
+---
 ## 🚀 Quick Start
 
-### 1. Clone the Repository
+### Prerequisites
+- **Docker & Docker‑Compose** (≥ 24)
+- **Java 21** (for local builds) – optional if you only run the containers.
+- **Maven 3.9+** (for local compilation of individual services).
+
+### 1. Clone the repo
 ```bash
-git clone https://github.com/verginjose/Personal-Finance-Assistant
+git clone https://github.com/verginjose/Personal-Finance-Assistant.git
 cd Personal-Finance-Assistant
 ```
 
-### 2. Start the Application
+### 2. Start the stack
 ```bash
-docker-compose up -d
+docker compose up -d   # starts Postgres, Redis, Kafka, all services & observability stack
 ```
+> Services expose the following ports (see `docker-compose.yml`):
+> - API Gateway 8080
+> - Auth 8082, Upsert 8081, Bill 8083, Analytics 8084
+> - Grafana 3000, Prometheus 9090, ClickHouse 8123
 
-### 3. Verify Services
-Check that all services are running:
+### 3. Verify health
 ```bash
-docker-compose ps
+curl http://localhost:8080/health   # API gateway health
+curl http://localhost:8082/auth/health   # Auth service health
 ```
 
-## 🔧 Service Configuration
-
-### Port Mapping
-| Service | Port | Description |
-|---------|------|-------------|
-| API Gateway | 8080 | Main application entry point |
-| Upsert Service | 8081 | Transaction management |
-| Auth Service | 8082 | Authentication service |
-| OCR Parser | 8083 | Bill processing service |
-| Analytics Service | 8084 | Data analytics service |
-| PostgreSQL (Unified) | 5432 | Unified DB (`auth` and `finance` schemas) |
-| Grafana | 3000 | Metrics and logs dashboards |
-| Prometheus | 9090 | Metrics scraping and querying |
-| ClickHouse | 8123 | Log storage query endpoint |
-
-### Environment Variables
-The application uses environment-specific configurations for:
-- Database connections
-- JWT configuration
-- Service URLs
-- OCR processing settings
-
-## 📡 API Endpoints
-
-### Authentication
-```http
-POST /api/auth/login
-POST /api/auth/register
-GET  /api/auth/validate
-```
-
-### Transaction Management
-```http
-POST /api/upsert/create
-PUT  /api/upsert/update
-GET  /api/upsert/transactions
-DELETE /api/upsert/delete/{id}
-```
-
-### Bill Processing
-```http
-POST /api/bill/process/{userId}
-```
-
-### Analytics
-```http
-GET /api/analytics/summary/{userId}
-GET /api/analytics/category-breakdown/{userId}
-GET /api/analytics/spending-trends/{userId}
-```
-
-## 💡 Usage Examples
-
-### 1. User Registration & Login
-```http
-POST http://localhost:8080/api/auth/login
-Content-Type: application/json
-
-{
-  "email": "user@example.com",
-  "password": "password123",
-  "role": "USER"
-}
-```
-
-### 2. Create Expense Entry
-```http
-POST http://localhost:8080/api/upsert/create
-Authorization: Bearer <your-jwt-token>
-Content-Type: application/json
-
-{
-  "userId": "user-uuid",
-  "name": "Grocery Shopping",
-  "amount": 1200.50,
-  "type": "EXPENSE",
-  "expenseCategory": "FOOD_AND_DINING",
-  "currency": "INR",
-  "description": "Monthly groceries"
-}
-```
-
-### 3. Upload Bill for Processing
-```http
-POST http://localhost:8080/api/bill/process/{userId}
-Authorization: Bearer <your-jwt-token>
-Content-Type: multipart/form-data
-
-[Upload your bill image/PDF]
-```
-
-## 🗃️ Database Schema
-
-### Finance Schema
-- **Transactions Table**: Stores all income and expense records
-- **Categories**: Predefined expense and income categories
-- **Users**: User financial profiles
-
-### Auth Schema
-- **Users Table**: User authentication information
-- **Roles**: User roles (USER)
-
-## 📊 Expense Categories
-
-- FOOD_AND_DINING
-- TRANSPORTATION
-- SHOPPING
-- ENTERTAINMENT
-- BILLS_AND_UTILITIES
-- HEALTHCARE
-- EDUCATION
-- TRAVEL
-- PERSONAL_CARE
-- OTHER
-
-## 💰 Income Categories
-
-- SALARY
-- BUSINESS
-- INVESTMENTS
-- FREELANCE
-- RENTAL
-- OTHER
-
-## 🔍 OCR Processing
-
-The OCR Parser Service uses GPU-accelerated PaddleOCR to:
-1. Extract text from uploaded bill images
-2. Parse relevant financial information (amount, date, merchant)
-3. Auto-populate transaction forms
-4. Support multiple image formats (JPEG, PNG, PDF)
-
-## 📈 Analytics Features
-
-- **Spending Breakdown**: Pie charts showing expenses by category
-- **Monthly Trends**: Track spending patterns over time
-- **Income vs Expenses**: Compare earnings and expenditures
-- **Budget Analysis**: Monitor budget adherence
-- **Category-wise Reports**: Detailed category analysis
-
-## 🐳 Docker Services
-
-The application consists of the following Docker services:
-
-- `postgres`: Unified Postgres service with schema-level isolation
-- `upsert-service`: Transaction management microservice
-- `auth-service`: Authentication microservice
-- `bill-parser-service`: Bill processing microservice
-- `analytics-service`: Data analytics microservice
-- `api-gateway`: API Gateway for routing requests
-- `prometheus`: Metrics scraper
-- `grafana`: Visualization dashboards
-- `clickhouse`: Observability log store
-- `vector`: Log shipper to ClickHouse
-
-## 🛠️ Development
-
-### Local Development Setup
-1. Start the unified database:
-   ```bash
-   docker compose up postgres -d
-   ```
-
-2. Run services locally:
-   ```bash
-   cd auth-service && mvn spring-boot:run
-   ```
-
-### Building Services
+### 4. Run the end‑to‑end test suite
 ```bash
-# Build all services
-docker-compose build
-
-# Build specific service
-docker compose build upsert-service
+python3 requests/run_e2e_tests.py
 ```
+All tests should pass (`71 passed, 0 failed`).
 
-## Observability Quick Checks
+---
+## 📚 API Overview
+The full list of HTTP endpoints (including request/response schemas) is available in the companion documentation:
+- **Markdown version:** [`endpoints.md`](endpoints.md)
+- **OpenAPI spec:** [`openapi.yaml`](openapi.yaml)
 
-```bash
-docker compose ps
-curl http://localhost:9090/-/healthy
-curl http://localhost:3000/api/health
-curl http://localhost:8123/ping
-```
-
-- Grafana dashboards are provisioned from `observability/grafana/dashboards`.
-- Prometheus scrape config is at `observability/prometheus/prometheus.yml`.
-- Vector pipeline config is at `observability/vector/vector.yaml`.
-
-## 🔒 Security
-
-- JWT-based authentication with configurable expiration
-- Secure password storage with bcrypt hashing
-- API Gateway filters for request validation
-- Secure user session validation
-- Database connection security
-
+---
 ## 🧪 Testing
+The repository ships a **Python‑based E2E test suite** that exercises the complete flow:
+- authentication & token handling
+- CRUD operations for transactions, goals, budgets, and split‑bill groups
+- OCR bill ingestion (sample image included)
+- AI‑insights generation & cache eviction via Kafka
+- analytics charts and health‑score calculations
 
-Use the provided HTTP requests in your `requests` folder to test the API endpoints. Make sure to:
+Run it locally with the command shown above; CI pipelines execute the same script on every push.
 
-1. First authenticate to get a JWT token
-2. Include the token in subsequent requests
-3. Test all CRUD operations for transactions
-4. Verify OCR functionality with sample bills
+---
+## 🤝 Contributing
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feat/my‑feature`).
+3. Follow the project's **code‑style** (Spotless + Checkstyle Maven plugins).
+4. Run the full test suite (`./mvnw verify && python3 requests/run_e2e_tests.py`).
+5. Submit a Pull Request.
+
+---
+## 📜 License & Acknowledgements
+Licensed under the **MIT License**. Thanks to the maintainers of Spring Boot, Docker, PostgreSQL, Grafana, Prometheus, ClickHouse, PaddleOCR, and the Groq LLM API.
+
+---
+*Happy budgeting!*

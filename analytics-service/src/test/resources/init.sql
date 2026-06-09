@@ -1,0 +1,7 @@
+CREATE SCHEMA IF NOT EXISTS auth;
+CREATE SCHEMA IF NOT EXISTS finance;
+
+GRANT USAGE ON SCHEMA auth TO PUBLIC;
+GRANT USAGE ON SCHEMA finance TO PUBLIC;
+
+ALTER ROLE finance_user SET search_path TO finance, public;

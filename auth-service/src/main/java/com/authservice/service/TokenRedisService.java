@@ -45,4 +45,16 @@ public class TokenRedisService {
         }
         redisTemplate.delete(userKey);
     }
+
+    private static final String BLACKLIST_PREFIX = "token_blacklist:";
+
+    public void blacklistAccessToken(String token, long expiryMs) {
+        if (expiryMs > 0) {
+            redisTemplate.opsForValue().set(BLACKLIST_PREFIX + token, "revoked", expiryMs, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    public boolean isAccessTokenBlacklisted(String token) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + token));
+    }
 }

@@ -1,9 +1,0 @@
-POST http://localhost:8083/bill/process/123-wer
-Content-Type: multipart/form-data; boundary=boundary123
-
---boundary123
-Content-Disposition: form-data; name="file"; filename="ParkingLot.pdf"
-Content-Type: application/pdf
-
-< ./ParkingLot.pdf
---boundary123--

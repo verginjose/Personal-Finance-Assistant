@@ -103,33 +103,6 @@
       "gridPos": { "h": 3, "w": 4, "x": 16, "y": 0 }
     },
     {
-      "id": 20, "title": "HTTP Error Rate",
-      "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
-      "targets": [{
-        "expr": "sum by (job) (rate(http_server_requests_seconds_count{status=~\"5..\"}[2m]))",
-        "legendFormat": "{{job}}", "refId": "A"
-      }],
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "lineWidth": 2, "fillOpacity": 10 }, "unit": "reqps" } },
-      "options": { "tooltip": { "mode": "multi" } },
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 3 }
-    },
-    {
-      "id": 21, "title": "ERROR log count by service",
-      "type": "table",
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },
-      "targets": [{
-        "queryType": "sql",
-        "rawSql": "SELECT service, count() AS errors FROM default.logs WHERE timestamp >= toString(toDateTime($__from/1000)) AND timestamp <= toString(toDateTime($__to/1000)) AND level = 'ERROR' GROUP BY service ORDER BY errors DESC",
-        "refId": "A",
-        "format": "table"
-      }],
-      "fieldConfig": { "defaults": {}, "overrides": [
-        { "matcher": { "id": "byName", "options": "errors" }, "properties": [{ "id": "custom.width", "value": 80 }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 10 }] } }, { "id": "custom.displayMode", "value": "color-background" }] }
-      ]},
-      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 3 }
-    },
-    {
       "id": 10, "title": "Logs — $service | $level | $search",
       "type": "table",
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },

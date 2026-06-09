@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit;
  * Orchestrates Groq LLM extraction and live currency conversion.
  *
  * Production improvements over original:
- *  - Config-driven: model, timeout, retries via application.properties
+ *  - Config-driven: model, timeout, retries via application.yaml
  *  - Retry with exponential backoff on Groq API transient failures
  *  - Exchange-rate cache (1-hour TTL) — avoids hitting Frankfurter on every request
  *  - SLF4J logging throughout (@Slf4j)
@@ -48,7 +48,7 @@ public class FinancialDocumentProcessor {
 
     private static final String GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions";
     private static final String currencyUrl = "https://api.frankfurter.dev/v1/latest?from=USD";
-    // ── Config injected from application.properties ───────────────────────────
+    // ── Config injected from application.yaml ───────────────────────────
 
     @Value("${groq.api.key}")
     private String groqApiKey;

@@ -124,7 +124,7 @@ resilience4j:
       analytics-cb:
         timeout-duration: 30s
       ocr-cb:
-        timeout-duration: 5s
+        timeout-duration: 45s
 
 logging:
   level:
@@ -144,3 +144,8 @@ management:
   metrics:
     tags:
       application: api-gateway
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true

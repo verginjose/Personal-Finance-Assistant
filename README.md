@@ -1,25 +1,31 @@
-# Personal Finance Assistant - Microservices Architecture
+# 💰 Personal Finance Assistant
 
-A comprehensive personal finance tracking application built with Spring Boot microservices, featuring automated bill processing using OCR technology and advanced analytics capabilities.
+![Java](https://img.shields.io/badge/java-%23ED8B00.svg?style=for-the-badge&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/spring-%236DB33F.svg?style=for-the-badge&logo=spring-boot&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
+![Grafana](https://img.shields.io/badge/grafana-%23F46800.svg?style=for-the-badge&logo=grafana&logoColor=white)
+
+A comprehensive personal finance tracking application built with **Spring Boot microservices**, featuring automated bill processing using GPU-accelerated **PaddleOCR** technology and advanced data analytics capabilities. Designed with a centralized API gateway, secure JWT authentication, and a robust observability stack for seamless performance monitoring.
 
 ## 🏗️ Architecture Overview
 
 This application follows a microservices architecture with the following components:
 
 - **API Gateway** - Central entry point for all client requests
-- **Authentication Service** - JWT-based user authentication and authorization
+- **Authentication Service** - JWT-based user authentication
 - **Upsert Service** - Manages financial transactions (income/expenses)
-- **OCR Parser Service** - Processes bill images using Tesseract OCR
+- **OCR Parser Service** - Processes bill images using GPU-accelerated PaddleOCR
 - **Analytics Service** - Provides transaction analysis and reporting
 - **PostgreSQL (Single Instance)** - Unified database with `auth` and `finance` schemas
-- **Observability Stack** - Prometheus + Grafana + ClickHouse + Fluent Bit
+- **Observability Stack** - Prometheus + Grafana + ClickHouse + Vector
 
 ## 🚀 Features
 
 - **💰 Transaction Management**: Track income and expenses with categorization
 - **📄 Automated Bill Processing**: Upload bill images for automatic data extraction
 - **📊 Analytics Dashboard**: Visual insights with pie charts showing spending by category
-- **🔐 Secure Authentication**: JWT-based authentication with role-based access
+- **🔐 Secure Authentication**: JWT-based user authentication and session validation
 - **🏛️ Microservices Architecture**: Scalable and maintainable service separation
 - **🐳 Containerized Deployment**: Docker-based deployment for easy setup
 
@@ -28,7 +34,7 @@ This application follows a microservices architecture with the following compone
 - **Backend**: Spring Boot, Spring Cloud Gateway
 - **Database**: PostgreSQL
 - **Authentication**: JWT (JSON Web Tokens)
-- **OCR**: Tesseract OCR Engine
+- **OCR**: PaddleOCR (GPU Accelerated)
 - **Containerization**: Docker, Docker Compose
 - **Architecture**: Microservices
 
@@ -157,7 +163,7 @@ Content-Type: multipart/form-data
 
 ### Auth Schema
 - **Users Table**: User authentication information
-- **Roles**: User role definitions
+- **Roles**: User roles (USER)
 
 ## 📊 Expense Categories
 
@@ -183,7 +189,7 @@ Content-Type: multipart/form-data
 
 ## 🔍 OCR Processing
 
-The OCR Parser Service uses Tesseract OCR to:
+The OCR Parser Service uses GPU-accelerated PaddleOCR to:
 1. Extract text from uploaded bill images
 2. Parse relevant financial information (amount, date, merchant)
 3. Auto-populate transaction forms
@@ -210,7 +216,7 @@ The application consists of the following Docker services:
 - `prometheus`: Metrics scraper
 - `grafana`: Visualization dashboards
 - `clickhouse`: Observability log store
-- `fluent-bit`: Log shipper to ClickHouse
+- `vector`: Log shipper to ClickHouse
 
 ## 🛠️ Development
 
@@ -223,8 +229,6 @@ The application consists of the following Docker services:
 2. Run services locally:
    ```bash
    cd auth-service && mvn spring-boot:run
-   cd upsert-service && mvn spring-boot:run
-   # ... repeat for other services
    ```
 
 ### Building Services
@@ -247,14 +251,14 @@ curl http://localhost:8123/ping
 
 - Grafana dashboards are provisioned from `observability/grafana/dashboards`.
 - Prometheus scrape config is at `observability/prometheus/prometheus.yml`.
-- Fluent Bit pipeline config is at `observability/fluent-bit/fluent-bit.conf`.
+- Vector pipeline config is at `observability/vector/vector.yaml`.
 
 ## 🔒 Security
 
 - JWT-based authentication with configurable expiration
 - Secure password storage with bcrypt hashing
 - API Gateway filters for request validation
-- Role-based access control
+- Secure user session validation
 - Database connection security
 
 ## 🧪 Testing

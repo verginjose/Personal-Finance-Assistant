@@ -10,7 +10,7 @@ import java.util.Map;
 @RestController
 public class FallbackController {
 
-    @GetMapping("/fallback/upsert")
+    @org.springframework.web.bind.annotation.RequestMapping("/fallback/upsert")
     public Mono<ResponseEntity<Map<String, String>>> upsertFallback() {
         return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of(
@@ -20,7 +20,7 @@ public class FallbackController {
                 )));
     }
 
-    @GetMapping("/fallback/analytics")
+    @org.springframework.web.bind.annotation.RequestMapping("/fallback/analytics")
     public Mono<ResponseEntity<Map<String, String>>> analyticsFallback() {
         return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of(
@@ -30,7 +30,7 @@ public class FallbackController {
                 )));
     }
 
-    @GetMapping("/fallback/bill")
+    @org.springframework.web.bind.annotation.RequestMapping("/fallback/bill")
     public Mono<ResponseEntity<Map<String, String>>> billFallback() {
         return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of(

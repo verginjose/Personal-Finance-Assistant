@@ -4,135 +4,100 @@
   "tags": ["finance-assistant"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "15s",
   "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {
+    "refresh_intervals": ["5s","15s","30s","1m","5m"],
+    "time_options": ["5m","15m","1h","3h","6h","12h","24h","2d","7d"]
+  },
   "templating": {
     "list": [
       {
-        "name": "service",
-        "label": "Service",
-        "type": "custom",
+        "name": "service", "label": "Service", "type": "custom",
         "query": "api-gateway,auth-service,upsert-service,analytics-service,bill-parser-service",
         "current": { "text": "api-gateway", "value": "api-gateway" },
         "options": [
-          { "text": "api-gateway",        "value": "api-gateway",        "selected": true  },
-          { "text": "auth-service",       "value": "auth-service",       "selected": false },
-          { "text": "upsert-service",     "value": "upsert-service",     "selected": false },
-          { "text": "analytics-service",  "value": "analytics-service",  "selected": false },
-          { "text": "bill-parser-service", "value": "bill-parser-service", "selected": false }
+          { "text": "api-gateway",         "value": "api-gateway",        "selected": true  },
+          { "text": "auth-service",        "value": "auth-service",       "selected": false },
+          { "text": "upsert-service",      "value": "upsert-service",     "selected": false },
+          { "text": "analytics-service",   "value": "analytics-service",  "selected": false },
+          { "text": "bill-parser-service", "value": "bill-parser-service","selected": false }
         ],
-        "includeAll": false,
-        "multi": false
+        "includeAll": false, "multi": false
       }
     ]
   },
   "panels": [
-
     {
-      "id": 1,
-      "title": "Total Requests",
-      "type": "stat",
+      "id": 1, "title": "Total Requests", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
       "targets": [{
         "expr": "sum(http_server_requests_seconds_count{job=\"$service\"})",
-        "refId": "A",
-        "instant": true
+        "refId": "A", "instant": true
       }],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
-        }
-      },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
       "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 }
     },
-
     {
-      "id": 2,
-      "title": "2xx (last 1m avg)",
-      "type": "stat",
+      "id": 2, "title": "2xx (last 1m avg)", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
       "targets": [{
         "expr": "round(sum(rate(http_server_requests_seconds_count{job=\"$service\",status=~\"2..\"}[1m])) * 60)",
-        "refId": "A",
-        "instant": true
+        "refId": "A", "instant": true
       }],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
-        }
-      },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } } },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
       "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 }
     },
-
     {
-      "id": 3,
-      "title": "4xx (last 1m avg)",
-      "type": "stat",
+      "id": 3, "title": "4xx (last 1m avg)", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
       "targets": [{
         "expr": "round(sum(rate(http_server_requests_seconds_count{job=\"$service\",status=~\"4..\"}[1m])) * 60)",
-        "refId": "A",
-        "instant": true
+        "refId": "A", "instant": true
       }],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }] }
-        }
-      },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }] } } },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
       "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 }
     },
-
     {
-      "id": 4,
-      "title": "5xx (last 1m avg)",
-      "type": "stat",
+      "id": 4, "title": "5xx (last 1m avg)", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
       "targets": [{
         "expr": "round(sum(rate(http_server_requests_seconds_count{job=\"$service\",status=~\"5..\"}[1m])) * 60)",
-        "refId": "A",
-        "instant": true
+        "refId": "A", "instant": true
       }],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }
-        }
-      },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
       "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 }
     },
-
     {
-      "id": 5,
-      "title": "JVM Heap (MB)",
-      "type": "stat",
+      "id": 5, "title": "JVM Heap Used (MB)", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
       "targets": [{
-        "expr": "round(jvm_memory_used_bytes{job=\"$service\",area=\"heap\"} / 1048576)",
-        "refId": "A",
-        "instant": true
+        "expr": "round(sum(jvm_memory_used_bytes{job=\"$service\",area=\"heap\"}) / 1048576)",
+        "refId": "A", "instant": true
       }],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 256 }, { "color": "red", "value": 512 }] }
-        }
-      },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 256 }, { "color": "red", "value": 512 }] } } },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
       "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 }
     },
+    {
+      "id": 9, "title": "Threads", "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [{
+        "expr": "jvm_threads_live_threads{job=\"$service\"}",
+        "refId": "A", "instant": true
+      }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 100 }, { "color": "red", "value": 200 }] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 }
+    },
 
     {
-      "id": 6,
-      "title": "2xx / 4xx / 5xx — requests per second",
+      "id": 6, "title": "2xx / 4xx / 5xx — requests per second",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
       "targets": [
@@ -143,51 +108,89 @@
       "fieldConfig": {
         "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 8 } },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "2xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+          { "matcher": { "id": "byName", "options": "2xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green"  } }] },
           { "matcher": { "id": "byName", "options": "4xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }] },
-          { "matcher": { "id": "byName", "options": "5xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+          { "matcher": { "id": "byName", "options": "5xx" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red"    } }] }
         ]
       },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
-      "gridPos": { "h": 10, "w": 16, "x": 0, "y": 4 }
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 4 }
     },
 
     {
-      "id": 7,
-      "title": "JVM Heap (used vs max)",
+      "id": 10, "title": "Latency p50 / p95 / p99 (ms)",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
       "targets": [
-        { "expr": "jvm_memory_used_bytes{job=\"$service\",area=\"heap\"} / 1048576", "legendFormat": "used MB", "refId": "A" },
-        { "expr": "jvm_memory_max_bytes{job=\"$service\",area=\"heap\"} / 1048576", "legendFormat": "max MB", "refId": "B" }
+        { "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{job=\"$service\"}[1m])) by (le)) * 1000", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"$service\"}[1m])) by (le)) * 1000", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=\"$service\"}[1m])) by (le)) * 1000", "legendFormat": "p99", "refId": "C" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "p50" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green"  } }] },
+          { "matcher": { "id": "byName", "options": "p95" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }] },
+          { "matcher": { "id": "byName", "options": "p99" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red"    } }] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 4 }
+    },
+
+    {
+      "id": 7, "title": "JVM Heap — used vs max",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [
+        { "expr": "sum(jvm_memory_used_bytes{job=\"$service\",area=\"heap\"}) / 1048576", "legendFormat": "used MB", "refId": "A" },
+        { "expr": "sum(jvm_memory_max_bytes{job=\"$service\",area=\"heap\"}) / 1048576",  "legendFormat": "max MB",  "refId": "B" }
       ],
       "fieldConfig": {
         "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 8 } },
         "overrides": [
           { "matcher": { "id": "byName", "options": "used MB" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }] },
-          { "matcher": { "id": "byName", "options": "max MB" },  "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "gray" } }, { "id": "custom.lineStyle", "value": { "dash": [8, 4], "fill": "dash" } }] }
+          { "matcher": { "id": "byName", "options": "max MB"  }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "gray" } }, { "id": "custom.lineStyle", "value": { "dash": [8,4], "fill": "dash" } }] }
         ]
       },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
-      "gridPos": { "h": 10, "w": 8, "x": 16, "y": 4 }
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 }
     },
+
     {
-      "id": 8,
-      "title": "Redis Cache Hit Ratio",
+      "id": 11, "title": "GC Pause Time (ms/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [
+        { "expr": "sum(rate(jvm_gc_pause_seconds_sum{job=\"$service\"}[1m])) * 1000", "legendFormat": "GC ms/s", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "lineWidth": 2, "fillOpacity": 8 }, "color": { "mode": "fixed", "fixedColor": "orange" } } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 }
+    },
+
+    {
+      "id": 8, "title": "Redis Cache Hit Ratio",
       "type": "gauge",
       "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
       "targets": [{
-        "expr": "sum(rate(cache_gets_total{job=\"$service\", result=\"hit\"}[5m])) / (sum(rate(cache_gets_total{job=\"$service\", result=\"hit\"}[5m])) + sum(rate(cache_gets_total{job=\"$service\", result=\"miss\"}[5m])))",
+        "expr": "sum(rate(cache_gets_total{job=\"$service\",result=\"hit\"}[5m])) / (sum(rate(cache_gets_total{job=\"$service\",result=\"hit\"}[5m])) + sum(rate(cache_gets_total{job=\"$service\",result=\"miss\"}[5m])))",
         "refId": "A"
       }],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "green", "value": 0.8 }] }
-        }
-      },
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 14 }
+      "fieldConfig": { "defaults": { "unit": "percentunit", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "green", "value": 0.8 }] } } },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 22 }
+    },
+
+    {
+      "id": 12, "title": "Top Slow Endpoints (p95 ms)",
+      "type": "table",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [{
+        "expr": "topk(10, histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"$service\"}[5m])) by (le, uri)) * 1000)",
+        "refId": "A", "instant": true, "legendFormat": "{{uri}}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "options": { "sortBy": [{ "displayName": "Value", "desc": true }] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 }
     }
   ]
 }

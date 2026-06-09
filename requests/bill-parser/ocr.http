@@ -209,6 +209,10 @@ def test_auth():
         json_body={"email": "weak@test.com", "password": "abc", "role": "USER"},
         expected=400)
 
+    req("Register main user", "POST", "/api/auth/register",
+        json_body={"email": ARGS.email, "password": ARGS.password, "role": "USER"},
+        expected=[200, 201, 409])
+
     # case: login with valid credentials
     resp = req("Login valid credentials", "POST", "/api/auth/login",
                json_body={"email": ARGS.email, "password": ARGS.password},
@@ -305,6 +309,8 @@ def test_upsert():
         print(f"    income_id = {STATE['income_id']}")
 
     # case: idempotency key first call
+    import uuid
+    idem_key = f"netflix-idem-{uuid.uuid4().hex[:8]}"
     resp1 = req("Create with idempotency key (1st call)", "POST", "/api/upsert/create",
                 json_body={
                     "userId": uid, "name": "Netflix Subscription",
@@ -312,7 +318,7 @@ def test_upsert():
                     "expenseCategory": "ENTERTAINMENT",
                     "description": "Monthly Netflix plan",
                 },
-                extra_headers={"X-Idempotency-Key": "netflix-idem-key-001"},
+                extra_headers={"X-Idempotency-Key": idem_key},
                 expected=201,
                 capture={"netflix_id": "id"})
 
@@ -324,7 +330,7 @@ def test_upsert():
                     "expenseCategory": "ENTERTAINMENT",
                     "description": "Monthly Netflix plan",
                 },
-                extra_headers={"X-Idempotency-Key": "netflix-idem-key-001"},
+                extra_headers={"X-Idempotency-Key": idem_key},
                 expected=201)
     if resp1 and resp2 and resp1.status_code == 201 and resp2.status_code == 201:  # noqa
         id1 = resp1.json().get("id")
@@ -354,7 +360,7 @@ def test_upsert():
         json_body={
             "userId": "00000000-0000-0000-0000-000000000000",
             "name": "Bad Request", "amount": 1.0, "type": "EXPENSE",
-            "currency": "INR", "expenseCategory": "OTHER",
+            "currency": "INR", "expenseCategory": "OTHERS",
         },
         expected=403)
 
@@ -363,7 +369,7 @@ def test_upsert():
     STATE["token"] = None
     req("Create unauthenticated -> 401", "POST", "/api/upsert/create",
         json_body={"userId": uid, "name": "X", "amount": 1.0,
-                   "type": "EXPENSE", "currency": "INR", "expenseCategory": "OTHER"},
+                   "type": "EXPENSE", "currency": "INR", "expenseCategory": "OTHERS"},
         expected=401)
     STATE["token"] = saved
 
@@ -385,7 +391,7 @@ def test_upsert():
                 "id": STATE["expense_id"],
                 "userId": "00000000-0000-0000-0000-000000000000",
                 "name": "Hack", "amount": 1.0, "type": "EXPENSE",
-                "currency": "INR", "expenseCategory": "OTHER",
+                "currency": "INR", "expenseCategory": "OTHERS",
             },
             expected=403)
 
@@ -816,15 +822,19 @@ def _process_ocr_file(uid: str, path: Path, idx: int, total: int):
 
     try:
         ocr = resp.json()
+        ocr_type = (ocr.get("type") or "EXPENSE").upper()
         entry_body = {
             "userId":          uid,
             "name":            ocr.get("name")        or f"OCR Import - {path.name}",
             "amount":          ocr.get("amount")      or 0.0,
-            "type":            ocr.get("type")        or "EXPENSE",
+            "type":            ocr_type,
             "currency":        ocr.get("currency")    or "INR",
-            "expenseCategory": ocr.get("category")    or "OTHER",
             "description":     ocr.get("description") or f"Imported from {path.name}",
         }
+        if ocr_type == "INCOME":
+            entry_body["incomeCategory"] = ocr.get("incomeCategory") or "OTHERS"
+        else:
+            entry_body["expenseCategory"] = ocr.get("expenseCategory") or "OTHERS"
         # case: create entry from OCR result
         create_resp = req(
             f"Create entry from OCR [{path.name}]", "POST",

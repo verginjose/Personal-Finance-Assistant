@@ -334,6 +334,16 @@ services:
     networks:
       - finance-network        # ← was missing        # message storage
 
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - finance-network
+
 volumes:
   postgres_data:
   clickhouse_data:

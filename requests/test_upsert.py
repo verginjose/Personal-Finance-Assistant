@@ -36,17 +36,12 @@ CFG["request_delay_ms"] = ARGS.delay
 TAG = run_tag()
 
 
+from test_utils import ensure_unique_user
+
 # ── Login helper ──────────────────────────────────────────────────────────────
 def _login():
     section("AUTH — LOGIN (prereq)")
-    resp = req("Login", "POST", "/api/auth/login",
-               json_body={"email": CFG["email"], "password": CFG["password"]},
-               expected=200,
-               capture={"token": "token", "refresh_token": "refreshToken", "user_id": "userId"})
-    if not (resp and resp.status_code == 200):
-        print("  FATAL: Login failed. Aborting.")
-        print_summary()
-        sys.exit(1)
+    ensure_unique_user()
     print(f"    userId = {STATE['user_id']}")
 
 

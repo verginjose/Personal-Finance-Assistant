@@ -17,4 +17,5 @@ public class SavingsGoalRequest {
     @NotBlank @Size(min=3,max=3) private String currency;
     private String description;
     private LocalDate deadline;
+    private com.upsertservice.model.Priority priority = com.upsertservice.model.Priority.MEDIUM;
 }

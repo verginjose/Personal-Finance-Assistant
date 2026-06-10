@@ -55,7 +55,7 @@ public class GoalBudgetControllerTest {
         SavingsGoalResponse response = new SavingsGoalResponse(
                 1L, "New Car", new BigDecimal("15000"), BigDecimal.ZERO,
                 0.0, "INR", "Car goal", LocalDate.now().plusMonths(6),
-                false, LocalDateTime.now(), null
+                false, LocalDateTime.now(), null, com.upsertservice.model.Priority.MEDIUM
         );
 
         when(service.createGoal(any())).thenReturn(response);
@@ -75,7 +75,7 @@ public class GoalBudgetControllerTest {
         SavingsGoalResponse response = new SavingsGoalResponse(
                 1L, "Emergency Fund", new BigDecimal("5000"), BigDecimal.ZERO,
                 0.0, "USD", "Emergency Fund", LocalDate.now().plusMonths(6),
-                false, LocalDateTime.now(), null
+                false, LocalDateTime.now(), null, com.upsertservice.model.Priority.MEDIUM
         );
 
         when(service.getGoals(userId)).thenReturn(List.of(response));

@@ -59,10 +59,11 @@ async function loadBudgets(uid) {
 function goalCard(g) {
   const pct = Math.min(g.progressPercentage, 100);
   const color = g.completed ? 'var(--accent-g)' : pct >= 80 ? 'var(--accent-y)' : 'var(--primary)';
+  const priorityBadge = g.priority ? `<span class="badge" style="background:var(--bg-lighter);margin-left:8px;font-size:0.7rem;vertical-align:middle;">${esc(g.priority)} PRIORITY</span>` : '';
   return `
     <div class="card goal-card">
       <div class="section-header" style="margin-bottom:8px">
-        <h4 style="font-weight:700">${esc(g.name)} ${g.completed ? badge('Complete', 'income') : ''}</h4>
+        <h4 style="font-weight:700">${esc(g.name)} ${g.completed ? badge('Complete', 'income') : ''}${priorityBadge}</h4>
         <div style="display:flex;gap:6px">
           ${!g.completed ? `<button id="contrib-goal-${g.id}" class="btn btn-success btn-sm">Contribute</button>` : ''}
           <button id="del-goal-${g.id}" class="btn btn-danger btn-icon btn-sm" aria-label="Delete goal">${icon('trash', 'sm')}</button>
@@ -80,14 +81,19 @@ function goalCard(g) {
 function budgetCard(b) {
   const pct = Math.min(b.utilizationPercentage, 100);
   const color = budgetStatusColor(b.status);
+  let periodText = esc(b.period);
+  if (b.period === 'CUSTOM' && b.customStartDate && b.customEndDate) {
+      periodText = `${formatDate(b.customStartDate)} to ${formatDate(b.customEndDate)}`;
+  }
   return `
     <div class="card budget-card" style="--budget-color:${color}">
       <div class="section-header" style="margin-bottom:8px">
         <div>
           <h4 style="font-weight:700">${esc(formatCategory(b.expenseCategory))}</h4>
           <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-            <span style="font-size:.78rem;color:var(--text-muted)">${esc(b.period)}</span>
+            <span style="font-size:.78rem;color:var(--text-muted)">${periodText}</span>
             ${budgetStatusBadge(b.status)}
+            ${b.carryForward ? `<span class="badge badge-recurring">${icon('repeat', 'xs')} Rollover</span>` : ''}
           </div>
         </div>
         <button id="del-budget-${b.budgetId}" class="btn btn-danger btn-icon btn-sm" aria-label="Delete budget">${icon('trash', 'sm')}</button>
@@ -137,8 +143,18 @@ function bindEvents(uid) {
           <div class="form-group"><label for="g-target">Target Amount</label><input class="form-input" id="g-target" type="number" min="1" required></div>
           <div class="form-group"><label for="g-currency">Currency</label><input class="form-input" id="g-currency" value="INR" maxlength="3"></div>
         </div>
+        <div class="form-row">
+            <div class="form-group"><label for="g-priority">Priority</label>
+              <select class="form-select" id="g-priority">
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM" selected>Medium</option>
+                <option value="LOW">Low</option>
+              </select>
+            </div>
+            <div class="form-group"><label for="g-deadline">Deadline</label><input class="form-input" id="g-deadline" type="date"></div>
+        </div>
         <div class="form-group"><label for="g-desc">Description</label><input class="form-input" id="g-desc" placeholder="Optional"></div>
-        <div class="form-group"><label for="g-deadline">Deadline</label><input class="form-input" id="g-deadline" type="date"></div>
         ${modalActions('Cancel', 'Create Goal')}
       </form>`, {
       onSubmit: async () => {
@@ -148,7 +164,8 @@ function bindEvents(uid) {
           targetAmount: parseFloat(document.getElementById('g-target').value),
           currency: document.getElementById('g-currency').value.toUpperCase(),
           description: document.getElementById('g-desc').value,
-          deadline: document.getElementById('g-deadline').value || null
+          deadline: document.getElementById('g-deadline').value || null,
+          priority: document.getElementById('g-priority').value
         });
         toast('Goal created!', 'success');
         loadGoals(uid);
@@ -164,22 +181,51 @@ function bindEvents(uid) {
         <div class="form-row">
           <div class="form-group"><label for="b-amount">Budget Amount</label><input class="form-input" id="b-amount" type="number" min="1" required></div>
           <div class="form-group"><label for="b-period">Period</label>
-            <select class="form-select" id="b-period"><option value="MONTHLY">Monthly</option><option value="WEEKLY">Weekly</option></select></div>
+            <select class="form-select" id="b-period">
+                <option value="MONTHLY">Monthly</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="CUSTOM">Custom Range</option>
+            </select>
+          </div>
         </div>
-        <div class="form-group"><label for="b-currency">Currency</label><input class="form-input" id="b-currency" value="INR" maxlength="3"></div>
+        
+        <div class="form-row" id="b-custom-dates" style="display:none">
+          <div class="form-group"><label for="b-start">Start Date</label><input class="form-input" id="b-start" type="date"></div>
+          <div class="form-group"><label for="b-end">End Date</label><input class="form-input" id="b-end" type="date"></div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group"><label for="b-currency">Currency</label><input class="form-input" id="b-currency" value="INR" maxlength="3"></div>
+            <div class="form-group form-check" style="margin-top:auto;margin-bottom:12px;">
+                <input type="checkbox" id="b-carry">
+                <label for="b-carry">Carry forward remaining?</label>
+            </div>
+        </div>
         ${modalActions('Cancel', 'Create Budget')}
       </form>`, {
       onSubmit: async () => {
-        await api.post('/upsert/budgets', {
+        const payload = {
           userId: uid,
           expenseCategory: document.getElementById('b-cat').value,
           budgetAmount: parseFloat(document.getElementById('b-amount').value),
           period: document.getElementById('b-period').value,
-          currency: document.getElementById('b-currency').value.toUpperCase()
-        });
+          currency: document.getElementById('b-currency').value.toUpperCase(),
+          carryForward: document.getElementById('b-carry').checked
+        };
+        if (payload.period === 'CUSTOM') {
+            payload.customStartDate = document.getElementById('b-start').value || null;
+            payload.customEndDate = document.getElementById('b-end').value || null;
+        }
+        await api.post('/upsert/budgets', payload);
         toast('Budget created!', 'success');
         loadBudgets(uid);
       }
+    });
+
+    const periodSel = document.getElementById('b-period');
+    const customDiv = document.getElementById('b-custom-dates');
+    periodSel.addEventListener('change', () => {
+        customDiv.style.display = periodSel.value === 'CUSTOM' ? 'flex' : 'none';
     });
   };
 }

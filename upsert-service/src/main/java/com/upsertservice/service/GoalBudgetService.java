@@ -39,6 +39,7 @@ public class GoalBudgetService {
         goal.setCurrency(request.getCurrency());
         goal.setDescription(request.getDescription());
         goal.setDeadline(request.getDeadline());
+        goal.setPriority(request.getPriority() != null ? request.getPriority() : Priority.MEDIUM);
         goal.setSavedAmount(BigDecimal.ZERO);
         SavingsGoal saved = goalRepository.save(goal);
         log.info("Goal created: id={}, user={}", saved.getId(), saved.getUserId());
@@ -79,6 +80,9 @@ public class GoalBudgetService {
         budget.setBudgetAmount(request.getBudgetAmount());
         budget.setPeriod(request.getPeriod());
         budget.setCurrency(request.getCurrency());
+        budget.setCarryForward(request.isCarryForward());
+        budget.setCustomStartDate(request.getCustomStartDate());
+        budget.setCustomEndDate(request.getCustomEndDate());
         CategoryBudget saved = budgetRepository.save(budget);
         log.info("Budget created: id={}, category={}", saved.getId(), saved.getExpenseCategory());
         return computeUtilization(saved);
@@ -102,7 +106,7 @@ public class GoalBudgetService {
     // ── Internal helpers ──────────────────────────────────────────────────────
 
     BudgetUtilizationResponse computeUtilization(CategoryBudget budget) {
-        LocalDateTime[] range = getPeriodRange(budget.getPeriod());
+        LocalDateTime[] range = getPeriodRange(budget);
         BigDecimal spent = transactionRepository.sumExpensesByCategory(
                 budget.getUserId(), budget.getExpenseCategory(), range[0], range[1]);
         if (spent == null) spent = BigDecimal.ZERO;
@@ -120,9 +124,15 @@ public class GoalBudgetService {
                 BudgetUtilizationResponse.deriveStatus(pct));
     }
 
-    private LocalDateTime[] getPeriodRange(RecurringPeriod period) {
+    private LocalDateTime[] getPeriodRange(CategoryBudget budget) {
+        if (budget.getCustomStartDate() != null && budget.getCustomEndDate() != null) {
+            return new LocalDateTime[]{
+                    budget.getCustomStartDate().atStartOfDay(),
+                    budget.getCustomEndDate().atTime(23, 59, 59)
+            };
+        }
         LocalDateTime end = LocalDateTime.now();
-        LocalDateTime start = switch (period) {
+        LocalDateTime start = switch (budget.getPeriod()) {
             case WEEKLY  -> LocalDate.now().with(DayOfWeek.MONDAY).atStartOfDay();
             case MONTHLY -> LocalDate.now().withDayOfMonth(1).atStartOfDay();
             default      -> LocalDate.now().withDayOfMonth(1).atStartOfDay();
@@ -141,6 +151,7 @@ public class GoalBudgetService {
         return new SavingsGoalResponse(
                 g.getId(), g.getName(), g.getTargetAmount(), g.getSavedAmount(),
                 g.getProgressPercentage(), g.getCurrency(), g.getDescription(),
-                g.getDeadline(), g.isCompleted(), g.getCreatedAt(), g.getCompletedAt());
+                g.getDeadline(), g.isCompleted(), g.getCreatedAt(), g.getCompletedAt(),
+                g.getPriority());
     }
 }

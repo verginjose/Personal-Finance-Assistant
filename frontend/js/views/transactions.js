@@ -98,8 +98,14 @@ function renderPagination() {
   el.querySelectorAll('button').forEach(b => b.onclick = () => { currentPage = +b.dataset.p; loadTransactions(userId); });
 }
 
-function showModal(userId, existing, onDone) {
+async function showModal(userId, existing, onDone) {
   const isEdit = !!existing;
+  let goals = [];
+  try {
+    goals = await api.get('/upsert/goals', { userId });
+    goals = goals.filter(g => !g.completed); // only show active incomplete goals
+  } catch(e) { console.error('Failed to load goals for allocation', e); }
+
   openModal(isEdit ? 'Edit Transaction' : 'Add Transaction', `
     <form id="txn-form">
       <div class="form-row">
@@ -117,6 +123,15 @@ function showModal(userId, existing, onDone) {
       </div>
       <div class="form-group"><label for="m-cat">Category</label><select class="form-select" id="m-cat"></select></div>
       <div class="form-group"><label for="m-desc">Description</label><textarea class="form-textarea" id="m-desc">${esc(existing?.description || '')}</textarea></div>
+      
+      ${!isEdit && goals.length > 0 ? `
+      <div class="form-group" style="background:var(--bg-card);padding:12px;border-radius:6px;border:1px solid var(--border)">
+        <label>Allocate to Goals (Optional)</label>
+        <div style="font-size:0.85rem;color:var(--text-dim);margin-bottom:8px;">You can split a portion of this amount towards your savings goals.</div>
+        <div id="m-allocations"></div>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-add-alloc">+ Add Allocation</button>
+      </div>` : ''}
+
       <div class="form-row" style="align-items:center">
         <div class="form-check">
           <input type="checkbox" id="m-recurring" ${existing?.recurring ? 'checked' : ''}>
@@ -137,10 +152,11 @@ function showModal(userId, existing, onDone) {
     onSubmit: async () => {
       const type = document.getElementById('m-type').value;
       const recurring = document.getElementById('m-recurring').checked;
+      const amount = parseFloat(document.getElementById('m-amount').value);
       const payload = {
         userId,
         name: document.getElementById('m-name').value,
-        amount: parseFloat(document.getElementById('m-amount').value),
+        amount,
         type,
         currency: document.getElementById('m-currency').value.toUpperCase(),
         description: document.getElementById('m-desc').value,
@@ -148,6 +164,27 @@ function showModal(userId, existing, onDone) {
         recurring,
         recurringPeriod: recurring ? document.getElementById('m-recurring-period').value : null
       };
+
+      if (!isEdit) {
+        const allocElements = document.querySelectorAll('.alloc-row');
+        if (allocElements.length > 0) {
+          payload.allocations = [];
+          let totalAllocated = 0;
+          allocElements.forEach(el => {
+            const goalId = parseInt(el.querySelector('.alloc-goal').value);
+            const a = parseFloat(el.querySelector('.alloc-amount').value);
+            if (goalId && !isNaN(a) && a > 0) {
+              payload.allocations.push({ goalId, amount: a });
+              totalAllocated += a;
+            }
+          });
+          if (totalAllocated > amount) {
+            toast('Allocations cannot exceed the total transaction amount!', 'error');
+            return false;
+          }
+        }
+      }
+
       if (isEdit) {
         payload.id = existing.id;
         await api.put('/upsert/update', payload);
@@ -160,6 +197,29 @@ function showModal(userId, existing, onDone) {
     }
   });
 
+  if (!isEdit && goals.length > 0) {
+    const allocContainer = document.getElementById('m-allocations');
+    const btnAddAlloc = document.getElementById('btn-add-alloc');
+    btnAddAlloc.onclick = () => {
+      const row = document.createElement('div');
+      row.className = 'alloc-row form-row';
+      row.style.marginBottom = '8px';
+      row.innerHTML = `
+        <div class="form-group" style="flex:2;margin-bottom:0">
+          <select class="form-select alloc-goal">
+            <option value="">Select Goal...</option>
+            ${goals.map(g => `<option value="${g.id}">${esc(g.name)} (Remaining: ${formatCurrency(g.targetAmount - g.savedAmount, g.currency)})</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="flex:1;margin-bottom:0">
+          <input type="number" class="form-input alloc-amount" placeholder="Amount" step="0.01" min="0.01">
+        </div>
+        <button type="button" class="btn btn-danger btn-icon btn-sm" onclick="this.parentElement.remove()" style="margin-top:auto">${icon('trash', 'sm')}</button>
+      `;
+      allocContainer.appendChild(row);
+    };
+  }
+
   const recCheckbox = document.getElementById('m-recurring');
   const recGroup = document.getElementById('m-rec-period-group');
   recCheckbox.onchange = () => { recGroup.style.display = recCheckbox.checked ? 'block' : 'none'; };
@@ -167,7 +227,7 @@ function showModal(userId, existing, onDone) {
   const updateCats = () => {
     const type = document.getElementById('m-type').value;
     const cats = type === 'INCOME' ? INCOME_CATS : EXPENSE_CATS;
-    const sel = existing?.type === type ? existing.category : null;  // ✅ single field
+    const sel = existing?.type === type ? existing.category : null;  // single field
     document.getElementById('m-cat').innerHTML = categoryOptions(cats, sel);
   };
 

@@ -25,6 +25,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @RestController
 @RequestMapping("/analytics")
@@ -33,6 +34,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
+    private final com.finance.analytics.service.GoalForecastingService forecastingService;
+    private final com.finance.analytics.service.BudgetTrendService trendService;
 
     @GetMapping("/category-pie-chart")
     @Operation(summary = "Get category distribution pie chart")
@@ -139,6 +142,21 @@ public class AnalyticsController {
 
         return ResponseEntity.ok(analyticsService.findTransactionsByTypeAndDate(
                 userId, type, startDateTime, endDateTime, pageable));
+    }
+
+    @GetMapping("/goals/{id}/forecast")
+    @Operation(summary = "Get goal completion forecast")
+    public ResponseEntity<com.finance.analytics.service.GoalForecastingService.GoalForecast> getGoalForecast(
+            @PathVariable Long id,
+            @RequestHeader("X-User-Id") String xUserId) {
+        return ResponseEntity.ok(forecastingService.forecastGoal(id, UUID.fromString(xUserId)));
+    }
+
+    @GetMapping("/budgets/trends")
+    @Operation(summary = "Get month-over-month budget trends")
+    public ResponseEntity<java.util.List<com.finance.analytics.service.BudgetTrendService.BudgetTrend>> getBudgetTrends(
+            @RequestHeader("X-User-Id") String xUserId) {
+        return ResponseEntity.ok(trendService.getTrends(UUID.fromString(xUserId)));
     }
 
     @GetMapping("/health")

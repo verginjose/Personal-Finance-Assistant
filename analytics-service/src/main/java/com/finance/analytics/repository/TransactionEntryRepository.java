@@ -50,6 +50,16 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             @Param("userId") UUID userId, @Param("type") TransactionType type,
             @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
+    @Query("""
+            SELECT COALESCE(SUM(t.amount), 0)
+            FROM TransactionEntry t
+            WHERE t.userId = :userId AND t.category = :category AND t.type = 'EXPENSE'
+              AND t.createdAt BETWEEN :start AND :end
+            """)
+    BigDecimal sumExpensesByCategory(
+            @Param("userId") UUID userId, @Param("category") Category category,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
     // ── Category analytics — typed projections replace Object[] ──────────────
 
     @Query("""

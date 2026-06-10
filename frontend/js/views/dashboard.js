@@ -12,11 +12,13 @@ export async function renderDashboard(container) {
   const userId = Auth.getUserId();
   container.innerHTML = `
     ${pageHeader('Dashboard', 'Your financial overview at a glance')}
+    <div id="d-alerts" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;"></div>
     <div class="card-grid card-grid-2 fade-up" style="margin-bottom:24px">
       ${healthPanelHtml('d')}
       ${aiPanelHtml('d')}
     </div>
     <div id="d-kpis">${skeletonKpiRow(4)}</div>
+    <div id="d-goals" class="card-grid fade-up" style="margin-top:24px;display:none;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:20px;"></div>
     <div class="card-grid card-grid-2" style="margin-top:24px">
       <div class="card fade-up">
         <div class="card-header"><h3>Spending by Category</h3></div>
@@ -29,13 +31,31 @@ export async function renderDashboard(container) {
     </div>`;
 
   try {
-    const [summary, pie, timeline, health, ai] = await Promise.all([
+    const [summary, pie, timeline, health, ai, budgets, goals] = await Promise.all([
       api.get('/upsert/summary', { userId }),
       api.get('/analytics/category-pie-chart', { userId, transactionFilter: 'EXPENSE' }),
       api.get('/analytics/timeline-chart', { userId, timelineType: 'MONTHLY' }),
       api.get('/analytics/health-score', { userId }),
-      api.get('/analytics/ai-insights', { userId })
+      api.get('/analytics/ai-insights', { userId }),
+      api.get('/upsert/budgets', { userId }).catch(() => []),
+      api.get('/upsert/goals', { userId }).catch(() => [])
     ]);
+
+    // Budget Alerts
+    const alertsContainer = document.getElementById('d-alerts');
+    const alertsHtml = [];
+    for (const b of budgets) {
+        if (b.utilizationPercentage >= 100) {
+            alertsHtml.push(`<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--accent);padding:12px 16px;border-radius:8px;display:flex;align-items:center;gap:12px;">${icon('alert-triangle')} <strong>Budget Exceeded:</strong> You have spent ${b.utilizationPercentage.toFixed(1)}% of your ${b.expenseCategory} budget!</div>`);
+        } else if (b.utilizationPercentage >= 90) {
+            alertsHtml.push(`<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:var(--accent-y);padding:12px 16px;border-radius:8px;display:flex;align-items:center;gap:12px;">${icon('alert-triangle')} <strong>Critical Warning:</strong> You have spent ${b.utilizationPercentage.toFixed(1)}% of your ${b.expenseCategory} budget.</div>`);
+        } else if (b.utilizationPercentage >= 80) {
+            alertsHtml.push(`<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:var(--accent-y);padding:12px 16px;border-radius:8px;display:flex;align-items:center;gap:12px;">${icon('alert-circle')} <strong>Warning:</strong> You are nearing your ${b.expenseCategory} budget limit (${b.utilizationPercentage.toFixed(1)}%).</div>`);
+        }
+    }
+    if (alertsHtml.length > 0) {
+        alertsContainer.innerHTML = alertsHtml.join('');
+    }
 
     document.getElementById('d-kpis').innerHTML = `
       <div class="card-grid card-grid-4 fade-up">
@@ -56,6 +76,38 @@ export async function renderDashboard(container) {
           <div class="stat-value">${summary.totalCount ?? 0}</div>
         </div>
       </div>`;
+
+    // Goal Forecasting
+    const goalsContainer = document.getElementById('d-goals');
+    goalsContainer.style.display = 'grid';
+    const activeGoals = goals.filter(g => !g.completed);
+    
+    if (activeGoals.length > 0) {
+        let goalsHtml = '';
+        for (const g of activeGoals) {
+            try {
+                const forecast = await api.get(`/analytics/goals/${g.id}/forecast`);
+                let velocityText = forecast.monthlyVelocity > 0 ? `<br><small style="color:var(--text-dim)">Velocity: ${formatCurrency(forecast.monthlyVelocity, g.currency)}/mo</small>` : '';
+                goalsHtml += `
+                <div class="card" style="border-left:4px solid var(--accent-g)">
+                    <div style="font-weight:600;margin-bottom:4px;">🎯 ${g.name}</div>
+                    <div style="font-size:0.9rem;color:var(--text-muted);">${forecast.message}${velocityText}</div>
+                </div>`;
+            } catch (e) { console.error('Failed to forecast goal', g.id); }
+        }
+        goalsContainer.innerHTML = goalsHtml;
+    } else {
+        goalsContainer.innerHTML = `
+            <div class="card" style="border-left:4px solid var(--border); grid-column: 1 / -1; display:flex; align-items:center; gap: 16px; padding: 20px;">
+                <div style="background:var(--bg-lighter); width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--text-dim);">
+                    ${icon('target')}
+                </div>
+                <div>
+                    <div style="font-weight:600;margin-bottom:4px;">No Active Goals</div>
+                    <div style="font-size:0.9rem;color:var(--text-muted);">Create a savings goal in the Goals & Budgets page to track your progress and get AI forecasts!</div>
+                </div>
+            </div>`;
+    }
 
     renderHealthData('d', health);
     renderAiData('d', ai);

@@ -21,4 +21,5 @@ public class SavingsGoalResponse {
     private boolean completed;
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;
+    private com.upsertservice.model.Priority priority;
 }

@@ -42,4 +42,7 @@ public class CreateEntryRequest {
 
     /** Required when recurring = true. */
     private RecurringPeriod recurringPeriod;
+
+    /** Optional list of goal allocations when this transaction contributes to goals. */
+    private java.util.List<GoalAllocationRequest> allocations;
 }

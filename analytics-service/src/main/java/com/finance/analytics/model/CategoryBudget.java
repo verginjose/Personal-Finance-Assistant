@@ -1,4 +1,4 @@
-package com.upsertservice.model;
+package com.finance.analytics.model;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;

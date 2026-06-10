@@ -103,7 +103,7 @@ class AiInsightsServiceTest {
             }
         });
 
-        String prompt = service.buildPrompt(income, expense, cats);
+        String prompt = service.buildPrompt(income, expense, cats, Collections.emptyList(), Collections.emptyList());
 
         assertThat(prompt).contains("30000");
         assertThat(prompt).contains("20000");
@@ -115,7 +115,7 @@ class AiInsightsServiceTest {
     @DisplayName("buildPrompt: works with empty category list")
     void buildPrompt_emptyCategories_noException() {
         assertThatCode(() -> service.buildPrompt(
-                BigDecimal.valueOf(5000), BigDecimal.valueOf(3000), Collections.emptyList()))
+                BigDecimal.valueOf(5000), BigDecimal.valueOf(3000), Collections.emptyList(), Collections.emptyList(), Collections.emptyList()))
                 .doesNotThrowAnyException();
     }
 

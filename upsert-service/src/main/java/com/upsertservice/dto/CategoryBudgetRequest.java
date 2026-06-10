@@ -16,4 +16,7 @@ public class CategoryBudgetRequest {
     @NotNull @DecimalMin("0.01") private BigDecimal budgetAmount;
     @NotNull  private RecurringPeriod period;
     @NotBlank @Size(min=3,max=3) private String currency;
+    private boolean carryForward = false;
+    private java.time.LocalDate customStartDate;
+    private java.time.LocalDate customEndDate;
 }

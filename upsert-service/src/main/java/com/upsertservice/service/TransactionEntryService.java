@@ -37,16 +37,23 @@ public class TransactionEntryService {
     private final Counter createCounter;
     private final Counter deleteCounter;
     private final CacheEvictPublisher cacheEvictPublisher;
+    private final GoalBudgetService goalBudgetService;
+    private final com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository;
+
     public TransactionEntryService(
             TransactionEntryRepository repository,
             IdempotencyRecordRepository idempotencyRecordRepository,
-            MeterRegistry meterRegistry, CacheEvictPublisher cacheEvictPublisher
+            MeterRegistry meterRegistry, CacheEvictPublisher cacheEvictPublisher,
+            GoalBudgetService goalBudgetService,
+            com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository
     ) {
         this.repository = repository;
         this.idempotencyRecordRepository = idempotencyRecordRepository;
         this.createCounter = meterRegistry.counter("transactions.create.success");
         this.deleteCounter = meterRegistry.counter("transactions.delete.success");
         this.cacheEvictPublisher = cacheEvictPublisher;
+        this.goalBudgetService = goalBudgetService;
+        this.allocationRepository = allocationRepository;
     }
 
     // ── Create ────────────────────────────────────────────────────────────────
@@ -73,6 +80,20 @@ public class TransactionEntryService {
         TransactionEntry entry = getTransactionEntry(request);
 
         TransactionEntry saved = repository.save(entry);
+        
+        // Handle Goal Allocations
+        if (request.getAllocations() != null && !request.getAllocations().isEmpty()) {
+            for (com.upsertservice.dto.GoalAllocationRequest alloc : request.getAllocations()) {
+                com.upsertservice.model.TransactionGoalAllocation tga = new com.upsertservice.model.TransactionGoalAllocation();
+                tga.setTransactionId(saved.getId());
+                tga.setGoalId(alloc.getGoalId());
+                tga.setAmount(alloc.getAmount());
+                allocationRepository.save(tga);
+                goalBudgetService.contributeToGoal(alloc.getGoalId(), request.getUserId(), alloc.getAmount());
+                log.info("Allocated {} from transaction {} to goal {}", alloc.getAmount(), saved.getId(), alloc.getGoalId());
+            }
+        }
+
         if (publishCacheEvict) {
             cacheEvictPublisher.publish(request.getUserId(), "CREATE", saved.getId());
         }
@@ -149,6 +170,20 @@ public class TransactionEntryService {
         if (!entry.getUserId().equals(userId)) {
             throw new SecurityException("User is not authorized to delete this transaction");
         }
+        
+        // Revert goal allocations
+        List<com.upsertservice.model.TransactionGoalAllocation> allocations = allocationRepository.findByTransactionId(id);
+        if (allocations != null && !allocations.isEmpty()) {
+            for (com.upsertservice.model.TransactionGoalAllocation alloc : allocations) {
+                try {
+                    goalBudgetService.contributeToGoal(alloc.getGoalId(), userId, alloc.getAmount().negate());
+                    log.info("Reverted {} from goal {} due to transaction {} deletion", alloc.getAmount(), alloc.getGoalId(), id);
+                } catch (Exception e) {
+                    log.warn("Failed to revert goal allocation for goal {}: {}", alloc.getGoalId(), e.getMessage());
+                }
+            }
+        }
+        
         entry.setDeletedAt(LocalDateTime.now());
         repository.save(entry);
         cacheEvictPublisher.publish(userId, "DELETE", id); // ADD THIS

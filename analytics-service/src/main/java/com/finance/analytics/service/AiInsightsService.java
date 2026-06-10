@@ -37,6 +37,10 @@ public class AiInsightsService {
     private String groqModel;
 
     private final TransactionEntryRepository repository;
+    private final GoalForecastingService goalForecastingService;
+    private final BudgetTrendService budgetTrendService;
+    private final com.finance.analytics.repository.SavingsGoalRepository savingsGoalRepository;
+
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
@@ -55,7 +59,14 @@ public class AiInsightsService {
             return buildDefaultResponse();
         }
 
-        String prompt = buildPrompt(income, expense, categories);
+        // Fetch goals & budgets
+        List<GoalForecastingService.GoalForecast> goalForecasts = new ArrayList<>();
+        for (com.finance.analytics.model.SavingsGoal goal : savingsGoalRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(userId)) {
+            goalForecasts.add(goalForecastingService.forecastGoal(goal.getId(), userId));
+        }
+        List<BudgetTrendService.BudgetTrend> budgetTrends = budgetTrendService.getTrends(userId);
+
+        String prompt = buildPrompt(income, expense, categories, goalForecasts, budgetTrends);
 
         if (groqApiKey == null || groqApiKey.isBlank()) {
             log.warn("GROQ_API_KEY not configured — returning rule-based insights");
@@ -72,7 +83,9 @@ public class AiInsightsService {
 
     // ── Prompt building ───────────────────────────────────────────────────────
 
-    String buildPrompt(BigDecimal income, BigDecimal expense, List<CategoryRow> categories) {
+    String buildPrompt(BigDecimal income, BigDecimal expense, List<CategoryRow> categories,
+                       List<GoalForecastingService.GoalForecast> goalForecasts,
+                       List<BudgetTrendService.BudgetTrend> budgetTrends) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are a personal financial advisor. Analyze this user's financial data and provide 3-5 actionable, specific insights.\n\n");
         sb.append("This Month's Summary:\n");
@@ -86,6 +99,22 @@ public class AiInsightsService {
             for (int i = 0; i < limit; i++) {
                 CategoryRow row = categories.get(i);
                 sb.append("  ").append(row.getCategory()).append(": ₹").append(row.getTotalAmount()).append("\n");
+            }
+        }
+
+        if (!goalForecasts.isEmpty()) {
+            sb.append("\n- Active Savings Goals:\n");
+            for (GoalForecastingService.GoalForecast gf : goalForecasts) {
+                sb.append("  Goal ").append(gf.getGoalId()).append(": ").append(gf.getMessage()).append("\n");
+            }
+            sb.append("\nProvide suggestions on how to accelerate these goals by reducing spending in specific categories.\n");
+        }
+
+        if (!budgetTrends.isEmpty()) {
+            sb.append("\n- Budget Trends (MoM):\n");
+            for (BudgetTrendService.BudgetTrend bt : budgetTrends) {
+                sb.append("  ").append(bt.getCategory()).append(": ").append(bt.getTrend())
+                  .append(" by ").append(String.format("%.1f", bt.getPercentageChange())).append("%\n");
             }
         }
 

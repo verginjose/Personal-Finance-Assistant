@@ -32,7 +32,10 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
 
     Optional<TransactionEntry> findByIdAndDeletedAtIsNull(Long id);
 
-    Optional<TransactionEntry> findByIdAndUserIdAndDeletedAtIsNull(Long id, UUID userId);
+    @Query("SELECT t FROM TransactionEntry t WHERE t.id = :id AND t.userId = :userId AND t.deletedAt IS NULL")
+    Optional<TransactionEntry> findByIdAndUserIdAndDeletedAtIsNull(@Param("id") Long id, @Param("userId") UUID userId);
+
+    List<TransactionEntry> findByRecurringTrueAndDeletedAtIsNullAndNextRunDateLessThanEqual(java.time.LocalDateTime nextRunDate);
 
     // ── Date-range queries ────────────────────────────────────────────────────
 

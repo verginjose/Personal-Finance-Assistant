@@ -20,12 +20,26 @@ transforms:
       .compose_project = string(.label."com.docker.compose.project")  ?? "unknown"
       .container       = string(.container_name)                       ?? "unknown"
 
-      parsed, err = parse_regex(.message, r'(?P<level>TRACE|DEBUG|INFO|WARN|ERROR)')
-      .level = if err == null { parsed.level } else { "INFO" }
-
-      ts, err = parse_regex(.message, r'(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})')
+      # Try parsing JSON first (for Spring Boot LogstashEncoder)
+      parsed, err = parse_json(.message)
       if err == null {
-        .log_timestamp = ts.ts
+         # Merge parsed JSON fields into root
+         . = merge!(., parsed)
+         
+         # LogstashEncoder outputs the message in "message" field
+         .level = string(.level) ?? "INFO"
+         .trace_id = string(.traceId) ?? ""
+         .span_id = string(.spanId) ?? ""
+         
+         if exists(.stack_trace) {
+            .stack_trace = string(.stack_trace) ?? ""
+         }
+      } else {
+         # Fallback for non-JSON logs (Postgres, Redis, Kafka)
+         parsed_lvl, err_lvl = parse_regex(.message, r'(?P<level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)')
+         .level = if err_lvl == null { parsed_lvl.level } else { "INFO" }
+         .trace_id = ""
+         .span_id = ""
       }
 
       .timestamp = format_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S%.3f")
@@ -36,25 +50,51 @@ transforms:
       del(.stream)
       del(.host)
 
-  merge_multiline:
-    type: reduce
-    inputs: ["parse_logs"]
-    group_by:
-      - container
-      - service
-    merge_strategies:
-      message: concat_newline
-    starts_when: match(string!(.message), r'^\d{4}-\d{2}-\d{2}')
-    expire_after_ms: 2000
-    flush_period_ms: 500
+  filter_noise:
+    type: filter
+    inputs: [ "parse_logs" ]
+    condition: |
+      !contains(string(.message) ?? "", "PathMatcherServerWebExchangeMatcher") &&
+      !contains(string(.message) ?? "", "actuator/prometheus") &&
+      !contains(string(.message) ?? "", "Checking match of request") &&
+      !contains(string(.message) ?? "", "Trying to match using") &&
+      !contains(string(.message) ?? "", "No matches found") &&
+      !contains(string(.message) ?? "", "Authorization successful")
+
+  mask_pii:
+    type: remap
+    inputs: ["filter_noise"]
+    source: |
+      msg = string(.message) ?? ""
+      msg = replace(msg, r'(?i)Bearer\s+[a-zA-Z0-9\-\._~+/]+=*', "Bearer [REDACTED]")
+      msg = replace(msg, r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', "[EMAIL_REDACTED]")
+      msg = replace(msg, r'(?i)"password"\s*:\s*"[^"]+"', "\"password\":\"[REDACTED]\"")
+      .message = msg
+
+  filter_errors:
+    type: filter
+    inputs: ["filter_noise"]
+    condition: '.level == "ERROR"'
+
+  error_metrics:
+    type: log_to_metric
+    inputs: ["filter_errors"]
+    metrics:
+      - type: counter
+        field: level
+        name: log_errors_total
+        namespace: pfa
+        tags:
+          service: "{{service}}"
 
 sinks:
   clickhouse_logs:
     type: clickhouse
-    inputs: ["merge_multiline"]   # ← changed from parse_logs
+    inputs: ["mask_pii"]
     endpoint: "http://clickhouse:8123"
     database: "default"
     table: "logs"
+    skip_unknown_fields: true
     auth:
       strategy: basic
       user: default
@@ -63,3 +103,8 @@ sinks:
       max_bytes: 1048576
       timeout_secs: 5
     compression: gzip
+
+  prometheus_exporter:
+    type: prometheus_exporter
+    inputs: ["error_metrics"]
+    address: "0.0.0.0:9090" # Vector exposes this port for Prometheus to scrape

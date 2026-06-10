@@ -103,10 +103,15 @@ public class TransactionEntry implements Serializable {
      * Hibernate adds this as a nullable VARCHAR column automatically.
      */
     @Enumerated(EnumType.STRING)
-    @Column(name = "recurring_period")
+    @Column(name = "recurring_period", length = 20)
     @Getter
     @Setter
     private RecurringPeriod recurringPeriod;
+
+    @Column(name = "next_run_date")
+    @Getter
+    @Setter
+    private LocalDateTime nextRunDate;
 
     @Setter
     @Getter

@@ -4,7 +4,7 @@
   "tags": ["finance-assistant"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 4,
+  "version": 5,
   "refresh": "15s",
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {
@@ -18,7 +18,7 @@
         "query": "api-gateway,auth-service,upsert-service,analytics-service,bill-parser-service",
         "current": { "text": "All", "value": "$__all" },
         "options": [
-          { "text": "All",                 "value": "$__all",            "selected": true  },
+          { "text": "All",                 "value": "$__all",             "selected": true  },
           { "text": "api-gateway",         "value": "api-gateway",        "selected": false },
           { "text": "auth-service",        "value": "auth-service",       "selected": false },
           { "text": "upsert-service",      "value": "upsert-service",     "selected": false },
@@ -47,6 +47,7 @@
     ]
   },
   "panels": [
+
     {
       "id": 1, "title": "api-gateway", "type": "stat",
       "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
@@ -102,23 +103,73 @@
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none", "textMode": "value", "colorMode": "background" },
       "gridPos": { "h": 3, "w": 4, "x": 16, "y": 0 }
     },
+
     {
-      "id": 10, "title": "Logs — $service | $level | $search",
-      "type": "table",
+      "id": 6,
+      "title": "Error Rate — per service (last 1h)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [{
+        "expr": "sum by (service) (increase(pfa_log_errors_total[1m]))",
+        "legendFormat": "{{service}}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "short",
+          "min": 0
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum", "max"] }
+      },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 3 }
+    },
+
+    {
+      "id": 10,
+      "title": "Logs — $service | $level | $search",
+      "type": "logs",
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse-ds" },
       "targets": [{
         "queryType": "sql",
-        "rawSql": "SELECT timestamp, service, level, message FROM default.logs WHERE service ILIKE '$service' AND level ILIKE '$level' AND message ILIKE '%${search}%' AND timestamp >= toString(toDateTime($__from/1000)) AND timestamp <= toString(toDateTime($__to/1000)) ORDER BY timestamp DESC LIMIT 500",
+        "rawSql": "SELECT timestamp, if(stack_trace != '', concat(message, char(10), stack_trace), message) as message, service, level FROM default.logs WHERE service ILIKE '$service' AND level ILIKE '$level' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
         "refId": "A",
-        "format": "table"
+        "format": "logs"
       }],
-      "fieldConfig": { "defaults": {}, "overrides": [
-        { "matcher": { "id": "byName", "options": "timestamp" }, "properties": [{ "id": "custom.width", "value": 180 }] },
-        { "matcher": { "id": "byName", "options": "service" },   "properties": [{ "id": "custom.width", "value": 120 }] },
-        { "matcher": { "id": "byName", "options": "level" },     "properties": [{ "id": "custom.width", "value": 70  }] }
-      ]},
-      "options": { "sortBy": [{ "displayName": "timestamp", "desc": true }] },
-      "gridPos": { "h": 35, "w": 24, "x": 0, "y": 9 }
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "level" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": { "ERROR": { "color": "red",    "index": 0 } } },
+                  { "type": "value", "options": { "WARN":  { "color": "orange", "index": 1 } } },
+                  { "type": "value", "options": { "INFO":  { "color": "green",  "index": 2 } } },
+                  { "type": "value", "options": { "DEBUG": { "color": "blue",   "index": 3 } } }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 30, "w": 24, "x": 0, "y": 9 }
     }
   ]
 }

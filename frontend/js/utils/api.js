@@ -25,31 +25,76 @@ export const Auth = {
   }
 };
 
+let isRefreshing = false;
+let refreshPromise = null;
+
 async function request(method, path, { body, params, headers = {}, raw = false } = {}) {
   const url = new URL(API_BASE + path, location.origin);
   if (params) Object.entries(params).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
 
-  const opts = { method, headers: { ...headers } };
+  const getOpts = () => {
+    const opts = { method, headers: { ...headers } };
+    const token = Auth.getToken();
+    if (token) opts.headers['Authorization'] = `Bearer ${token}`;
 
-  const token = Auth.getToken();
-  if (token) opts.headers['Authorization'] = `Bearer ${token}`;
+    if (body instanceof FormData) {
+      opts.body = body;
+    } else if (body) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
 
-  if (body instanceof FormData) {
-    opts.body = body;
-  } else if (body) {
-    opts.headers['Content-Type'] = 'application/json';
-    opts.body = JSON.stringify(body);
+    const userId = Auth.getUserId();
+    if (userId) opts.headers['X-User-Id'] = userId;
+    return opts;
+  };
+
+  let res = await fetch(url.toString(), getOpts());
+
+  // Handle 401 Unauthorized for token refresh
+  if (res.status === 401 && path !== '/auth/login' && path !== '/auth/refresh' && path !== '/auth/register') {
+    const refreshToken = Auth.getRefresh();
+    if (refreshToken) {
+      if (!isRefreshing) {
+        isRefreshing = true;
+        refreshPromise = fetch(API_BASE + '/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken })
+        }).then(async (refreshRes) => {
+          if (!refreshRes.ok) throw new Error('Refresh failed');
+          const data = await refreshRes.json();
+          // Update tokens without overwriting existing email/name with undefined
+          localStorage.setItem('pfa_token', data.token);
+          localStorage.setItem('pfa_refresh', data.refreshToken);
+          return data.token;
+        }).catch((err) => {
+          Auth.clear();
+          window.dispatchEvent(new Event('auth-expired'));
+          throw err;
+        }).finally(() => {
+          isRefreshing = false;
+          refreshPromise = null;
+        });
+      }
+
+      try {
+        await refreshPromise; // Wait for the refresh to finish
+        res = await fetch(url.toString(), getOpts()); // Retry the original request
+      } catch (e) {
+        throw new Error('Session expired. Please log in again.');
+      }
+    } else {
+      Auth.clear();
+      window.dispatchEvent(new Event('auth-expired'));
+      throw new Error('Session expired');
+    }
   }
 
-  const userId = Auth.getUserId();
-  if (userId) opts.headers['X-User-Id'] = userId;
-
-  const res = await fetch(url.toString(), opts);
-
-  if (res.status === 401 && path !== '/auth/login' && path !== '/auth/refresh') {
-    Auth.clear();
-    window.dispatchEvent(new Event('auth-expired'));
-    throw new Error('Session expired');
+  if (res.status === 401) {
+      Auth.clear();
+      window.dispatchEvent(new Event('auth-expired'));
+      throw new Error('Session expired');
   }
 
   if (raw) return res;

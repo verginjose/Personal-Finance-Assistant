@@ -27,3 +27,7 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ['bill-parser-service:8083']
+
+  - job_name: vector
+    static_configs:
+      - targets: ['vector:9090']

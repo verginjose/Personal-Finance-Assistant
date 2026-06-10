@@ -1,0 +1,4 @@
+-- Create a partial index for active transactions to speed up querying
+-- We wait for Hibernate to create the tables first.
+-- Wait, the db-init scripts run BEFORE Hibernate.
+-- We can't create an index on a table that doesn't exist yet!

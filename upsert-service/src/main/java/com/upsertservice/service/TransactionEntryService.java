@@ -9,6 +9,8 @@ import com.upsertservice.model.TransactionEntry;
 import com.upsertservice.model.TransactionType;
 import com.upsertservice.repository.IdempotencyRecordRepository;
 import com.upsertservice.repository.TransactionEntryRepository;
+import com.upsertservice.repository.OutboxEventRepository;
+import com.upsertservice.model.OutboxEvent;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -39,14 +41,14 @@ public class TransactionEntryService {
     private final StringRedisTemplate redisTemplate;
     private final Counter createCounter;
     private final Counter deleteCounter;
-    private final CacheEvictPublisher cacheEvictPublisher;
+    private final OutboxEventRepository outboxEventRepository;
     private final GoalBudgetService goalBudgetService;
     private final com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository;
 
     public TransactionEntryService(
             TransactionEntryRepository repository,
             StringRedisTemplate redisTemplate,
-            MeterRegistry meterRegistry, CacheEvictPublisher cacheEvictPublisher,
+            MeterRegistry meterRegistry, OutboxEventRepository outboxEventRepository,
             GoalBudgetService goalBudgetService,
             com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository
     ) {
@@ -54,7 +56,7 @@ public class TransactionEntryService {
         this.redisTemplate = redisTemplate;
         this.createCounter = meterRegistry.counter("transactions.create.success");
         this.deleteCounter = meterRegistry.counter("transactions.delete.success");
-        this.cacheEvictPublisher = cacheEvictPublisher;
+        this.outboxEventRepository = outboxEventRepository;
         this.goalBudgetService = goalBudgetService;
         this.allocationRepository = allocationRepository;
     }
@@ -103,7 +105,11 @@ public class TransactionEntryService {
         }
 
         if (publishCacheEvict) {
-            cacheEvictPublisher.publish(request.getUserId(), "CREATE", saved.getId());
+            OutboxEvent event = new OutboxEvent();
+            event.setUserId(request.getUserId());
+            event.setEventType("CREATE");
+            event.setEntityId(saved.getId());
+            outboxEventRepository.save(event);
         }
         createCounter.increment();
         log.info("Idempotency key {}",idempotencyKey);
@@ -126,7 +132,20 @@ public class TransactionEntryService {
         entry.setDescription(request.getDescription());
         entry.setRecurring(request.isRecurring());
         entry.setRecurringPeriod(request.getRecurringPeriod());
+        if (request.isRecurring() && request.getRecurringPeriod() != null) {
+            entry.setNextRunDate(calculateNextRunDate(LocalDateTime.now(), request.getRecurringPeriod()));
+        }
         return entry;
+    }
+
+    public static LocalDateTime calculateNextRunDate(LocalDateTime from, com.upsertservice.model.RecurringPeriod period) {
+        if (period == null) return null;
+        return switch (period) {
+            case DAILY -> from.plusDays(1);
+            case WEEKLY -> from.plusWeeks(1);
+            case MONTHLY -> from.plusMonths(1);
+            case YEARLY -> from.plusYears(1);
+        };
     }
 
     // ── Update (full) ─────────────────────────────────────────────────────────
@@ -147,7 +166,13 @@ public class TransactionEntryService {
         existing.setRecurring(request.isRecurring());
         existing.setRecurringPeriod(request.getRecurringPeriod());
         TransactionEntry updated = repository.save(existing);
-        cacheEvictPublisher.publish(request.getUserId(), "UPDATE", updated.getId()); // ADD THIS
+        
+        OutboxEvent event = new OutboxEvent();
+        event.setUserId(request.getUserId());
+        event.setEventType("UPDATE");
+        event.setEntityId(updated.getId());
+        outboxEventRepository.save(event);
+        
         log.info("Transaction updated: id={}", updated.getId());
         return convertToResponse(updated);
     }
@@ -160,7 +185,13 @@ public class TransactionEntryService {
                         "Transaction entry with ID " + id + " not found for user " + userId));
         entry.setAmount(newAmount);
         TransactionEntry saved = repository.save(entry);
-        cacheEvictPublisher.publish(userId, "PATCH", id); // ADD THIS
+        
+        OutboxEvent event = new OutboxEvent();
+        event.setUserId(userId);
+        event.setEventType("PATCH");
+        event.setEntityId(id);
+        outboxEventRepository.save(event);
+        
         log.info("Transaction amount patched: id={}, newAmount={}", id, newAmount);
         return convertToResponse(saved);
     }
@@ -190,7 +221,13 @@ public class TransactionEntryService {
         
         entry.setDeletedAt(LocalDateTime.now());
         repository.save(entry);
-        cacheEvictPublisher.publish(userId, "DELETE", id); // ADD THIS
+        
+        OutboxEvent event = new OutboxEvent();
+        event.setUserId(userId);
+        event.setEventType("DELETE");
+        event.setEntityId(id);
+        outboxEventRepository.save(event);
+        
         deleteCounter.increment();
         log.info("Transaction deleted: id={}, user={}", id, userId);
     }

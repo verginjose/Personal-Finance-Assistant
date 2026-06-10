@@ -93,13 +93,13 @@ public class GoalBudgetControllerTest {
         UUID userId = UUID.randomUUID();
         CategoryBudgetRequest request = new CategoryBudgetRequest();
         request.setUserId(userId);
-        request.setExpenseCategory(Category.FOOD_AND_DINING);
+        request.setExpenseCategory(Category.RESTAURANTS);
         request.setBudgetAmount(new BigDecimal("500"));
         request.setPeriod(RecurringPeriod.MONTHLY);
         request.setCurrency("INR");
 
         BudgetUtilizationResponse response = new BudgetUtilizationResponse(
-                1L, Category.FOOD_AND_DINING, new BigDecimal("500"),
+                1L, Category.RESTAURANTS, new BigDecimal("500"),
                 BigDecimal.ZERO, 0.0, RecurringPeriod.MONTHLY, "INR", "SAFE"
         );
 
@@ -163,7 +163,7 @@ public class GoalBudgetControllerTest {
     void getBudgets_succeeds() throws Exception {
         UUID userId = UUID.randomUUID();
         BudgetUtilizationResponse response = new BudgetUtilizationResponse(
-                1L, Category.FOOD_AND_DINING, new BigDecimal("500"),
+                1L, Category.RESTAURANTS, new BigDecimal("500"),
                 new BigDecimal("100"), 20.0, RecurringPeriod.MONTHLY, "INR", "SAFE"
         );
 

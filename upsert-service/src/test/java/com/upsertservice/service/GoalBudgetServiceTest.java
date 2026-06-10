@@ -139,7 +139,7 @@ class GoalBudgetServiceTest {
     void createBudget_validRequest_savesBudget() {
         CategoryBudgetRequest req = new CategoryBudgetRequest();
         req.setUserId(userId);
-        req.setExpenseCategory(Category.FOOD_AND_DINING);
+        req.setExpenseCategory(Category.RESTAURANTS);
         req.setBudgetAmount(new BigDecimal("5000"));
         req.setPeriod(RecurringPeriod.MONTHLY);
         req.setCurrency("USD");
@@ -153,7 +153,7 @@ class GoalBudgetServiceTest {
 
         BudgetUtilizationResponse res = service.createBudget(req);
 
-        assertThat(res.getExpenseCategory()).isEqualTo(Category.FOOD_AND_DINING);
+        assertThat(res.getExpenseCategory()).isEqualTo(Category.RESTAURANTS);
         assertThat(res.getUtilizationPercentage()).isEqualTo(20.0);
         assertThat(res.getStatus()).isEqualTo("SAFE");
     }
@@ -265,7 +265,7 @@ class GoalBudgetServiceTest {
         CategoryBudget b = new CategoryBudget();
         b.setId(1L);
         b.setUserId(userId);
-        b.setExpenseCategory(Category.FOOD_AND_DINING);
+        b.setExpenseCategory(Category.RESTAURANTS);
         b.setBudgetAmount(amount);
         b.setPeriod(period);
         b.setCurrency("INR");

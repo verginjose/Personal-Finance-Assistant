@@ -99,11 +99,11 @@ public class AiInsightsIntegrationTest {
         repository.save(income);
 
         TransactionEntry rent = new TransactionEntry(userId, "Flat Rent", new BigDecimal("15000.00"), TransactionType.EXPENSE, "INR");
-        rent.setCategory(Category.BILLS_AND_UTILITIES);
+        rent.setCategory(Category.RENT);
         repository.save(rent);
 
         TransactionEntry food = new TransactionEntry(userId, "Restaurant Dinner", new BigDecimal("3500.00"), TransactionType.EXPENSE, "INR");
-        food.setCategory(Category.FOOD_AND_DINING);
+        food.setCategory(Category.RESTAURANTS);
         repository.save(food);
 
         System.out.println("Calling generateInsights using Groq API key: " + System.getProperty("GROQ_API_KEY"));

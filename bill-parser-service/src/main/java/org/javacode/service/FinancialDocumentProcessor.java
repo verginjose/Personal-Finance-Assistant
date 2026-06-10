@@ -35,18 +35,20 @@ import java.util.concurrent.TimeUnit;
  * Orchestrates Groq LLM extraction and live currency conversion.
  *
  * Production improvements over original:
- *  - Config-driven: model, timeout, retries via application.yaml
- *  - Retry with exponential backoff on Groq API transient failures
- *  - Exchange-rate cache (1-hour TTL) — avoids hitting Frankfurter on every request
- *  - SLF4J logging throughout (@Slf4j)
- *  - jakarta.annotation.PostConstruct (Jakarta EE 9+, required for Spring Boot 3)
- *  - HttpClient uses a dedicated virtual-thread executor
+ * - Config-driven: model, timeout, retries via application.yaml
+ * - Retry with exponential backoff on Groq API transient failures
+ * - Exchange-rate cache (1-hour TTL) — avoids hitting Frankfurter on every
+ * request
+ * - SLF4J logging throughout (@Slf4j)
+ * - jakarta.annotation.PostConstruct (Jakarta EE 9+, required for Spring Boot
+ * 3)
+ * - HttpClient uses a dedicated virtual-thread executor
  */
 @Slf4j
 @Service
 public class FinancialDocumentProcessor {
 
-    private static final String GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions";
+    private static final String GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
     private static final String currencyUrl = "https://api.frankfurter.dev/v1/latest?from=USD";
     // ── Config injected from application.yaml ───────────────────────────
 
@@ -70,11 +72,11 @@ public class FinancialDocumentProcessor {
     // Replace the per-key ConcurrentHashMap cache with a single volatile map
     private volatile Map<String, Double> allRates = Map.of();
     private volatile String rateDate = "";
-    private final Cache<String, FinancialDocument> llmCache =
-            Caffeine.newBuilder()
-                    .maximumSize(200)
-                    .expireAfterWrite(24, TimeUnit.HOURS)
-                    .build();
+    private final Cache<String, FinancialDocument> llmCache = Caffeine.newBuilder()
+            .maximumSize(200)
+            .expireAfterWrite(24, TimeUnit.HOURS)
+            .build();
+
     @PostConstruct
     public void init() {
         this.httpClient = HttpClient.newBuilder()
@@ -100,8 +102,7 @@ public class FinancialDocumentProcessor {
             if (response.statusCode() == 200) {
                 JsonNode root = objectMapper.readTree(response.body());
                 Map<String, Double> rates = new ConcurrentHashMap<>();
-                root.path("rates").fields().forEachRemaining(e ->
-                        rates.put(e.getKey(), e.getValue().asDouble()));
+                root.path("rates").fields().forEachRemaining(e -> rates.put(e.getKey(), e.getValue().asDouble()));
                 rates.put("USD", 1.0); // base currency
                 allRates = Map.copyOf(rates); // immutable snapshot, thread-safe;
                 rateDate = root.path("date").asText();
@@ -113,7 +114,6 @@ public class FinancialDocumentProcessor {
             log.error("Exchange rate fetch error: {}", e.getMessage());
         }
     }
-
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -135,8 +135,7 @@ public class FinancialDocumentProcessor {
                 extracted,
                 conversion.amountInr(),
                 conversion.amountUsd(),
-                rateDate
-        );
+                rateDate);
     }
 
     // ── Groq extraction with retry ────────────────────────────────────────────
@@ -156,16 +155,15 @@ public class FinancialDocumentProcessor {
                     cached.expenseCategory(),
                     cached.incomeCategory(),
                     cached.currency(),
-                    cached.description()
-            );
+                    cached.description());
         }
         int attempt = 0;
         long delayMs = 500;
 
         while (true) {
             try {
-                FinancialDocument result=extractFinancialDataWithGroq(text, userId);
-                llmCache.put(hash,result);
+                FinancialDocument result = extractFinancialDataWithGroq(text, userId);
+                llmCache.put(hash, result);
                 return result;
             } catch (RuntimeException e) {
                 attempt++;
@@ -173,7 +171,8 @@ public class FinancialDocumentProcessor {
                     log.error("Groq extraction failed after {} attempts: {}", attempt, e.getMessage());
                     throw e;
                 }
-                log.warn("Groq attempt {}/{} failed, retrying in {}ms — {}", attempt, maxRetries, delayMs, e.getMessage());
+                log.warn("Groq attempt {}/{} failed, retrying in {}ms — {}", attempt, maxRetries, delayMs,
+                        e.getMessage());
                 try {
                     Thread.sleep(delayMs);
                 } catch (InterruptedException ie) {
@@ -192,7 +191,7 @@ public class FinancialDocumentProcessor {
         ObjectNode body = objectMapper.createObjectNode();
         body.put("model", groqModel);
         body.put("temperature", 0.1);
-        
+
         ObjectNode responseFormat = objectMapper.createObjectNode();
         responseFormat.put("type", "json_object");
         body.set("response_format", responseFormat);
@@ -231,7 +230,8 @@ public class FinancialDocumentProcessor {
             return parseFinancialDocument(content, userId);
 
         } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            if (e instanceof InterruptedException)
+                Thread.currentThread().interrupt();
             throw new RuntimeException("Groq API call failed: " + e.getMessage(), e);
         }
     }
@@ -241,7 +241,8 @@ public class FinancialDocumentProcessor {
     // ── Parsing ───────────────────────────────────────────────────────────────
 
     public String sanitizeText(String text) {
-        if (text == null || text.isBlank()) return "";
+        if (text == null || text.isBlank())
+            return "";
         return text.replace("\u00A0", " ").replaceAll("\\s+", " ").trim();
     }
 
@@ -262,21 +263,22 @@ public class FinancialDocumentProcessor {
 
     private String buildPrompt(String text) {
         return """
-            Extract financial data from this receipt/document. Return ONLY valid JSON.
-            
-            Rules:
-            - transactionType: "Expense" or "Income"
-            - expenseCategory (if Expense): FOOD_AND_DINING|TRANSPORTATION|SHOPPING|ENTERTAINMENT|BILLS_AND_UTILITIES|HEALTHCARE|TRAVEL|EDUCATION|OTHERS
-            - incomeCategory (if Income): SALARY|BUSINESS|INVESTMENTS|GIFTS|FREELANCE|RENTAL_INCOME|INTEREST|OTHERS
-            - Set the unused category to null
-            - currency: 3-letter ISO code (INR for ₹)
-            
-            JSON schema:
-            {"vendor":"string","amount":0.0,"transactionType":"string","expenseCategory":"string|null","incomeCategory":"string|null","currency":"string","description":"string"}
-            
-            Receipt:
-            %s
-            """.formatted(text);
+                Extract financial data from this receipt/document. Return ONLY valid JSON.
+
+                Rules:
+                - transactionType: "Expense" or "Income"
+                - expenseCategory: Guess the closest category (e.g., GROCERIES, RESTAURANTS, FUEL, ELECTRICITY, DOCTOR_AND_CLINIC, CLOTHING, TRAVEL_VACATION) or use "OTHERS"
+                - incomeCategory: Guess the closest (e.g., SALARY, FREELANCE, BUSINESS, REFUND) or use "OTHERS"
+                - Set the unused category to null
+                - currency: 3-letter ISO code (INR for ₹)
+
+                JSON schema:
+                {"vendor":"string","amount":0.0,"transactionType":"string","expenseCategory":"string|null","incomeCategory":"string|null","currency":"string","description":"string"}
+
+                Receipt:
+                %s
+                """
+                .formatted(text);
     }
     // ── Currency helpers ──────────────────────────────────────────────────────
 
@@ -297,7 +299,9 @@ public class FinancialDocumentProcessor {
         return new CurrencyConversion(round(inInr), round(inUsd));
     }
 
-    private double round(double v) { return Math.round(v * 100.0) / 100.0; }
+    private double round(double v) {
+        return Math.round(v * 100.0) / 100.0;
+    }
 
     // ── Enums and Records ─────────────────────────────────────────────────────
 
@@ -307,7 +311,8 @@ public class FinancialDocumentProcessor {
 
         @JsonCreator
         public static ExpenseCategory fromString(String value) {
-            if (value == null || value.trim().isEmpty()) return null;
+            if (value == null || value.trim().isEmpty())
+                return null;
             String normalized = value.trim().toUpperCase()
                     .replace(" ", "_")
                     .replace("&", "AND")
@@ -329,7 +334,8 @@ public class FinancialDocumentProcessor {
 
         @JsonCreator
         public static IncomeCategory fromString(String value) {
-            if (value == null || value.trim().isEmpty()) return null;
+            if (value == null || value.trim().isEmpty())
+                return null;
             String normalized = value.trim().toUpperCase()
                     .replace(" ", "_")
                     .replace("&", "AND")
@@ -355,8 +361,7 @@ public class FinancialDocumentProcessor {
             ExpenseCategory expenseCategory,
             IncomeCategory incomeCategory,
             String currency,
-            String description
-    ) {
+            String description) {
         @JsonCreator
         public FinancialDocument {
             if ("Expense".equalsIgnoreCase(type) && expenseCategory == null)
@@ -371,18 +376,25 @@ public class FinancialDocumentProcessor {
             FinancialDocument originalData,
             double totalAmountInr,
             double totalAmountUsd,
-            String exchangeRateDate
-    ) {}
+            String exchangeRateDate) {
+    }
 
-    public record DocumentInput(String userId, String rawText) {}
+    public record DocumentInput(String userId, String rawText) {
+    }
 
-    private record CurrencyConversion(double amountInr, double amountUsd) {}
+    private record CurrencyConversion(double amountInr, double amountUsd) {
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record GroqResponse(List<GroqChoice> choices) {}
+    private record GroqResponse(List<GroqChoice> choices) {
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record GroqChoice(GroqMessage message) {}
+    private record GroqChoice(GroqMessage message) {
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record GroqMessage(String content) {}
+    private record GroqMessage(String content) {
+    }
 
 }

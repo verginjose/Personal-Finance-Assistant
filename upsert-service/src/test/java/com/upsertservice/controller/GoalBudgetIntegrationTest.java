@@ -116,7 +116,7 @@ public class GoalBudgetIntegrationTest {
     void createAndGetBudget() throws Exception {
         CategoryBudgetRequest request = new CategoryBudgetRequest();
         request.setUserId(userId);
-        request.setExpenseCategory(Category.TRAVEL);
+        request.setExpenseCategory(Category.TRAVEL_VACATION);
         request.setBudgetAmount(new BigDecimal("1000.00"));
         request.setPeriod(RecurringPeriod.MONTHLY);
         request.setCurrency("USD");

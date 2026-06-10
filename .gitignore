@@ -12,3 +12,5 @@ target/
 
 # Frontend
 frontend/node_modules/
+*.jar
+node_modules/

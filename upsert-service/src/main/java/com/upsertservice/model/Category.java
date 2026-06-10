@@ -92,5 +92,6 @@ public enum Category {
     PETS,
     CHILDCARE,
     ELDER_CARE,
+    GOAL,
     OTHERS
 }

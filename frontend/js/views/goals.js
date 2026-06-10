@@ -39,7 +39,7 @@ async function loadGoals(uid) {
       emptyState('target', 'No savings goals', 'Create a goal to start tracking progress.');
     goals.forEach(g => {
       document.getElementById(`del-goal-${g.id}`)?.addEventListener('click', (e) => deleteGoal(g.id, uid, e.target.closest('.card')));
-      document.getElementById(`contrib-goal-${g.id}`)?.addEventListener('click', () => contributeToGoal(g.id, uid));
+      document.getElementById(`view-goal-${g.id}`)?.addEventListener('click', () => viewGoalDetails(g, uid));
     });
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -65,7 +65,7 @@ function goalCard(g) {
       <div class="section-header" style="margin-bottom:8px">
         <h4 style="font-weight:700">${esc(g.name)} ${g.completed ? badge('Complete', 'income') : ''}${priorityBadge}</h4>
         <div style="display:flex;gap:6px">
-          ${!g.completed ? `<button id="contrib-goal-${g.id}" class="btn btn-success btn-sm">Contribute</button>` : ''}
+          <button id="view-goal-${g.id}" class="btn btn-secondary btn-sm">View Details</button>
           <button id="del-goal-${g.id}" class="btn btn-danger btn-icon btn-sm" aria-label="Delete goal">${icon('trash', 'sm')}</button>
         </div>
       </div>
@@ -150,19 +150,102 @@ async function deleteBudget(id, uid, cardElement) {
   }
 }
 
-function contributeToGoal(id, uid) {
-  openModal('Contribute to Goal', `
-    <form id="contrib-form">
-      <div class="form-group"><label for="contrib-amt">Amount</label>
-        <input class="form-input" id="contrib-amt" type="number" step="0.01" min="0.01" required placeholder="1000"></div>
-      ${modalActions('Cancel', 'Contribute')}
-    </form>`, {
-    onSubmit: async () => {
-      const amt = document.getElementById('contrib-amt').value;
-      await api.patch(`/upsert/goals/${id}/contribute`, null, { userId: uid, amount: amt });
-      toast(`₹${amt} contributed!`, 'success');
-      loadGoals(uid);
+window.deleteContribution = async function(txnId, goalId, uid) {
+  if (!(await confirmModal('Delete Contribution', 'Are you sure you want to delete this contribution? The goal progress will decrease.', 'Delete'))) return;
+  try {
+    await api.delete(`/upsert/delete/${txnId}`, { userId: uid });
+    toast('Contribution deleted', 'success');
+    viewGoalDetails({id: goalId}, uid, true); // reload
+    loadGoals(uid);
+  } catch(e) { toast(e.message, 'error'); }
+};
+
+async function viewGoalDetails(goalParam, uid, reloadData = false) {
+  let goal = goalParam;
+  if (reloadData) {
+      const goals = await api.get('/upsert/goals', { userId: uid });
+      goal = goals.find(g => g.id === goalParam.id);
+  }
+  
+  let txnsHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
+  
+  openModal(`Goal: ${esc(goal.name)}`, `
+    <div style="margin-bottom:16px;">
+      ${progressBar(Math.min(goal.progressPercentage, 100), goal.completed ? 'var(--accent-g)' : 'var(--primary)')}
+      <div style="display:flex;justify-content:space-between;font-size:.85rem;color:var(--text-dim);margin-top:8px">
+        <span>${formatCurrency(goal.savedAmount, goal.currency)} saved</span>
+        <span>Target: ${formatCurrency(goal.targetAmount, goal.currency)}</span>
+      </div>
+    </div>
+    
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h4 style="margin:0; font-weight:600;">Contribution History</h4>
+      ${!goal.completed ? `<button class="btn btn-success btn-sm" id="btn-add-contrib">+ Add Contribution</button>` : ''}
+    </div>
+    
+    <div id="goal-txns-list" style="max-height:300px; overflow-y:auto;">
+      ${txnsHTML}
+    </div>
+  `);
+
+  const txnsContainer = document.getElementById('goal-txns-list');
+  try {
+    const txns = await api.get(`/upsert/goals/${goal.id}/transactions`, { userId: uid });
+    if (!txns || txns.length === 0) {
+      txnsContainer.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:0.9rem">No contributions yet.</div>';
+    } else {
+      txnsContainer.innerHTML = txns.map(t => `
+        <div class="card" style="padding:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+           <div>
+             <div style="font-weight:600; font-size:0.95rem;">${formatCurrency(t.amount, t.currency)}</div>
+             <div style="font-size:0.8rem; color:var(--text-dim);">${formatDate(t.createdAt)} • ${esc(t.description || 'Contribution')}</div>
+           </div>
+           <button class="btn btn-danger btn-icon btn-sm" onclick="window.deleteContribution(${t.id}, ${goal.id}, '${uid}')" title="Delete Contribution">
+              ${icon('trash', 'xs')}
+           </button>
+        </div>
+      `).join('');
     }
+  } catch(e) {
+    txnsContainer.innerHTML = `<div style="color:var(--accent-r);padding:10px">Failed to load history</div>`;
+  }
+
+  document.getElementById('btn-add-contrib')?.addEventListener('click', () => {
+    openModal('Add Contribution', `
+      <form id="contrib-form">
+        <div class="form-row">
+          <div class="form-group" style="flex:1"><label for="c-amount">Amount</label>
+            <input class="form-input" id="c-amount" type="number" step="0.01" min="0.01" required placeholder="Amount to add">
+          </div>
+          <div class="form-group" style="flex:1"><label for="c-date">Date</label>
+            <input class="form-input" id="c-date" type="date" value="${new Date().toISOString().split('T')[0]}">
+          </div>
+        </div>
+        <div class="form-group"><label for="c-desc">Description (Optional)</label>
+          <input class="form-input" id="c-desc" placeholder="e.g. June savings">
+        </div>
+        ${modalActions('Cancel', 'Save Contribution')}
+      </form>
+    `, {
+      onSubmit: async () => {
+        const cDate = document.getElementById('c-date').value;
+        const payload = {
+          userId: uid,
+          name: `Contribution to ${goal.name}`,
+          amount: parseFloat(document.getElementById('c-amount').value),
+          type: 'EXPENSE',
+          category: 'GOAL',
+          currency: goal.currency,
+          description: document.getElementById('c-desc').value,
+          allocations: [{ goalId: goal.id, amount: parseFloat(document.getElementById('c-amount').value) }],
+          createdAt: cDate ? `${cDate}T12:00:00` : null
+        };
+        await api.post('/upsert/create', payload);
+        toast('Contribution added successfully', 'success');
+        viewGoalDetails(goal, uid, true);
+        loadGoals(uid);
+      }
+    });
   });
 }
 

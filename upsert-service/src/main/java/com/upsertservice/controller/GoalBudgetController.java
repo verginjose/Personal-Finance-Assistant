@@ -51,6 +51,7 @@ public class GoalBudgetController {
             @RequestParam BigDecimal amount) {
         validateUser(xUserId, userId);
         return ResponseEntity.ok(service.contributeToGoal(id, userId, amount));
+
     }
 
     @DeleteMapping("/goals/{id}")

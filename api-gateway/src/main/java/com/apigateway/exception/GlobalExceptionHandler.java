@@ -45,7 +45,10 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
 
         // Handle other exceptions as needed
         exchange.getResponse().setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR);
-        return exchange.getResponse().setComplete();
+        exchange.getResponse().getHeaders().add("Content-Type", MediaType.APPLICATION_JSON_VALUE);
+        String body = "{\"error\":\"Internal Server Error\",\"message\":\"An unexpected server error occurred\"}";
+        DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(body.getBytes());
+        return exchange.getResponse().writeWith(Mono.just(buffer));
     }
 
     private Mono<Void> handleUnauthorized(ServerWebExchange exchange) {

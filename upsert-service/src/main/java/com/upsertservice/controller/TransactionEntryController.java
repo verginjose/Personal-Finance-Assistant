@@ -91,7 +91,7 @@ public class TransactionEntryController {
         return ResponseEntity.ok(Map.of("message", "Entries deleted successfully", "count", ids.size()));
     }
 
-    // ── Read — single entry ───────────────────────────────────────────────────
+    // ── Read — single entry & goal contributions ──────────────────────────────
 
     @GetMapping("/entries/{id}")
     @Operation(summary = "Get a single entry by ID")
@@ -99,6 +99,18 @@ public class TransactionEntryController {
             @PathVariable Long id,
             @RequestParam UUID userId) {
         return ResponseEntity.ok(service.getEntryById(id, userId));
+    }
+
+    @GetMapping("/goals/{id}/transactions")
+    @Operation(summary = "Get transaction history for a savings goal")
+    public ResponseEntity<List<CreateEntryResponse>> getGoalTransactions(
+            @RequestHeader("X-User-Id") String xUserId,
+            @PathVariable Long id,
+            @RequestParam UUID userId) {
+        if (!userId.toString().equalsIgnoreCase(xUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: User ID mismatch");
+        }
+        return ResponseEntity.ok(service.getGoalContributions(id, userId));
     }
 
     // ── Read — paginated list with optional date-range filter ─────────────────

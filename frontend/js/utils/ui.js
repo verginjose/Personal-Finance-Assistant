@@ -222,6 +222,17 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
     };
   }
 
+  // Initialize Flatpickr for industrial grade date pickers
+  if (window.flatpickr) {
+    flatpickr(overlay.querySelectorAll('input[type="date"]'), {
+      dateFormat: "Y-m-d",
+      allowInput: true,
+      altInput: true,
+      altFormat: "F j, Y",
+      disableMobile: "true"
+    });
+  }
+
   return { overlay, close };
 }
 
@@ -300,31 +311,29 @@ export function categoryOptions(cats, selected) {
 
 export function setupCategorySearch(inputId, selectId) {
   const input = document.getElementById(inputId);
-  const select = document.getElementById(selectId);
-  if (!input || !select) return;
+  const selectElement = document.getElementById(selectId);
+  if (!selectElement) return;
 
-  input.addEventListener('input', (e) => {
-    const filter = e.target.value.toLowerCase();
-    const options = Array.from(select.options);
-    
-    // Skip empty or optgroup labels, just focus on actual category options
-    options.forEach(opt => {
-      if (!opt.value) return; 
-      
-      const text = opt.textContent.toLowerCase();
-      if (text.includes(filter)) {
-        opt.style.display = '';
-      } else {
-        opt.style.display = 'none';
-      }
-    });
+  // Hide our manual search input since Tom Select has its own
+  if (input) {
+    input.style.display = 'none';
+  }
 
-    // Auto-select the first visible valid option if user is typing
-    if (filter.length > 0) {
-      const firstVisible = options.find(opt => opt.value && opt.style.display !== 'none');
-      if (firstVisible) {
-        firstVisible.selected = true;
-      }
+  // If Tom Select is loaded, initialize it
+  if (window.TomSelect) {
+    // Check if it's already initialized to avoid errors on re-renders
+    if (selectElement.tomselect) {
+      selectElement.tomselect.destroy();
     }
-  });
+    
+    new TomSelect(selectElement, {
+      create: false,
+      sortField: {
+        field: "text",
+        direction: "asc"
+      },
+      placeholder: 'Search category...',
+      maxOptions: 100
+    });
+  }
 }

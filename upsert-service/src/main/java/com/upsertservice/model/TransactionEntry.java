@@ -71,7 +71,7 @@ public class TransactionEntry implements Serializable {
     @Setter
     private String description;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false)
     @Getter
     @Setter
     private LocalDateTime createdAt;
@@ -83,7 +83,9 @@ public class TransactionEntry implements Serializable {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
         updatedAt = LocalDateTime.now();
     }
 

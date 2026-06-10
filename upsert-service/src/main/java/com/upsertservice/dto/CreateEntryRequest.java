@@ -45,4 +45,7 @@ public class CreateEntryRequest {
 
     /** Optional list of goal allocations when this transaction contributes to goals. */
     private java.util.List<GoalAllocationRequest> allocations;
+
+    /** Optional creation date for retroactively adding transactions. */
+    private java.time.LocalDateTime createdAt;
 }

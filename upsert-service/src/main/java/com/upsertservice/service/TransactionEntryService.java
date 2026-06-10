@@ -135,6 +135,9 @@ public class TransactionEntryService {
         if (request.isRecurring() && request.getRecurringPeriod() != null) {
             entry.setNextRunDate(calculateNextRunDate(LocalDateTime.now(), request.getRecurringPeriod()));
         }
+        if (request.getCreatedAt() != null) {
+            entry.setCreatedAt(request.getCreatedAt());
+        }
         return entry;
     }
 
@@ -157,6 +160,9 @@ public class TransactionEntryService {
         if (!existing.getUserId().equals(request.getUserId())) {
             throw new SecurityException("User is not authorized to update this transaction");
         }
+        BigDecimal oldAmount = existing.getAmount();
+        BigDecimal diff = request.getAmount().subtract(oldAmount);
+
         existing.setName(request.getName());
         existing.setAmount(request.getAmount());
         existing.setType(request.getType());
@@ -165,7 +171,26 @@ public class TransactionEntryService {
         existing.setCategory(request.getCategory());
         existing.setRecurring(request.isRecurring());
         existing.setRecurringPeriod(request.getRecurringPeriod());
+        
+        if (request.getCreatedAt() != null) {
+            existing.setCreatedAt(request.getCreatedAt());
+        }
+        
         TransactionEntry updated = repository.save(existing);
+        
+        if (diff.compareTo(BigDecimal.ZERO) != 0) {
+            List<com.upsertservice.model.TransactionGoalAllocation> allocations = allocationRepository.findByTransactionId(updated.getId());
+            if (allocations != null && !allocations.isEmpty()) {
+                com.upsertservice.model.TransactionGoalAllocation alloc = allocations.get(0);
+                alloc.setAmount(alloc.getAmount().add(diff));
+                allocationRepository.save(alloc);
+                try {
+                    goalBudgetService.contributeToGoal(alloc.getGoalId(), request.getUserId(), diff);
+                } catch (Exception e) {
+                    log.warn("Failed to update goal allocation for goal {}: {}", alloc.getGoalId(), e.getMessage());
+                }
+            }
+        }
         
         OutboxEvent event = new OutboxEvent();
         event.setUserId(request.getUserId());
@@ -183,8 +208,25 @@ public class TransactionEntryService {
         TransactionEntry entry = repository.findByIdAndUserIdAndDeletedAtIsNull(id, userId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Transaction entry with ID " + id + " not found for user " + userId));
+        BigDecimal oldAmount = entry.getAmount();
+        BigDecimal diff = newAmount.subtract(oldAmount);
+
         entry.setAmount(newAmount);
         TransactionEntry saved = repository.save(entry);
+        
+        if (diff.compareTo(BigDecimal.ZERO) != 0) {
+            List<com.upsertservice.model.TransactionGoalAllocation> allocations = allocationRepository.findByTransactionId(saved.getId());
+            if (allocations != null && !allocations.isEmpty()) {
+                com.upsertservice.model.TransactionGoalAllocation alloc = allocations.get(0);
+                alloc.setAmount(alloc.getAmount().add(diff));
+                allocationRepository.save(alloc);
+                try {
+                    goalBudgetService.contributeToGoal(alloc.getGoalId(), userId, diff);
+                } catch (Exception e) {
+                    log.warn("Failed to update goal allocation for goal {}: {}", alloc.getGoalId(), e.getMessage());
+                }
+            }
+        }
         
         OutboxEvent event = new OutboxEvent();
         event.setUserId(userId);
@@ -232,7 +274,14 @@ public class TransactionEntryService {
         log.info("Transaction deleted: id={}, user={}", id, userId);
     }
 
-    // ── Read — single entry ───────────────────────────────────────────────────
+    // ── Read — single entry & goal contributions ──────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<CreateEntryResponse> getGoalContributions(Long goalId, UUID userId) {
+        return repository.findByGoalIdAndUserId(goalId, userId).stream()
+                .map(this::convertToResponse)
+                .toList();
+    }
 
     @Transactional(readOnly = true)
     public CreateEntryResponse getEntryById(Long id, UUID userId) {

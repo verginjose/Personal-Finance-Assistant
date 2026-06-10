@@ -52,7 +52,7 @@ public class GlobalExceptionHandler {
         log.error("Unexpected error in analytics-service", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
                 "error", "Internal server error",
-                "message", ex.getMessage(),
+                "message", "An unexpected server error occurred. Please try again later.",
                 "timestamp", LocalDateTime.now()));
     }
 

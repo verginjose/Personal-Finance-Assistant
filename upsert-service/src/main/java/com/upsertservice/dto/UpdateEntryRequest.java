@@ -45,6 +45,8 @@ public class UpdateEntryRequest {
 
     private RecurringPeriod recurringPeriod;
 
+    private java.time.LocalDateTime createdAt;
+
     public UpdateEntryRequest() {}
 }
 

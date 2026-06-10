@@ -111,15 +111,16 @@ public class CacheKeyRegistry {
     public void evictForUser(UUID userId) {
         String userSet = USER_KEY_PREFIX + userId;
         try {
-            Set<Object> members = redisTemplate.opsForSet().members(userSet);
-            if (members == null || members.isEmpty()) {
+            Set<String> keys = redisTemplate.execute((RedisCallback<Set<String>>) connection -> {
+                Set<byte[]> bytes = connection.setCommands().sMembers(userSet.getBytes());
+                if (bytes == null) return Collections.emptySet();
+                return bytes.stream().map(String::new).collect(Collectors.toSet());
+            });
+
+            if (keys == null || keys.isEmpty()) {
                 log.debug("Nothing to evict for user={}", userId);
                 return;
             }
-
-            List<String> keys = members.stream()
-                    .map(Object::toString)
-                    .toList();
 
             // Delete cache entries + registry set atomically
             redisTemplate.executePipelined((RedisCallback<?>) connection -> {
@@ -155,9 +156,12 @@ public class CacheKeyRegistry {
     public Set<String> getRegisteredKeys(UUID userId) {
         String userSet = USER_KEY_PREFIX + userId;
         try {
-            Set<Object> members = redisTemplate.opsForSet().members(userSet);
-            if (members == null) return Collections.emptySet();
-            return members.stream().map(Object::toString).collect(Collectors.toSet());
+            Set<String> keys = redisTemplate.execute((RedisCallback<Set<String>>) connection -> {
+                Set<byte[]> bytes = connection.setCommands().sMembers(userSet.getBytes());
+                if (bytes == null) return Collections.emptySet();
+                return bytes.stream().map(String::new).collect(Collectors.toSet());
+            });
+            return keys != null ? keys : Collections.emptySet();
         } catch (Exception e) {
             log.warn("getRegisteredKeys failed user={}: {}", userId, e.getMessage());
             return Collections.emptySet();

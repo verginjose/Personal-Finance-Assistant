@@ -120,7 +120,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                    SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
                    SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
                    COUNT(*) AS transactionCount
-            FROM transaction_entry t
+            FROM transaction_entries t
             WHERE t.user_id = :userId
             GROUP BY day
             ORDER BY day
@@ -132,7 +132,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                    SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
                    SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
                    COUNT(*) AS transactionCount
-            FROM transaction_entry t
+            FROM transaction_entries t
             WHERE t.user_id = :userId
               AND t.created_at BETWEEN :start AND :end
             GROUP BY day

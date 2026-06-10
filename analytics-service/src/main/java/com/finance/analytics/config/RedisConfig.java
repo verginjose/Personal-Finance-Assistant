@@ -15,7 +15,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.actuate.metrics.cache.CacheMetricsRegistrar;
 import org.springframework.cache.Cache;
 import org.springframework.cache.annotation.CachingConfigurer;
-import org.springframework.cache.annotation.CachingConfigurerSupport;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,7 +33,6 @@ import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSeriali
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.lang.NonNull;
-import org.springframework.lang.NonNullApi;
 
 import java.util.Map;
 import java.util.HashMap;
@@ -86,7 +84,14 @@ public class RedisConfig {
     }
 
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory, @Lazy CacheKeyRegistry cacheKeyRegistry) {
+    public RedisCacheWriter redisCacheWriter(RedisConnectionFactory connectionFactory) {
+        return RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory);
+    }
+
+    @Bean
+    public RedisCacheManager cacheManager(
+            RedisCacheWriter redisCacheWriter,           // ✅ injected — reused everywhere
+            @Lazy CacheKeyRegistry cacheKeyRegistry) {  // ✅ removed connectionFactory — not needed here
 
         GenericJackson2JsonRedisSerializer jsonSerializer =
                 new GenericJackson2JsonRedisSerializer(redisObjectMapper());
@@ -94,8 +99,8 @@ public class RedisConfig {
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration
                 .defaultCacheConfig()
                 .entryTtl(Duration.ofMinutes(10))
-                .disableCachingNullValues()          // add this — don't cache nulls
-                .computePrefixWith(cacheName ->      // add this — namespace keys
+                .disableCachingNullValues()
+                .computePrefixWith(cacheName ->
                         "finance:analytics:v1:" + cacheName + ":")
                 .serializeKeysWith(
                         RedisSerializationContext.SerializationPair
@@ -104,7 +109,6 @@ public class RedisConfig {
                         RedisSerializationContext.SerializationPair
                                 .fromSerializer(jsonSerializer));
 
-        // Per-cache TTL
         Map<String, RedisCacheConfiguration> cacheConfigs = new HashMap<>();
         cacheConfigs.put("category-analytics",
                 defaultConfig.entryTtl(Duration.ofMinutes(30)));
@@ -113,21 +117,28 @@ public class RedisConfig {
         cacheConfigs.put("comprehensive-analytics",
                 defaultConfig.entryTtl(Duration.ofMinutes(5)));
 
-
         return new RedisCacheManager(
-                RedisCacheWriter.nonLockingRedisCacheWriter(connectionFactory),
+                redisCacheWriter,    // ✅ same instance
                 defaultConfig,
-                cacheConfigs
+                cacheConfigs         // ✅ per-cache TTLs now actually applied
         ) {
             @Override
             @NonNull
-            protected RedisCache createRedisCache(@NonNull String name,  RedisCacheConfiguration cfg) {
-                RedisCache raw = super.createRedisCache(name, cfg);
-                return new TrackingRedisCache(raw, cacheKeyRegistry);
+            protected RedisCache createRedisCache(
+                    @NonNull String name,
+                    @Nullable RedisCacheConfiguration cfg) {
+
+                RedisCacheConfiguration resolved = cfg != null ? cfg : defaultConfig;
+
+                return new TrackingRedisCache(
+                        name,
+                        redisCacheWriter,   // ✅ same instance
+                        resolved,
+                        cacheKeyRegistry
+                );
             }
         };
     }
-
     // Circuit breaker — Redis down won't crash your app
     @Bean
     public CachingConfigurer cachingConfigurer() {

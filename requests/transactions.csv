@@ -1,1 +1,4 @@
 id,name,amount,type,expenseCategory,incomeCategory,currency,description,recurring,recurringPeriod,createdAt
+4,Saving money for mackbook,49000.00,EXPENSE,OTHERS,INR,Saving 50000 for macbook,false,,2026-06-10T15:16:44.976031
+3,ABC Tech Solutions Pvt. Ltd.,150000.00,INCOME,SALARY,INR,Monthly Earnings,false,,2026-06-10T11:52:21.978797
+2,SETC MARTHANDAM DEPOT,245.00,EXPENSE,PUBLIC_TRANSPORT,INR,Ticket No 103571793131224036,false,,2026-06-10T11:41:44.939415

@@ -2,7 +2,7 @@ import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
-  typeBadge, openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions
+  typeBadge, openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions, setupCategorySearch
 } from '../utils/ui.js';
 
 let currentPage = 0, totalPages = 0;
@@ -185,7 +185,11 @@ async function showModal(userId, existing, onDone) {
         </div>
         <div class="form-group"><label for="m-currency">Currency</label><input class="form-input" id="m-currency" maxlength="3" value="${esc(existing?.currency || 'INR')}" required></div>
       </div>
-      <div class="form-group"><label for="m-cat">Category</label><select class="form-select" id="m-cat"></select></div>
+      <div class="form-group" id="m-cat-group">
+        <label for="m-cat">Category</label>
+        <input type="text" id="m-cat-search" class="form-input category-search" placeholder="Search category..." style="margin-bottom: 8px;">
+        <select class="form-select category-select" id="m-cat" required></select>
+      </div>
       <div class="form-group"><label for="m-desc">Description</label><textarea class="form-textarea" id="m-desc">${esc(existing?.description || '')}</textarea></div>
       
       ${!isEdit && goals.length > 0 ? `
@@ -296,6 +300,7 @@ async function showModal(userId, existing, onDone) {
   };
 
   updateCats();
+  setupCategorySearch('m-cat-search', 'm-cat');
   document.getElementById('m-type').onchange = updateCats;
 }
 

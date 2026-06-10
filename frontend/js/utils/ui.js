@@ -277,17 +277,54 @@ export function dataField(label, value) {
 }
 
 export const EXPENSE_CATS = [
-  'FOOD_AND_DINING', 'TRANSPORTATION', 'SHOPPING', 'ENTERTAINMENT',
-  'BILLS_AND_UTILITIES', 'HEALTHCARE', 'TRAVEL', 'EDUCATION', 'OTHERS'
+  'RENT', 'HOME_LOAN_EMI', 'HOME_MAINTENANCE', 'PROPERTY_TAX', 'ELECTRICITY', 'WATER', 'GAS', 'INTERNET', 'MOBILE_PHONE', 'OTT_SUBSCRIPTIONS',
+  'GROCERIES', 'RESTAURANTS', 'FOOD_DELIVERY', 'COFFEE_AND_SNACKS',
+  'FUEL', 'PUBLIC_TRANSPORT', 'CAB_AND_AUTO', 'VEHICLE_EMI', 'VEHICLE_MAINTENANCE', 'PARKING_AND_TOLLS', 'FLIGHT_AND_TRAIN',
+  'DOCTOR_AND_CLINIC', 'MEDICINES', 'HEALTH_INSURANCE', 'GYM_AND_FITNESS', 'MENTAL_WELLNESS',
+  'TUITION_AND_FEES', 'BOOKS_AND_COURSES', 'COACHING', 'STUDENT_LOAN_EMI',
+  'CLOTHING', 'ELECTRONICS', 'HOME_APPLIANCES', 'PERSONAL_CARE', 'GIFTS_GIVEN',
+  'MOVIES_AND_EVENTS', 'GAMING', 'SPORTS_AND_HOBBIES', 'BOOKS_AND_MAGAZINES', 'TRAVEL_VACATION', 'HOTEL_AND_STAYS',
+  'LIFE_INSURANCE', 'VEHICLE_INSURANCE', 'CREDIT_CARD_PAYMENT', 'LOAN_REPAYMENT', 'MUTUAL_FUNDS_SIP', 'STOCKS_AND_TRADING', 'CRYPTO', 'EMERGENCY_FUND', 'FIXED_DEPOSIT',
+  'CHARITY_AND_DONATIONS', 'TAXES', 'FINES_AND_PENALTIES', 'PETS', 'CHILDCARE', 'ELDER_CARE', 'OTHERS'
 ];
 
 export const INCOME_CATS = [
-  'SALARY', 'BUSINESS', 'INVESTMENTS', 'GIFTS', 'FREELANCE',
-  'RENTAL_INCOME', 'INTEREST', 'OTHERS'
+  'SALARY', 'FREELANCE', 'BUSINESS', 'INVESTMENTS', 'RENTAL_INCOME', 'DIVIDENDS', 'INTEREST', 'BONUS', 'PENSION', 'GOVT_BENEFITS', 'CASHBACK_REWARDS', 'GIFTS_RECEIVED', 'TAX_REFUND', 'SIDE_HUSTLE', 'OTHER_INCOME'
 ];
 
 export function categoryOptions(cats, selected) {
   return cats.map(c =>
     `<option value="${c}" ${selected === c ? 'selected' : ''}>${formatCategory(c)}</option>`
   ).join('');
+}
+
+export function setupCategorySearch(inputId, selectId) {
+  const input = document.getElementById(inputId);
+  const select = document.getElementById(selectId);
+  if (!input || !select) return;
+
+  input.addEventListener('input', (e) => {
+    const filter = e.target.value.toLowerCase();
+    const options = Array.from(select.options);
+    
+    // Skip empty or optgroup labels, just focus on actual category options
+    options.forEach(opt => {
+      if (!opt.value) return; 
+      
+      const text = opt.textContent.toLowerCase();
+      if (text.includes(filter)) {
+        opt.style.display = '';
+      } else {
+        opt.style.display = 'none';
+      }
+    });
+
+    // Auto-select the first visible valid option if user is typing
+    if (filter.length > 0) {
+      const firstVisible = options.find(opt => opt.value && opt.style.display !== 'none');
+      if (firstVisible) {
+        firstVisible.selected = true;
+      }
+    }
+  });
 }

@@ -3,7 +3,7 @@ import { icon } from '../utils/icons.js';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
   progressBar, budgetStatusColor, budgetStatusBadge, badge, openModal, confirmModal, modalActions,
-  EXPENSE_CATS, categoryOptions
+  EXPENSE_CATS, categoryOptions, setupCategorySearch
 } from '../utils/ui.js';
 
 export async function renderGoals(container) {
@@ -208,8 +208,11 @@ function bindEvents(uid) {
   document.getElementById('add-budget-btn').onclick = () => {
     openModal('New Category Budget', `
       <form id="budget-form">
-        <div class="form-group"><label for="b-cat">Category</label>
-          <select class="form-select" id="b-cat">${categoryOptions(EXPENSE_CATS)}</select></div>
+        <div class="form-group" id="b-cat-group">
+          <label for="b-cat">Category</label>
+          <input type="text" id="b-cat-search" class="form-input category-search" placeholder="Search category..." style="margin-bottom: 8px;">
+          <select class="form-select category-select" id="b-cat">${categoryOptions(EXPENSE_CATS)}</select>
+        </div>
         <div class="form-row">
           <div class="form-group"><label for="b-amount">Budget Amount</label><input class="form-input" id="b-amount" type="number" min="1" required></div>
           <div class="form-group"><label for="b-period">Period</label>
@@ -253,6 +256,8 @@ function bindEvents(uid) {
         loadBudgets(uid);
       }
     });
+
+    setupCategorySearch('b-cat-search', 'b-cat');
 
     const periodSel = document.getElementById('b-period');
     const customDiv = document.getElementById('b-custom-dates');

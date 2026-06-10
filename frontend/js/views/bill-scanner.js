@@ -1,6 +1,6 @@
 import {api, Auth, toast} from '../utils/api.js';
 import {icon} from '../utils/icons.js';
-import {EXPENSE_CATS, INCOME_CATS, pageHeader} from '../utils/ui.js';
+import {EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
@@ -88,9 +88,10 @@ export async function renderBillScanner(container) {
             <option value="INCOME" ${type === 'INCOME' ? 'selected' : ''}>Income</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group" id="bs-cat-group">
           <label for="bs-category">Category</label>
-          <select class="form-select" id="bs-category"></select>
+          <input type="text" id="bs-cat-search" class="form-input category-search" placeholder="Search category..." style="margin-bottom: 8px;">
+          <select class="form-select category-select" id="bs-category"></select>
         </div>
       </div>
       <div class="form-group">
@@ -113,6 +114,7 @@ export async function renderBillScanner(container) {
 
     typeSelect.onchange = fillCategories;
     fillCategories();
+    setupCategorySearch('bs-cat-search', 'bs-category');
     form.onsubmit = (e) => { e.preventDefault(); saveTransaction(userId); };
   }
 

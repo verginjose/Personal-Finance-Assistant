@@ -1,6 +1,8 @@
 # Personal Finance Assistant
 
 [![Java](https://img.shields.io/badge/java-21%20%28OpenJDK%29-ED8B00?style=for-the-badge&logo=java)](https://openjdk.org/)
+[![JavaScript](https://img.shields.io/badge/javascript-ES6+-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![HTML5](https://img.shields.io/badge/html5-Vanilla-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML)
 [![Spring Boot](https://img.shields.io/badge/spring%20boot-3.2-6DB33F?style=for-the-badge&logo=springboot)](https://spring.io/projects/spring-boot)
 [![Docker](https://img.shields.io/badge/docker-24.0.5-2496ED?style=for-the-badge&logo=docker)](https://www.docker.com/)
 [![PostgreSQL]( https://img.shields.io/badge/postgresql-15-336791?style=for-the-badge&logo=postgresql)](https://www.postgresql.org/)
@@ -84,24 +86,29 @@ flowchart LR
 
 This platform is engineered as a highly scalable, event-driven microservices ecosystem. Below is a detailed breakdown of how data flows through the system and how each component interacts.
 
-### 1. API Gateway & Security Layer
+### 1. Client Application (Frontend)
+The user interface is engineered as a lightning-fast Single Page Application (SPA).
+- **Zero-Dependency Core**: Built purely with Vanilla JavaScript (ES6 Modules) and native HTML5/CSS3 to guarantee near-instant load times and minimal memory footprint without the overhead of heavy frameworks like React or Angular.
+- **Dynamic Data Visualization**: Leverages **Chart.js** to render real-time, interactive pie charts and trend lines for user analytics and budgets.
+
+### 2. API Gateway & Security Layer
 All incoming client traffic (Web UI or Mobile) is routed through the **Spring Cloud Gateway**. 
 - **Centralized Routing & CORS**: The Gateway handles CORS configuration and dynamically routes requests to the appropriate downstream microservice (`/auth/**` to Auth Service, `/upsert/**` to Upsert Service, etc.).
 - **Security Validation**: Every protected route requires a valid JSON Web Token (JWT). The Gateway intercepts requests, cryptographically validates the JWT signature (without needing to ping the Auth service), and securely forwards the extracted `X-User-Id` downstream via HTTP headers. 
 
-### 2. Core Business Services (Synchronous Flow)
+### 3. Core Business Services (Synchronous Flow)
 Once a request passes the Gateway, it hits one of the domain-driven services:
 - **Auth Service**: Manages user registration and authentication. It verifies credentials against hashed passwords stored in PostgreSQL, generates short-lived access tokens, and utilizes Redis to track active sessions or blacklist compromised tokens.
 - **Upsert Service**: The primary operational engine. It executes all core mutations (CRUD operations) for transactions, budgets, savings goals, and shared group bills. It guarantees ACID compliance by persisting canonical state directly to its isolated schema in **PostgreSQL**.
 - **Bill-Parser Service**: A specialized microservice designed to handle file uploads. It utilizes **PaddleOCR** to perform Optical Character Recognition on receipt images. It synchronously extracts semantic data (Merchant Name, Total Amount, Date) and returns a structured JSON payload to the client for easy transaction ingestion.
 
-### 3. Event-Driven Architecture (Asynchronous Flow)
+### 4. Event-Driven Architecture (Asynchronous Flow)
 To ensure high performance and loose coupling, the system leverages **Apache Kafka** and **Redis** for state propagation.
 - **The Outbox Pattern**: When the Upsert Service successfully modifies data (e.g., adding a new transaction), it atomically saves the transaction to the database *and* publishes a `transaction-cache-evict` event to Kafka. 
 - **Real-Time Analytics**: The **Analytics Service** acts as a Kafka consumer. It listens to these cache eviction events. When a user's financial data changes, the Analytics Service instantly invalidates their stale, pre-computed aggregations residing in the Redis Cache.
 - **AI-Powered Insights**: When a user requests their financial health dashboard, the Analytics Service aggregates their spending history and queries the external **Groq LLM API**. This generates personalized, AI-driven financial insights (e.g., warning the user about subscription bloat), which are then cached in Redis for extremely fast subsequent retrievals.
 
-### 4. Telemetry & Observability Pipeline
+### 5. Telemetry & Observability Pipeline
 A robust, enterprise-grade observability stack monitors the entire cluster.
 - **Log Aggregation (Vector & ClickHouse)**: Every microservice outputs structured JSON logs. **Vector** acts as an ultra-fast, lightweight log aggregator that scrapes the Docker socket, sanitizes the payloads (redacting PII like emails and passwords), and ships the logs in bulk to **ClickHouse**—a columnar database optimized for massive analytical queries.
 - **Metrics Scraping (Prometheus)**: Each Spring Boot microservice exposes a `/actuator/prometheus` endpoint. **Prometheus** periodically scrapes these endpoints to collect JVM metrics, HTTP latencies, and connection pool statuses. Additionally, Vector computes real-time error rates from the log streams and exposes them as native Prometheus metrics.

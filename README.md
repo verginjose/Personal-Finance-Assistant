@@ -68,6 +68,18 @@ flowchart LR
     Prometheus --> Grafana
 ```
 
+---
+## Key Features
+
+- **Income & Expense Tracking**: Fully-featured ledger to record, categorize, and query day-to-day financial transactions.
+- **Automated Subscription Detection**: A scheduled background job analyzes historical spending patterns to automatically detect recurring payments (e.g., Netflix, Gym), tracking active subscriptions and projecting upcoming charge dates.
+- **Savings Goals**: Users can define target amounts and deadlines for specific goals (e.g., "Vacation Fund"). The platform tracks progress and calculates required monthly contributions.
+- **Category Budgets**: Set hard spending limits across different categories (e.g., "Food", "Entertainment"). Real-time analytics track your burn rate to prevent overspending.
+- **Group Split Bills**: Seamlessly share expenses among friends or roommates. The system automatically calculates complex debt relationships to determine exactly who owes whom.
+- **AI-Powered Financial Insights**: Aggregates your transaction history and feeds it securely into the Groq LLM API to generate personalized financial health scores and actionable insights.
+- **OCR Receipt Parsing**: Upload an image of a receipt, and the backend uses PaddleOCR to instantly extract the merchant, total amount, and date for one-click ingestion.
+
+---
 ## System Architecture & Data Flow
 
 This platform is engineered as a highly scalable, event-driven microservices ecosystem. Below is a detailed breakdown of how data flows through the system and how each component interacts.
@@ -153,16 +165,3 @@ This repository ships with a comprehensive Python-based End-to-End (E2E) test su
 - Analytics generation and complex health-score calculations.
 
 The suite can be executed locally using the commands outlined above. Continuous Integration pipelines are configured to execute this script on every push to ensure system integrity. Furthermore, each microservice contains a comprehensive suite of Unit and Integration tests leveraging JUnit and Spring Boot Test. These can be executed by running `mvn test` in each respective service directory.
-
----
-## Contributing Guidelines
-1. Fork the repository.
-2. Create an isolated feature branch (`git checkout -b feature/your-feature-name`).
-3. Adhere to the established code style guidelines (enforced via Spotless and Checkstyle Maven plugins).
-4. Run the full test suite (`./mvnw verify && python3 requests/run_e2e_tests.py`) before committing.
-5. Submit a detailed Pull Request.
-
----
-## License and Acknowledgements
-This project is licensed under the MIT License. 
-Special thanks to the open-source maintainers of Spring Boot, Docker, PostgreSQL, Grafana, Prometheus, ClickHouse, PaddleOCR, and the Groq LLM API.

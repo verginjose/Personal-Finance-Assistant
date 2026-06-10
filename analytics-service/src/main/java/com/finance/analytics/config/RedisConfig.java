@@ -19,6 +19,7 @@ import org.springframework.cache.annotation.CachingConfigurerSupport;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.cache.RedisCache;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
@@ -85,7 +86,7 @@ public class RedisConfig {
     }
 
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory, CacheKeyRegistry cacheKeyRegistry) {
+    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory, @Lazy CacheKeyRegistry cacheKeyRegistry) {
 
         GenericJackson2JsonRedisSerializer jsonSerializer =
                 new GenericJackson2JsonRedisSerializer(redisObjectMapper());
@@ -181,7 +182,6 @@ public class RedisConfig {
         return template;
     }
 
-    @Bean
     public ObjectMapper redisObjectMapper() {
         return new ObjectMapper()
                 .registerModule(new JavaTimeModule())

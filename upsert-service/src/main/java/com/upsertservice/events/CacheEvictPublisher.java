@@ -25,30 +25,37 @@ public class CacheEvictPublisher {
     }
 
     public void publish(UUID userId, String operation, Long transactionId) {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         CompletableFuture.runAsync(() -> {
-            CacheEvictEvent event = CacheEvictEvent.of(userId, operation, transactionId);
-
-            // Use userId as partition key so same user's events go to same partition → ordered processing.
-            // Wrapped in try-catch: Kafka is optional infrastructure — a missing topic or broker
-            // unavailability must NEVER propagate as a 503 to the caller.
+            ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(classLoader);
             try {
-                CompletableFuture<SendResult<String, CacheEvictEvent>> future =
-                        kafkaTemplate.send(TOPIC, userId.toString(), event);
+                CacheEvictEvent event = CacheEvictEvent.of(userId, operation, transactionId);
 
-                future.whenComplete((result, ex) -> {
-                    if (ex != null) {
-                        log.warn("Cache evict event delivery failed for user={}, operation={}: {}",
-                                userId, operation, ex.getMessage());
-                    } else {
-                        log.debug("Cache evict event published: user={}, operation={}, partition={}",
-                                userId, operation,
-                                result.getRecordMetadata().partition());
-                    }
-                });
-            } catch (Exception ex) {
-                // Fire-and-forget: swallow synchronous Kafka errors (e.g. unknown topic, broker down)
-                log.warn("Could not send cache evict event for user={}, operation={}: {}",
-                        userId, operation, ex.getMessage());
+                // Use userId as partition key so same user's events go to same partition → ordered processing.
+                // Wrapped in try-catch: Kafka is optional infrastructure — a missing topic or broker
+                // unavailability must NEVER propagate as a 503 to the caller.
+                try {
+                    CompletableFuture<SendResult<String, CacheEvictEvent>> future =
+                            kafkaTemplate.send(TOPIC, userId.toString(), event);
+
+                    future.whenComplete((result, ex) -> {
+                        if (ex != null) {
+                            log.warn("Cache evict event delivery failed for user={}, operation={}: {}",
+                                    userId, operation, ex.getMessage());
+                        } else {
+                            log.debug("Cache evict event published: user={}, operation={}, partition={}",
+                                    userId, operation,
+                                    result.getRecordMetadata().partition());
+                        }
+                    });
+                } catch (Exception ex) {
+                    // Fire-and-forget: swallow synchronous Kafka errors (e.g. unknown topic, broker down)
+                    log.warn("Could not send cache evict event for user={}, operation={}",
+                            userId, operation, ex.getMessage());
+                }
+            } finally {
+                Thread.currentThread().setContextClassLoader(originalClassLoader);
             }
         });
     }

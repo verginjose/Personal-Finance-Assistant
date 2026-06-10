@@ -8,12 +8,14 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Table(name = "transaction_entries", schema = "finance", indexes = {
         @Index(name = "idx_transaction_user_deleted", columnList = "user_id, deleted_at"),
         @Index(name = "idx_transaction_user_type_created", columnList = "user_id, type, created_at")
 })
+@SQLRestriction("deleted_at IS NULL")
 public class TransactionEntry implements Serializable {
     private static final long serialVersionUID = 1L;
 

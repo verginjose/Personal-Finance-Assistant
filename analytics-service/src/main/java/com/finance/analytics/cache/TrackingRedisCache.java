@@ -37,7 +37,7 @@ public class TrackingRedisCache extends RedisCache {
     private void extractUserIdAndRegister(Object key) {
         try {
             String keyStr = key.toString();
-            String fullRedisKey = "finance:analytics:v1:" + getName() + "::" + keyStr;
+            String fullRedisKey = "finance:analytics:v1:" + getName() + ":" + keyStr;
             String[] parts = keyStr.split(":");
             UUID userId = UUID.fromString(parts[0]);
             registry.register(userId, fullRedisKey);
@@ -45,4 +45,5 @@ public class TrackingRedisCache extends RedisCache {
             log.warn("Could not register cache key={}: {}", key, e.getMessage());
         }
     }
+
 }

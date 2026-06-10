@@ -84,9 +84,9 @@ public class AnalyticsService {
         BigDecimal totalAmount = BigDecimal.ZERO;
 
         for (CategoryRow row : rows) {
-            Object category   = row.getCategory() != null ? row.getCategory() : "Unknown";
+            String category   = row.getCategory() != null ? row.getCategory().name() : "Unknown";
             BigDecimal amount = row.getTotalAmount() != null ? row.getTotalAmount() : BigDecimal.ZERO;
-            categoryData.add(new CategoryAnalytics((String)category, amount, row.getTransactionCount()));
+            categoryData.add(new CategoryAnalytics(category, amount, row.getTransactionCount()));
             totalAmount = totalAmount.add(amount);
         }
 

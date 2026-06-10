@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js';
-import { icon } from '../utils/icons.js';
-import { pageHeader, EXPENSE_CATS, INCOME_CATS } from '../utils/ui.js';
+import {api, Auth, toast} from '../utils/api.js';
+import {icon} from '../utils/icons.js';
+import {EXPENSE_CATS, INCOME_CATS, pageHeader} from '../utils/ui.js';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
@@ -155,9 +155,7 @@ async function saveTransaction(userId) {
       currency,
       description: document.getElementById('bs-desc').value.trim() || 'Processed from bill scanner'
     };
-    const cat = document.getElementById('bs-category').value;
-    if (type === 'INCOME') payload.incomeCategory = cat;
-    else payload.expenseCategory = cat;
+    payload.category = document.getElementById('bs-category').value;
 
     await api.post('/upsert/create', payload);
     toast('Transaction saved successfully!', 'success');

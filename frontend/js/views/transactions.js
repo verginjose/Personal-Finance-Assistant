@@ -2,7 +2,7 @@ import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
-  typeBadge, openModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions
+  typeBadge, openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions
 } from '../utils/ui.js';
 
 let currentPage = 0, totalPages = 0;
@@ -13,11 +13,7 @@ export async function renderTransactions(container) {
     ${pageHeader('Transactions', 'Manage your income and expenses', '<button class="btn btn-primary btn-sm" id="t-add">+ Add Transaction</button>')}
     <div class="toolbar fade-up">
       <div class="search-box">${icon('search', 'sm')}<input class="form-input" id="t-search" placeholder="Search by name or description…" aria-label="Search transactions"></div>
-      <select class="form-select" id="t-type-filter" style="width:150px" aria-label="Filter by type">
-        <option value="">All Types</option><option value="INCOME">Income</option><option value="EXPENSE">Expense</option>
-      </select>
-      <input class="form-input" id="t-start" type="date" style="width:160px" aria-label="Start date">
-      <input class="form-input" id="t-end" type="date" style="width:160px" aria-label="End date">
+      <button class="btn btn-secondary btn-sm" id="t-filter-btn">${icon('filter', 'sm')} Filters</button>
       <button class="btn btn-secondary btn-sm" id="t-export">${icon('download', 'sm')} Export CSV</button>
     </div>
     <div class="table-wrap fade-up">
@@ -26,34 +22,102 @@ export async function renderTransactions(container) {
         <tbody id="t-body"><tr><td colspan="6" style="text-align:center;padding:48px;color:var(--text-dim)">Loading…</td></tr></tbody>
       </table>
     </div>
-    <div class="pagination" id="t-pagination"></div>`;
+    <div class="pagination" id="t-pagination"></div>
+
+    <div class="side-panel-overlay" id="t-filter-overlay"></div>
+    <div class="side-panel" id="t-filter-panel">
+      <div class="side-panel-header">
+        <h2>Advanced Filters</h2>
+        <button class="btn btn-icon btn-ghost" id="t-filter-close" aria-label="Close filters">${icon('close', 'sm')}</button>
+      </div>
+      <div class="side-panel-body">
+        <div class="form-group">
+          <label for="t-type-filter">Transaction Type</label>
+          <select class="form-select" id="t-type-filter" aria-label="Filter by type">
+            <option value="">All Types</option><option value="INCOME">Income</option><option value="EXPENSE">Expense</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="t-category">Category</label>
+          <select class="form-select" id="t-category" aria-label="Filter by category">
+            <option value="">All Categories</option>
+            <optgroup label="Expenses">${categoryOptions(EXPENSE_CATS)}</optgroup>
+            <optgroup label="Income">${categoryOptions(INCOME_CATS)}</optgroup>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="t-start">Start Date</label>
+          <input class="form-input" id="t-start" type="date" aria-label="Start date">
+        </div>
+        <div class="form-group">
+          <label for="t-end">End Date</label>
+          <input class="form-input" id="t-end" type="date" aria-label="End date">
+        </div>
+      </div>
+      <div class="side-panel-footer">
+        <button class="btn btn-secondary" id="t-filter-reset">Reset</button>
+        <button class="btn btn-primary" id="t-filter-apply">Apply Filters</button>
+      </div>
+    </div>`;
 
   const load = () => loadTransactions(userId);
   document.getElementById('t-add').onclick = () => showModal(userId, null, load);
   document.getElementById('t-export').onclick = () => exportCsv(userId);
-  document.getElementById('t-type-filter').onchange = () => { currentPage = 0; load(); };
-  document.getElementById('t-start').onchange = () => { currentPage = 0; load(); };
-  document.getElementById('t-end').onchange = () => { currentPage = 0; load(); };
+
+  const panel = document.getElementById('t-filter-panel');
+  const overlay = document.getElementById('t-filter-overlay');
+  const openPanel = () => { panel.classList.add('open'); overlay.classList.add('open'); };
+  const closePanel = () => { panel.classList.remove('open'); overlay.classList.remove('open'); };
+
+  document.getElementById('t-filter-btn').onclick = openPanel;
+  document.getElementById('t-filter-close').onclick = closePanel;
+  overlay.onclick = closePanel;
+
+  document.getElementById('t-filter-apply').onclick = () => { currentPage = 0; load(); closePanel(); };
+  document.getElementById('t-filter-reset').onclick = () => {
+    document.getElementById('t-type-filter').value = '';
+    document.getElementById('t-category').value = '';
+    document.getElementById('t-start').value = '';
+    document.getElementById('t-end').value = '';
+    currentPage = 0;
+    load();
+    closePanel();
+  };
+
   let debounce;
   document.getElementById('t-search').oninput = () => {
     clearTimeout(debounce);
     debounce = setTimeout(() => { currentPage = 0; load(); }, 400);
   };
+
+  const pendingCategory = sessionStorage.getItem('pendingCategoryFilter');
+  if (pendingCategory) {
+    document.getElementById('t-category').value = pendingCategory;
+    sessionStorage.removeItem('pendingCategoryFilter');
+  }
+
   load();
 }
 
 async function loadTransactions(userId) {
   const search = document.getElementById('t-search')?.value;
   const type = document.getElementById('t-type-filter')?.value;
+  const category = document.getElementById('t-category')?.value;
   const start = document.getElementById('t-start')?.value;
   const end = document.getElementById('t-end')?.value;
   const tbody = document.getElementById('t-body');
   if (!tbody) return;
 
   try {
+    const params = { userId, page: currentPage, size: 15 };
+    if (type) params.type = type;
+    if (category) params.category = category;
+    if (start) params.startDate = start;
+    if (end) params.endDate = end;
+
     const result = search
       ? await api.get('/upsert/search', { userId, q: search, page: currentPage, size: 15 })
-      : await api.get('/upsert/entries', { userId, type: type || undefined, startDate: start || undefined, endDate: end || undefined, page: currentPage, size: 15 });
+      : await api.get('/upsert/entries', params);
 
     const items = result.content || [];
     totalPages = result.totalPages || 1;
@@ -80,7 +144,7 @@ async function loadTransactions(userId) {
       </tr>`).join('');
 
       tbody.querySelectorAll('.t-edit').forEach(b => b.onclick = () => editTransaction(userId, b.dataset.id));
-      tbody.querySelectorAll('.t-del').forEach(b => b.onclick = () => deleteTransaction(userId, b.dataset.id));
+      tbody.querySelectorAll('.t-del').forEach(b => b.onclick = () => deleteTransaction(userId, b.dataset.id, b.closest('tr')));
     }
     renderPagination();
   } catch (err) {
@@ -242,13 +306,25 @@ async function editTransaction(userId, id) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
-async function deleteTransaction(userId, id) {
-  if (!confirm('Delete this transaction?')) return;
+async function deleteTransaction(userId, id, rowElement) {
+  if (!(await confirmModal('Delete Transaction', 'Are you sure you want to delete this transaction? This action cannot be undone.', 'Delete'))) return;
+  if (rowElement) {
+    rowElement.style.transition = 'all 0.3s';
+    rowElement.style.opacity = '0.3';
+    rowElement.style.transform = 'scale(0.98)';
+  }
   try {
     await api.delete(`/upsert/delete/${id}`, { userId });
     toast('Deleted', 'success');
-    loadTransactions(userId);
-  } catch (err) { toast(err.message, 'error'); }
+    if (rowElement) rowElement.remove();
+    loadTransactions(userId); // reload quietly to get updated pagination
+  } catch (err) { 
+    if (rowElement) {
+      rowElement.style.opacity = '1';
+      rowElement.style.transform = 'none';
+    }
+    toast(err.message, 'error'); 
+  }
 }
 
 async function exportCsv(userId) {

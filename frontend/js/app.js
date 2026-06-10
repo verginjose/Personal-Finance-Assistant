@@ -89,7 +89,7 @@ function renderShell() {
   renderView();
 }
 
-function navigateTo(view) {
+export function navigateTo(view) {
   currentView = view;
   document.querySelectorAll('#sidebar-nav a').forEach(a => {
     const active = a.dataset.view === view;

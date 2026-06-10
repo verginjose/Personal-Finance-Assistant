@@ -1,5 +1,5 @@
 import { api, Auth, toast } from '../utils/api.js';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, modalActions } from '../utils/ui.js';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions } from '../utils/ui.js';
 
 let currentGroupId = null;
 
@@ -120,7 +120,7 @@ async function loadGroupDetail(groupId, userId) {
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, members, userId);
     el.querySelectorAll('.delete-expense-btn').forEach(btn => {
       btn.onclick = async () => {
-        if (!confirm('Delete this shared expense? Linked personal transactions will be removed.')) return;
+        if (!(await confirmModal('Delete Expense', 'Delete this shared expense? Linked personal transactions will be removed.', 'Delete'))) return;
         try {
           await api.delete(`/upsert/groups/${groupId}/expenses/${btn.dataset.id}`);
           toast('Expense deleted', 'success');
@@ -130,7 +130,7 @@ async function loadGroupDetail(groupId, userId) {
     });
     el.querySelectorAll('.settle-btn').forEach(btn => {
       btn.onclick = async () => {
-        if (!confirm(`Record settlement: did ${btn.dataset.fromName} pay ${btn.dataset.toName}?`)) return;
+        if (!(await confirmModal('Record Settlement', `Record settlement: did ${btn.dataset.fromName} pay ${btn.dataset.toName}?`, 'Record'))) return;
         try {
           await api.post(`/upsert/groups/${groupId}/settle`, null, { params: { fromUserId: btn.dataset.from, toUserId: btn.dataset.to } });
           toast('Settlement recorded!', 'success');

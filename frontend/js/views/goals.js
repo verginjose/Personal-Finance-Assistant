@@ -2,7 +2,7 @@ import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
-  progressBar, budgetStatusColor, budgetStatusBadge, badge, openModal, modalActions,
+  progressBar, budgetStatusColor, budgetStatusBadge, badge, openModal, confirmModal, modalActions,
   EXPENSE_CATS, categoryOptions
 } from '../utils/ui.js';
 
@@ -38,7 +38,7 @@ async function loadGoals(uid) {
     el.innerHTML = goals.length ? goals.map(goalCard).join('') :
       emptyState('target', 'No savings goals', 'Create a goal to start tracking progress.');
     goals.forEach(g => {
-      document.getElementById(`del-goal-${g.id}`)?.addEventListener('click', () => deleteGoal(g.id, uid));
+      document.getElementById(`del-goal-${g.id}`)?.addEventListener('click', (e) => deleteGoal(g.id, uid, e.target.closest('.card')));
       document.getElementById(`contrib-goal-${g.id}`)?.addEventListener('click', () => contributeToGoal(g.id, uid));
     });
   } catch (e) { toast(e.message, 'error'); }
@@ -51,7 +51,7 @@ async function loadBudgets(uid) {
     el.innerHTML = budgets.length ? budgets.map(budgetCard).join('') :
       emptyState('bar-chart', 'No budgets set', 'Set category limits to track spending.');
     budgets.forEach(b => {
-      document.getElementById(`del-budget-${b.budgetId}`)?.addEventListener('click', () => deleteBudget(b.budgetId, uid));
+      document.getElementById(`del-budget-${b.budgetId}`)?.addEventListener('click', (e) => deleteBudget(b.budgetId, uid, e.target.closest('.card')));
     });
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -106,16 +106,48 @@ function budgetCard(b) {
     </div>`;
 }
 
-async function deleteGoal(id, uid) {
-  if (!confirm('Delete this goal?')) return;
-  try { await api.delete(`/upsert/goals/${id}`, { userId: uid }); toast('Goal deleted', 'success'); loadGoals(uid); }
-  catch (e) { toast(e.message, 'error'); }
+async function deleteGoal(id, uid, cardElement) {
+  if (!(await confirmModal('Delete Goal', 'Are you sure you want to delete this goal? This action cannot be undone.', 'Delete'))) return;
+  if (cardElement) {
+    cardElement.style.transition = 'all 0.3s';
+    cardElement.style.opacity = '0.3';
+    cardElement.style.transform = 'scale(0.98)';
+  }
+  try { 
+    await api.delete(`/upsert/goals/${id}`, { userId: uid }); 
+    toast('Goal deleted', 'success'); 
+    if (cardElement) cardElement.remove();
+    loadGoals(uid); 
+  }
+  catch (e) { 
+    if (cardElement) {
+      cardElement.style.opacity = '1';
+      cardElement.style.transform = 'none';
+    }
+    toast(e.message, 'error'); 
+  }
 }
 
-async function deleteBudget(id, uid) {
-  if (!confirm('Delete this budget?')) return;
-  try { await api.delete(`/upsert/budgets/${id}`, { userId: uid }); toast('Budget deleted', 'success'); loadBudgets(uid); }
-  catch (e) { toast(e.message, 'error'); }
+async function deleteBudget(id, uid, cardElement) {
+  if (!(await confirmModal('Delete Budget', 'Are you sure you want to delete this budget? This action cannot be undone.', 'Delete'))) return;
+  if (cardElement) {
+    cardElement.style.transition = 'all 0.3s';
+    cardElement.style.opacity = '0.3';
+    cardElement.style.transform = 'scale(0.98)';
+  }
+  try { 
+    await api.delete(`/upsert/budgets/${id}`, { userId: uid }); 
+    toast('Budget deleted', 'success'); 
+    if (cardElement) cardElement.remove();
+    loadBudgets(uid); 
+  }
+  catch (e) { 
+    if (cardElement) {
+      cardElement.style.opacity = '1';
+      cardElement.style.transform = 'none';
+    }
+    toast(e.message, 'error'); 
+  }
 }
 
 function contributeToGoal(id, uid) {

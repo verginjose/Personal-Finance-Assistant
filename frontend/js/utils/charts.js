@@ -18,7 +18,7 @@ Chart.defaults.color = '#8888a4';
 Chart.defaults.borderColor = 'rgba(255,255,255,.06)';
 Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
 
-export function createDoughnut(ctx, labels, data, title = '') {
+export function createDoughnut(ctx, labels, data, title = '', onClickHandler = null) {
   return new Chart(ctx, {
     type: 'doughnut',
     data: {
@@ -33,6 +33,15 @@ export function createDoughnut(ctx, labels, data, title = '') {
     options: {
       responsive: true, maintainAspectRatio: false,
       cutout: '68%',
+      onClick: (e, elements) => {
+        if (elements.length > 0 && onClickHandler) {
+          const index = elements[0].index;
+          onClickHandler(labels[index], data[index]);
+        }
+      },
+      onHover: (e, elements) => {
+        e.native.target.style.cursor = (elements.length > 0 && onClickHandler) ? 'pointer' : 'default';
+      },
       plugins: {
         legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyleWidth: 10 } },
         title: { display: !!title, text: title, font: { size: 14, weight: 600 } }

@@ -27,13 +27,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.data.redis.core.StringRedisTemplate;
+import java.time.Duration;
+
 @Slf4j
 @Service
 @Transactional
 public class TransactionEntryService {
 
     private final TransactionEntryRepository repository;
-    private final IdempotencyRecordRepository idempotencyRecordRepository;
+    private final StringRedisTemplate redisTemplate;
     private final Counter createCounter;
     private final Counter deleteCounter;
     private final CacheEvictPublisher cacheEvictPublisher;
@@ -42,13 +45,13 @@ public class TransactionEntryService {
 
     public TransactionEntryService(
             TransactionEntryRepository repository,
-            IdempotencyRecordRepository idempotencyRecordRepository,
+            StringRedisTemplate redisTemplate,
             MeterRegistry meterRegistry, CacheEvictPublisher cacheEvictPublisher,
             GoalBudgetService goalBudgetService,
             com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository
     ) {
         this.repository = repository;
-        this.idempotencyRecordRepository = idempotencyRecordRepository;
+        this.redisTemplate = redisTemplate;
         this.createCounter = meterRegistry.counter("transactions.create.success");
         this.deleteCounter = meterRegistry.counter("transactions.delete.success");
         this.cacheEvictPublisher = cacheEvictPublisher;
@@ -63,16 +66,21 @@ public class TransactionEntryService {
     }
 
     public CreateEntryResponse createEntry(CreateEntryRequest request, String idempotencyKey, boolean publishCacheEvict) {
+        String redisKey = null;
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            IdempotencyRecord existing = idempotencyRecordRepository
-                    .findByUserIdAndIdempotencyKey(request.getUserId(), idempotencyKey.trim())
-                    .orElse(null);
+            redisKey = "idem:txn:" + request.getUserId() + ":" + idempotencyKey.trim();
+            String existingTxnIdStr = redisTemplate.opsForValue().get(redisKey);
             log.info("Trying to find the IdempotencyRecord for this key {}",idempotencyKey);
-            if (existing != null && existing.getTransactionId() != null) {
-                log.info("Found existing IdempotencyRecord for this key {}",existing.getId());
-                TransactionEntry existingEntry = repository.findByIdAndDeletedAtIsNull(existing.getTransactionId())
-                        .orElseThrow(() -> new IllegalStateException("Idempotency key points to a missing transaction"));
-                return convertToResponse(existingEntry);
+            if (existingTxnIdStr != null) {
+                log.info("Found existing IdempotencyRecord for this key {}", idempotencyKey);
+                try {
+                    Long existingTxnId = Long.parseLong(existingTxnIdStr);
+                    TransactionEntry existingEntry = repository.findByIdAndDeletedAtIsNull(existingTxnId)
+                            .orElseThrow(() -> new IllegalStateException("Idempotency key points to a missing transaction"));
+                    return convertToResponse(existingEntry);
+                } catch (NumberFormatException e) {
+                    log.error("Invalid transaction ID in redis cache", e);
+                }
             }
             log.info("Creating the IdempotencyRecord for this key {}",request.getUserId());
         }
@@ -99,13 +107,9 @@ public class TransactionEntryService {
         }
         createCounter.increment();
         log.info("Idempotency key {}",idempotencyKey);
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            IdempotencyRecord record = new IdempotencyRecord();
-            record.setUserId(request.getUserId());
-            record.setIdempotencyKey(idempotencyKey.trim());
-            record.setTransactionId(saved.getId());
-            record=idempotencyRecordRepository.save(record);
-            log.info("Created IdempotencyRecord for this key {}",record.getId());
+        if (redisKey != null) {
+            redisTemplate.opsForValue().set(redisKey, String.valueOf(saved.getId()), Duration.ofHours(24));
+            log.info("Created IdempotencyRecord for this key {} in Redis", idempotencyKey);
         }
 
         log.info("Transaction created: id={}, user={}, recurring={}", saved.getId(), saved.getUserId(), saved.isRecurring());

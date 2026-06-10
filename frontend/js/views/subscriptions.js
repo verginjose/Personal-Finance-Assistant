@@ -1,5 +1,5 @@
 import { api, Auth, toast } from '../utils/api.js';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate } from '../utils/ui.js';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, confirmModal } from '../utils/ui.js';
 
 export async function renderSubscriptions(container) {
   const userId = Auth.getUserId();
@@ -26,7 +26,7 @@ export async function renderSubscriptions(container) {
   }
 
   async function dismissSub(id, uid) {
-    if (!confirm('Dismiss this subscription alert?')) return;
+    if (!(await confirmModal('Dismiss Subscription', 'Dismiss this subscription alert?', 'Dismiss'))) return;
     try {
       await api.delete(`/upsert/subscriptions/${id}/deactivate`, { userId: uid });
       toast('Subscription dismissed', 'success');

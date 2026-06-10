@@ -1,5 +1,6 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { createDoughnut, createLine, destroyChart } from '../utils/charts.js';
+import { navigateTo } from '../app.js';
 import { icon } from '../utils/icons.js';
 import {
   pageHeader, skeletonKpiRow, skeletonChart,
@@ -116,7 +117,17 @@ export async function renderDashboard(container) {
     pieWrap.innerHTML = '<canvas id="d-pie"></canvas>';
     pieChart = destroyChart(pieChart);
     if (pie?.labels?.length && pie.datasets?.[0]?.data) {
-      pieChart = createDoughnut(document.getElementById('d-pie'), pie.labels, pie.datasets[0].data);
+      pieChart = createDoughnut(document.getElementById('d-pie'), pie.labels, pie.datasets[0].data, '', (label, value) => {
+        // Find the category key matching the label
+        // Labels are typically formatted, e.g. 'Food and Dining' -> 'FOOD_AND_DINING'
+        const categoryKey = label.toUpperCase().replace(/\s+/g, '_');
+        
+        // Wait, how do we pass filter to transactions page?
+        // We'll set it in localStorage briefly or just navigate
+        // Since we don't have a state management system, we can store it in sessionStorage
+        sessionStorage.setItem('pendingCategoryFilter', categoryKey);
+        navigateTo('transactions');
+      });
     } else {
       pieWrap.innerHTML = '<div class="empty-state" style="padding:40px"><p>No expense data yet</p></div>';
     }

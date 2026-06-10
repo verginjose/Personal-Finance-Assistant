@@ -225,6 +225,41 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
   return { overlay, close };
 }
 
+export function confirmModal(title, message, confirmText = 'Confirm', cancelText = 'Cancel') {
+  return new Promise((resolve) => {
+    const { overlay, close } = openModal(title, `
+      <p style="margin-bottom: 24px; color: var(--text-dim);">${esc(message)}</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="confirm-cancel-btn">${esc(cancelText)}</button>
+        <button type="button" class="btn" style="background: var(--accent-g); color: #000;" id="confirm-ok-btn">${esc(confirmText)}</button>
+      </div>
+    `);
+
+    overlay.querySelector('#confirm-cancel-btn').onclick = () => {
+      close();
+      resolve(false);
+    };
+
+    overlay.querySelector('#confirm-ok-btn').onclick = () => {
+      close();
+      resolve(true);
+    };
+
+    // Override the default close behavior to resolve false
+    const originalClose = overlay.querySelector('.modal-close').onclick;
+    overlay.querySelector('.modal-close').onclick = (e) => {
+      originalClose(e);
+      resolve(false);
+    };
+    overlay.onclick = (e) => {
+      if (e.target === overlay) {
+        close();
+        resolve(false);
+      }
+    };
+  });
+}
+
 export function modalActions(cancelLabel = 'Cancel', submitLabel = 'Save') {
   return `
     <div class="modal-actions">

@@ -1164,9 +1164,9 @@ components:
         newPassword:
           type: string
     CreateEntryRequest:
-      $ref: './upsert-service/dto/CreateEntryRequest.yaml'
+      type: object
     UpdateEntryRequest:
-      $ref: './upsert-service/dto/UpdateEntryRequest.yaml'
+      type: object
     PatchAmountRequest:
       type: object
       required: [amount]
@@ -1174,7 +1174,7 @@ components:
         amount:
           type: number
     CreateEntryResponse:
-      $ref: './upsert-service/dto/CreateEntryResponse.yaml'
+      type: object
     TransactionEntry:
       type: object
       properties:
@@ -1223,18 +1223,20 @@ components:
       enum: [INCOME, EXPENSE]
     ExpenseCategory:
       type: string
+      enum: [FOOD_AND_DINING, TRANSPORT, HOUSING, UTILITIES, HEALTHCARE, EDUCATION, ENTERTAINMENT, SHOPPING, TRAVEL, INSURANCE, OTHER_EXPENSE, OTHERS]
     IncomeCategory:
       type: string
+      enum: [SALARY, FREELANCE, BUSINESS, INVESTMENT, RENTAL, GIFT, OTHER_INCOME]
     SavingsGoalRequest:
-      $ref: './upsert-service/dto/SavingsGoalRequest.yaml'
+      type: object
     SavingsGoalResponse:
-      $ref: './upsert-service/dto/SavingsGoalResponse.yaml'
+      type: object
     CategoryBudgetRequest:
-      $ref: './upsert-service/dto/CategoryBudgetRequest.yaml'
+      type: object
     BudgetUtilizationResponse:
-      $ref: './upsert-service/dto/BudgetUtilizationResponse.yaml'
+      type: object
     CreateGroupRequest:
-      $ref: './upsert-service/dto/CreateGroupRequest.yaml'
+      type: object
     ExpenseGroup:
       type: object
       properties:
@@ -1248,7 +1250,7 @@ components:
           type: string
           format: uuid
     AddMemberRequest:
-      $ref: './upsert-service/dto/AddMemberRequest.yaml'
+      type: object
     GroupMember:
       type: object
       properties:
@@ -1258,7 +1260,7 @@ components:
         userName:
           type: string
     CreateSharedExpenseRequest:
-      $ref: './upsert-service/dto/CreateSharedExpenseRequest.yaml'
+      type: object
     SharedExpense:
       type: object
       properties:
@@ -1351,6 +1353,6 @@ components:
           type: string
           format: date-time
     AiInsightResponse:
-      $ref: './analytics-service/dto/AiInsightResponse.yaml'
+      type: object
     HealthScoreResponse:
-      $ref: './analytics-service/dto/HealthScoreResponse.yaml'
+      type: object

@@ -1,4 +1,4 @@
-# 💰 Personal Finance Assistant
+# Personal Finance Assistant
 
 [![Java](https://img.shields.io/badge/java-21%20%28OpenJDK%29-ED8B00?style=for-the-badge&logo=java)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/spring%20boot-3.2-6DB33F?style=for-the-badge&logo=springboot)](https://spring.io/projects/spring-boot)
@@ -6,30 +6,38 @@
 [![PostgreSQL](https://img.shields.io/badge/postgresql-15-336791?style=for-the-badge&logo=postgresql)](https://www.postgresql.org/)
 [![Grafana](https://img.shields.io/badge/grafana-11.1.4-F46800?style=for-the-badge&logo=grafana)](https://grafana.com/)
 
-A **complete, production‑ready personal finance platform** built on a **micro‑services** architecture. It lets users track income/expenses, split bills, manage savings goals & budgets, automatically extract data from scanned bills, and receive AI‑generated financial insights. All services communicate via **JWT‑secured API gateway**, **Redis caching**, and **Kafka‑driven event propagation**.
+A comprehensive, production-ready personal finance platform built on a microservices architecture. This application enables users to track income and expenses, manage split bills, define savings goals, automatically extract structured data from scanned receipts, and receive AI-generated financial insights. 
+
+All services communicate securely via a JWT-secured API Gateway, utilizing Redis for high-performance caching and Kafka for asynchronous event propagation. The system is also equipped with an enterprise-grade observability pipeline powered by Vector, ClickHouse, and Grafana for centralized logging and telemetry.
 
 ---
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 ```mermaid
 flowchart LR
-    subgraph client[Client]
+    subgraph Client
         UI[Web UI / Mobile]
     end
-    subgraph gateway[API Gateway]
+    subgraph Gateway
         GW[Spring Cloud Gateway]
     end
-    subgraph services[Micro‑services]
+    subgraph Services
         Auth[Auth Service]
         Upsert[Upsert Service]
-        Bill[Bill‑Parser Service]
+        Bill[Bill-Parser Service]
         Analytics[Analytics Service]
     end
-    subgraph infra[Infrastructure]
+    subgraph Infrastructure
         PG[PostgreSQL]
-        Redis[Redis]
-        Kafka[Kafka]
-        Groq[Groq LLM]
+        Redis[Redis Cache]
+        Kafka[Kafka Event Broker]
+        Groq[Groq LLM API]
+    end
+    subgraph Observability
+        Vector[Vector Log Aggregator]
+        CH[ClickHouse Logs DB]
+        Grafana[Grafana Dashboard]
+        Prometheus[Prometheus Metrics]
     end
     UI --> GW
     GW --> Auth
@@ -46,73 +54,83 @@ flowchart LR
     Upsert --> Kafka
     Analytics --> Kafka
     Analytics --> Groq
+    Services -.-> Vector
+    Vector --> CH
+    Vector --> Prometheus
+    CH --> Grafana
+    Prometheus --> Grafana
 ```
 
-> The diagram above is generated with Mermaid and rendered by GitHub/Markdown viewers.
+> The diagram above is generated with Mermaid and rendered natively by GitHub.
 
 ---
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
-- **Docker & Docker‑Compose** (≥ 24)
-- **Java 21** (for local builds) – optional if you only run the containers.
-- **Maven 3.9+** (for local compilation of individual services).
+- Docker and Docker Compose (v24 or newer)
+- Java 21 (optional, required only for local compilation)
+- Maven 3.9+ (optional, required only for local compilation)
 
-### 1. Clone the repo
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/verginjose/Personal-Finance-Assistant.git
 cd Personal-Finance-Assistant
 ```
 
-### 2. Start the stack
+### 2. Start the Infrastructure Stack
 ```bash
-docker compose up -d   # starts Postgres, Redis, Kafka, all services & observability stack
+docker compose up -d
 ```
-> Services expose the following ports (see `docker-compose.yml`):
-> - API Gateway 8080
-> - Auth 8082, Upsert 8081, Bill 8083, Analytics 8084
-> - Grafana 3000, Prometheus 9090, ClickHouse 8123
+This command initializes PostgreSQL, Redis, Kafka, the complete suite of microservices, and the observability stack.
 
-### 3. Verify health
+Services expose the following ports locally (refer to `docker-compose.yml` for details):
+- API Gateway: `8080`
+- Auth Service: `8082`
+- Upsert Service: `8081`
+- Bill-Parser Service: `8083`
+- Analytics Service: `8084`
+- Grafana: `3000`
+- Prometheus: `9090`
+- ClickHouse: `8123`
+
+### 3. Verify System Health
 ```bash
-curl http://localhost:8080/health   # API gateway health
-curl http://localhost:8082/auth/health   # Auth service health
+curl http://localhost:8080/health        # API Gateway health check
+curl http://localhost:8082/auth/health   # Auth Service health check
 ```
 
-### 4. Run the end‑to‑end test suite
+### 4. Execute the End-to-End Test Suite
 ```bash
 python3 requests/run_e2e_tests.py
 ```
-All tests should pass (`71 passed, 0 failed`).
+The testing script will perform a full system validation. Expected outcome: `71 passed, 0 failed`.
 
 ---
-## 📚 API Overview
-The full list of HTTP endpoints (including request/response schemas) is available in the companion documentation:
-- **Markdown version:** [`endpoints.md`](endpoints.md)
-- **OpenAPI spec:** [`openapi.yaml`](openapi.yaml)
+## API Documentation
+The comprehensive list of HTTP endpoints, including request and response schemas, is available in the companion documentation files:
+- Markdown format: [`endpoints.md`](endpoints.md)
+- OpenAPI specification: [`openapi.yaml`](openapi.yaml)
 
 ---
-## 🧪 Testing
-The repository ships a **Python‑based E2E test suite** that exercises the complete flow:
-- authentication & token handling
-- CRUD operations for transactions, goals, budgets, and split‑bill groups
-- OCR bill ingestion (sample image included)
-- AI‑insights generation & cache eviction via Kafka
-- analytics charts and health‑score calculations
+## Testing Methodology
+This repository ships with a comprehensive Python-based End-to-End (E2E) test suite that exercises the entire system architecture. Coverage includes:
+- Authentication, token generation, and secure session handling.
+- Full CRUD operations for transactions, goals, budgets, and split-bill groups.
+- End-to-end OCR bill ingestion using sample images.
+- AI-driven insight generation and cache eviction workflows via Kafka.
+- Analytics generation and complex health-score calculations.
 
-Run it locally with the command shown above; CI pipelines execute the same script on every push.
+The suite can be executed locally using the commands outlined above. Continuous Integration pipelines are configured to execute this script on every push to ensure system integrity. Furthermore, each microservice contains a comprehensive suite of Unit and Integration tests leveraging JUnit and Spring Boot Test. These can be executed by running `mvn test` in each respective service directory.
 
 ---
-## 🤝 Contributing
+## Contributing Guidelines
 1. Fork the repository.
-2. Create a feature branch (`git checkout -b feat/my‑feature`).
-3. Follow the project's **code‑style** (Spotless + Checkstyle Maven plugins).
-4. Run the full test suite (`./mvnw verify && python3 requests/run_e2e_tests.py`).
-5. Submit a Pull Request.
+2. Create an isolated feature branch (`git checkout -b feature/your-feature-name`).
+3. Adhere to the established code style guidelines (enforced via Spotless and Checkstyle Maven plugins).
+4. Run the full test suite (`./mvnw verify && python3 requests/run_e2e_tests.py`) before committing.
+5. Submit a detailed Pull Request.
 
 ---
-## 📜 License & Acknowledgements
-Licensed under the **MIT License**. Thanks to the maintainers of Spring Boot, Docker, PostgreSQL, Grafana, Prometheus, ClickHouse, PaddleOCR, and the Groq LLM API.
-
----
-*Happy budgeting!*
+## License and Acknowledgements
+This project is licensed under the MIT License. 
+Special thanks to the open-source maintainers of Spring Boot, Docker, PostgreSQL, Grafana, Prometheus, ClickHouse, PaddleOCR, and the Groq LLM API.

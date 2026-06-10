@@ -109,7 +109,92 @@ class GoalBudgetServiceTest {
         assertThat(goal.isActive()).isFalse();
     }
 
+    @Test
+    @DisplayName("contributeToGoal: throws SecurityException when wrong user")
+    void contributeToGoal_wrongUser_throwsSecurityException() {
+        SavingsGoal goal = buildGoal(new BigDecimal("10000"), BigDecimal.ZERO);
+        goal.setUserId(UUID.randomUUID());
+        when(goalRepository.findById(1L)).thenReturn(Optional.of(goal));
+
+        assertThatThrownBy(() -> service.contributeToGoal(1L, userId, new BigDecimal("1000")))
+                .isInstanceOf(SecurityException.class);
+    }
+
+    @Test
+    @DisplayName("getGoals: returns list of active goals mapped to response")
+    void getGoals_returnsActiveGoals() {
+        SavingsGoal goal = buildGoal(new BigDecimal("5000"), BigDecimal.ZERO);
+        when(goalRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(userId)).thenReturn(List.of(goal));
+
+        List<SavingsGoalResponse> res = service.getGoals(userId);
+
+        assertThat(res).hasSize(1);
+        assertThat(res.get(0).getName()).isEqualTo("Test Goal");
+    }
+
     // ── Category Budgets ──────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("createBudget: saves budget and returns utilization")
+    void createBudget_validRequest_savesBudget() {
+        CategoryBudgetRequest req = new CategoryBudgetRequest();
+        req.setUserId(userId);
+        req.setExpenseCategory(Category.FOOD_AND_DINING);
+        req.setBudgetAmount(new BigDecimal("5000"));
+        req.setPeriod(RecurringPeriod.MONTHLY);
+        req.setCurrency("USD");
+
+        CategoryBudget saved = buildBudget(new BigDecimal("5000"), RecurringPeriod.MONTHLY);
+        saved.setCurrency("USD");
+
+        when(budgetRepository.save(any())).thenReturn(saved);
+        when(transactionRepository.sumExpensesByCategory(any(), any(), any(), any()))
+                .thenReturn(new BigDecimal("1000"));
+
+        BudgetUtilizationResponse res = service.createBudget(req);
+
+        assertThat(res.getExpenseCategory()).isEqualTo(Category.FOOD_AND_DINING);
+        assertThat(res.getUtilizationPercentage()).isEqualTo(20.0);
+        assertThat(res.getStatus()).isEqualTo("SAFE");
+    }
+
+    @Test
+    @DisplayName("getBudgets: returns utilization for all active budgets")
+    void getBudgets_returnsUtilizationList() {
+        CategoryBudget budget = buildBudget(new BigDecimal("1000"), RecurringPeriod.MONTHLY);
+        when(budgetRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(userId)).thenReturn(List.of(budget));
+        when(transactionRepository.sumExpensesByCategory(any(), any(), any(), any()))
+                .thenReturn(new BigDecimal("850")); // 85%
+
+        List<BudgetUtilizationResponse> res = service.getBudgets(userId);
+
+        assertThat(res).hasSize(1);
+        assertThat(res.get(0).getStatus()).isEqualTo("WARNING");
+        assertThat(res.get(0).getUtilizationPercentage()).isEqualTo(85.0);
+    }
+
+    @Test
+    @DisplayName("deleteBudget: throws SecurityException when wrong user")
+    void deleteBudget_wrongUser_throwsSecurityException() {
+        CategoryBudget budget = buildBudget(new BigDecimal("1000"), RecurringPeriod.MONTHLY);
+        budget.setUserId(UUID.randomUUID());
+        when(budgetRepository.findById(1L)).thenReturn(Optional.of(budget));
+
+        assertThatThrownBy(() -> service.deleteBudget(1L, userId))
+                .isInstanceOf(SecurityException.class);
+    }
+
+    @Test
+    @DisplayName("deleteBudget: archives budget when valid owner")
+    void deleteBudget_validOwner_archivesBudget() {
+        CategoryBudget budget = buildBudget(new BigDecimal("1000"), RecurringPeriod.MONTHLY);
+        when(budgetRepository.findById(1L)).thenReturn(Optional.of(budget));
+        when(budgetRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service.deleteBudget(1L, userId);
+
+        assertThat(budget.isActive()).isFalse();
+    }
 
     @Test
     @DisplayName("computeUtilization: returns SAFE when spent < 80% of budget")

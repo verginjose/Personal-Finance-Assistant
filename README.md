@@ -3,7 +3,12 @@
 [![Java](https://img.shields.io/badge/java-21%20%28OpenJDK%29-ED8B00?style=for-the-badge&logo=java)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/spring%20boot-3.2-6DB33F?style=for-the-badge&logo=springboot)](https://spring.io/projects/spring-boot)
 [![Docker](https://img.shields.io/badge/docker-24.0.5-2496ED?style=for-the-badge&logo=docker)](https://www.docker.com/)
-[![PostgreSQL](https://img.shields.io/badge/postgresql-15-336791?style=for-the-badge&logo=postgresql)](https://www.postgresql.org/)
+[![PostgreSQL]( https://img.shields.io/badge/postgresql-15-336791?style=for-the-badge&logo=postgresql)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/redis-7-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![Kafka](https://img.shields.io/badge/kafka-7.5.0-231F20?style=for-the-badge&logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
+[![Apache ZooKeeper](https://img.shields.io/badge/zookeeper-7.5.0-black?style=for-the-badge&logo=apachezookeeper)](https://zookeeper.apache.org/)
+[![ClickHouse](https://img.shields.io/badge/clickhouse-24.8-FFCC01?style=for-the-badge&logo=clickhouse&logoColor=white)](https://clickhouse.com/)
+[![Vector](https://img.shields.io/badge/vector-0.41.1-000000?style=for-the-badge&logo=vector&logoColor=white)](https://vector.dev/)
 [![Grafana](https://img.shields.io/badge/grafana-11.1.4-F46800?style=for-the-badge&logo=grafana)](https://grafana.com/)
 
 A comprehensive, production-ready personal finance platform built on a microservices architecture. This application enables users to track income and expenses, manage split bills, define savings goals, automatically extract structured data from scanned receipts, and receive AI-generated financial insights. 
@@ -55,13 +60,40 @@ flowchart LR
     Analytics --> Kafka
     Analytics --> Groq
     Services -.-> Vector
+    Services -.-> Prometheus
+    GW -.-> Prometheus
     Vector --> CH
     Vector --> Prometheus
     CH --> Grafana
     Prometheus --> Grafana
 ```
 
-> The diagram above is generated with Mermaid and rendered natively by GitHub.
+## System Architecture & Data Flow
+
+This platform is engineered as a highly scalable, event-driven microservices ecosystem. Below is a detailed breakdown of how data flows through the system and how each component interacts.
+
+### 1. API Gateway & Security Layer
+All incoming client traffic (Web UI or Mobile) is routed through the **Spring Cloud Gateway**. 
+- **Centralized Routing & CORS**: The Gateway handles CORS configuration and dynamically routes requests to the appropriate downstream microservice (`/auth/**` to Auth Service, `/upsert/**` to Upsert Service, etc.).
+- **Security Validation**: Every protected route requires a valid JSON Web Token (JWT). The Gateway intercepts requests, cryptographically validates the JWT signature (without needing to ping the Auth service), and securely forwards the extracted `X-User-Id` downstream via HTTP headers. 
+
+### 2. Core Business Services (Synchronous Flow)
+Once a request passes the Gateway, it hits one of the domain-driven services:
+- **Auth Service**: Manages user registration and authentication. It verifies credentials against hashed passwords stored in PostgreSQL, generates short-lived access tokens, and utilizes Redis to track active sessions or blacklist compromised tokens.
+- **Upsert Service**: The primary operational engine. It executes all core mutations (CRUD operations) for transactions, budgets, savings goals, and shared group bills. It guarantees ACID compliance by persisting canonical state directly to its isolated schema in **PostgreSQL**.
+- **Bill-Parser Service**: A specialized microservice designed to handle file uploads. It utilizes **PaddleOCR** to perform Optical Character Recognition on receipt images. It synchronously extracts semantic data (Merchant Name, Total Amount, Date) and returns a structured JSON payload to the client for easy transaction ingestion.
+
+### 3. Event-Driven Architecture (Asynchronous Flow)
+To ensure high performance and loose coupling, the system leverages **Apache Kafka** and **Redis** for state propagation.
+- **The Outbox Pattern**: When the Upsert Service successfully modifies data (e.g., adding a new transaction), it atomically saves the transaction to the database *and* publishes a `transaction-cache-evict` event to Kafka. 
+- **Real-Time Analytics**: The **Analytics Service** acts as a Kafka consumer. It listens to these cache eviction events. When a user's financial data changes, the Analytics Service instantly invalidates their stale, pre-computed aggregations residing in the Redis Cache.
+- **AI-Powered Insights**: When a user requests their financial health dashboard, the Analytics Service aggregates their spending history and queries the external **Groq LLM API**. This generates personalized, AI-driven financial insights (e.g., warning the user about subscription bloat), which are then cached in Redis for extremely fast subsequent retrievals.
+
+### 4. Telemetry & Observability Pipeline
+A robust, enterprise-grade observability stack monitors the entire cluster.
+- **Log Aggregation (Vector & ClickHouse)**: Every microservice outputs structured JSON logs. **Vector** acts as an ultra-fast, lightweight log aggregator that scrapes the Docker socket, sanitizes the payloads (redacting PII like emails and passwords), and ships the logs in bulk to **ClickHouse**—a columnar database optimized for massive analytical queries.
+- **Metrics Scraping (Prometheus)**: Each Spring Boot microservice exposes a `/actuator/prometheus` endpoint. **Prometheus** periodically scrapes these endpoints to collect JVM metrics, HTTP latencies, and connection pool statuses. Additionally, Vector computes real-time error rates from the log streams and exposes them as native Prometheus metrics.
+- **Visualization (Grafana)**: **Grafana** serves as the single pane of glass. It is pre-configured with ClickHouse and Prometheus data sources, offering rich dashboards that visualize system health, error traces, and infrastructure bottlenecks.
 
 ---
 ## Quick Start

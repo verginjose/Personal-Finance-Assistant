@@ -41,6 +41,12 @@ public class AnalyticsControllerTest {
     @MockitoBean
     private AiInsightsService aiInsightsService;
 
+    @MockitoBean
+    private com.finance.analytics.service.GoalForecastingService goalForecastingService;
+
+    @MockitoBean
+    private com.finance.analytics.service.BudgetTrendService budgetTrendService;
+
     @Test
     @DisplayName("GET /analytics/category-pie-chart: returns chart data")
     void getCategoryPieChart_succeeds() throws Exception {

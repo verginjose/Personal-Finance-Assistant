@@ -124,9 +124,9 @@ class AiInsightsServiceTest {
     @Test
     @DisplayName("generateInsights: returns default response when user has no transactions")
     void generateInsights_noTransactions_returnsDefaultMessage() {
-        when(repository.getTotalAmountByTypeAndDateRange(any(), TransactionType.valueOf(ArgumentMatchers.eq("INCOME")), any(), any()))
+        when(repository.getTotalAmountByTypeAndDateRange(any(), ArgumentMatchers.eq(TransactionType.INCOME), any(), any()))
                 .thenReturn(null);
-        when(repository.getTotalAmountByTypeAndDateRange(any(), TransactionType.valueOf(ArgumentMatchers.eq("EXPENSE")), any(), any()))
+        when(repository.getTotalAmountByTypeAndDateRange(any(), ArgumentMatchers.eq(TransactionType.EXPENSE), any(), any()))
                 .thenReturn(null);
         when(repository.getCategoryAnalyticsByDateRange(any(), any(), any()))
                 .thenReturn(Collections.emptyList());

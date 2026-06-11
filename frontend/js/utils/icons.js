@@ -39,6 +39,8 @@ const PATHS = {
   award: '<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>',
   handshake: '<path d="M11 17l2 2 6-6"/><path d="M2 12l4-4 4 4"/><path d="M22 12l-4-4-4 4"/>',
   document: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+  'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
+  'chevron-up': '<polyline points="18 15 12 9 6 15"/>'
 };
 
 export function icon(name, size = 'md') {

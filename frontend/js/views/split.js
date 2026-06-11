@@ -1,5 +1,6 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions } from '../utils/ui.js';
+import { icon } from '../utils/icons.js';
 
 let currentGroupId = null;
 
@@ -113,72 +114,150 @@ async function loadGroupDetail(groupId, userId) {
       };
       return;
     }
+    
+    const resolveMemberNameLocally = (id) => {
+      const m = members.find(x => x.userId === id);
+      return m ? m.name : id.substring(0, 8);
+    };
+
+    const myBalanceObj = balances?.memberBalances?.find(b => b.userId === userId);
+    const myNetBalance = myBalanceObj ? myBalanceObj.netBalance : 0;
 
     el.innerHTML = `
-      <div class="card" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:flex-start;">
-        <div>
-          <h3>${esc(group.name)}</h3>
-          <p style="color:var(--text-dim);margin-top:4px">${esc(group.description || '')}</p>
+      <div class="card" id="group-header-card" style="margin-bottom:20px;">
+        <div id="group-header-collapsed" style="cursor:pointer; display:flex; justify-content:space-between; align-items:flex-start;">
+          <div style="overflow:hidden; padding-right: 16px;">
+            <h3 style="margin:0;">${esc(group.name)}</h3>
+            <p id="gh-short-desc" style="color:var(--text-dim); margin-top:4px; margin-bottom:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(group.description || '')}</p>
+          </div>
+          <div id="gh-expand-icon" style="color:var(--text-muted); padding-top:4px; transition: transform 0.3s;">${icon('chevron-down')}</div>
         </div>
-        <div style="display:flex; gap:8px;">
-           <button class="btn btn-secondary btn-sm" id="sp-edit-group">Edit</button>
-           <button class="btn btn-danger btn-sm" id="sp-leave-group">Leave</button>
+        
+        <div id="group-header-expanded" style="display:none; border-top:1px solid var(--border); padding-top:16px; margin-top:16px;">
+          <p style="color:var(--text);margin-bottom:16px;line-height:1.5;">${esc(group.description || 'No description provided')}</p>
+          <div style="display:flex; gap:8px;">
+             <button class="btn btn-secondary btn-sm" id="sp-edit-group">Edit Group</button>
+             <button class="btn btn-danger btn-sm" id="sp-leave-group">Leave Group</button>
+          </div>
+        </div>
+        
+        <div style="display:flex; align-items:center; margin-top:16px; gap:8px;">
+          <div id="sp-view-members" style="background:var(--bg-card); padding:6px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.9rem; cursor:pointer; color:var(--text); font-weight:500; transition:var(--transition); display:flex; align-items:center; gap:6px;">
+            ${icon('users', 'sm')} ${members.length} Members
+          </div>
+          ${myNetBalance !== 0 ? `
+          <div style="background:rgba(${myNetBalance > 0 ? '34, 201, 147' : '249, 115, 22'}, 0.1); padding:6px 12px; border-radius:var(--radius-sm); border:1px solid ${myNetBalance > 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-size:0.9rem; color:${myNetBalance > 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-weight:700;">
+            ${myNetBalance > 0 ? 'Gets back ' + formatCurrency(myNetBalance) : 'You owe ' + formatCurrency(Math.abs(myNetBalance))}
+          </div>` : ''}
         </div>
       </div>
-      <div class="card-grid card-grid-3">
-        <div class="card">
-          <div class="card-header"><h3>Members (${members.length})</h3></div>
-          ${members.map(m => `<div class="balance-item"><span>@${esc(m.name)} ${m.status === 'PENDING' ? '<span class="badge badge-warning" style="font-size:.68rem">Pending</span>' : ''}</span></div>`).join('')}
-          <button class="btn btn-secondary btn-sm" style="margin-top:12px;width:100%" id="sp-add-member">+ Add Member</button>
-        </div>
-        <div class="card">
-          <div class="card-header"><h3>Expenses (${expenses.length})</h3></div>
-          ${expenses.length ? expenses.slice(0, 8).map(e => `
-            <div class="balance-item expense-row">
-              <span>${esc(e.description || 'Expense')} <span class="badge badge-info" style="font-size:.68rem;margin-left:4px">${esc(splitTypeLabel(e.splitType))}</span></span>
-              <div class="expense-row-actions">
-                <span style="font-weight:600;color:var(--accent)">${formatCurrency(e.amount)}</span>
-                <button type="button" class="btn btn-danger btn-sm delete-expense-btn" data-id="${e.id}" title="Delete expense">×</button>
-              </div>
-            </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem">No expenses yet</p>'}
-          <button class="btn btn-primary btn-sm" style="margin-top:12px;width:100%" id="sp-add-expense" ${members.length ? '' : 'disabled'}>+ Add Expense</button>
-        </div>
-        <div class="card">
-          <div class="card-header"><h3>Balances</h3></div>
+    
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div class="tab-header" style="display:flex; border-bottom: 1px solid var(--border); background: var(--bg-card-h); overflow-x: auto;">
+        <button class="tab-btn active" id="tab-expenses" style="flex:1; padding:16px; background:transparent; border:none; color:var(--text); font-weight:600; cursor:pointer; border-bottom: 2px solid var(--primary); transition: var(--transition);">Expenses</button>
+        <button class="tab-btn" id="tab-balances" style="flex:1; padding:16px; background:transparent; border:none; color:var(--text-dim); font-weight:600; cursor:pointer; border-bottom: 2px solid transparent; transition: var(--transition);">Balances</button>
+        <button class="tab-btn" id="tab-activity" style="flex:1; padding:16px; background:transparent; border:none; color:var(--text-dim); font-weight:600; cursor:pointer; border-bottom: 2px solid transparent; transition: var(--transition);">Activity</button>
+      </div>
+      
+      <div id="content-expenses" style="padding: 20px;">
+        <button class="btn btn-primary btn-sm" style="margin-bottom:16px;width:100%" id="sp-add-expense" ${members.length ? '' : 'disabled'}>+ Add Expense</button>
+        ${expenses.length ? expenses.map(e => `
+          <div class="balance-item expense-row" style="padding:16px 0; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center;">
+            <div>
+               <div style="font-weight:600; font-size:1.05rem;">${esc(e.description || 'Expense')}</div>
+               <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);">Paid by @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span></div>
+            </div>
+            <div class="expense-row-actions" style="display:flex; align-items:center;">
+              <span style="font-weight:700;color:var(--text);font-size:1.1rem;margin-right:12px;">${formatCurrency(e.amount)}</span>
+              <button type="button" class="btn btn-danger btn-sm delete-expense-btn" data-id="${e.id}" title="Delete expense" style="padding:6px 10px;">×</button>
+            </div>
+          </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No expenses yet</p>'}
+      </div>
+      
+      <div id="content-balances" style="padding: 20px; display:none;">
+        <h4 style="margin-bottom:12px; color:var(--text-muted); text-transform:uppercase; font-size:0.8rem; letter-spacing:0.5px;">Net Balances</h4>
+        <div style="margin-bottom:24px; display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:12px;">
           ${balances?.memberBalances?.length ? balances.memberBalances.map(b => `
-            <div class="balance-item">
-              <span>${esc(b.userName || b.userId?.substring(0, 8))}</span>
-              <span style="font-weight:700;color:${b.netBalance >= 0 ? 'var(--accent-g)' : 'var(--accent)'}">
+            <div style="background:var(--bg-card); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border); display:flex; flex-direction:column; gap:4px;">
+              <span style="color:var(--text-dim); font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@${esc(b.userName || b.userId?.substring(0, 8))}</span>
+              <span style="font-weight:700;color:${b.netBalance >= 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-size:1.1rem;">
                 ${b.netBalance >= 0 ? '+' : ''}${formatCurrency(b.netBalance)}
               </span>
-            </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem">No balance data</p>'}
+            </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;">No balance data</p>'}
         </div>
-      </div>
-      <div class="card activity-card">
-        <div class="card-header"><h3>Group Activity</h3></div>
-        ${activity?.length ? activity.slice(0, 20).map(a => `
-          <div class="activity-item">
-            <div class="activity-message">${esc(a.message)}</div>
-            <div class="activity-meta">${formatDate(a.createdAt)} · ${esc(activityTypeLabel(a.activityType))}</div>
-          </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem">No activity yet</p>'}
-      </div>
-      <div class="card settlement-card">
-        <div class="card-header"><h3>Simplified Settlements</h3></div>
-        ${balances?.simplifiedDebts?.length ? balances.simplifiedDebts.map(s => `
-          <div class="settlement-row">
-            <div>
-              <strong>${esc(s.fromUserName)}</strong> owes <strong>${esc(s.toUserName)}</strong>
-              <span style="font-weight:800;color:var(--accent);margin-left:6px">${formatCurrency(s.amount)}</span>
+        
+        <h4 style="margin-bottom:12px; color:var(--text-muted); text-transform:uppercase; font-size:0.8rem; letter-spacing:0.5px;">Settlements</h4>
+        ${balances?.simplifiedDebts?.length ? balances.simplifiedDebts.map(s => {
+          let text = '';
+          let amountColor = 'var(--text)';
+          let amountSign = '';
+          if (s.fromUserId === userId) {
+            text = `You owe <strong>${esc(s.toUserName)}</strong>`;
+            amountColor = 'var(--accent)';
+            amountSign = '-';
+          } else if (s.toUserId === userId) {
+            text = `<strong>${esc(s.fromUserName)}</strong> owes you`;
+            amountColor = 'var(--accent-g)';
+            amountSign = '+';
+          } else {
+            text = `<strong>${esc(s.fromUserName)}</strong> owes <strong>${esc(s.toUserName)}</strong>`;
+          }
+          return `
+          <div class="settlement-row" style="display:flex; justify-content:space-between; align-items:center; padding:16px 0; border-bottom:1px solid var(--border);">
+            <div style="font-size: 1rem;">
+              ${text}
+              <span style="font-weight:800;color:${amountColor};margin-left:8px;font-size:1.1rem;">${amountSign}${formatCurrency(s.amount)}</span>
             </div>
             <button class="btn btn-secondary btn-sm settle-btn"
               data-from="${s.fromUserId}" data-to="${s.toUserId}"
               data-from-name="${esc(s.fromUserName)}" data-to-name="${esc(s.toUserName)}">
               Record Payment
             </button>
-          </div>`).join('') : '<p style="color:var(--text-dim);margin:0">All balances are settled.</p>'}
-      </div>`;
+          </div>`;
+        }).join('') : '<p style="color:var(--text-dim);margin:0;text-align:center;padding:20px;">All balances are settled.</p>'}
+      </div>
+      
+      <div id="content-activity" style="padding: 20px; display:none;">
+        ${activity?.length ? activity.slice(0, 20).map(a => `
+          <div class="activity-item" style="padding:12px 0; border-bottom:1px solid var(--border-light);">
+            <div class="activity-message" style="font-weight:500;">${esc(a.message)}</div>
+            <div class="activity-meta" style="font-size:0.8rem; color:var(--text-dim); margin-top:6px;">${formatDate(a.createdAt)} · ${esc(activityTypeLabel(a.activityType))}</div>
+          </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No activity yet</p>'}
+      </div>
+    </div>`;
 
-    document.getElementById('sp-add-member').onclick = () => addMemberModal(groupId, userId);
+    document.getElementById('sp-view-members').onclick = () => viewMembersModal(members, groupId, userId);
+    document.getElementById('sp-view-members').onmouseover = (e) => e.target.style.background = 'var(--bg-card-h)';
+    document.getElementById('sp-view-members').onmouseout = (e) => e.target.style.background = 'var(--bg-card)';
+    
+    // Group header expand/collapse
+    document.getElementById('group-header-collapsed').onclick = () => {
+      const exp = document.getElementById('group-header-expanded');
+      const shortDesc = document.getElementById('gh-short-desc');
+      const iconWrap = document.getElementById('gh-expand-icon');
+      if (exp.style.display === 'none') {
+        exp.style.display = 'block';
+        shortDesc.style.display = 'none';
+        iconWrap.style.transform = 'rotate(180deg)';
+      } else {
+        exp.style.display = 'none';
+        shortDesc.style.display = 'block';
+        iconWrap.style.transform = 'rotate(0deg)';
+      }
+    };
+    
+    // Tab switching logic
+    const tabs = ['expenses', 'balances', 'activity'];
+    tabs.forEach(t => {
+      document.getElementById(`tab-${t}`).onclick = () => {
+        tabs.forEach(other => {
+          const isT = other === t;
+          document.getElementById(`tab-${other}`).style.borderBottomColor = isT ? 'var(--primary)' : 'transparent';
+          document.getElementById(`tab-${other}`).style.color = isT ? 'var(--text)' : 'var(--text-dim)';
+          document.getElementById(`content-${other}`).style.display = isT ? 'block' : 'none';
+        });
+      };
+    });
     
     const acceptedMembers = members.filter(m => m.status === 'ACCEPTED');
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, acceptedMembers, userId);
@@ -217,6 +296,28 @@ async function loadGroupDetail(groupId, userId) {
   } catch (err) {
     el.innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
   }
+}
+
+function viewMembersModal(members, groupId, userId) {
+  openModal('Group Members', `
+    <div style="margin-bottom: 20px; max-height: 400px; overflow-y: auto;">
+      ${members.map(m => `<div style="padding:12px; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between;">
+        <span style="font-size:1.05rem; font-weight:500;">@${esc(m.name)}</span>
+        ${m.status === 'PENDING' ? '<span class="badge badge-warning" style="font-size:.68rem">Pending</span>' : '<span class="badge badge-success" style="font-size:.68rem; background:var(--accent-g); color:#000;">Accepted</span>'}
+      </div>`).join('')}
+    </div>
+    <button class="btn btn-secondary" style="width:100%" id="vm-add-member">+ Add Member</button>
+  `, {
+    onSubmit: () => {}
+  });
+  
+  // Wait for modal to render
+  setTimeout(() => {
+    document.getElementById('vm-add-member').onclick = () => {
+      document.querySelector('.modal-close').click();
+      addMemberModal(groupId, userId);
+    };
+  }, 50);
 }
 
 function editGroupModal(group, userId) {

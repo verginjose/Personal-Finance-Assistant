@@ -224,11 +224,14 @@ public class SplitService {
         evictAnalyticsCacheForSplits(splits, expense.getId(), "SPLIT_EXPENSE");
 
         String actorName = resolveMemberName(req.getGroupId(), actorUserId);
+        ActivityType logType = expense.getSplitType() == SharedExpense.SplitType.SETTLEMENT
+                ? ActivityType.SETTLEMENT_RECORDED : ActivityType.EXPENSE_ADDED;
+        String logMessage = expense.getSplitType() == SharedExpense.SplitType.SETTLEMENT
+                ? "@" + actorName + " recorded payment: " + expense.getDescription()
+                : "@" + actorName + " added expense \"" + expense.getDescription() + "\" (" + expense.getAmount() + " " + expense.getCurrency() + ")";
+
         groupActivityService.log(req.getGroupId(), actorUserId, actorName,
-                ActivityType.EXPENSE_ADDED,
-                "@" + actorName + " added expense \"" + expense.getDescription()
-                        + "\" (" + expense.getAmount() + " " + expense.getCurrency() + ")",
-                expense.getId());
+                logType, logMessage, expense.getId());
         log.info("Shared expense added: id={}, group={}, amount={}", expense.getId(), req.getGroupId(), req.getAmount());
         
         final String desc = expense.getDescription();
@@ -289,6 +292,40 @@ public class SplitService {
     private void createPersonalTransactions(SharedExpense expense, List<ExpenseSplit> splits, ExpenseGroup group) {
         Category category = toTransactionCategory(expense);
         String groupLabel = group.getName() != null ? group.getName() : "group";
+
+        if (expense.getSplitType() == SharedExpense.SplitType.SETTLEMENT) {
+            // SETTLEMENT: The person who paid (fromUser) is the payer, so they get an EXPENSE.
+            // The person receiving (toUser) is the one in the split list, so they get an INCOME.
+            for (ExpenseSplit split : splits) {
+                if (split.getAmount().compareTo(BigDecimal.ZERO) <= 0) continue;
+                
+                // Expense for the Payer (fromUser)
+                CreateEntryRequest payerEntry = new CreateEntryRequest();
+                payerEntry.setUserId(expense.getPaidBy());
+                payerEntry.setName("Paid " + split.getUserName());
+                payerEntry.setAmount(split.getAmount());
+                payerEntry.setType(TransactionType.EXPENSE);
+                payerEntry.setCurrency(expense.getCurrency());
+                payerEntry.setCategory(Category.SETTLEMENT);
+                payerEntry.setDescription("Settlement · " + groupLabel);
+                CreateEntryResponse savedPayer = transactionEntryService.createEntry(payerEntry, null, false);
+                transactionLinkRepo.save(new ExpenseTransactionLink(null, expense.getId(), expense.getPaidBy(), savedPayer.getId()));
+
+                // Income for the Receiver (toUser)
+                CreateEntryRequest receiverEntry = new CreateEntryRequest();
+                receiverEntry.setUserId(split.getUserId());
+                receiverEntry.setName("Received from " + resolveMemberName(expense.getGroupId(), expense.getPaidBy()));
+                receiverEntry.setAmount(split.getAmount());
+                receiverEntry.setType(TransactionType.INCOME);
+                receiverEntry.setCurrency(expense.getCurrency());
+                receiverEntry.setCategory(Category.SETTLEMENT);
+                receiverEntry.setDescription("Settlement · " + groupLabel);
+                CreateEntryResponse savedReceiver = transactionEntryService.createEntry(receiverEntry, null, false);
+                transactionLinkRepo.save(new ExpenseTransactionLink(null, expense.getId(), split.getUserId(), savedReceiver.getId()));
+            }
+            return;
+        }
+
         for (ExpenseSplit split : splits) {
             if (split.getAmount().compareTo(BigDecimal.ZERO) <= 0) continue;
             CreateEntryRequest entry = new CreateEntryRequest();
@@ -326,7 +363,7 @@ public class SplitService {
         switch (expense.getSplitType()) {
             case EQUAL -> generateEqualSplits(expense, members);
             case PERCENTAGE -> generatePercentageSplits(expense, req, members);
-            case EXACT -> generateExactSplits(expense, req, members);
+            case EXACT, SETTLEMENT -> generateExactSplits(expense, req, members);
         }
     }
 
@@ -502,42 +539,49 @@ public class SplitService {
 
     public void settleDebt(Long groupId, UUID fromUserId, UUID toUserId, UUID actorUserId) {
         requireGroupMember(groupId, actorUserId);
-        List<SharedExpense> expenses = expenseRepo.findByGroupIdOrderByCreatedAtDesc(groupId);
-        if (expenses.isEmpty()) return;
-        List<Long> ids = expenses.stream().map(SharedExpense::getId).toList();
-        List<ExpenseSplit> splits = splitRepo.findBySharedExpenseIdIn(ids)
-                .stream()
-                .filter(s -> s.getUserId().equals(fromUserId) && !s.isSettled())
-                .filter(s -> expenses.stream()
-                        .filter(e -> e.getId().equals(s.getSharedExpenseId()))
-                        .anyMatch(e -> e.getPaidBy().equals(toUserId)))
-                .collect(Collectors.toList());
-        if (splits.isEmpty()) return;
+        
+        GroupBalanceResponse balances = getGroupBalances(groupId);
+        BigDecimal debtAmount = balances.getMemberBalances().stream()
+                .filter(b -> b.getUserId().equals(fromUserId))
+                .map(GroupBalanceResponse.MemberBalance::getNetBalance)
+                .map(BigDecimal::negate) // if net is -500, debt is 500
+                .findFirst()
+                .orElse(BigDecimal.ZERO);
 
-        BigDecimal settledTotal = splits.stream()
-                .map(ExpenseSplit::getAmount)
+        // Calculate how much fromUserId actually owes to toUserId based on suggestions
+        BigDecimal settledTotal = balances.getSimplifiedDebts().stream()
+                .filter(s -> s.getFromUserId().equals(fromUserId) && s.getToUserId().equals(toUserId))
+                .map(GroupBalanceResponse.SettlementSuggestion::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        LocalDateTime now = LocalDateTime.now();
-        splits.forEach(s -> { s.setSettled(true); s.setSettledAt(now); });
-        splitRepo.saveAll(splits);
-        cacheEvictPublisher.publishForUsers(Set.of(fromUserId, toUserId), "SPLIT_SETTLE", groupId);
+        if (settledTotal.compareTo(BigDecimal.ZERO) <= 0) {
+            return; // No debt to settle
+        }
 
         String fromName = resolveMemberName(groupId, fromUserId);
         String toName = resolveMemberName(groupId, toUserId);
-        String actorName = resolveMemberName(groupId, actorUserId);
-        groupActivityService.log(groupId, actorUserId, actorName,
-                ActivityType.SETTLEMENT_RECORDED,
-                "@" + fromName + " recorded payment to @" + toName
-                        + " (" + settledTotal.setScale(2, RoundingMode.HALF_UP) + ")",
-                groupId);
-        log.info("Settled {} splits from {} to {}", splits.size(), fromUserId, toUserId);
+        
+        CreateSharedExpenseRequest req = new CreateSharedExpenseRequest();
+        req.setGroupId(groupId);
+        req.setDescription("Payment from " + fromName + " to " + toName);
+        req.setAmount(settledTotal);
+        req.setCurrency(balances.getSimplifiedDebts().stream().findFirst().map(GroupBalanceResponse.SettlementSuggestion::getCurrency).orElse("INR"));
+        req.setPaidBy(fromUserId);
+        req.setSplitType("SETTLEMENT");
+        req.setExpenseCategory("SETTLEMENT");
+        
+        CreateSharedExpenseRequest.SplitDetailRequest detail = new CreateSharedExpenseRequest.SplitDetailRequest();
+        detail.setUserId(toUserId);
+        detail.setValue(settledTotal);
+        req.setSplitDetails(List.of(detail));
+
+        addSharedExpense(req, actorUserId);
         
         // Push notification
         UUID targetNotificationUser = fromUserId.equals(actorUserId) ? toUserId : fromUserId;
         notificationService.sendNotification(targetNotificationUser, Map.of(
             "status", "SUCCESS",
-            "message", actorName + " recorded a ₹" + settledTotal.setScale(2, RoundingMode.HALF_UP) + " settlement with you.",
+            "message", fromName + " recorded a ₹" + settledTotal.setScale(2, RoundingMode.HALF_UP) + " settlement with " + toName,
             "event", "debt-settled",
             "groupId", groupId
         ));

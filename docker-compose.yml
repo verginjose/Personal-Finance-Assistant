@@ -164,7 +164,7 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      OCR_SERVICE_URL: http://ocr-service:8100   # add this
+      OCR_SERVICE_URL: http://ocr-service:8100 # add this
     networks:
       - finance-network
 
@@ -181,7 +181,7 @@ services:
               count: 1
               capabilities: [ gpu ]
     volumes:
-       - paddle-model-cache:/root/.paddleocr    # ← add this
+      - paddle-model-cache:/root/.paddleocr # ← add this
     ports:
       - "8100:8100"
     environment:
@@ -239,7 +239,7 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: clickhouse
-    profiles: ["observability"]
+    profiles: [ "observability" ]
     deploy:
       resources:
         limits:
@@ -259,7 +259,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.55.0
     container_name: prometheus
-    profiles: ["observability"]
+    profiles: [ "observability" ]
     deploy:
       resources:
         limits:
@@ -274,7 +274,7 @@ services:
   grafana:
     image: grafana/grafana:11.1.4
     container_name: grafana
-    profiles: ["observability"]
+    profiles: [ "observability" ]
     deploy:
       resources:
         limits:
@@ -306,7 +306,7 @@ services:
   vector:
     image: timberio/vector:0.41.1-debian
     container_name: vector
-    profiles: ["observability"]
+    profiles: [ "observability" ]
     volumes:
       - ./observability/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -328,7 +328,7 @@ services:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-logs:/var/lib/zookeeper/log
     networks:
-      - finance-network        # ← was missing
+      - finance-network # ← was missing
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -348,7 +348,7 @@ services:
     volumes:
       - kafka-data:/var/lib/kafka/data
     networks:
-      - finance-network        # ← was missing        # message storage
+      - finance-network # ← was missing        # message storage
 
   frontend:
     build: ./frontend
@@ -357,6 +357,16 @@ services:
       - "3001:80"
     depends_on:
       - api-gateway
+    networks:
+      - finance-network
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
     networks:
       - finance-network
 
@@ -369,7 +379,8 @@ volumes:
   zookeeper-data:
   zookeeper-logs:
   kafka-data:
-  paddle-model-cache:    # ← add to volumes section
+  paddle-model-cache:
+    # ← add to volumes section
 
 networks:
   finance-network:

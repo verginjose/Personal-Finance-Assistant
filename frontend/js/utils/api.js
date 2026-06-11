@@ -129,7 +129,13 @@ async function request(method, path, { body, params, headers = {}, raw = false }
 
       try {
         await refreshPromise; // Wait for the refresh to finish
-        res = await fetch(url.toString(), getOpts()); // Retry the original request
+        try {
+          res = await fetch(url.toString(), getOpts()); // Retry the original request
+        } catch (networkErr) {
+          // Give the network 1 second to stabilize on wake-up and try one last time
+          await new Promise(r => setTimeout(r, 1000));
+          res = await fetch(url.toString(), getOpts());
+        }
       } catch (e) {
         throw new Error('Session expired. Please log in again.');
       }

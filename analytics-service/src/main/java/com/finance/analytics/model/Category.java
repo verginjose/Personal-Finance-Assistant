@@ -93,5 +93,6 @@ public enum Category {
     CHILDCARE,
     ELDER_CARE,
     GOAL,
+    SETTLEMENT,
     OTHERS
 }

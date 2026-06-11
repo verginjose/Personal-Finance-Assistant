@@ -54,7 +54,7 @@ public class SharedExpense {
     private LocalDateTime createdAt;
 
     public enum SplitType {
-        EQUAL, PERCENTAGE, EXACT
+        EQUAL, PERCENTAGE, EXACT, SETTLEMENT
     }
 
     public enum ExpenseCategory {
@@ -132,6 +132,7 @@ public class SharedExpense {
         PETS,
         CHILDCARE,
         ELDER_CARE,
+        SETTLEMENT,
         OTHERS
     }
 

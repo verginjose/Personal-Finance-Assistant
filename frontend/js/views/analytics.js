@@ -44,6 +44,11 @@ export async function renderAnalytics(container) {
       <div class="chart-container" id="a-bar-wrap">${skeletonChart()}</div>
     </div>`;
 
+  if (window.flatpickr) {
+    flatpickr('#a-start', { dateFormat: 'Y-m-d' });
+    flatpickr('#a-end', { dateFormat: 'Y-m-d' });
+  }
+
   document.getElementById('a-apply').onclick = () => loadAnalytics(userId);
   document.getElementById('a-export').onclick = async () => {
     try {

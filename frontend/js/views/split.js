@@ -220,7 +220,10 @@ async function loadGroupDetail(groupId, userId) {
       <div id="content-activity" style="padding: 20px; display:none;">
         ${activity?.length ? activity.slice(0, 20).map(a => `
           <div class="activity-item" style="padding:12px 0; border-bottom:1px solid var(--border-light);">
-            <div class="activity-message" style="font-weight:500;">${esc(a.message)}</div>
+            <div class="activity-message" style="font-weight:500; display:flex; justify-content:space-between; align-items:center;">
+              <span>${esc(a.message)}</span>
+              ${a.activityType === 'SETTLEMENT_RECORDED' ? `<button class="btn btn-danger btn-sm revert-btn" data-id="${a.referenceId}" title="Revert Settlement" style="padding:4px 8px; font-size:0.75rem;">Revert</button>` : ''}
+            </div>
             <div class="activity-meta" style="font-size:0.8rem; color:var(--text-dim); margin-top:6px;">${formatDate(a.createdAt)} · ${esc(activityTypeLabel(a.activityType))}</div>
           </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No activity yet</p>'}
       </div>
@@ -262,16 +265,34 @@ async function loadGroupDetail(groupId, userId) {
     const acceptedMembers = members.filter(m => m.status === 'ACCEPTED');
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, acceptedMembers, userId);
     
-    el.querySelectorAll('.delete-expense-btn').forEach(btn => {
-      btn.onclick = async () => {
-        if (!(await confirmModal('Delete Expense', 'Delete this shared expense? Linked personal transactions will be removed.', 'Delete'))) return;
-        try {
-          await api.delete(`/upsert/groups/${groupId}/expenses/${btn.dataset.id}`);
-          toast('Expense deleted', 'success');
-          await loadGroupDetail(groupId, userId);
-        } catch (e) { toast(e.message, 'error'); }
-      };
+    // Delete Expense
+    document.querySelectorAll('.delete-expense-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const expenseId = e.currentTarget.dataset.id;
+        if (await confirmModal('Delete Expense', 'Are you sure you want to delete this expense? This action cannot be undone.', 'Delete')) {
+          try {
+            await api.delete(`/upsert/groups/${groupId}/expenses/${expenseId}`, { userId });
+            toast('Expense deleted', 'success');
+            loadGroupDetail(groupId, userId);
+          } catch (err) { toast(err.message, 'error'); }
+        }
+      });
     });
+
+    // Revert Settlement
+    document.querySelectorAll('.revert-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const expenseId = e.currentTarget.dataset.id;
+        if (await confirmModal('Revert Settlement', 'Are you sure you want to revert this settlement? The balances will be restored.', 'Revert')) {
+          try {
+            await api.delete(`/upsert/groups/${groupId}/expenses/${expenseId}`, { userId });
+            toast('Settlement reverted successfully', 'success');
+            loadGroupDetail(groupId, userId);
+          } catch (err) { toast(err.message, 'error'); }
+        }
+      });
+    });
+
     el.querySelectorAll('.settle-btn').forEach(btn => {
       btn.onclick = async () => {
         if (!(await confirmModal('Record Settlement', `Record settlement: did ${btn.dataset.fromName} pay ${btn.dataset.toName}?`, 'Record'))) return;
@@ -461,7 +482,7 @@ function addExpenseModal(groupId, members, userId) {
     <form id="ae-form">
       <div class="form-group"><label for="ae-desc">Description</label><input class="form-input" id="ae-desc" required maxlength="100"></div>
       <div class="form-row">
-        <div class="form-group"><label for="ae-amt">Amount</label><input class="form-input" id="ae-amt" type="number" step="0.01" min="0.01" required></div>
+        <div class="form-group"><label for="ae-amt">Amount</label><input class="form-input" id="ae-amt" type="text" inputmode="decimal" required></div>
         <div class="form-group"><label for="ae-paid">Paid By</label>
           <select class="form-select" id="ae-paid" required>
             ${members.map(m => `<option value="${m.userId}">@${esc(m.name)}</option>`).join('')}
@@ -568,7 +589,7 @@ function addExpenseModal(groupId, members, userId) {
             <span>@${esc(m.name)}</span>
             <div class="split-detail-input-wrap">
               <input class="form-input split-detail-input" id="ae-split-${m.userId}"
-                type="number" step="${isPct ? '0.01' : '0.01'}" min="0"
+                type="text" inputmode="decimal"
                 ${isPct ? 'max="100"' : ''} value="${defaultVal}" required>
               ${isPct ? '<span class="split-detail-suffix">%</span>' : ''}
             </div>

@@ -1195,3 +1195,62 @@ span.flatpickr-weekday {
   border-color: var(--primary) !important;
   box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.2) !important;
 }
+
+/* ── Mobile Layout Adjustments ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Cards and grid elements */
+  .card-grid, .card-grid-3 {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+  
+  /* Split view tweaks */
+  .expense-row {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 12px;
+  }
+  .expense-row-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  /* Settlement rows */
+  .settlement-row {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 12px;
+  }
+  .settlement-row > div {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+  }
+  .settlement-row button {
+    width: 100%;
+  }
+
+  /* Modals */
+  .modal-content {
+    width: 95%;
+    padding: var(--space-4);
+  }
+
+  /* Auth page */
+  .auth-card {
+    padding: var(--space-4);
+  }
+
+  /* Main content layout */
+  .main-content {
+    padding: 0;
+  }
+  #view-root {
+    padding: 16px;
+  }
+
+  /* Table responsiveness */
+  .table-responsive {
+    overflow-x: auto;
+  }
+}

@@ -22,7 +22,8 @@ public class OcrCompletionConsumer {
     public void consumeOcrCompletion(String message) {
         log.info("Received OCR completion event: {}", message);
         try {
-            Map<String, Object> event = objectMapper.readValue(message, new TypeReference<Map<String, Object>>() {});
+            Map<String, Object> event = objectMapper.readValue(message, new TypeReference<>() {
+            });
             String userIdStr = (String) event.get("userId");
             if (userIdStr != null) {
                 UUID userId = UUID.fromString(userIdStr);

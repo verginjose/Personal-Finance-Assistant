@@ -130,16 +130,23 @@ async function loadTransactions(userId) {
     if (!items.length) {
       tbody.innerHTML = `<tr><td colspan="6">${emptyState('receipt', 'No transactions found', 'Add a transaction or adjust your filters.')}</td></tr>`;
     } else {
-      tbody.innerHTML = items.map(t => `<tr>
+      tbody.innerHTML = items.map(t => `<tr data-txn='${esc(JSON.stringify(t))}'>
         <td>
-          <strong>${esc(t.name)}</strong>
-          ${t.recurring ? `<span class="badge badge-recurring">${icon('repeat', 'xs')} ${esc(t.recurringPeriod)}</span>` : ''}
-          ${t.description ? `<br><small style="color:var(--text-dim)">${esc(t.description)}</small>` : ''}
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;color:var(--text-dim);">
+              ${icon(t.type === 'INCOME' ? 'transactions' : 'dashboard', 'sm')}
+            </div>
+            <div>
+              <strong style="font-size:0.95rem;">${esc(t.name)}</strong>
+              ${t.recurring ? `<span class="badge badge-recurring" style="margin-left:6px;">${icon('repeat', 'xs')} ${esc(t.recurringPeriod)}</span>` : ''}
+              ${t.description ? `<br><small style="color:var(--text-dim)" class="desktop-only">${esc(t.description)}</small>` : ''}
+            </div>
+          </div>
         </td>
         <td>${typeBadge(t.type)}</td>
         <td>${esc(t.category)}</td>  
-        <td style="font-weight:600;color:${t.type === 'INCOME' ? 'var(--accent-g)' : 'var(--accent)'}">
-          ${t.type === 'INCOME' ? '+' : '−'}${formatCurrency(t.amount, t.currency)}
+        <td style="font-weight:700;font-size:1.05rem;color:${t.type === 'INCOME' ? 'var(--accent-g)' : 'var(--text)'}">
+          ${t.type === 'INCOME' ? '+' : ''}${formatCurrency(t.amount, t.currency)}
         </td>
         <td style="font-size:.82rem;color:var(--text-dim)">${formatDate(t.createdAt)}</td>
         <td class="td-actions">
@@ -148,8 +155,23 @@ async function loadTransactions(userId) {
         </td>
       </tr>`).join('');
 
-      tbody.querySelectorAll('.t-edit').forEach(b => b.onclick = () => editTransaction(userId, b.dataset.id));
-      tbody.querySelectorAll('.t-del').forEach(b => b.onclick = () => deleteTransaction(userId, b.dataset.id, b.closest('tr')));
+      tbody.querySelectorAll('.t-edit').forEach(b => b.onclick = (e) => {
+        e.stopPropagation();
+        editTransaction(userId, b.dataset.id);
+      });
+      tbody.querySelectorAll('.t-del').forEach(b => b.onclick = (e) => {
+        e.stopPropagation();
+        deleteTransaction(userId, b.dataset.id, b.closest('tr'));
+      });
+      
+      // Row click for mobile modal
+      tbody.querySelectorAll('tr').forEach(tr => {
+        tr.onclick = () => {
+          if (window.innerWidth > 768) return; // Only open modal on mobile
+          const t = JSON.parse(tr.dataset.txn);
+          openMobileTxnModal(t, userId);
+        };
+      });
     }
     renderPagination();
   } catch (err) {
@@ -302,4 +324,57 @@ async function exportCsv(userId) {
     a.click();
     toast('CSV downloaded', 'success');
   } catch (err) { toast(err.message, 'error'); }
+}
+
+function openMobileTxnModal(t, userId) {
+  openModal('Transaction Details', `
+    <div style="text-align:center; padding: 20px 0;">
+      <div style="font-size: 2rem; font-weight: 800; color: ${t.type === 'INCOME' ? 'var(--accent-g)' : 'var(--text)'}; margin-bottom: 8px;">
+        ${t.type === 'INCOME' ? '+' : ''}${formatCurrency(t.amount, t.currency)}
+      </div>
+      <div style="font-size: 1.1rem; font-weight: 600;">${esc(t.name)}</div>
+      <div style="color: var(--text-dim); font-size: 0.9rem; margin-top: 4px;">${formatDate(t.createdAt)}</div>
+    </div>
+    
+    <div style="background: var(--bg-input); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 20px;">
+      <div style="display:flex; justify-content:space-between; margin-bottom: 12px;">
+        <span style="color:var(--text-dim)">Category</span>
+        <span style="font-weight:600">${esc(t.category)}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-bottom: 12px;">
+        <span style="color:var(--text-dim)">Type</span>
+        <span>${typeBadge(t.type)}</span>
+      </div>
+      ${t.recurring ? `
+      <div style="display:flex; justify-content:space-between; margin-bottom: 12px;">
+        <span style="color:var(--text-dim)">Recurring</span>
+        <span style="font-weight:600">${esc(t.recurringPeriod)}</span>
+      </div>` : ''}
+      ${t.description ? `
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <span style="color:var(--text-dim)">Note</span>
+        <span style="font-size:0.95rem;">${esc(t.description)}</span>
+      </div>` : ''}
+    </div>
+    
+    <div style="display:flex; gap: 12px;">
+      <button class="btn btn-secondary" id="m-edit-btn" style="flex:1">${icon('edit', 'sm')} Edit</button>
+      <button class="btn btn-danger" id="m-del-btn" style="flex:1">${icon('trash', 'sm')} Delete</button>
+    </div>
+  `);
+
+  document.getElementById('m-edit-btn').onclick = () => {
+    document.querySelector('.modal-overlay').click(); // Close current modal
+    setTimeout(() => editTransaction(userId, t.id), 50); // Reopen standard edit modal
+  };
+  
+  document.getElementById('m-del-btn').onclick = async () => {
+    if (!(await confirmModal('Delete Transaction', 'Are you sure you want to delete this transaction?', 'Delete'))) return;
+    try {
+      await api.delete(`/upsert/delete/${t.id}`, { userId });
+      toast('Transaction deleted', 'success');
+      document.querySelector('.modal-overlay').click(); // Close current modal
+      loadTransactions(userId);
+    } catch (err) { toast(err.message, 'error'); }
+  };
 }

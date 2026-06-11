@@ -12,6 +12,7 @@ import org.springframework.security.web.server.authentication.AuthenticationWebF
 import org.springframework.security.web.server.authentication.HttpStatusServerEntryPoint;
 import org.springframework.security.web.server.authorization.HttpStatusServerAccessDeniedHandler;
 import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
+import org.springframework.security.web.server.authentication.ServerAuthenticationEntryPointFailureHandler;
 
 @Configuration
 @EnableWebFluxSecurity
@@ -33,6 +34,8 @@ public class SecurityConfig {
         jwtFilter.setServerAuthenticationConverter(jwtAuthenticationConverter);
         // Stateless — no session
         jwtFilter.setSecurityContextRepository(NoOpServerSecurityContextRepository.getInstance());
+        // Prevent default WWW-Authenticate: Basic header on auth failure
+        jwtFilter.setAuthenticationFailureHandler(new ServerAuthenticationEntryPointFailureHandler(new HttpStatusServerEntryPoint(HttpStatus.UNAUTHORIZED)));
 
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)

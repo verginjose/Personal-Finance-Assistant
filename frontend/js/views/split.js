@@ -162,13 +162,13 @@ async function loadGroupDetail(groupId, userId) {
       <div id="content-expenses" style="padding: 20px;">
         <button class="btn btn-primary btn-sm" style="margin-bottom:16px;width:100%" id="sp-add-expense" ${members.length ? '' : 'disabled'}>+ Add Expense</button>
         ${expenses.length ? expenses.map(e => `
-          <div class="balance-item expense-row" style="padding:16px 0; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center;">
+          <div class="balance-item expense-row" data-exp='${esc(JSON.stringify(e))}' style="padding:16px 0; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
             <div>
                <div style="font-weight:600; font-size:1.05rem;">${esc(e.description || 'Expense')}</div>
-               <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);">Paid by @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span></div>
+               <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span></div>
             </div>
-            <div class="expense-row-actions" style="display:flex; align-items:center;">
-              <span style="font-weight:700;color:var(--text);font-size:1.1rem;margin-right:12px;">${formatCurrency(e.amount)}</span>
+            <div class="expense-row-actions" style="display:flex; align-items:center; gap: 12px;">
+              <span style="font-weight:700;color:var(--text);font-size:1.1rem;">${formatCurrency(e.amount)}</span>
               <button type="button" class="btn btn-danger btn-sm delete-expense-btn" data-id="${e.id}" title="Delete expense" style="padding:6px 10px;">×</button>
             </div>
           </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No expenses yet</p>'}
@@ -203,12 +203,12 @@ async function loadGroupDetail(groupId, userId) {
             text = `<strong>${esc(s.fromUserName)}</strong> owes <strong>${esc(s.toUserName)}</strong>`;
           }
           return `
-          <div class="settlement-row" style="display:flex; justify-content:space-between; align-items:center; padding:16px 0; border-bottom:1px solid var(--border);">
-            <div style="font-size: 1rem;">
+          <div class="settlement-row" style="display:flex; justify-content:space-between; align-items:center; padding:16px 0; border-bottom:1px solid var(--border); gap: 16px;">
+            <div style="font-size: 1rem; flex: 1; min-width: 0; word-break: break-word;">
               ${text}
               <span style="font-weight:800;color:${amountColor};margin-left:8px;font-size:1.1rem;">${amountSign}${formatCurrency(s.amount)}</span>
             </div>
-            <button class="btn btn-secondary btn-sm settle-btn"
+            <button class="btn btn-secondary btn-sm settle-btn" style="flex-shrink: 0;"
               data-from="${s.fromUserId}" data-to="${s.toUserId}"
               data-from-name="${esc(s.fromUserName)}" data-to-name="${esc(s.toUserName)}">
               Record Payment
@@ -220,9 +220,9 @@ async function loadGroupDetail(groupId, userId) {
       <div id="content-activity" style="padding: 20px; display:none;">
         ${activity?.length ? activity.slice(0, 20).map(a => `
           <div class="activity-item" style="padding:12px 0; border-bottom:1px solid var(--border-light);">
-            <div class="activity-message" style="font-weight:500; display:flex; justify-content:space-between; align-items:center;">
-              <span>${esc(a.message)}</span>
-              ${a.activityType === 'SETTLEMENT_RECORDED' ? `<button class="btn btn-danger btn-sm revert-btn" data-id="${a.referenceId}" title="Revert Settlement" style="padding:4px 8px; font-size:0.75rem;">Revert</button>` : ''}
+            <div class="activity-message" style="font-weight:500; display:flex; justify-content:space-between; align-items:center; gap: 12px;">
+              <span style="flex: 1; min-width: 0; word-break: break-word;">${esc(a.message)}</span>
+              ${a.activityType === 'SETTLEMENT_RECORDED' ? `<button class="btn btn-danger btn-sm revert-btn" data-id="${a.referenceId}" title="Revert Settlement" style="padding:4px 8px; font-size:0.75rem; flex-shrink: 0;">Revert</button>` : ''}
             </div>
             <div class="activity-meta" style="font-size:0.8rem; color:var(--text-dim); margin-top:6px;">${formatDate(a.createdAt)} · ${esc(activityTypeLabel(a.activityType))}</div>
           </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No activity yet</p>'}
@@ -265,9 +265,19 @@ async function loadGroupDetail(groupId, userId) {
     const acceptedMembers = members.filter(m => m.status === 'ACCEPTED');
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, acceptedMembers, userId);
     
+    // Mobile expense tap
+    document.querySelectorAll('.expense-row').forEach(row => {
+      row.onclick = () => {
+        if (window.innerWidth > 768) return; // Only open modal on mobile
+        const exp = JSON.parse(row.dataset.exp);
+        openMobileExpenseModal(exp, groupId, userId);
+      };
+    });
+
     // Delete Expense
     document.querySelectorAll('.delete-expense-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
         const expenseId = e.currentTarget.dataset.id;
         if (await confirmModal('Delete Expense', 'Are you sure you want to delete this expense? This action cannot be undone.', 'Delete')) {
           try {
@@ -317,6 +327,43 @@ async function loadGroupDetail(groupId, userId) {
   } catch (err) {
     el.innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
   }
+}
+
+function openMobileExpenseModal(e, groupId, userId) {
+  openModal('Expense Details', `
+    <div style="text-align:center; padding: 20px 0;">
+      <div style="font-size: 2rem; font-weight: 800; color: var(--text); margin-bottom: 8px;">
+        ${formatCurrency(e.amount, e.currency || 'INR')}
+      </div>
+      <div style="font-size: 1.1rem; font-weight: 600;">${esc(e.description)}</div>
+      <div style="color: var(--text-dim); font-size: 0.9rem; margin-top: 4px;">Paid by @${esc(resolveMemberNameLocally(e.paidBy))}</div>
+    </div>
+    
+    <div style="background: var(--bg-input); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 20px;">
+      <div style="display:flex; justify-content:space-between; margin-bottom: 12px;">
+        <span style="color:var(--text-dim)">Split Type</span>
+        <span style="font-weight:600">${esc(splitTypeLabel(e.splitType))}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <span style="color:var(--text-dim)">Category</span>
+        <span>${esc(e.expenseCategory || 'OTHERS')}</span>
+      </div>
+    </div>
+    
+    <div style="display:flex; gap: 12px;">
+      <button class="btn btn-danger" id="m-del-exp-btn" style="flex:1; width:100%;">${icon('trash', 'sm')} Delete Expense</button>
+    </div>
+  `);
+
+  document.getElementById('m-del-exp-btn').onclick = async () => {
+    if (!(await confirmModal('Delete Expense', 'Are you sure you want to delete this shared expense?', 'Delete'))) return;
+    try {
+      await api.delete(`/upsert/groups/${groupId}/expenses/${e.id}`, { userId });
+      toast('Expense deleted', 'success');
+      document.querySelector('.modal-overlay').click(); // Close current modal
+      loadGroupDetail(groupId, userId);
+    } catch (err) { toast(err.message, 'error'); }
+  };
 }
 
 function viewMembersModal(members, groupId, userId) {

@@ -1196,6 +1196,11 @@ span.flatpickr-weekday {
   box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.2) !important;
 }
 
+/* ── Bottom Nav & Sheets (Hidden on Desktop) ─────────────────────────────── */
+.bottom-nav, .bottom-sheet-overlay, .bottom-sheet {
+  display: none;
+}
+
 /* ── Mobile Layout Adjustments ───────────────────────────────────────────── */
 @media (max-width: 768px) {
   /* Cards and grid elements */
@@ -1205,14 +1210,8 @@ span.flatpickr-weekday {
   }
   
   /* Split view tweaks */
-  .expense-row {
-    flex-direction: column;
-    align-items: flex-start !important;
-    gap: 12px;
-  }
-  .expense-row-actions {
-    width: 100%;
-    justify-content: space-between;
+  .desktop-only {
+    display: none !important;
   }
   
   /* Settlement rows */
@@ -1243,14 +1242,193 @@ span.flatpickr-weekday {
 
   /* Main content layout */
   .main-content {
+    margin-left: 0 !important;
     padding: 0;
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 16px)); /* Space for bottom nav */
+    max-width: 100vw;
+    overflow-x: hidden;
   }
   #view-root {
     padding: 16px;
   }
 
-  /* Table responsiveness */
-  .table-responsive {
-    overflow-x: auto;
+  /* Hide Desktop Sidebar and Mobile Header */
+  .sidebar, .mobile-header {
+    display: none !important;
+  }
+  
+  /* Bottom Navigation */
+  .bottom-nav {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: calc(65px + env(safe-area-inset-bottom, 10px));
+    padding-bottom: env(safe-area-inset-bottom, 10px);
+    background: rgba(10, 20, 25, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border);
+    z-index: 9999;
+  }
+  .bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.65rem;
+    gap: 4px;
+    flex: 1;
+    transition: color 0.2s;
+  }
+  .bottom-nav-item.active {
+    color: var(--primary);
+  }
+  .bottom-nav-item svg {
+    width: 24px;
+    height: 24px;
+    stroke-width: 1.5;
+  }
+  
+  .bottom-nav-fab-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .bottom-nav-fab {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #000;
+    border: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
+    transform: translateY(-15px);
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .bottom-nav-fab:active {
+    transform: translateY(-15px) scale(0.95);
+  }
+  .bottom-nav-fab svg {
+    width: 24px;
+    height: 24px;
+    stroke: #000;
+  }
+  
+  /* Bottom Sheets */
+  .bottom-sheet-overlay {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 10001;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+  }
+  .bottom-sheet-overlay.open {
+    opacity: 1;
+    visibility: visible;
+  }
+  .bottom-sheet {
+    display: block;
+    position: fixed;
+    bottom: -100%;
+    left: 0;
+    width: 100%;
+    background: var(--bg-elevated);
+    border-radius: 20px 20px 0 0;
+    z-index: 10002;
+    padding: 16px 0 32px 0;
+    padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+    transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
+  }
+  .bottom-sheet.open {
+    bottom: 0;
+  }
+  .bottom-sheet-handle {
+    width: 40px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 0 auto 16px auto;
+  }
+  .more-menu-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .more-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 1rem;
+    border-bottom: 1px solid var(--border-light);
+  }
+  .more-menu-item svg {
+    width: 20px;
+    height: 20px;
+    margin-right: 12px;
+    color: var(--text-dim);
+  }
+
+  /* Compressed Mobile Tables */
+  .table-wrap {
+    border: none !important;
+    background: transparent !important;
+    overflow-x: visible !important;
+  }
+  table {
+    display: block;
+  }
+  thead {
+    display: none;
+  }
+  tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  tr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-card);
+    padding: 16px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border) !important;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  tr:active {
+    background: var(--bg-card-h);
+  }
+  td {
+    padding: 0;
+    border: none !important;
+  }
+  
+  /* Hide non-essential columns on mobile */
+  /* Keep only column 1 (Name) and column 4 (Amount) */
+  td:nth-child(2),
+  td:nth-child(3),
+  td:nth-child(5),
+  td:nth-child(6) {
+    display: none !important;
   }
 }

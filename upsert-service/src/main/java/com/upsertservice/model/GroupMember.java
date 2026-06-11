@@ -16,6 +16,10 @@ import java.util.UUID;
 @AllArgsConstructor
 public class GroupMember {
 
+    public enum InvitationStatus {
+        PENDING, ACCEPTED, REJECTED
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -32,6 +36,10 @@ public class GroupMember {
 
     @Column(name = "joined_at", nullable = false, updatable = false)
     private LocalDateTime joinedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private InvitationStatus status = InvitationStatus.PENDING;
 
     @PrePersist
     protected void onCreate() {

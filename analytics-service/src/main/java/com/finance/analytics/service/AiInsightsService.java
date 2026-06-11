@@ -49,11 +49,11 @@ public class AiInsightsService {
     @Cacheable(value = "ai-insights", key = "#userId")
     public AiInsightResponse generateInsights(UUID userId) {
         LocalDateTime monthStart = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime monthEnd = monthStart.plusMonths(1).minusSeconds(1);
 
-        BigDecimal income  = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.valueOf("INCOME"),  monthStart, now));
-        BigDecimal expense = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.valueOf("EXPENSE"), monthStart, now));
-        List<CategoryRow> categories = repository.getCategoryAnalyticsByDateRange(userId, monthStart, now);
+        BigDecimal income  = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.valueOf("INCOME"),  monthStart, monthEnd));
+        BigDecimal expense = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.valueOf("EXPENSE"), monthStart, monthEnd));
+        List<CategoryRow> categories = repository.getCategoryAnalyticsByDateRange(userId, monthStart, monthEnd);
 
         if (income.compareTo(BigDecimal.ZERO) == 0 && expense.compareTo(BigDecimal.ZERO) == 0) {
             return buildDefaultResponse();

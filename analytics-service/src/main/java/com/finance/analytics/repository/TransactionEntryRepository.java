@@ -23,6 +23,8 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
 
     Page<TransactionEntry> findByUserId(UUID userId, Pageable pageable);
 
+    List<TransactionEntry> findByUserIdOrderByCreatedAtDesc(UUID userId);
+
     Page<TransactionEntry> findByUserIdAndCategoryAndCreatedAtBetween(
             UUID userId, Category incomeCategory,
             LocalDateTime start, LocalDateTime end, Pageable pageable);

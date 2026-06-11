@@ -13,13 +13,16 @@ public class JwtAuthenticationConverter
 
     @Override
     public Mono<Authentication> convert(ServerWebExchange exchange) {
-
-        return Mono.justOrEmpty(
-                        exchange.getRequest()
-                                .getHeaders()
-                                .getFirst(HttpHeaders.AUTHORIZATION))
-                .filter(header -> header.startsWith("Bearer "))
-                .map(header -> header.substring(7))
-                .map(JwtAuthenticationToken::new);
+        String token = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (token != null && token.startsWith("Bearer ")) {
+            return Mono.just(new JwtAuthenticationToken(token.substring(7)));
+        }
+        
+        String queryToken = exchange.getRequest().getQueryParams().getFirst("token");
+        if (queryToken != null && !queryToken.isEmpty()) {
+            return Mono.just(new JwtAuthenticationToken(queryToken));
+        }
+        
+        return Mono.empty();
     }
 }

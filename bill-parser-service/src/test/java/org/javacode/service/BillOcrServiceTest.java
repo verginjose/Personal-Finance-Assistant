@@ -44,7 +44,7 @@ public class BillOcrServiceTest {
 
         when(ocrClient.extractText(any(byte[].class), anyString())).thenReturn("abc"); // too short
 
-        CreateEntryResponse response = billOcrService.processFile("user-123", file);
+        CreateEntryResponse response = billOcrService.processFile("user-123", file.getBytes(), file.getOriginalFilename());
 
         assertThat(response.getUserId()).isNull();
         assertThat(response.getName()).isNull();
@@ -79,7 +79,7 @@ public class BillOcrServiceTest {
         when(financialDocumentProcessor.processDocumentAndConvert(any(DocumentInput.class)))
                 .thenReturn(processed);
 
-        CreateEntryResponse response = billOcrService.processFile("user-123", file);
+        CreateEntryResponse response = billOcrService.processFile("user-123", file.getBytes(), file.getOriginalFilename());
 
         assertThat(response.getUserId()).isEqualTo("user-123");
         assertThat(response.getName()).isEqualTo("Walmart Store");

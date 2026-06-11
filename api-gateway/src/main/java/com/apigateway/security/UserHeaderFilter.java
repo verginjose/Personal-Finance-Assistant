@@ -28,9 +28,18 @@ public class UserHeaderFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        String token = null;
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
+            token = authHeader.substring(7);
+        } else {
+            String queryToken = exchange.getRequest().getQueryParams().getFirst("token");
+            if (queryToken != null && !queryToken.isEmpty()) {
+                token = queryToken;
+            }
+        }
+
+        if (token != null) {
             try {
                 Claims claims = Jwts.parser()
                         .verifyWith(secretKey)

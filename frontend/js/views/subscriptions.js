@@ -1,5 +1,5 @@
 import { api, Auth, toast } from '../utils/api.js';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, confirmModal } from '../utils/ui.js';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, confirmModal, openModal, modalActions } from '../utils/ui.js';
 
 export async function renderSubscriptions(container) {
   const userId = Auth.getUserId();
@@ -20,7 +20,17 @@ export async function renderSubscriptions(container) {
       }
       grid.innerHTML = `<div class="sub-grid">${data.map(subCard).join('')}</div>`;
       data.forEach(sub => {
-        document.getElementById(`dismiss-${sub.id}`)?.addEventListener('click', () => dismissSub(sub.id, uid));
+        const cardEl = document.getElementById(`sub-card-${sub.id}`);
+        const dismissBtn = document.getElementById(`dismiss-${sub.id}`);
+        if (dismissBtn) {
+          dismissBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dismissSub(sub.id, uid);
+          });
+        }
+        if (cardEl) {
+          cardEl.addEventListener('click', () => editSub(sub, uid));
+        }
       });
     } catch (err) { toast(err.message, 'error'); }
   }
@@ -33,6 +43,40 @@ export async function renderSubscriptions(container) {
       await loadSubscriptions(uid);
     } catch (err) { toast(err.message, 'error'); }
   }
+
+  function editSub(sub, uid) {
+    const periods = ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'];
+    openModal('Edit Subscription', `
+      <form id="edit-sub-form">
+        <div class="form-group">
+          <label>Name</label>
+          <input type="text" class="form-input" name="name" value="${esc(sub.name)}" required>
+        </div>
+        <div class="form-group">
+          <label>Amount</label>
+          <input type="number" step="0.01" class="form-input" name="amount" value="${sub.amount}" required>
+        </div>
+        <div class="form-group">
+          <label>Period</label>
+          <select class="form-select" name="period" required>
+            ${periods.map(p => `<option value="${p}" ${p === sub.period ? 'selected' : ''}>${p}</option>`).join('')}
+          </select>
+        </div>
+        ${modalActions('Save Changes')}
+      </form>
+    `, {
+      onSubmit: async (form) => {
+        const body = {
+          name: form.name.value,
+          amount: parseFloat(form.amount.value),
+          period: form.period.value
+        };
+        await api.put(`/upsert/subscriptions/${sub.id}`, body, { params: { userId: uid } });
+        toast('Subscription updated', 'success');
+        await loadSubscriptions(uid);
+      }
+    });
+  }
 }
 
 function subCard(sub) {
@@ -42,7 +86,7 @@ function subCard(sub) {
                   sub.daysUntilCharge === 1 ? '1 day' :
                   `${sub.daysUntilCharge} days`;
   return `
-    <div class="card sub-card" style="--sub-color:${color}">
+    <div class="card sub-card cursor-pointer" id="sub-card-${sub.id}" style="--sub-color:${color}; cursor: pointer;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
           <h3 style="font-weight:700;font-size:1.05rem;margin-bottom:4px">${esc(sub.name)}</h3>

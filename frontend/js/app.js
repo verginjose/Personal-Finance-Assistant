@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    app.js — SPA Router + Shell
    ═══════════════════════════════════════════════════════════════════════════ */
-import { Auth } from './utils/api.js';
+import { Auth, SseManager } from './utils/api.js';
 import { icon } from './utils/icons.js';
 import { renderAuth }          from './views/auth.js';
 import { renderDashboard }     from './views/dashboard.js';
@@ -30,10 +30,13 @@ function renderShell() {
   const root = document.getElementById('app');
 
   if (!Auth.isLoggedIn()) {
+    SseManager.disconnect();
     root.innerHTML = '<div id="view-root"></div>';
     renderAuth(document.getElementById('view-root'));
     return;
   }
+
+  SseManager.connect();
 
   const email = Auth.getEmail() || 'User';
   const initial = email[0].toUpperCase();

@@ -23,6 +23,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,7 @@ public class AnalyticsController {
     private final AnalyticsService analyticsService;
     private final com.finance.analytics.service.GoalForecastingService forecastingService;
     private final com.finance.analytics.service.BudgetTrendService trendService;
+    private final com.finance.analytics.repository.TransactionEntryRepository transactionEntryRepository;
 
     @GetMapping("/category-pie-chart")
     @Operation(summary = "Get category distribution pie chart")
@@ -157,6 +159,35 @@ public class AnalyticsController {
     public ResponseEntity<java.util.List<com.finance.analytics.service.BudgetTrendService.BudgetTrend>> getBudgetTrends(
             @RequestHeader("X-User-Id") String xUserId) {
         return ResponseEntity.ok(trendService.getTrends(UUID.fromString(xUserId)));
+    }
+
+    @GetMapping(value = "/export", produces = "text/csv")
+    @Operation(summary = "Export user transactions as CSV")
+    public ResponseEntity<String> exportTransactionsCSV(@RequestHeader("X-User-Id") String xUserId) {
+        UUID userId = UUID.fromString(xUserId);
+        java.util.List<TransactionEntry> transactions = transactionEntryRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        
+        StringBuilder csv = new StringBuilder();
+        csv.append("Date,Type,Category,Amount,Currency,Name,Description\n");
+        
+        for (TransactionEntry t : transactions) {
+            String date = t.getCreatedAt() != null ? t.getCreatedAt().toString() : "";
+            String type = t.getType() != null ? t.getType().name() : "";
+            String cat = t.getCategory() != null ? t.getCategory().name() : "";
+            String amt = t.getAmount() != null ? t.getAmount().toPlainString() : "0";
+            String curr = t.getCurrency() != null ? t.getCurrency() : "INR";
+            String name = t.getName() != null ? t.getName().replace(",", " ") : "";
+            String desc = t.getDescription() != null ? t.getDescription().replace(",", " ") : "";
+            
+            csv.append(String.format("%s,%s,%s,%s,%s,%s,%s\n", date, type, cat, amt, curr, name, desc));
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"transactions.csv\"");
+        
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(csv.toString());
     }
 
     @GetMapping("/health")

@@ -3,6 +3,15 @@ server:
 
 # ── Virtual Threads (Java 21) ─────────────────────────────────────────────────
 spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:kafka:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      group-id: bill-parser-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
   threads:
     virtual:
       enabled: true
@@ -49,3 +58,6 @@ logging:
 ocr:
   service:
     url: ${OCR_SERVICE_URL:http://ocr-service:8100}
+
+# ── Kafka ─────────────────────────────────────────────────────────────────────
+# (Moved to top spring block)

@@ -69,6 +69,11 @@ export async function renderTransactions(container) {
   const openPanel = () => { panel.classList.add('open'); overlay.classList.add('open'); };
   const closePanel = () => { panel.classList.remove('open'); overlay.classList.remove('open'); };
 
+  if (window.flatpickr) {
+    flatpickr('#t-start', { dateFormat: 'Y-m-d' });
+    flatpickr('#t-end', { dateFormat: 'Y-m-d' });
+  }
+
   document.getElementById('t-filter-btn').onclick = openPanel;
   document.getElementById('t-filter-close').onclick = closePanel;
   overlay.onclick = closePanel;

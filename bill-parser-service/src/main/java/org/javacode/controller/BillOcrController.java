@@ -5,6 +5,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.javacode.dto.CreateEntryResponse;
 import org.javacode.service.BillOcrService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.kafka.core.KafkaTemplate;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,9 +32,11 @@ public class BillOcrController {
     private static final long MAX_FILE_BYTES = 10L * 1024 * 1024; // 10 MB
 
     private final BillOcrService billOcrService;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final ObjectMapper objectMapper;
 
     @PostMapping("/process/{userId}")
-    public ResponseEntity<CreateEntryResponse> processBill(
+    public ResponseEntity<?> processBill(
             @PathVariable String userId,
             @RequestParam(value = "file", required = false) MultipartFile file) {
 
@@ -55,11 +64,24 @@ public class BillOcrController {
                 userId, file.getOriginalFilename(), file.getSize() / 1024, contentType);
 
         try {
-            CreateEntryResponse result = billOcrService.processFile(userId, file);
-            return ResponseEntity.ok(result);
-        } catch ( java.io.IOException e) {
-            // Re-throw as unchecked — GlobalExceptionHandler maps it to 502
-            throw new RuntimeException("OCR extraction failed: " + e.getMessage(), e);
+            // Save file to temp location
+            Path tempDir = Files.createTempDirectory("ocr-upload-");
+            File tempFile = new File(tempDir.toFile(), file.getOriginalFilename() != null ? file.getOriginalFilename() : "bill.pdf");
+            file.transferTo(tempFile);
+
+            // Publish job to Kafka
+            Map<String, String> job = Map.of(
+                    "userId", userId,
+                    "filePath", tempFile.getAbsolutePath(),
+                    "contentType", contentType,
+                    "originalFilename", file.getOriginalFilename() != null ? file.getOriginalFilename() : ""
+            );
+            kafkaTemplate.send("ocr-jobs", userId, objectMapper.writeValueAsString(job));
+
+            return ResponseEntity.accepted().body(Map.of("status", "processing", "message", "Bill uploaded and is being processed asynchronously."));
+        } catch (Exception e) {
+            log.error("Failed to enqueue OCR job", e);
+            throw new RuntimeException("OCR upload failed: " + e.getMessage(), e);
         }
     }
 }

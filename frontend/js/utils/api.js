@@ -25,6 +25,55 @@ export const Auth = {
   }
 };
 
+export const SseManager = {
+  eventSource: null,
+  connect() {
+    if (this.eventSource) return;
+    const userId = Auth.getUserId();
+    const token = Auth.getToken();
+    if (!userId || !token) return;
+
+    this.eventSource = new EventSource(`${API_BASE}/upsert/notifications/stream?token=${encodeURIComponent(token)}`);
+    
+    this.eventSource.onopen = () => console.log('SSE connected');
+    
+    this.eventSource.addEventListener('notification', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.status === 'SUCCESS' || data.status === 'ERROR' || data.status === 'INFO') {
+          // INFO type is new, typically for alerts. Toast the message.
+          toast(data.message, data.status === 'SUCCESS' ? 'success' : (data.status === 'ERROR' ? 'error' : 'info'));
+          
+          // Dispatch specific event if provided, otherwise a generic one
+          if (data.event) {
+            window.dispatchEvent(new CustomEvent(data.event, { detail: data }));
+          } else {
+             // Fallback for old OCR events
+             window.dispatchEvent(new CustomEvent('ocr-completed', { detail: data }));
+          }
+          // Also dispatch a generic notification event
+          window.dispatchEvent(new CustomEvent('app-notification', { detail: data }));
+        }
+      } catch (err) {
+        console.error('Failed to parse SSE notification', err);
+      }
+    });
+
+    this.eventSource.onerror = (err) => {
+      console.error('SSE error', err);
+      this.disconnect();
+      // Reconnect after 5s
+      setTimeout(() => this.connect(), 5000);
+    };
+  },
+  disconnect() {
+    if (this.eventSource) {
+      this.eventSource.close();
+      this.eventSource = null;
+    }
+  }
+};
+
 let isRefreshing = false;
 let refreshPromise = null;
 
@@ -116,7 +165,7 @@ async function request(method, path, { body, params, headers = {}, raw = false }
 export const api = {
   get:    (path, params)       => request('GET', path, { params }),
   post:   (path, body, opts)   => request('POST', path, { body, ...opts }),
-  put:    (path, body)         => request('PUT', path, { body }),
+  put:    (path, body, opts)   => request('PUT', path, { body, ...opts }),
   patch:  (path, body, params) => request('PATCH', path, { body, params }),
   delete: (path, params)       => request('DELETE', path, { params }),
   upload: (path, formData)     => request('POST', path, { body: formData }),

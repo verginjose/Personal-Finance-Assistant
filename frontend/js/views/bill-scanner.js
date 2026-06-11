@@ -125,15 +125,28 @@ export async function renderBillScanner(container) {
     try {
       const fd = new FormData();
       fd.append('file', selectedFile);
-      const result = await api.upload(`/bill/process/${userId}`, fd);
-      document.getElementById('bs-result').style.display = 'block';
-      renderPreviewForm(result);
+      await api.upload(`/bill/process/${userId}`, fd);
+      toast('Bill uploaded. AI is processing...', 'info');
     } catch (err) {
-      toast('OCR failed: ' + err.message, 'error');
+      toast('OCR upload failed: ' + err.message, 'error');
+      uploadBtn.disabled = false;
+      uploadBtn.innerHTML = `${icon('scan', 'sm')} Process Receipt`;
+    }
+  };
+
+  if (window._bsOcrListener) {
+    window.removeEventListener('ocr-completed', window._bsOcrListener);
+  }
+  window._bsOcrListener = (e) => {
+    const detail = e.detail;
+    if (detail.status === 'SUCCESS' && detail.data) {
+      document.getElementById('bs-result').style.display = 'block';
+      renderPreviewForm(detail.data);
     }
     uploadBtn.disabled = !selectedFile;
     uploadBtn.innerHTML = `${icon('scan', 'sm')} Process Receipt`;
   };
+  window.addEventListener('ocr-completed', window._bsOcrListener);
 }
 
 function escapeAttr(s) {

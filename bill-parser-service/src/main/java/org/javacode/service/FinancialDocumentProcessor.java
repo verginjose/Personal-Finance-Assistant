@@ -80,7 +80,7 @@ public class FinancialDocumentProcessor {
     @PostConstruct
     public void init() {
         this.httpClient = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_2)
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(10))
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .executor(Executors.newVirtualThreadPerTaskExecutor())

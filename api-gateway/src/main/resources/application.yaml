@@ -42,6 +42,13 @@ spring:
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@ipPathKeyResolver}"
 
+        - id: upsert-service-sse
+          uri: http://upsert-service:8081
+          predicates:
+            - Path=/api/upsert/notifications/**
+          filters:
+            - StripPrefix=2
+            
         - id: upsert-service
           uri: http://upsert-service:8081
           predicates:

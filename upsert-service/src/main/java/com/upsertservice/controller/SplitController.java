@@ -42,6 +42,14 @@ public class SplitController {
         return ResponseEntity.status(HttpStatus.CREATED).body(splitService.createGroup(req));
     }
 
+    @PutMapping("/{groupId}")
+    public ResponseEntity<ExpenseGroup> updateGroup(
+            @RequestHeader("X-User-Id") String xUserId,
+            @PathVariable Long groupId,
+            @Valid @RequestBody UpdateGroupRequest req) {
+        return ResponseEntity.ok(splitService.updateGroup(groupId, req, requireUserId(xUserId)));
+    }
+
     @GetMapping
     public ResponseEntity<List<ExpenseGroup>> getUserGroups(@RequestParam UUID userId) {
         return ResponseEntity.ok(splitService.getUserGroups(userId));
@@ -63,6 +71,42 @@ public class SplitController {
             @Valid @RequestBody AddMemberRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(splitService.addMember(groupId, req, requireUserId(xUserId)));
+    }
+
+    @PostMapping("/{groupId}/members/{memberUserId}/accept")
+    public ResponseEntity<Map<String, String>> acceptInvitation(
+            @RequestHeader("X-User-Id") String xUserId,
+            @PathVariable Long groupId,
+            @PathVariable UUID memberUserId) {
+        if (!requireUserId(xUserId).equals(memberUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot accept invitation for another user");
+        }
+        splitService.acceptInvitation(groupId, memberUserId);
+        return ResponseEntity.ok(Map.of("message", "Invitation accepted"));
+    }
+
+    @PostMapping("/{groupId}/members/{memberUserId}/reject")
+    public ResponseEntity<Map<String, String>> rejectInvitation(
+            @RequestHeader("X-User-Id") String xUserId,
+            @PathVariable Long groupId,
+            @PathVariable UUID memberUserId) {
+        if (!requireUserId(xUserId).equals(memberUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot reject invitation for another user");
+        }
+        splitService.rejectInvitation(groupId, memberUserId);
+        return ResponseEntity.ok(Map.of("message", "Invitation rejected"));
+    }
+
+    @DeleteMapping("/{groupId}/members/{memberUserId}")
+    public ResponseEntity<Map<String, String>> leaveGroup(
+            @RequestHeader("X-User-Id") String xUserId,
+            @PathVariable Long groupId,
+            @PathVariable UUID memberUserId) {
+        if (!requireUserId(xUserId).equals(memberUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot remove another user");
+        }
+        splitService.leaveGroup(groupId, memberUserId);
+        return ResponseEntity.ok(Map.of("message", "Successfully left the group"));
     }
 
     @GetMapping("/{groupId}/members")

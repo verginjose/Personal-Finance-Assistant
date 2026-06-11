@@ -12,7 +12,7 @@ export async function renderAnalytics(container) {
   const userId = Auth.getUserId();
 
   container.innerHTML = `
-    ${pageHeader('Analytics', 'Deep insights into your finances')}
+    ${pageHeader('Analytics', 'Deep insights into your finances', '<button class="btn btn-secondary" id="a-export">Export CSV</button>')}
     <div class="card-grid card-grid-2 fade-up" style="margin-bottom:24px">
       ${healthPanelHtml('a')}
       ${aiPanelHtml('a')}
@@ -45,6 +45,22 @@ export async function renderAnalytics(container) {
     </div>`;
 
   document.getElementById('a-apply').onclick = () => loadAnalytics(userId);
+  document.getElementById('a-export').onclick = async () => {
+    try {
+      const res = await api.get('/analytics/export', null, { raw: true });
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'transactions.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      toast('Export failed: ' + err.message, 'error');
+    }
+  };
   loadAnalytics(userId);
 }
 

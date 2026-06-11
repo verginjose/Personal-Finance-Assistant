@@ -31,6 +31,7 @@ public class SplitService {
     private final UserValidationService userValidationService;
     private final GroupActivityService groupActivityService;
     private final CacheEvictPublisher cacheEvictPublisher;
+    private final NotificationService notificationService;
 
     /* ─── GROUPS ─── */
 
@@ -43,12 +44,34 @@ public class SplitService {
         group = groupRepo.save(group);
         RegisteredUser creator = userValidationService.requireRegisteredUser(req.getCreatedBy());
         String creatorName = userValidationService.displayName(creator);
-        addMemberInternal(group.getId(), req.getCreatedBy(), creatorName);
+        GroupMember creatorMember = addMemberInternal(group.getId(), req.getCreatedBy(), creatorName);
+        creatorMember.setStatus(GroupMember.InvitationStatus.ACCEPTED);
+        memberRepo.save(creatorMember);
         groupActivityService.log(group.getId(), req.getCreatedBy(), creatorName,
                 ActivityType.GROUP_CREATED,
                 "@" + creatorName + " created the group \"" + group.getName() + "\"",
                 group.getId());
         log.info("Group created: id={}, name={}", group.getId(), group.getName());
+        return group;
+    }
+
+    public ExpenseGroup updateGroup(Long groupId, UpdateGroupRequest req, UUID actorUserId) {
+        ExpenseGroup group = groupRepo.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));
+        requireGroupMember(groupId, actorUserId);
+        
+        group.setName(req.getName());
+        group.setDescription(req.getDescription());
+        if (req.getCurrency() != null) {
+            group.setCurrency(req.getCurrency());
+        }
+        group = groupRepo.save(group);
+        
+        String actorName = resolveMemberName(groupId, actorUserId);
+        groupActivityService.log(groupId, actorUserId, actorName,
+                ActivityType.GROUP_CREATED, // Reuse or create new ActivityType, currently reuse
+                "@" + actorName + " updated group details",
+                groupId);
         return group;
     }
 
@@ -81,6 +104,18 @@ public class SplitService {
                 ActivityType.MEMBER_ADDED,
                 "@" + actorName + " added @" + name + " to the group",
                 member.getId());
+                
+        // Push notification
+        ExpenseGroup group = groupRepo.findById(groupId).orElse(null);
+        if (group != null) {
+            notificationService.sendNotification(req.getUserId(), Map.of(
+                "status", "INFO",
+                "message", "You've been invited to join the group: " + group.getName(),
+                "event", "group-invite",
+                "groupId", groupId
+            ));
+        }
+        
         return member;
     }
 
@@ -89,7 +124,66 @@ public class SplitService {
         m.setGroupId(groupId);
         m.setUserId(userId);
         m.setName(name);
+        m.setStatus(GroupMember.InvitationStatus.PENDING);
         return memberRepo.save(m);
+    }
+
+    public void acceptInvitation(Long groupId, UUID userId) {
+        GroupMember member = memberRepo.findByGroupId(groupId).stream()
+                .filter(m -> m.getUserId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Membership not found"));
+        
+        if (member.getStatus() == GroupMember.InvitationStatus.ACCEPTED) {
+            return;
+        }
+        
+        member.setStatus(GroupMember.InvitationStatus.ACCEPTED);
+        memberRepo.save(member);
+        
+        String actorName = resolveMemberName(groupId, userId);
+        groupActivityService.log(groupId, userId, actorName,
+                ActivityType.MEMBER_ADDED,
+                "@" + actorName + " joined the group",
+                member.getId());
+    }
+
+    public void rejectInvitation(Long groupId, UUID userId) {
+        GroupMember member = memberRepo.findByGroupId(groupId).stream()
+                .filter(m -> m.getUserId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Membership not found"));
+        
+        if (member.getStatus() == GroupMember.InvitationStatus.ACCEPTED) {
+            throw new IllegalArgumentException("Cannot reject an already accepted invitation. Use leave group instead.");
+        }
+        
+        memberRepo.delete(member);
+    }
+
+    public void leaveGroup(Long groupId, UUID userId) {
+        GroupMember member = memberRepo.findByGroupId(groupId).stream()
+                .filter(m -> m.getUserId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Membership not found"));
+                
+        // Ensure balance is 0
+        GroupBalanceResponse balances = getGroupBalances(groupId);
+        boolean hasBalance = balances.getMemberBalances().stream()
+                .filter(b -> b.getUserId().equals(userId))
+                .anyMatch(b -> b.getNetBalance().compareTo(BigDecimal.ZERO) != 0);
+                
+        if (hasBalance) {
+            throw new IllegalArgumentException("Cannot leave the group with a non-zero balance. Please settle your debts first.");
+        }
+        
+        memberRepo.delete(member);
+        
+        String actorName = member.getName();
+        groupActivityService.log(groupId, userId, actorName,
+                ActivityType.MEMBER_ADDED, // Reuse ActivityType, maybe we should add a LEAVE type, but reusing is fine for now
+                "@" + actorName + " left the group",
+                member.getId());
     }
 
     @Transactional(readOnly = true)
@@ -136,6 +230,22 @@ public class SplitService {
                         + "\" (" + expense.getAmount() + " " + expense.getCurrency() + ")",
                 expense.getId());
         log.info("Shared expense added: id={}, group={}, amount={}", expense.getId(), req.getGroupId(), req.getAmount());
+        
+        final String desc = expense.getDescription();
+        final Long gid = req.getGroupId();
+        
+        // Push notification to involved members
+        splits.forEach(s -> {
+            if (!s.getUserId().equals(actorUserId) && s.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                notificationService.sendNotification(s.getUserId(), Map.of(
+                    "status", "INFO",
+                    "message", actorName + " added a new expense: " + desc,
+                    "event", "expense-added",
+                    "groupId", gid
+                ));
+            }
+        });
+        
         return expense;
     }
 
@@ -422,6 +532,15 @@ public class SplitService {
                         + " (" + settledTotal.setScale(2, RoundingMode.HALF_UP) + ")",
                 groupId);
         log.info("Settled {} splits from {} to {}", splits.size(), fromUserId, toUserId);
+        
+        // Push notification
+        UUID targetNotificationUser = fromUserId.equals(actorUserId) ? toUserId : fromUserId;
+        notificationService.sendNotification(targetNotificationUser, Map.of(
+            "status", "SUCCESS",
+            "message", actorName + " recorded a ₹" + settledTotal.setScale(2, RoundingMode.HALF_UP) + " settlement with you.",
+            "event", "debt-settled",
+            "groupId", groupId
+        ));
     }
 
     private void requireGroupMember(Long groupId, UUID userId) {

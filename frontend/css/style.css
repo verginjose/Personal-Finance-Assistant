@@ -229,11 +229,15 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: var(--space-6);
-  transition: all var(--transition);
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
   backdrop-filter: blur(8px);
 }
 
-.card:hover { border-color: rgba(20, 184, 166, 0.22); }
+.card:hover {
+  border-color: rgba(20, 184, 166, 0.35);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.4), 0 0 16px rgba(20, 184, 166, 0.1);
+}
 
 .card-header {
   display: flex;

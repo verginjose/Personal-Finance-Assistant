@@ -20,6 +20,7 @@ public class RecurringTransactionScheduler {
     private final TransactionEntryRepository repository;
     private final TransactionEntryService transactionEntryService;
     private final com.upsertservice.repository.OutboxEventRepository outboxEventRepository;
+    private final NotificationService notificationService;
 
     // Run every hour. ShedLock ensures only one instance executes this at a time.
     @Scheduled(cron = "0 0 * * * *")
@@ -84,6 +85,13 @@ public class RecurringTransactionScheduler {
                 // 2. Advance the original transaction's nextRunDate
                 original.setNextRunDate(tempDate);
                 repository.save(original);
+                
+                // 3. Push notification
+                notificationService.sendNotification(original.getUserId(), java.util.Map.of(
+                    "status", "INFO",
+                    "message", "Recurring transaction '" + original.getName() + "' of ₹" + aggregatedAmount + " was logged automatically.",
+                    "event", "recurring-processed"
+                ));
 
                 log.info("Successfully processed recurring transaction {}. Missed periods: {}. Next run: {}", original.getId(), missedPeriods, tempDate);
             } catch (Exception e) {

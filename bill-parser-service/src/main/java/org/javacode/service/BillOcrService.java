@@ -11,7 +11,7 @@ import org.javacode.service.FinancialDocumentProcessor.DocumentInput;
 import org.javacode.service.FinancialDocumentProcessor.FinancialDocument;
 import org.javacode.service.FinancialDocumentProcessor.ProcessedFinancialDocument;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
+import org.springframework.stereotype.Service;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -47,13 +47,12 @@ public class BillOcrService {
         this.ocrClient = ocrClient;
     }
 
-    public CreateEntryResponse processFile(String userId, MultipartFile file)
+    public CreateEntryResponse processFile(String userId, byte[] fileBytes, String filename)
             throws IOException {
 
-        String filename = file.getOriginalFilename();
         String extractedText = isPdf(filename)
-                ? extractTextFromPdf(file)
-                : extractTextFromImage(file);
+                ? extractTextFromPdf(fileBytes)
+                : extractTextFromImage(fileBytes, filename);
 
         extractedText = cleanOcrText(extractedText);
         log.info("Extracted {} characters from '{}'", extractedText.length(), filename);
@@ -91,9 +90,9 @@ public class BillOcrService {
         return filename != null && filename.toLowerCase().endsWith(".pdf");
     }
 
-    private String extractTextFromPdf(MultipartFile file) throws IOException {
+    private String extractTextFromPdf(byte[] fileBytes) throws IOException {
         log.info("we are extracting from PDF");
-        try (InputStream is = file.getInputStream();
+        try (InputStream is = new java.io.ByteArrayInputStream(fileBytes);
              PDDocument document = Loader.loadPDF(is.readAllBytes())) {
 
             String text = new PDFTextStripper().getText(document);
@@ -108,18 +107,18 @@ public class BillOcrService {
         }
     }
 
-    private String extractTextFromImage(MultipartFile file) throws IOException {
-        byte[] bytes = file.getBytes();
-        String hash = DigestUtils.sha256Hex(bytes);
+    private String extractTextFromImage(byte[] fileBytes, String filename) throws IOException {
+        String hash = DigestUtils.sha256Hex(fileBytes);
 
         String cached = ocrCache.getIfPresent(hash);
         if (cached != null) {
-            log.debug("OCR cache hit for {}", file.getOriginalFilename());
+            log.debug("OCR cache hit for {}", filename);
             return cached;
         }
-        String filename = file.getOriginalFilename() != null
-                ? file.getOriginalFilename() : "image.jpg";
-        String result = ocrClient.extractText(bytes, filename);
+        if (filename == null) {
+            filename = "image.jpg";
+        }
+        String result = ocrClient.extractText(fileBytes, filename);
         ocrCache.put(hash, result);
         return result;
     }

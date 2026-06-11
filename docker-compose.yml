@@ -5,7 +5,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 1G
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -29,7 +29,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128M
+          memory: 256M
     ports:
       - "6379:6379"
     volumes:
@@ -56,7 +56,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          cpus: '1'
+          memory: 768M
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
@@ -87,6 +88,7 @@ services:
     deploy:
       resources:
         limits:
+          cpus: '2'
           memory: 1G
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
@@ -99,7 +101,7 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     ports:
       - "${UPSERT_SERVICE_PORT}:8081"
     networks:
@@ -113,10 +115,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      kafka:
+        condition: service_started
     restart: on-failure
     deploy:
       resources:
         limits:
+          cpus: '2'
           memory: 1G
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
@@ -129,7 +134,7 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       GROQ_API_KEY: ${GROQ_API_KEY}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
     ports:
@@ -145,16 +150,20 @@ services:
     depends_on:
       ocr-service:
         condition: service_healthy
+      kafka:
+        condition: service_started
     restart: on-failure
     deploy:
       resources:
         limits:
-          memory: 1G
+          cpus: '1'
+          memory: 768M
     ports:
       - "${OCR_SERVICE_PORT}:8083"
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       OCR_SERVICE_URL: http://ocr-service:8100   # add this
     networks:
       - finance-network
@@ -208,7 +217,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          cpus: '1'
+          memory: 768M
     environment:
       # JWT
       JWT_SECRET: ${JWT_SECRET}
@@ -229,6 +239,7 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: clickhouse
+    profiles: ["observability"]
     deploy:
       resources:
         limits:
@@ -248,10 +259,11 @@ services:
   prometheus:
     image: prom/prometheus:v2.55.0
     container_name: prometheus
+    profiles: ["observability"]
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
     ports:
       - "9090:9090"
     volumes:
@@ -262,6 +274,7 @@ services:
   grafana:
     image: grafana/grafana:11.1.4
     container_name: grafana
+    profiles: ["observability"]
     deploy:
       resources:
         limits:
@@ -293,6 +306,7 @@ services:
   vector:
     image: timberio/vector:0.41.1-debian
     container_name: vector
+    profiles: ["observability"]
     volumes:
       - ./observability/vector/vector.yaml:/etc/vector/vector.yaml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -328,7 +342,7 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: false
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
       KAFKA_LOG_RETENTION_HOURS: 168
       KAFKA_LOG_RETENTION_BYTES: 1073741824
     volumes:

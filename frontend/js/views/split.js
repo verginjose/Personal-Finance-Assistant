@@ -3,6 +3,30 @@ import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, con
 
 let currentGroupId = null;
 
+// Global notification listeners for Split view
+window.addEventListener('group-invite', () => {
+  const userId = Auth.getUserId();
+  if (userId && !currentGroupId && document.getElementById('sp-content')) {
+    loadGroups(userId); // Refresh group list if on the main split view
+  }
+});
+
+window.addEventListener('expense-added', (e) => {
+  const userId = Auth.getUserId();
+  const data = e.detail;
+  if (userId && currentGroupId && data.groupId === currentGroupId && document.getElementById('sp-content')) {
+    loadGroupDetail(currentGroupId, userId); // Refresh group details
+  }
+});
+
+window.addEventListener('debt-settled', (e) => {
+  const userId = Auth.getUserId();
+  const data = e.detail;
+  if (userId && currentGroupId && data.groupId === currentGroupId && document.getElementById('sp-content')) {
+    loadGroupDetail(currentGroupId, userId); // Refresh group details
+  }
+});
+
 export async function renderSplit(container) {
   currentGroupId = null;
   const userId = Auth.getUserId();
@@ -58,15 +82,53 @@ async function loadGroupDetail(groupId, userId) {
       api.get(`/upsert/groups/${groupId}/balances`),
       api.get(`/upsert/groups/${groupId}/activity`)
     ]);
+    const currentUserMember = members.find(m => m.userId === userId);
+    const isPending = currentUserMember && currentUserMember.status === 'PENDING';
+
+    if (isPending) {
+      el.innerHTML = `
+        <div class="card" style="margin-bottom:20px; text-align:center; padding:40px;">
+          <h2 style="margin-bottom:8px">You've been invited!</h2>
+          <p style="color:var(--text-dim); margin-bottom:24px">You have been invited to join the group <strong>${esc(group.name)}</strong>.</p>
+          <div style="display:flex; justify-content:center; gap:16px;">
+            <button class="btn btn-secondary" id="sp-decline-invite">Decline</button>
+            <button class="btn btn-primary" id="sp-accept-invite">Accept Invitation</button>
+          </div>
+        </div>`;
+        
+      document.getElementById('sp-accept-invite').onclick = async () => {
+        try {
+          await api.post(`/upsert/groups/${groupId}/members/${userId}/accept`);
+          toast('Invitation accepted!', 'success');
+          loadGroupDetail(groupId, userId);
+        } catch(e) { toast(e.message, 'error'); }
+      };
+      document.getElementById('sp-decline-invite').onclick = async () => {
+        if (!(await confirmModal('Decline', 'Are you sure you want to decline this invitation?', 'Decline'))) return;
+        try {
+          await api.post(`/upsert/groups/${groupId}/members/${userId}/reject`);
+          toast('Invitation declined', 'info');
+          document.getElementById('sp-back').click();
+        } catch(e) { toast(e.message, 'error'); }
+      };
+      return;
+    }
+
     el.innerHTML = `
-      <div class="card" style="margin-bottom:20px">
-        <h3>${esc(group.name)}</h3>
-        <p style="color:var(--text-dim);margin-top:4px">${esc(group.description || '')}</p>
+      <div class="card" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:flex-start;">
+        <div>
+          <h3>${esc(group.name)}</h3>
+          <p style="color:var(--text-dim);margin-top:4px">${esc(group.description || '')}</p>
+        </div>
+        <div style="display:flex; gap:8px;">
+           <button class="btn btn-secondary btn-sm" id="sp-edit-group">Edit</button>
+           <button class="btn btn-danger btn-sm" id="sp-leave-group">Leave</button>
+        </div>
       </div>
       <div class="card-grid card-grid-3">
         <div class="card">
           <div class="card-header"><h3>Members (${members.length})</h3></div>
-          ${members.map(m => `<div class="balance-item"><span>@${esc(m.name)}</span></div>`).join('')}
+          ${members.map(m => `<div class="balance-item"><span>@${esc(m.name)} ${m.status === 'PENDING' ? '<span class="badge badge-warning" style="font-size:.68rem">Pending</span>' : ''}</span></div>`).join('')}
           <button class="btn btn-secondary btn-sm" style="margin-top:12px;width:100%" id="sp-add-member">+ Add Member</button>
         </div>
         <div class="card">
@@ -117,7 +179,10 @@ async function loadGroupDetail(groupId, userId) {
       </div>`;
 
     document.getElementById('sp-add-member').onclick = () => addMemberModal(groupId, userId);
-    document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, members, userId);
+    
+    const acceptedMembers = members.filter(m => m.status === 'ACCEPTED');
+    document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, acceptedMembers, userId);
+    
     el.querySelectorAll('.delete-expense-btn').forEach(btn => {
       btn.onclick = async () => {
         if (!(await confirmModal('Delete Expense', 'Delete this shared expense? Linked personal transactions will be removed.', 'Delete'))) return;
@@ -138,9 +203,40 @@ async function loadGroupDetail(groupId, userId) {
         } catch (e) { toast(e.message, 'error'); }
       };
     });
+    document.getElementById('sp-edit-group').onclick = () => editGroupModal(group, userId);
+    document.getElementById('sp-leave-group').onclick = async () => {
+      if (!(await confirmModal('Leave Group', 'Are you sure you want to leave this group? You must have a settled balance to leave.', 'Leave Group'))) return;
+      try {
+        await api.delete(`/upsert/groups/${groupId}/members/${userId}`);
+        toast('You left the group.', 'success');
+        document.getElementById('sp-back').click();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    };
   } catch (err) {
     el.innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
   }
+}
+
+function editGroupModal(group, userId) {
+  openModal('Edit Group', `
+    <form id="eg-form">
+      <div class="form-group"><label for="eg-name">Group Name</label><input class="form-input" id="eg-name" required maxlength="100" value="${esc(group.name)}"></div>
+      <div class="form-group"><label for="eg-desc">Description</label><textarea class="form-textarea" id="eg-desc" maxlength="300">${esc(group.description || '')}</textarea></div>
+      <div class="form-group"><label for="eg-currency">Currency</label><input class="form-input" id="eg-currency" value="${esc(group.currency || 'INR')}" maxlength="3" required></div>
+      ${modalActions('Cancel', 'Save Changes')}
+    </form>`, {
+    onSubmit: async () => {
+      await api.put(`/upsert/groups/${group.id}`, {
+        name: document.getElementById('eg-name').value.trim(),
+        description: document.getElementById('eg-desc').value.trim() || undefined,
+        currency: document.getElementById('eg-currency').value.trim().toUpperCase()
+      });
+      toast('Group updated', 'success');
+      loadGroupDetail(group.id, userId);
+    }
+  });
 }
 
 function createGroupModal(userId) {

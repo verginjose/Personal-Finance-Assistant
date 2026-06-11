@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -27,9 +28,15 @@ public class BillOcrControllerTest {
     @MockBean
     private BillOcrService billOcrService;
 
+    @MockBean
+    private org.springframework.kafka.core.KafkaTemplate<String, String> kafkaTemplate;
+
+    @MockBean
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
     @Test
-    @DisplayName("POST /bill/process/{userId}: returns extracted data on successful file upload")
-    void processBill_succeeds_returnsData() throws Exception {
+    @DisplayName("POST /bill/process/{userId}: returns accepted on successful file upload")
+    void processBill_succeeds_returnsAccepted() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "receipt.png",
@@ -37,26 +44,15 @@ public class BillOcrControllerTest {
                 "dummy image content".getBytes()
         );
 
-        CreateEntryResponse response = new CreateEntryResponse(
-                "user-123",
-                "Walmart Store",
-                "150.75",
-                "EXPENSE",
-                "SHOPPING",
-                null,
-                "USD",
-                "Grocery receipt"
-        );
-
-        when(billOcrService.processFile(eq("user-123"), any())).thenReturn(response);
+        when(objectMapper.writeValueAsString(any())).thenReturn("{\"dummy\":\"json\"}");
 
         mockMvc.perform(multipart("/bill/process/user-123")
                         .file(file))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userId").value("user-123"))
-                .andExpect(jsonPath("$.name").value("Walmart Store"))
-                .andExpect(jsonPath("$.amount").value("150.75"))
-                .andExpect(jsonPath("$.expenseCategory").value("SHOPPING"));
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("processing"))
+                .andExpect(jsonPath("$.message").exists());
+        
+        verify(kafkaTemplate).send(eq("ocr-jobs"), eq("user-123"), any());
     }
 
     @Test

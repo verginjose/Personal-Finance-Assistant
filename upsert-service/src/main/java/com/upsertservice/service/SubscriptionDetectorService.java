@@ -82,6 +82,29 @@ public class SubscriptionDetectorService {
         log.info("Subscription {} deactivated by user {}", id, userId);
     }
 
+    @Transactional
+    public SubscriptionResponse updateSubscription(Long id, UUID userId, com.upsertservice.dto.UpdateSubscriptionRequest request) {
+        Subscription sub = subscriptionRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Subscription not found: " + id));
+        if (!sub.getUserId().equals(userId)) {
+            throw new SecurityException("Not authorized to modify this subscription");
+        }
+        sub.setName(request.getName());
+        sub.setAmount(request.getAmount());
+        
+        if (sub.getPeriod() != request.getPeriod()) {
+            sub.setPeriod(request.getPeriod());
+            LocalDate nextCharge = calculateNextChargeDate(sub.getNextChargeDate() != null ? sub.getNextChargeDate() : LocalDate.now(), request.getPeriod());
+            sub.setNextChargeDate(nextCharge);
+            int daysUntil = Math.max(0, (int) ChronoUnit.DAYS.between(LocalDate.now(), nextCharge));
+            sub.setDaysUntilCharge(daysUntil);
+        }
+        
+        subscriptionRepository.save(sub);
+        log.info("Subscription {} updated by user {}", id, userId);
+        return toResponse(sub);
+    }
+
     // ── Core logic ────────────────────────────────────────────────────────────
 
     /**
@@ -146,14 +169,22 @@ public class SubscriptionDetectorService {
         return gaps.stream().allMatch(g -> Math.abs(g - target) <= tolerance);
     }
 
-    /** Calculate next charge date from last transaction date and period. */
+    /** Calculate next charge date from last transaction date and period, ensuring it is in the future. */
     LocalDate calculateNextChargeDate(LocalDate lastDate, RecurringPeriod period) {
-        return switch (period) {
-            case DAILY   -> lastDate.plusDays(1);
-            case WEEKLY  -> lastDate.plusWeeks(1);
-            case MONTHLY -> lastDate.plusMonths(1);
-            case YEARLY  -> lastDate.plusYears(1);
-        };
+        if (lastDate == null || period == null) return LocalDate.now();
+        LocalDate nextCharge = lastDate;
+        LocalDate today = LocalDate.now();
+        
+        do {
+            nextCharge = switch (period) {
+                case DAILY   -> nextCharge.plusDays(1);
+                case WEEKLY  -> nextCharge.plusWeeks(1);
+                case MONTHLY -> nextCharge.plusMonths(1);
+                case YEARLY  -> nextCharge.plusYears(1);
+            };
+        } while (nextCharge.isBefore(today) || nextCharge.isEqual(today));
+        
+        return nextCharge;
     }
 
     /** Insert or update a subscription record. */

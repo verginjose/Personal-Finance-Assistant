@@ -19,6 +19,7 @@ public class RecurringTransactionScheduler {
 
     private final TransactionEntryRepository repository;
     private final TransactionEntryService transactionEntryService;
+    private final com.upsertservice.repository.OutboxEventRepository outboxEventRepository;
 
     // Run every hour. ShedLock ensures only one instance executes this at a time.
     @Scheduled(cron = "0 0 * * * *")
@@ -40,28 +41,51 @@ public class RecurringTransactionScheduler {
 
         for (TransactionEntry original : dueEntries) {
             try {
+                // Calculate missed periods and aggregate amount
+                LocalDateTime tempDate = original.getNextRunDate();
+                int missedPeriods = 0;
+                
+                while (tempDate.isBefore(now) || tempDate.isEqual(now)) {
+                    missedPeriods++;
+                    tempDate = TransactionEntryService.calculateNextRunDate(tempDate, original.getRecurringPeriod());
+                    
+                    // Failsafe to prevent infinite loop
+                    if (missedPeriods > 1000) {
+                        log.warn("Excessive missed periods for transaction {}. Breaking loop.", original.getId());
+                        break;
+                    }
+                }
+                
+                java.math.BigDecimal aggregatedAmount = original.getAmount().multiply(java.math.BigDecimal.valueOf(missedPeriods));
+
                 // 1. Create a duplicate transaction for the current period
                 TransactionEntry newEntry = new TransactionEntry(
                         original.getUserId(),
                         original.getName(),
-                        original.getAmount(),
+                        aggregatedAmount,
                         original.getType(),
                         original.getCurrency()
                 );
                 newEntry.setCategory(original.getCategory());
-                newEntry.setDescription("Auto-generated: " + original.getDescription());
+                newEntry.setDescription(missedPeriods > 1 ? 
+                        "Auto-generated (Aggregated " + missedPeriods + " missed periods): " + original.getDescription() :
+                        "Auto-generated: " + original.getDescription());
                 newEntry.setRecurring(false); // The generated instance is not recurring itself
-                newEntry.setCreatedAt(original.getNextRunDate());
+                newEntry.setCreatedAt(now);
                 
                 repository.save(newEntry);
                 
+                com.upsertservice.model.OutboxEvent event = new com.upsertservice.model.OutboxEvent();
+                event.setUserId(newEntry.getUserId());
+                event.setEventType("CREATE");
+                event.setEntityId(newEntry.getId());
+                outboxEventRepository.save(event);
+                
                 // 2. Advance the original transaction's nextRunDate
-                LocalDateTime nextRun = TransactionEntryService.calculateNextRunDate(
-                        original.getNextRunDate(), original.getRecurringPeriod());
-                original.setNextRunDate(nextRun);
+                original.setNextRunDate(tempDate);
                 repository.save(original);
 
-                log.info("Successfully processed recurring transaction {}. Next run: {}", original.getId(), nextRun);
+                log.info("Successfully processed recurring transaction {}. Missed periods: {}. Next run: {}", original.getId(), missedPeriods, tempDate);
             } catch (Exception e) {
                 log.error("Failed to process recurring transaction id={}", original.getId(), e);
             }

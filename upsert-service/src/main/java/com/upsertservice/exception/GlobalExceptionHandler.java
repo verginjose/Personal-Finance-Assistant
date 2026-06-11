@@ -62,6 +62,16 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse("Forbidden", List.of(ex.getMessage()), 403));
     }
 
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException ex) {
+        log.warn("Data Integrity Violation: {}", ex.getMostSpecificCause().getMessage());
+        recordError(400);
+        return ResponseEntity.badRequest()
+                .body(new ErrorResponse("Data Integrity Error", 
+                        List.of("Database constraint violated. Please check your input parameters (e.g., valid categories, types)."), 
+                        400));
+    }
+
     @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
     public ResponseEntity<ErrorResponse> handleResponseStatus(org.springframework.web.server.ResponseStatusException ex) {
         log.warn("ResponseStatusException: {}", ex.getMessage());

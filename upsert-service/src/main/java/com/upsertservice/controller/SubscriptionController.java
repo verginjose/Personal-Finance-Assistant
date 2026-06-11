@@ -39,6 +39,17 @@ public class SubscriptionController {
         return ResponseEntity.ok().build();
     }
 
+    @PutMapping("/{id}")
+    @Operation(summary = "Update subscription details")
+    public ResponseEntity<SubscriptionResponse> update(
+            @RequestHeader("X-User-Id") String xUserId,
+            @PathVariable Long id,
+            @RequestParam UUID userId,
+            @jakarta.validation.Valid @RequestBody com.upsertservice.dto.UpdateSubscriptionRequest request) {
+        validateUser(xUserId, userId);
+        return ResponseEntity.ok(service.updateSubscription(id, userId, request));
+    }
+
     private void validateUser(String xUserId, UUID userId) {
         if (!UUID.fromString(xUserId).equals(userId)) {
             throw new SecurityException("User ID mismatch");

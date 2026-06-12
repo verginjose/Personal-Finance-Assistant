@@ -5,7 +5,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2.5G
+    command: postgres -c shared_buffers=1GB -c work_mem=64MB -c maintenance_work_mem=128MB -c max_connections=200
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -70,7 +71,7 @@ services:
       JWT_EXPIRATION: ${JWT_EXPIRATION}
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
     ports:
       - "${AUTH_SERVICE_PORT}:8082"
     networks:
@@ -100,7 +101,7 @@ services:
       SPRING_DATASOURCE_HIKARI_SCHEMA: ${FINANCE_DB_SCHEMA}
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     ports:
       - "${UPSERT_SERVICE_PORT}:8081"
@@ -136,7 +137,7 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       GROQ_API_KEY: ${GROQ_API_KEY}
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
     ports:
       - "${ANALYTICS_SERVICE_PORT}:8084"
     networks:
@@ -162,7 +163,7 @@ services:
       - "${OCR_SERVICE_PORT}:8083"
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY}
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       OCR_SERVICE_URL: http://ocr-service:8100 # add this
     networks:
@@ -230,7 +231,7 @@ services:
 
       # Auth service URL
       AUTH_SERVICE_URL: http://auth-service:8082
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
     ports:
       - "${API_GATEWAY_PORT}:8080"
     networks:

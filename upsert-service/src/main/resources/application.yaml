@@ -38,7 +38,7 @@ app:
       username: ${SPRING_DATASOURCE_USERNAME:finance_user}
       password: ${SPRING_DATASOURCE_PASSWORD:finance_pass}
       pool-name: HikariPool-write
-      maximum-pool-size: 8
+      maximum-pool-size: 25
       minimum-idle: 2
       connection-timeout: 3000
       max-lifetime: 1800000
@@ -47,7 +47,7 @@ app:
       username: ${SPRING_DATASOURCE_USERNAME:finance_user}
       password: ${SPRING_DATASOURCE_PASSWORD:finance_pass}
       pool-name: HikariPool-read
-      maximum-pool-size: 20
+      maximum-pool-size: 25
       minimum-idle: 5
       connection-timeout: 3000
       max-lifetime: 1800000

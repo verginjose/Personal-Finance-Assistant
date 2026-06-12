@@ -13,7 +13,7 @@ spring:
         default_schema: finance
   datasource:
     hikari:
-      maximum-pool-size: 10
+      maximum-pool-size: 25
       minimum-idle: 2
 
   # ── Redis & Caching ─────────────────────────────────────────────────────────

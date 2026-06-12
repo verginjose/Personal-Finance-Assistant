@@ -105,31 +105,6 @@
     },
 
     {
-      "id": 6,
-      "title": "Error Rate — per service (last 1h)",
-      "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
-      "targets": [{
-        "expr": "sum by (service) (increase(pfa_log_errors_total[1m]))",
-        "legendFormat": "{{service}}",
-        "refId": "A"
-      }],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "lineWidth": 2, "fillOpacity": 10 },
-          "unit": "short",
-          "min": 0
-        }
-      },
-      "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum", "max"] }
-      },
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 3 }
-    },
-
-    {
       "id": 10,
       "title": "Logs — $service | $level | $search",
       "type": "logs",
@@ -169,7 +144,7 @@
           }
         ]
       },
-      "gridPos": { "h": 30, "w": 24, "x": 0, "y": 9 }
+      "gridPos": { "h": 36, "w": 24, "x": 0, "y": 3 }
     }
   ]
 }

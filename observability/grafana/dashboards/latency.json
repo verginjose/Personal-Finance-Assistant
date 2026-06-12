@@ -1,0 +1,36 @@
+{
+  "uid": "api-latency-dashboard",
+  "title": "API Latency",
+  "tags": ["latency", "performance"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "API Latency (p95) — per service (last 1h)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, application))",
+        "legendFormat": "{{application}}",
+        "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s",
+          "min": 0
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "mean"] }
+      },
+      "gridPos": { "h": 20, "w": 24, "x": 0, "y": 0 }
+    }
+  ]
+}

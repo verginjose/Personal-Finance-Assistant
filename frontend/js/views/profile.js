@@ -91,7 +91,23 @@ export async function renderProfile(container) {
   
   avatarDiv.onmouseenter = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '1';
   avatarDiv.onmouseleave = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '0';
-  avatarDiv.onclick = () => uploadInput.click();
+  
+  avatarDiv.onclick = () => {
+    const body = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:10px;">
+        ${profilePicture 
+          ? `<img src="${profilePicture}" style="width:250px;height:250px;border-radius:50%;object-fit:cover;box-shadow:0 8px 24px rgba(0,0,0,0.2);" />` 
+          : `<div style="width:250px;height:250px;border-radius:50%;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;font-size:5rem;color:var(--text-dim);box-shadow:0 8px 24px rgba(0,0,0,0.2);">${(email || 'U')[0].toUpperCase()}</div>`
+        }
+        <button class="btn btn-primary" id="view-upload-btn" type="button">${icon('camera', 'sm')} Update Picture</button>
+      </div>
+    `;
+    const { overlay, close } = openModal('Profile Picture', body);
+    overlay.querySelector('#view-upload-btn').onclick = () => {
+      close();
+      uploadInput.click();
+    };
+  };
 
   uploadInput.onchange = (e) => {
     const file = e.target.files[0];
@@ -109,9 +125,9 @@ export async function renderProfile(container) {
         </div>
       `;
 
-      const { modal, close } = openModal('Crop Profile Picture', modalBody);
-      const imgEl = modal.querySelector('#crop-image');
-      const saveBtn = modal.querySelector('#crop-save-btn');
+      const { overlay, close } = openModal('Crop Profile Picture', modalBody);
+      const imgEl = overlay.querySelector('#crop-image');
+      const saveBtn = overlay.querySelector('#crop-save-btn');
 
       // Initialize Cropper
       const cropper = new Cropper(imgEl, {
@@ -130,6 +146,7 @@ export async function renderProfile(container) {
 
         try {
           await api.put('/auth/profile', { profilePicture: dataUrl });
+          profilePicture = dataUrl;
           avatarDiv.style.backgroundImage = `url('${dataUrl}')`;
           avatarDiv.innerHTML = `<div class="avatar-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;color:#fff;">${icon('camera', 'sm')}</div>`;
           avatarDiv.onmouseenter = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '1';

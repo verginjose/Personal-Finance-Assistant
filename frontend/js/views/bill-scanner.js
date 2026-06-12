@@ -30,6 +30,8 @@ export async function renderBillScanner(container) {
   } catch (e) { console.error('Failed to load groups', e); }
 
   const dropZone = document.getElementById('bs-drop');
+  if (!dropZone) return;
+  
   const fileInput = document.getElementById('bs-file');
   const uploadBtn = document.getElementById('bs-upload');
   let selectedFile = null;

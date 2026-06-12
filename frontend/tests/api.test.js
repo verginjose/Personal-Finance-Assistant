@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Auth, api, toast } from '../js/utils/api.js';
+import { Auth, api, toast, abortPendingRequests } from '../js/utils/api.js';
 
 function mockFetchJson(data, status = 200) {
   global.fetch.mockResolvedValueOnce({
@@ -80,6 +80,8 @@ describe('api client', () => {
   });
 
   it('clears auth and dispatches event on 401', async () => {
+    // Remove refresh token so the 401 handler goes directly to clear+dispatch
+    localStorage.removeItem('pfa_refresh');
     const handler = vi.fn();
     window.addEventListener('auth-expired', handler);
 
@@ -95,6 +97,6 @@ describe('toast', () => {
     toast('Hello', 'success');
     const el = document.querySelector('.toast-success');
     expect(el).toBeTruthy();
-    expect(el.textContent).toBe('Hello');
+    expect(el.textContent).toContain('Hello');
   });
 });

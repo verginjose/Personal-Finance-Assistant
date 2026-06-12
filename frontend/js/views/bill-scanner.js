@@ -2,6 +2,7 @@ import {api, Auth, toast} from '../utils/api.js';
 import {icon} from '../utils/icons.js';
 import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js';
 import {navigateTo} from '../app.js';
+import {loadTomSelect, loadFlatpickr} from '../utils/loader.js';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
@@ -141,13 +142,17 @@ export async function renderBillScanner(container) {
     typeSelect.onchange = fillCategories;
     fillCategories();
     setupCategorySearch('bs-cat-search', 'bs-category');
-    if (window.TomSelect) {
-      new TomSelect('#bs-type', { create: false, controlInput: null });
-      new TomSelect('#bs-dest', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' }});
-    }
-    if (window.flatpickr) {
-      flatpickr('#bs-date', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
-    }
+    loadTomSelect().then(() => {
+      if (window.TomSelect) {
+        new TomSelect('#bs-type', { create: false, controlInput: null });
+        new TomSelect('#bs-dest', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' }});
+      }
+    }).catch(() => {});
+    loadFlatpickr().then(() => {
+      if (window.flatpickr) {
+        flatpickr('#bs-date', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
+      }
+    }).catch(() => {});
     form.onsubmit = (e) => { e.preventDefault(); saveTransaction(userId); };
   }
 

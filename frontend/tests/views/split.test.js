@@ -2,11 +2,24 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderSplit } from '../../js/views/split.js';
 import { Auth } from '../../js/utils/api.js';
 
-function mockFetchJson(data, status = 200) {
-  global.fetch.mockResolvedValueOnce({
-    status,
-    ok: status >= 200 && status < 300,
-    text: async () => JSON.stringify(data),
+let currentMockResponses = {};
+
+function mockFetchJson(urlMap) {
+  global.fetch.mockImplementation(async (url, opts) => {
+    let data = []; // default to array since most are lists
+    for (const [key, value] of Object.entries(urlMap)) {
+      if (url.includes(key)) {
+        data = value;
+        break;
+      }
+    }
+    // Only return a 201 for POST requests
+    const isPost = opts && opts.method === 'POST';
+    return {
+      status: isPost ? 201 : 200,
+      ok: true,
+      text: async () => JSON.stringify(data)
+    };
   });
 }
 
@@ -23,7 +36,7 @@ describe('renderSplit', () => {
   });
 
   it('sends createdBy when creating a group', async () => {
-    mockFetchJson([]);
+    mockFetchJson({ '/groups': [] });
     await renderSplit(container);
     container.querySelector('#sp-create').click();
 
@@ -31,7 +44,7 @@ describe('renderSplit', () => {
 
     document.querySelector('#cg-name').value = 'Weekend Trip';
     document.querySelector('#cg-desc').value = 'Cab share';
-    mockFetchJson({ id: 1, name: 'Weekend Trip' }, 201);
+    mockFetchJson({ '/groups': { id: 1, name: 'Weekend Trip' } });
 
     document.querySelector('#cg-form').requestSubmit();
 
@@ -46,15 +59,17 @@ describe('renderSplit', () => {
 
   it('sends paidBy UUID when adding a shared expense', async () => {
     const memberUserId = 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff';
-    mockFetchJson([{ id: 5, name: 'Trip', description: '' }]);
+    mockFetchJson({ '/groups': [{ id: 5, name: 'Trip', description: '' }] });
     await renderSplit(container);
     await vi.waitFor(() => expect(container.querySelector('.group-card')).toBeTruthy());
 
-    mockFetchJson({ id: 5, name: 'Trip' });
-    mockFetchJson([{ id: 1, name: 'Me', userId: memberUserId }]);
-    mockFetchJson([]);
-    mockFetchJson({ memberBalances: [], simplifiedDebts: [] });
-    mockFetchJson([]);
+    mockFetchJson({
+      '/groups/5/members': [{ id: 1, name: 'Me', userId: memberUserId }],
+      '/groups/5/activities': [],
+      '/groups/5/balances': { memberBalances: [], simplifiedDebts: [] },
+      '/groups/5/expenses': [],
+      '/groups/5': { id: 5, name: 'Trip' },
+    });
     container.querySelector('.group-card').click();
 
     await vi.waitFor(() => expect(document.getElementById('sp-add-expense')).toBeTruthy());
@@ -65,7 +80,6 @@ describe('renderSplit', () => {
     document.querySelector('#ae-desc').value = 'Lunch';
     document.querySelector('#ae-amt').value = '200';
     document.querySelector('#ae-paid').value = memberUserId;
-    mockFetchJson({ id: 99 }, 201);
 
     document.querySelector('#ae-form').requestSubmit();
 
@@ -87,18 +101,20 @@ describe('renderSplit', () => {
   it('sends splitDetails when using percentage split', async () => {
     const memberA = 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff';
     const memberB = 'cccccccc-dddd-eeee-ffff-000000000000';
-    mockFetchJson([{ id: 5, name: 'Trip', description: '' }]);
+    mockFetchJson({ '/groups': [{ id: 5, name: 'Trip', description: '' }] });
     await renderSplit(container);
     await vi.waitFor(() => expect(container.querySelector('.group-card')).toBeTruthy());
 
-    mockFetchJson({ id: 5, name: 'Trip' });
-    mockFetchJson([
-      { id: 1, name: 'alice', userId: memberA },
-      { id: 2, name: 'bob', userId: memberB }
-    ]);
-    mockFetchJson([]);
-    mockFetchJson({ memberBalances: [], simplifiedDebts: [] });
-    mockFetchJson([]);
+    mockFetchJson({
+      '/groups/5/members': [
+        { id: 1, name: 'alice', userId: memberA },
+        { id: 2, name: 'bob', userId: memberB }
+      ],
+      '/groups/5/activities': [],
+      '/groups/5/balances': { memberBalances: [], simplifiedDebts: [] },
+      '/groups/5/expenses': [],
+      '/groups/5': { id: 5, name: 'Trip' }
+    });
     container.querySelector('.group-card').click();
 
     await vi.waitFor(() => expect(document.getElementById('sp-add-expense')).toBeTruthy());
@@ -116,7 +132,6 @@ describe('renderSplit', () => {
 
     document.getElementById(`ae-split-${memberA}`).value = '60';
     document.getElementById(`ae-split-${memberB}`).value = '40';
-    mockFetchJson({ id: 100 }, 201);
 
     document.querySelector('#ae-form').requestSubmit();
 

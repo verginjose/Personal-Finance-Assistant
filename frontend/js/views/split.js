@@ -1,6 +1,7 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions } from '../utils/ui.js';
 import { icon } from '../utils/icons.js';
+import { loadTomSelect } from '../utils/loader.js';
 
 let currentGroupId = null;
 
@@ -77,6 +78,7 @@ async function loadGroups(userId) {
       c.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
     });
   } catch (err) {
+    if (err.name === 'AbortError') return;
     el.innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
   }
 }
@@ -144,6 +146,7 @@ async function loadGroupDetail(groupId, userId) {
       return m ? m.name : id.substring(0, 8);
     };
 
+    const acceptedMembers = members.filter(m => m.status === 'ACCEPTED' || !m.status);
     const myBalanceObj = balances?.memberBalances?.find(b => b.userId === userId);
     const myNetBalance = myBalanceObj ? myBalanceObj.netBalance : 0;
 
@@ -291,7 +294,6 @@ async function loadGroupDetail(groupId, userId) {
       };
     });
     
-    const acceptedMembers = members.filter(m => m.status === 'ACCEPTED');
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, acceptedMembers, userId);
     
     // Mobile expense tap
@@ -376,6 +378,7 @@ async function loadGroupDetail(groupId, userId) {
 
 
   } catch (err) {
+    if (err.name === 'AbortError') return;
     el.innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
   }
 }
@@ -729,10 +732,12 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
   const splitDetailsEl = document.getElementById('ae-split-details');
   const amountInput = document.getElementById('ae-amt');
 
-  if (window.TomSelect) {
-    new TomSelect('#ae-paid', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' }});
-    new TomSelect('#ae-split-type', { create: false, controlInput: null });
-  }
+  loadTomSelect().then(() => {
+    if (window.TomSelect) {
+      new TomSelect('#ae-paid', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' }});
+      new TomSelect('#ae-split-type', { create: false, controlInput: null });
+    }
+  }).catch(() => {});
 
   function defaultSplitValue(type, amount) {
     if (!members.length) return 0;

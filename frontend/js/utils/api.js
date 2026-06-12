@@ -9,7 +9,7 @@ export const Auth = {
   getRefresh()     { return localStorage.getItem('pfa_refresh'); },
   getUserId()      { return localStorage.getItem('pfa_userId'); },
   getEmail()       { return localStorage.getItem('pfa_email'); },
-  getName()               { return localStorage.getItem('pfa_name');},
+  getName()        { return localStorage.getItem('pfa_name'); },
   isLoggedIn()     { return !!this.getToken(); },
 
   save(data) {
@@ -21,7 +21,7 @@ export const Auth = {
   },
 
   clear() {
-    ['pfa_token','pfa_refresh','pfa_userId','pfa_email'].forEach(k => localStorage.removeItem(k));
+    ['pfa_token','pfa_refresh','pfa_userId','pfa_email','pfa_name'].forEach(k => localStorage.removeItem(k));
   }
 };
 
@@ -74,12 +74,72 @@ export const SseManager = {
   }
 };
 
+/* ── AbortController for view-scoped request cancellation ────────────────── */
+let activeAbortController = null;
+
+/**
+ * Call before rendering a new view to cancel in-flight requests from the
+ * previous view (prevents stale data from rendering into a new page).
+ */
+export function abortPendingRequests() {
+  if (activeAbortController) {
+    activeAbortController.abort();
+  }
+  activeAbortController = new AbortController();
+  return activeAbortController.signal;
+}
+
+export function getAbortSignal() {
+  if (!activeAbortController) activeAbortController = new AbortController();
+  return activeAbortController.signal;
+}
+
+/* ── Lightweight GET response cache ──────────────────────────────────────── */
+const responseCache = new Map();
+const CACHE_TTL_MS = 60_000; // 60 seconds
+
+function getCacheKey(method, url) {
+  return `${method}:${url}`;
+}
+
+function getCachedResponse(key) {
+  const entry = responseCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+    responseCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCachedResponse(key, data) {
+  responseCache.set(key, { data, ts: Date.now() });
+}
+
+/** Invalidate all cached GET responses (e.g. after a mutation). */
+export function invalidateCache() {
+  responseCache.clear();
+}
+
+/* ── Core request function ───────────────────────────────────────────────── */
 let isRefreshing = false;
 let refreshPromise = null;
 
-async function request(method, path, { body, params, headers = {}, raw = false } = {}) {
+async function request(method, path, { body, params, headers = {}, raw = false, cache = false } = {}) {
   const url = new URL(API_BASE + path, location.origin);
   if (params) Object.entries(params).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
+
+  // Check cache for GET requests
+  const urlStr = url.toString();
+  if (cache && method === 'GET') {
+    const cached = getCachedResponse(getCacheKey(method, urlStr));
+    if (cached) return cached;
+  }
+
+  // Invalidate cache on mutations
+  if (method !== 'GET') {
+    invalidateCache();
+  }
 
   const getOpts = () => {
     const opts = { method, headers: { ...headers } };
@@ -95,10 +155,22 @@ async function request(method, path, { body, params, headers = {}, raw = false }
 
     const userId = Auth.getUserId();
     if (userId) opts.headers['X-User-Id'] = userId;
+
+    // Attach abort signal (ignore for auth endpoints to avoid cancelling login mid-flight)
+    if (activeAbortController && path !== '/auth/login' && path !== '/auth/register') {
+      opts.signal = activeAbortController.signal;
+    }
+
     return opts;
   };
 
-  let res = await fetch(url.toString(), getOpts());
+  let res;
+  try {
+    res = await fetch(urlStr, getOpts());
+  } catch (err) {
+    if (err.name === 'AbortError') throw err; // Let callers handle abort gracefully
+    throw err;
+  }
 
   // Handle 401 Unauthorized for token refresh
   if (res.status === 401 && path !== '/auth/login' && path !== '/auth/refresh' && path !== '/auth/register') {
@@ -130,13 +202,15 @@ async function request(method, path, { body, params, headers = {}, raw = false }
       try {
         await refreshPromise; // Wait for the refresh to finish
         try {
-          res = await fetch(url.toString(), getOpts()); // Retry the original request
+          res = await fetch(urlStr, getOpts()); // Retry the original request
         } catch (networkErr) {
+          if (networkErr.name === 'AbortError') throw networkErr;
           // Give the network 1 second to stabilize on wake-up and try one last time
           await new Promise(r => setTimeout(r, 1000));
-          res = await fetch(url.toString(), getOpts());
+          res = await fetch(urlStr, getOpts());
         }
       } catch (e) {
+        if (e.name === 'AbortError') throw e;
         throw new Error('Session expired. Please log in again.');
       }
     } else {
@@ -165,30 +239,54 @@ async function request(method, path, { body, params, headers = {}, raw = false }
     }
     throw new Error(msg);
   }
+
+  // Cache successful GET responses if caching was requested
+  if (cache && method === 'GET') {
+    setCachedResponse(getCacheKey(method, urlStr), data);
+  }
+
   return data;
 }
 
 export const api = {
-  get:    (path, params)       => request('GET', path, { params }),
-  post:   (path, body, opts)   => request('POST', path, { body, ...opts }),
-  put:    (path, body, opts)   => request('PUT', path, { body, ...opts }),
-  patch:  (path, body, params) => request('PATCH', path, { body, params }),
-  delete: (path, params)       => request('DELETE', path, { params }),
-  upload: (path, formData)     => request('POST', path, { body: formData }),
-  raw:    (method, path, opts) => request(method, path, { ...opts, raw: true }),
+  get:    (path, params, opts)   => request('GET', path, { params, ...opts }),
+  post:   (path, body, opts)     => request('POST', path, { body, ...opts }),
+  put:    (path, body, opts)     => request('PUT', path, { body, ...opts }),
+  patch:  (path, body, params)   => request('PATCH', path, { body, params }),
+  delete: (path, params)         => request('DELETE', path, { params }),
+  upload: (path, formData)       => request('POST', path, { body: formData }),
+  raw:    (method, path, opts)   => request(method, path, { ...opts, raw: true }),
+  /** GET with in-memory caching (60s TTL). Use for dashboard/analytics data. */
+  cachedGet: (path, params)      => request('GET', path, { params, cache: true }),
 };
 
 /* ── Toast helper ──────────────────────────────────────────────────────── */
+const TOAST_ICONS = {
+  success: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>',
+  error:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6"/><path d="M9 9l6 6"/></svg>',
+  info:    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
+};
+
 let toastContainer;
 export function toast(message, type = 'info', duration = 3500) {
   if (!toastContainer) {
     toastContainer = document.createElement('div');
     toastContainer.className = 'toast-container';
+    toastContainer.setAttribute('role', 'status');
+    toastContainer.setAttribute('aria-live', 'polite');
+    toastContainer.setAttribute('aria-atomic', 'false');
     document.body.appendChild(toastContainer);
   }
   const el = document.createElement('div');
   el.className = `toast toast-${type}`;
-  el.textContent = message;
+  el.setAttribute('role', 'alert');
+  el.innerHTML = `${TOAST_ICONS[type] || TOAST_ICONS.info}<span>${escapeHtml(message)}</span>`;
   toastContainer.appendChild(el);
   setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, duration);
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s ?? '';
+  return d.innerHTML;
 }

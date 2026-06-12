@@ -72,12 +72,12 @@ public class AuthService {
                 .build();
 
         User saved = userRepository.save(user);
-        log.info("Registered new user: {} (@{}) [{}]", saved.getEmail(), saved.getUsername(), saved.getRole());
+        log.info("Registered new user: {} (@{}) [{}]", saved.getEmail(), saved.getActualUsername(), saved.getRole());
 
         return new RegisterResponse(
                 saved.getId().toString(),
                 saved.getEmail(),
-                saved.getUsername(),
+                saved.getActualUsername(),
                 saved.getRole().name());
     }
 

@@ -46,6 +46,8 @@ public class TransactionEntryService {
     private final GoalBudgetService goalBudgetService;
     private final com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository;
     private final CacheKeyRegistry cacheKeyRegistry;
+    private final com.upsertservice.repository.SavingsGoalRepository goalRepository;
+    private final com.upsertservice.repository.ExpenseTransactionLinkRepository transactionLinkRepo;
 
     public TransactionEntryService(
             TransactionEntryRepository repository,
@@ -53,7 +55,9 @@ public class TransactionEntryService {
             MeterRegistry meterRegistry, OutboxEventRepository outboxEventRepository,
             GoalBudgetService goalBudgetService,
             com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository,
-            CacheKeyRegistry cacheKeyRegistry
+            CacheKeyRegistry cacheKeyRegistry,
+            com.upsertservice.repository.SavingsGoalRepository goalRepository,
+            com.upsertservice.repository.ExpenseTransactionLinkRepository transactionLinkRepo
     ) {
         this.repository = repository;
         this.redisTemplate = redisTemplate;
@@ -63,6 +67,8 @@ public class TransactionEntryService {
         this.goalBudgetService = goalBudgetService;
         this.allocationRepository = allocationRepository;
         this.cacheKeyRegistry = cacheKeyRegistry;
+        this.goalRepository = goalRepository;
+        this.transactionLinkRepo = transactionLinkRepo;
     }
 
     // ── Create ────────────────────────────────────────────────────────────────
@@ -95,19 +101,6 @@ public class TransactionEntryService {
 
         TransactionEntry saved = repository.save(entry);
         
-        // Handle Goal Allocations
-        if (request.getAllocations() != null && !request.getAllocations().isEmpty()) {
-            for (com.upsertservice.dto.GoalAllocationRequest alloc : request.getAllocations()) {
-                com.upsertservice.model.TransactionGoalAllocation tga = new com.upsertservice.model.TransactionGoalAllocation();
-                tga.setTransactionId(saved.getId());
-                tga.setGoalId(alloc.getGoalId());
-                tga.setAmount(alloc.getAmount());
-                allocationRepository.save(tga);
-                goalBudgetService.contributeToGoal(alloc.getGoalId(), request.getUserId(), alloc.getAmount());
-                log.info("Allocated {} from transaction {} to goal {}", alloc.getAmount(), saved.getId(), alloc.getGoalId());
-            }
-        }
-
         if (publishCacheEvict) {
             OutboxEvent event = new OutboxEvent();
             event.setUserId(request.getUserId());
@@ -168,6 +161,9 @@ public class TransactionEntryService {
         if (!existing.getUserId().equals(request.getUserId())) {
             throw new SecurityException("User is not authorized to update this transaction");
         }
+        if (transactionLinkRepo.existsByTransactionEntryId(request.getId())) {
+            throw new IllegalStateException("This transaction is managed by a group expense. Please modify the shared expense instead.");
+        }
         BigDecimal oldAmount = existing.getAmount();
         BigDecimal diff = request.getAmount().subtract(oldAmount);
 
@@ -187,13 +183,13 @@ public class TransactionEntryService {
         TransactionEntry updated = repository.save(existing);
         
         if (diff.compareTo(BigDecimal.ZERO) != 0) {
-            List<com.upsertservice.model.TransactionGoalAllocation> allocations = allocationRepository.findByTransactionId(updated.getId());
-            if (allocations != null && !allocations.isEmpty()) {
-                com.upsertservice.model.TransactionGoalAllocation alloc = allocations.get(0);
+            java.util.Optional<com.upsertservice.model.TransactionGoalAllocation> allocationOpt = allocationRepository.findByTransactionId(updated.getId());
+            if (allocationOpt.isPresent()) {
+                com.upsertservice.model.TransactionGoalAllocation alloc = allocationOpt.get();
                 alloc.setAmount(alloc.getAmount().add(diff));
                 allocationRepository.save(alloc);
                 try {
-                    goalBudgetService.contributeToGoal(alloc.getGoalId(), request.getUserId(), diff);
+                    goalBudgetService.adjustGoalSavedAmount(alloc.getGoalId(), request.getUserId(), diff);
                 } catch (Exception e) {
                     log.warn("Failed to update goal allocation for goal {}: {}", alloc.getGoalId(), e.getMessage());
                 }
@@ -225,13 +221,13 @@ public class TransactionEntryService {
         TransactionEntry saved = repository.save(entry);
         
         if (diff.compareTo(BigDecimal.ZERO) != 0) {
-            List<com.upsertservice.model.TransactionGoalAllocation> allocations = allocationRepository.findByTransactionId(saved.getId());
-            if (allocations != null && !allocations.isEmpty()) {
-                com.upsertservice.model.TransactionGoalAllocation alloc = allocations.get(0);
+            java.util.Optional<com.upsertservice.model.TransactionGoalAllocation> allocationOpt = allocationRepository.findByTransactionId(saved.getId());
+            if (allocationOpt.isPresent()) {
+                com.upsertservice.model.TransactionGoalAllocation alloc = allocationOpt.get();
                 alloc.setAmount(alloc.getAmount().add(diff));
                 allocationRepository.save(alloc);
                 try {
-                    goalBudgetService.contributeToGoal(alloc.getGoalId(), userId, diff);
+                    goalBudgetService.adjustGoalSavedAmount(alloc.getGoalId(), userId, diff);
                 } catch (Exception e) {
                     log.warn("Failed to update goal allocation for goal {}: {}", alloc.getGoalId(), e.getMessage());
                 }
@@ -253,6 +249,13 @@ public class TransactionEntryService {
     // ── Delete ────────────────────────────────────────────────────────────────
 
     public void deleteEntry(Long id, UUID userId) {
+        if (transactionLinkRepo.existsByTransactionEntryId(id)) {
+            throw new IllegalStateException("This transaction is managed by a group expense. Please modify the shared expense instead.");
+        }
+        deleteEntryInternal(id, userId);
+    }
+
+    public void deleteEntryInternal(Long id, UUID userId) {
         TransactionEntry entry = repository.findByIdAndDeletedAtIsNull(id)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Transaction entry with ID " + id + " not found"));
@@ -261,15 +264,14 @@ public class TransactionEntryService {
         }
         
         // Revert goal allocations
-        List<com.upsertservice.model.TransactionGoalAllocation> allocations = allocationRepository.findByTransactionId(id);
-        if (allocations != null && !allocations.isEmpty()) {
-            for (com.upsertservice.model.TransactionGoalAllocation alloc : allocations) {
-                try {
-                    goalBudgetService.contributeToGoal(alloc.getGoalId(), userId, alloc.getAmount().negate());
-                    log.info("Reverted {} from goal {} due to transaction {} deletion", alloc.getAmount(), alloc.getGoalId(), id);
-                } catch (Exception e) {
-                    log.warn("Failed to revert goal allocation for goal {}: {}", alloc.getGoalId(), e.getMessage());
-                }
+        java.util.Optional<com.upsertservice.model.TransactionGoalAllocation> allocationOpt = allocationRepository.findByTransactionId(id);
+        if (allocationOpt.isPresent()) {
+            com.upsertservice.model.TransactionGoalAllocation alloc = allocationOpt.get();
+            try {
+                goalBudgetService.adjustGoalSavedAmount(alloc.getGoalId(), userId, alloc.getAmount().negate());
+                log.info("Reverted {} from goal {} due to transaction {} deletion", alloc.getAmount(), alloc.getGoalId(), id);
+            } catch (Exception e) {
+                log.warn("Failed to revert goal allocation for goal {}: {}", alloc.getGoalId(), e.getMessage());
             }
         }
         
@@ -391,6 +393,7 @@ public class TransactionEntryService {
                 entry.getId(), entry.getUserId(), entry.getName(), entry.getAmount(),
                 entry.getType(), entry.getCategory(),
                 entry.getCurrency(), entry.getDescription(),
+                entry.isRecurring(), entry.getRecurringPeriod(),
                 entry.getCreatedAt(), entry.getUpdatedAt()
         );
     }

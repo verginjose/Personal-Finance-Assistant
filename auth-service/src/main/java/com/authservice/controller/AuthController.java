@@ -57,20 +57,39 @@ public class AuthController {
             "email", authentication.getName(),
             "role",  authentication.getAuthorities()
                     .iterator().next().getAuthority(),
-            "profilePicture", user != null && user.getProfilePicture() != null ? user.getProfilePicture() : ""
+            "profilePicture", user != null && user.getProfilePicture() != null ? user.getProfilePicture() : "",
+            "username", user != null ? user.getActualUsername() : ""
     ));
   }
 
-  @PutMapping("/profile-picture")
+  @PutMapping("/profile")
   @PreAuthorize("isAuthenticated()")
-  public ResponseEntity<Map<String, String>> updateProfilePicture(
+  public ResponseEntity<Map<String, String>> updateProfile(
           Authentication authentication,
           @RequestBody Map<String, String> body) {
     User user = userRepository.findByEmail(authentication.getName())
             .orElseThrow(() -> new RuntimeException("User not found"));
-    user.setProfilePicture(body.get("profilePicture"));
+            
+    if (body.containsKey("profilePicture")) {
+        user.setProfilePicture(body.get("profilePicture"));
+    }
+    
+    if (body.containsKey("username")) {
+        String newUsername = body.get("username").trim();
+        if (newUsername.length() < 3 || newUsername.length() > 30) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Username must be between 3 and 30 characters"));
+        }
+        if (!newUsername.matches("^[a-zA-Z0-9_]+$")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Username may only contain letters, numbers, and underscores"));
+        }
+        if (!newUsername.equalsIgnoreCase(user.getActualUsername()) && userRepository.existsByUsername(newUsername)) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Username is already taken"));
+        }
+        user.setUsername(newUsername);
+    }
+    
     userRepository.save(user);
-    return ResponseEntity.ok(Map.of("message", "Profile picture updated"));
+    return ResponseEntity.ok(Map.of("message", "Profile updated successfully"));
   }
 
 

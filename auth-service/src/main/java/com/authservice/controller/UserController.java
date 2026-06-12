@@ -23,7 +23,8 @@ public class UserController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<UserSearchResult>> searchUsers(
             @RequestParam String q,
-            @RequestParam(defaultValue = "10") int limit) {
-        return ResponseEntity.ok(userService.searchUsers(q, limit));
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(defaultValue = "0") int page) {
+        return ResponseEntity.ok(userService.searchUsers(q, limit, page));
     }
 }

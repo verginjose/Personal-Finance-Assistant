@@ -31,6 +31,7 @@ public class SplitService {
     private final SharedExpenseRepository expenseRepo;
     private final ExpenseSplitRepository splitRepo;
     private final ExpenseTransactionLinkRepository transactionLinkRepo;
+    private final TransactionEntryRepository transactionEntryRepo;
     private final TransactionEntryService transactionEntryService;
     private final UserValidationService userValidationService;
     private final GroupActivityService groupActivityService;
@@ -175,7 +176,7 @@ public class SplitService {
 
     private GroupMember addMemberInternal(Long groupId, UUID userId, String name) {
         GroupMember m = new GroupMember();
-        m.setGroupId(groupId);
+        m.setGroup(groupRepo.getReferenceById(groupId));
         m.setUserId(userId);
         m.setName(name);
         m.setStatus(GroupMember.InvitationStatus.PENDING);
@@ -267,7 +268,7 @@ public class SplitService {
         }
 
         SharedExpense expense = new SharedExpense();
-        expense.setGroupId(req.getGroupId());
+        expense.setGroup(groupRepo.getReferenceById(req.getGroupId()));
         expense.setDescription(req.getDescription());
         expense.setAmount(req.getAmount());
         expense.setCurrency(req.getCurrency() != null ? req.getCurrency() : group.getCurrency());
@@ -345,7 +346,7 @@ public class SplitService {
 
         List<ExpenseTransactionLink> links = transactionLinkRepo.findBySharedExpenseId(expenseId);
         for (ExpenseTransactionLink link : links) {
-            transactionEntryService.deleteEntry(link.getTransactionEntryId(), link.getUserId());
+            transactionEntryService.deleteEntryInternal(link.getTransactionEntryId(), link.getUserId());
         }
         transactionLinkRepo.deleteBySharedExpenseId(expenseId);
         splitRepo.deleteAll(splits);
@@ -385,8 +386,11 @@ public class SplitService {
                 payerEntry.setCategory(Category.SETTLEMENT);
                 payerEntry.setDescription("Settlement · " + groupLabel);
                 CreateEntryResponse savedPayer = transactionEntryService.createEntry(payerEntry, null, false);
-                transactionLinkRepo.save(
-                        new ExpenseTransactionLink(null, expense.getId(), expense.getPaidBy(), savedPayer.getId()));
+                ExpenseTransactionLink payerLink = new ExpenseTransactionLink();
+                payerLink.setSharedExpense(expense);
+                payerLink.setUserId(expense.getPaidBy());
+                payerLink.setTransactionEntry(transactionEntryRepo.getReferenceById(savedPayer.getId()));
+                transactionLinkRepo.save(payerLink);
 
                 // Income for the Receiver (toUser)
                 CreateEntryRequest receiverEntry = new CreateEntryRequest();
@@ -398,8 +402,11 @@ public class SplitService {
                 receiverEntry.setCategory(Category.SETTLEMENT);
                 receiverEntry.setDescription("Settlement · " + groupLabel);
                 CreateEntryResponse savedReceiver = transactionEntryService.createEntry(receiverEntry, null, false);
-                transactionLinkRepo.save(
-                        new ExpenseTransactionLink(null, expense.getId(), split.getUserId(), savedReceiver.getId()));
+                ExpenseTransactionLink receiverLink = new ExpenseTransactionLink();
+                receiverLink.setSharedExpense(expense);
+                receiverLink.setUserId(split.getUserId());
+                receiverLink.setTransactionEntry(transactionEntryRepo.getReferenceById(savedReceiver.getId()));
+                transactionLinkRepo.save(receiverLink);
             }
             return;
         }
@@ -416,8 +423,11 @@ public class SplitService {
             entry.setCategory(category);
             entry.setDescription("Split expense · " + groupLabel);
             CreateEntryResponse saved = transactionEntryService.createEntry(entry, null, false);
-            transactionLinkRepo.save(new ExpenseTransactionLink(null, expense.getId(),
-                    split.getUserId(), saved.getId()));
+            ExpenseTransactionLink splitLink = new ExpenseTransactionLink();
+            splitLink.setSharedExpense(expense);
+            splitLink.setUserId(split.getUserId());
+            splitLink.setTransactionEntry(transactionEntryRepo.getReferenceById(saved.getId()));
+            transactionLinkRepo.save(splitLink);
         }
     }
 
@@ -455,7 +465,7 @@ public class SplitService {
                 .divide(BigDecimal.valueOf(members.size()), 2, RoundingMode.HALF_UP);
         List<ExpenseSplit> splits = members.stream().map(m -> {
             ExpenseSplit s = new ExpenseSplit();
-            s.setSharedExpenseId(expense.getId());
+            s.setSharedExpense(expense);
             s.setUserId(m.getUserId());
             s.setUserName(m.getName());
             s.setAmount(each);
@@ -481,7 +491,7 @@ public class SplitService {
             BigDecimal share = expense.getAmount().multiply(pct)
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
             ExpenseSplit s = new ExpenseSplit();
-            s.setSharedExpenseId(expense.getId());
+            s.setSharedExpense(expense);
             s.setUserId(m.getUserId());
             s.setUserName(m.getName());
             s.setAmount(share);
@@ -504,7 +514,7 @@ public class SplitService {
             CreateSharedExpenseRequest.SplitDetailRequest detail = detailMap.get(m.getUserId());
             BigDecimal share = detail != null ? detail.getValue() : BigDecimal.ZERO;
             ExpenseSplit s = new ExpenseSplit();
-            s.setSharedExpenseId(expense.getId());
+            s.setSharedExpense(expense);
             s.setUserId(m.getUserId());
             s.setUserName(m.getName());
             s.setAmount(share);

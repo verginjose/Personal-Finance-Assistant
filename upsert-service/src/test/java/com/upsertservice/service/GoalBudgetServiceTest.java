@@ -22,6 +22,7 @@ class GoalBudgetServiceTest {
     @Mock SavingsGoalRepository goalRepository;
     @Mock CategoryBudgetRepository budgetRepository;
     @Mock TransactionEntryRepository transactionRepository;
+    @Mock TransactionGoalAllocationRepository allocationRepository;
 
     @InjectMocks GoalBudgetService service;
 
@@ -66,7 +67,13 @@ class GoalBudgetServiceTest {
         when(goalRepository.findById(1L)).thenReturn(Optional.of(goal));
         when(goalRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        SavingsGoalResponse res = service.contributeToGoal(1L, userId, new BigDecimal("1000"));
+        GoalContributionRequest req = new GoalContributionRequest();
+        req.setAmount(new BigDecimal("1000"));
+        
+        // Mocking the transaction save as well since we added that
+        when(transactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        
+        SavingsGoalResponse res = service.contributeToGoal(1L, userId, req);
 
         assertThat(res.isCompleted()).isTrue();
         assertThat(res.getSavedAmount()).isEqualByComparingTo(new BigDecimal("10000"));
@@ -80,7 +87,11 @@ class GoalBudgetServiceTest {
         when(goalRepository.findById(1L)).thenReturn(Optional.of(goal));
         when(goalRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        SavingsGoalResponse res = service.contributeToGoal(1L, userId, new BigDecimal("3000"));
+        GoalContributionRequest req = new GoalContributionRequest();
+        req.setAmount(new BigDecimal("3000"));
+        when(transactionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        
+        SavingsGoalResponse res = service.contributeToGoal(1L, userId, req);
 
         assertThat(res.isCompleted()).isFalse();
         assertThat(res.getProgressPercentage()).isEqualTo(30.0);
@@ -116,7 +127,9 @@ class GoalBudgetServiceTest {
         goal.setUserId(UUID.randomUUID());
         when(goalRepository.findById(1L)).thenReturn(Optional.of(goal));
 
-        assertThatThrownBy(() -> service.contributeToGoal(1L, userId, new BigDecimal("1000")))
+        GoalContributionRequest req = new GoalContributionRequest();
+        req.setAmount(new BigDecimal("1000"));
+        assertThatThrownBy(() -> service.contributeToGoal(1L, userId, req))
                 .isInstanceOf(SecurityException.class);
     }
 

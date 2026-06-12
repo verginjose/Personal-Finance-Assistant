@@ -16,16 +16,17 @@ public class UserService {
     private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
-    public List<UserSearchResult> searchUsers(String query, int limit) {
+    public List<UserSearchResult> searchUsers(String query, int limit, int page) {
         if (query == null || query.isBlank()) {
             return List.of();
         }
-        int capped = Math.min(Math.max(limit, 1), 20);
-        return userRepository.searchByUsernameOrEmail(query.trim(), PageRequest.of(0, capped))
+        int capped = Math.clamp(limit, 1, 20);
+        int safePage = Math.max(0, page);
+        return userRepository.searchByUsernameOrEmail(query.trim(), PageRequest.of(safePage, capped))
                 .stream()
                 .map(u -> new UserSearchResult(
                         u.getId().toString(),
-                        u.getUsername(),
+                        u.getActualUsername(),
                         u.getEmail()))
                 .toList();
     }

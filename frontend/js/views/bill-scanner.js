@@ -139,6 +139,10 @@ export async function renderBillScanner(container) {
     typeSelect.onchange = fillCategories;
     fillCategories();
     setupCategorySearch('bs-cat-search', 'bs-category');
+    if (window.TomSelect) {
+      new TomSelect('#bs-type', { create: false, controlInput: null });
+      new TomSelect('#bs-dest', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' }});
+    }
     if (window.flatpickr) {
       flatpickr('#bs-date', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
     }

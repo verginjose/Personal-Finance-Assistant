@@ -1,5 +1,6 @@
 package com.upsertservice.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -24,7 +25,12 @@ public class GroupMember {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "group_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id", nullable = false)
+    @JsonIgnore
+    private ExpenseGroup group;
+
+    @Column(name = "group_id", insertable = false, updatable = false)
     private Long groupId;
 
     @Column(name = "user_id", nullable = false)

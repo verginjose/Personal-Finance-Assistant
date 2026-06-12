@@ -48,9 +48,9 @@ public class GoalBudgetController {
             @RequestHeader("X-User-Id") String xUserId,
             @PathVariable Long id,
             @RequestParam UUID userId,
-            @RequestParam BigDecimal amount) {
+            @Valid @RequestBody GoalContributionRequest payload) {
         validateUser(xUserId, userId);
-        return ResponseEntity.ok(service.contributeToGoal(id, userId, amount));
+        return ResponseEntity.ok(service.contributeToGoal(id, userId, payload));
 
     }
 

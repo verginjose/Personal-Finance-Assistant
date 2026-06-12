@@ -25,6 +25,8 @@ public class CreateEntryResponse {
     private Category category;
     private String currency;
     private String description;
+    private boolean recurring;
+    private com.upsertservice.model.RecurringPeriod recurringPeriod;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

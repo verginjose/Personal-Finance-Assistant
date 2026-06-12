@@ -1,5 +1,6 @@
 package com.upsertservice.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -19,12 +20,29 @@ public class ExpenseTransactionLink {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "shared_expense_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "shared_expense_id", nullable = false)
+    @JsonIgnore
+    private SharedExpense sharedExpense;
+
+    @Column(name = "shared_expense_id", insertable = false, updatable = false)
     private Long sharedExpenseId;
 
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    @Column(name = "transaction_entry_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "transaction_entry_id")
+    @JsonIgnore
+    private TransactionEntry transactionEntry;
+
+    @Column(name = "transaction_entry_id", insertable = false, updatable = false)
     private Long transactionEntryId;
+
+    public ExpenseTransactionLink(Long id, Long sharedExpenseId, UUID userId, Long transactionEntryId) {
+        this.id = id;
+        this.sharedExpenseId = sharedExpenseId;
+        this.userId = userId;
+        this.transactionEntryId = transactionEntryId;
+    }
 }

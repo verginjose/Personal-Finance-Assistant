@@ -27,8 +27,8 @@ export async function renderGoals(container) {
       </div>
     </div>`;
 
-  await Promise.all([loadGoals(userId), loadBudgets(userId)]);
   bindEvents(userId);
+  await Promise.all([loadGoals(userId), loadBudgets(userId)]);
 }
 
 async function loadGoals(uid) {
@@ -243,17 +243,12 @@ async function viewGoalDetails(goalParam, uid, reloadData = false) {
         }
 
         const payload = {
-          userId: uid,
-          name: `Contribution to ${goal.name}`,
           amount: parseFloat(document.getElementById('c-amount').value),
-          type: 'EXPENSE',
-          category: 'GOAL',
-          currency: goal.currency,
           description: document.getElementById('c-desc').value,
-          allocations: [{ goalId: goal.id, amount: parseFloat(document.getElementById('c-amount').value) }],
-          createdAt: isoDate
+          createdAt: isoDate,
+          currency: goal.currency
         };
-        await api.post('/upsert/create', payload);
+        await api.patch(`/upsert/goals/${goal.id}/contribute?userId=${uid}`, payload);
         toast('Contribution added successfully', 'success');
         viewGoalDetails(goal, uid, true);
         loadGoals(uid);
@@ -263,8 +258,12 @@ async function viewGoalDetails(goalParam, uid, reloadData = false) {
 }
 
 function bindEvents(uid) {
-  document.getElementById('add-goal-btn').onclick = () => {
-    openModal('New Savings Goal', `
+  const addGoalBtn = document.getElementById('add-goal-btn');
+  const addBudgetBtn = document.getElementById('add-budget-btn');
+  
+  if (addGoalBtn) {
+    addGoalBtn.onclick = () => {
+      openModal('New Savings Goal', `
       <form id="goal-form">
         <div class="form-group"><label for="g-name">Goal Name</label><input class="form-input" id="g-name" required placeholder="MacBook Pro"></div>
         <div class="form-row">
@@ -285,25 +284,27 @@ function bindEvents(uid) {
         <div class="form-group"><label for="g-desc">Description</label><input class="form-input" id="g-desc" placeholder="Optional"></div>
         ${modalActions('Cancel', 'Create Goal')}
       </form>`, {
-      onSubmit: async () => {
-        await api.post('/upsert/goals', {
-          userId: uid,
-          name: document.getElementById('g-name').value,
-          targetAmount: parseFloat(document.getElementById('g-target').value),
-          currency: document.getElementById('g-currency').value.toUpperCase(),
-          description: document.getElementById('g-desc').value,
-          deadline: document.getElementById('g-deadline').value || null,
-          priority: document.getElementById('g-priority').value
-        });
-        toast('Goal created!', 'success');
-        loadGoals(uid);
-      }
-    });
-  };
+        onSubmit: async () => {
+          await api.post('/upsert/goals', {
+            userId:  uid,
+            name: document.getElementById('g-name').value,
+            targetAmount: parseFloat(document.getElementById('g-target').value),
+            currency: document.getElementById('g-currency').value.toUpperCase(),
+            description: document.getElementById('g-desc').value,
+            deadline: document.getElementById('g-deadline').value || null,
+            priority: document.getElementById('g-priority').value
+          });
+          toast('Goal created!', 'success');
+          loadGoals(uid);
+        }
+      });
+    };
+  }
 
-  document.getElementById('add-budget-btn').onclick = () => {
-    openModal('New Category Budget', `
-      <form id="budget-form">
+  if (addBudgetBtn) {
+    addBudgetBtn.onclick = () => {
+      openModal('New Category Budget', `
+        <form id="budget-form">
         <div class="form-group" id="b-cat-group">
           <label for="b-cat">Category</label>
           <input type="text" id="b-cat-search" class="form-input category-search" placeholder="Search category..." style="margin-bottom: 8px;">
@@ -361,4 +362,5 @@ function bindEvents(uid) {
         customDiv.style.display = periodSel.value === 'CUSTOM' ? 'flex' : 'none';
     });
   };
+  }
 }

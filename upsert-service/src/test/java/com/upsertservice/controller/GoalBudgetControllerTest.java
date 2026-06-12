@@ -124,12 +124,16 @@ public class GoalBudgetControllerTest {
                 false, LocalDateTime.now(), null, com.upsertservice.model.Priority.MEDIUM
         );
 
-        when(service.contributeToGoal(1L, userId, new BigDecimal("1000"))).thenReturn(response);
+        GoalContributionRequest req = new GoalContributionRequest();
+        req.setAmount(new BigDecimal("1000"));
+        
+        when(service.contributeToGoal(any(Long.class), any(UUID.class), any(GoalContributionRequest.class))).thenReturn(response);
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/upsert/goals/1/contribute")
                         .header("X-User-Id", userId.toString())
                         .param("userId", userId.toString())
-                        .param("amount", "1000"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.savedAmount").value(1000));
     }

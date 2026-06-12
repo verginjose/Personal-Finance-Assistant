@@ -7,9 +7,11 @@ export async function renderProfile(container) {
   const userId = Auth.getUserId();
   
   let profilePicture = '';
+  let currentUsername = '';
   try {
     const me = await api.get('/auth/me');
     profilePicture = me.profilePicture || '';
+    currentUsername = me.username || '';
   } catch (e) {
     console.error('Failed to load profile', e);
   }
@@ -19,17 +21,22 @@ export async function renderProfile(container) {
     <div class="profile-grid fade-up">
       <div class="card">
         <div class="card-header"><h3>Account Info</h3></div>
-        <div style="display:flex;align-items:center;gap:16px">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
           <div class="profile-avatar-lg" id="p-avatar" style="cursor:pointer;position:relative;overflow:hidden;background-size:cover;background-position:center;${profilePicture ? `background-image:url('${profilePicture}')` : ''}" title="Click to change profile picture">
             ${profilePicture ? '' : (email || 'U')[0].toUpperCase()}
             <div class="avatar-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;color:#fff;">${icon('camera', 'sm')}</div>
           </div>
           <input type="file" id="p-avatar-upload" accept="image/*" hidden>
-          <div>
+          <div style="flex:1">
             <div style="font-weight:600;font-size:1.05rem">${esc(email || 'User')}</div>
             <div style="color:var(--text-dim);font-size:.82rem;margin-top:2px">ID: ${esc(userId?.substring(0, 16) || '—')}…</div>
           </div>
         </div>
+        <form id="p-username-form" style="display:flex;gap:8px;align-items:flex-end;">
+          <div class="form-group" style="flex:1;margin-bottom:0;"><label for="p-username">Username</label>
+            <input class="form-input" id="p-username" type="text" value="${esc(currentUsername)}" required minlength="3" maxlength="30" pattern="^[a-zA-Z0-9_]+$"></div>
+          <button type="submit" class="btn btn-primary">Save Username</button>
+        </form>
       </div>
       <div class="card">
         <div class="card-header"><h3>Change Password</h3></div>
@@ -47,6 +54,16 @@ export async function renderProfile(container) {
         <button class="btn btn-danger" id="p-logout" style="width:100%">${icon('log-out', 'sm')} Sign Out</button>
       </div>
     </div>`;
+
+  document.getElementById('p-username-form').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api.put('/auth/profile', {
+        username: document.getElementById('p-username').value
+      });
+      toast('Username updated successfully', 'success');
+    } catch (err) { toast(err.message, 'error'); }
+  };
 
   document.getElementById('pw-form').onsubmit = async (e) => {
     e.preventDefault();
@@ -101,7 +118,7 @@ export async function renderProfile(container) {
         const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
         
         try {
-          await api.put('/auth/profile-picture', { profilePicture: dataUrl });
+          await api.put('/auth/profile', { profilePicture: dataUrl });
           avatarDiv.style.backgroundImage = `url('${dataUrl}')`;
           avatarDiv.innerHTML = `<div class="avatar-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;color:#fff;">${icon('camera', 'sm')}</div>`;
           avatarDiv.onmouseenter = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '1';

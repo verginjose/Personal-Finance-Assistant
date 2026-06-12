@@ -1,5 +1,6 @@
 package com.upsertservice.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
@@ -24,12 +25,20 @@ public class TransactionGoalAllocation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "transaction_id", nullable = false)
-    @NotNull
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "transaction_id", nullable = false, unique = true)
+    @JsonIgnore
+    private TransactionEntry transaction;
+
+    @Column(name = "transaction_id", insertable = false, updatable = false)
     private Long transactionId;
 
-    @Column(name = "goal_id", nullable = false)
-    @NotNull
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "goal_id", nullable = false)
+    @JsonIgnore
+    private SavingsGoal goal;
+
+    @Column(name = "goal_id", insertable = false, updatable = false)
     private Long goalId;
 
     @Column(name = "amount", nullable = false, precision = 12, scale = 2)

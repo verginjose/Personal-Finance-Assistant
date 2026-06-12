@@ -2,6 +2,7 @@ package com.upsertservice.service;
 
 import com.upsertservice.model.GroupActivity;
 import com.upsertservice.model.GroupActivity.ActivityType;
+import com.upsertservice.repository.ExpenseGroupRepository;
 import com.upsertservice.repository.GroupActivityRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,13 +18,14 @@ import java.util.UUID;
 public class GroupActivityService {
 
     private final GroupActivityRepository activityRepo;
+    private final ExpenseGroupRepository groupRepo;
 
     @Transactional
     @CacheEvict(value = "group-activity", key = "#groupId")
     public void log(Long groupId, UUID actorUserId, String actorName,
                     ActivityType type, String message, Long referenceId) {
         GroupActivity activity = new GroupActivity();
-        activity.setGroupId(groupId);
+        activity.setGroup(groupRepo.getReferenceById(groupId));
         activity.setActorUserId(actorUserId);
         activity.setActorName(actorName);
         activity.setActivityType(type);

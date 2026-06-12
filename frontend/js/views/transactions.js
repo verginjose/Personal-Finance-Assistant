@@ -298,6 +298,11 @@ async function showModal(userId, existing, onDone) {
 
   updateCats();
   document.getElementById('m-type').onchange = updateCats;
+
+  if (window.TomSelect) {
+    new TomSelect('#m-type', { create: false, controlInput: null });
+    new TomSelect('#m-recurring-period', { create: false, controlInput: null });
+  }
 }
 
 async function editTransaction(userId, id) {

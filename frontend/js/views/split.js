@@ -88,9 +88,21 @@ async function loadGroupDetail(groupId, userId) {
   document.getElementById('sp-create').style.display = 'none';
   el.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
   try {
-    const [group, members, expenses, balances, activity] = await Promise.all([
+    const [group, members] = await Promise.all([
       api.get(`/upsert/groups/${groupId}`),
-      api.get(`/upsert/groups/${groupId}/members`),
+      api.get(`/upsert/groups/${groupId}/members`)
+    ]);
+
+    let pendingScan = null;
+    if (window._pfaPendingScan && String(window._pfaPendingScan.groupId) === String(groupId)) {
+       pendingScan = window._pfaPendingScan;
+       delete window._pfaPendingScan;
+       const acceptedMembers = members.filter(m => m.status === 'ACCEPTED');
+       // Open modal immediately while background loads
+       try { addExpenseModal(groupId, acceptedMembers, userId, pendingScan); } catch (err) {}
+    }
+
+    const [expenses, balances, activity] = await Promise.all([
       api.get(`/upsert/groups/${groupId}/expenses`),
       api.get(`/upsert/groups/${groupId}/balances`),
       api.get(`/upsert/groups/${groupId}/activity`)
@@ -362,17 +374,7 @@ async function loadGroupDetail(groupId, userId) {
       }
     };
 
-    if (window._pfaPendingScan && String(window._pfaPendingScan.groupId) === String(groupId)) {
-       const scan = window._pfaPendingScan;
-       delete window._pfaPendingScan;
-       
-       // Call directly instead of setTimeout, openModal handles DOM attachment safely.
-       try {
-           addExpenseModal(groupId, acceptedMembers, userId, scan);
-       } catch (err) {
-           toast('Could not auto-open expense modal: ' + err.message, 'error');
-       }
-    }
+
   } catch (err) {
     el.innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
   }
@@ -535,44 +537,82 @@ function addMemberModal(groupId, userId) {
   const selectedEl = document.getElementById('am-selected');
   let debounceTimer = null;
 
-  searchInput.oninput = () => {
-    clearTimeout(debounceTimer);
-    document.getElementById('am-uid').value = '';
-    document.getElementById('am-name').value = '';
-    selectedEl.textContent = '';
+  let currentPage = 0;
+
+  const performSearch = async (append = false) => {
     const q = searchInput.value.trim();
     if (q.length < 2) {
       resultsEl.hidden = true;
       resultsEl.innerHTML = '';
       return;
     }
-    debounceTimer = setTimeout(async () => {
-      try {
-        const users = await api.get('/auth/users/search', { q, limit: 8 });
-        if (!users.length) {
-          resultsEl.innerHTML = '<div class="user-search-empty">No users found</div>';
+    
+    try {
+      const limit = 8;
+      const users = await api.get('/auth/users/search', { q, limit, page: currentPage });
+      
+      const renderUser = u => `
+        <button type="button" class="user-search-item" data-id="${esc(u.userId)}" data-name="${esc(u.username)}">
+          <strong>@${esc(u.username)}</strong>
+          <span>${esc(u.email)}</span>
+        </button>`;
+
+      if (!users.length && !append) {
+        resultsEl.innerHTML = '<div class="user-search-empty">No users found</div>';
+      } else {
+        const loadMoreBtn = document.getElementById('am-load-more');
+        if (loadMoreBtn) loadMoreBtn.remove(); // Remove existing load more button before appending
+        
+        const html = users.map(renderUser).join('');
+        if (append) {
+          resultsEl.insertAdjacentHTML('beforeend', html);
         } else {
-          resultsEl.innerHTML = users.map(u => `
-            <button type="button" class="user-search-item" data-id="${esc(u.userId)}" data-name="${esc(u.username)}">
-              <strong>@${esc(u.username)}</strong>
-              <span>${esc(u.email)}</span>
-            </button>`).join('');
-          resultsEl.querySelectorAll('.user-search-item').forEach(btn => {
-            btn.onclick = () => {
-              document.getElementById('am-uid').value = btn.dataset.id;
-              document.getElementById('am-name').value = btn.dataset.name;
-              searchInput.value = `@${btn.dataset.name}`;
-              selectedEl.textContent = `Selected: @${btn.dataset.name}`;
-              resultsEl.hidden = true;
-            };
-          });
+          resultsEl.innerHTML = html;
         }
-        resultsEl.hidden = false;
-      } catch (e) {
+
+        // Re-attach click listeners
+        resultsEl.querySelectorAll('.user-search-item').forEach(btn => {
+          btn.onclick = () => {
+            document.getElementById('am-uid').value = btn.dataset.id;
+            document.getElementById('am-name').value = btn.dataset.name;
+            searchInput.value = `@${btn.dataset.name}`;
+            selectedEl.textContent = `Selected: @${btn.dataset.name}`;
+            resultsEl.hidden = true;
+          };
+        });
+
+        // Add "Load More" button if we got a full page
+        if (users.length === limit) {
+          resultsEl.insertAdjacentHTML('beforeend', `
+            <button type="button" id="am-load-more" class="user-search-item" style="justify-content: center; color: var(--primary);">
+              Load More
+            </button>
+          `);
+          document.getElementById('am-load-more').onclick = () => {
+            currentPage++;
+            document.getElementById('am-load-more').textContent = 'Loading...';
+            performSearch(true);
+          };
+        }
+      }
+      resultsEl.hidden = false;
+    } catch (e) {
+      if (!append) {
         resultsEl.innerHTML = `<div class="user-search-empty">${esc(e.message)}</div>`;
         resultsEl.hidden = false;
+      } else {
+        toast(e.message, 'error');
       }
-    }, 300);
+    }
+  };
+
+  searchInput.oninput = () => {
+    clearTimeout(debounceTimer);
+    document.getElementById('am-uid').value = '';
+    document.getElementById('am-name').value = '';
+    selectedEl.textContent = '';
+    currentPage = 0;
+    debounceTimer = setTimeout(() => performSearch(false), 300);
   };
 }
 
@@ -668,11 +708,11 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
           value: parseFloat(document.getElementById(`ae-split-${m.userId}`).value) || 0
         }));
         const total = splitDetails.reduce((sum, d) => sum + d.value, 0);
-        if (splitType === 'PERCENTAGE' && Math.abs(total - 100) > 0.01) {
+        if (splitType === 'PERCENTAGE' && Math.abs(total - 100) > 0.0001) {
           toast('Percentages must add up to 100%', 'error');
           throw new Error('Invalid percentage split');
         }
-        if (splitType === 'EXACT' && Math.abs(total - amount) > 0.01) {
+        if (splitType === 'EXACT' && Math.abs(total - amount) > 0.0001) {
           toast(`Exact amounts must add up to ${amount}`, 'error');
           throw new Error('Invalid exact split');
         }
@@ -689,10 +729,15 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
   const splitDetailsEl = document.getElementById('ae-split-details');
   const amountInput = document.getElementById('ae-amt');
 
+  if (window.TomSelect) {
+    new TomSelect('#ae-paid', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' }});
+    new TomSelect('#ae-split-type', { create: false, controlInput: null });
+  }
+
   function defaultSplitValue(type, amount) {
     if (!members.length) return 0;
-    if (type === 'PERCENTAGE') return Math.round((100 / members.length) * 100) / 100;
-    return Math.round((amount / members.length) * 100) / 100;
+    if (type === 'PERCENTAGE') return Math.round((100 / members.length) * 10000) / 10000;
+    return Math.round((amount / members.length) * 10000) / 10000;
   }
 
   function updateSplitSummary() {
@@ -705,11 +750,11 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
     }, 0);
     const amount = parseFloat(amountInput.value) || 0;
     if (type === 'PERCENTAGE') {
-      const ok = Math.abs(total - 100) <= 0.01;
-      summary.textContent = `Total: ${total.toFixed(2)}% ${ok ? '' : '(must equal 100%)'}`;
+      const ok = Math.abs(total - 100) <= 0.0001;
+      summary.textContent = `Total: ${total.toFixed(4)}% ${ok ? '' : '(must equal 100%)'}`;
       summary.style.color = ok ? 'var(--accent-g)' : 'var(--accent)';
     } else {
-      const ok = Math.abs(total - amount) <= 0.01;
+      const ok = Math.abs(total - amount) <= 0.0001;
       summary.textContent = `Total: ${formatCurrency(total)} ${ok ? '' : `(must equal ${formatCurrency(amount)})`}`;
       summary.style.color = ok ? 'var(--accent-g)' : 'var(--accent)';
     }
@@ -744,14 +789,58 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
         <p id="ae-split-summary" class="split-summary"></p>
       </div>`;
 
+    const dirtyFlags = {};
+    
+    function runAdjustment() {
+        const target = isPct ? 100 : (parseFloat(amountInput.value) || 0);
+        let dirtySum = 0;
+        let cleanCount = 0;
+        
+        members.forEach(member => {
+            if (dirtyFlags[member.userId]) {
+                dirtySum += (parseFloat(document.getElementById(`ae-split-${member.userId}`).value) || 0);
+            } else {
+                cleanCount++;
+            }
+        });
+        
+        if (cleanCount > 0) {
+            const remainder = Math.max(0, target - dirtySum);
+            const perClean = Math.floor((remainder / cleanCount) * 10000) / 10000;
+            
+            members.forEach(member => {
+                if (!dirtyFlags[member.userId]) {
+                    document.getElementById(`ae-split-${member.userId}`).value = perClean;
+                }
+            });
+            
+            const cleanMembers = members.filter(member => !dirtyFlags[member.userId]);
+            if (cleanMembers.length > 0) {
+                 const lastClean = cleanMembers[cleanMembers.length - 1];
+                 const othersSum = dirtySum + perClean * (cleanCount - 1);
+                 document.getElementById(`ae-split-${lastClean.userId}`).value = Math.max(0, Math.round((target - othersSum) * 10000) / 10000);
+            }
+        }
+        updateSplitSummary();
+    }
+
     members.forEach(m => {
-      document.getElementById(`ae-split-${m.userId}`).oninput = updateSplitSummary;
+      const inputEl = document.getElementById(`ae-split-${m.userId}`);
+      inputEl.addEventListener('input', (e) => {
+        dirtyFlags[m.userId] = true;
+        runAdjustment();
+      });
     });
-    updateSplitSummary();
+    
+    // Initial exact distribution
+    runAdjustment();
+
+    amountInput.oninput = () => {
+      if (splitTypeSelect.value === 'EXACT') {
+          runAdjustment();
+      }
+    };
   }
 
   splitTypeSelect.onchange = renderSplitDetails;
-  amountInput.oninput = () => {
-    if (splitTypeSelect.value === 'EXACT') updateSplitSummary();
-  };
 }

@@ -27,6 +27,7 @@ public class GoalBudgetService {
     private final SavingsGoalRepository goalRepository;
     private final CategoryBudgetRepository budgetRepository;
     private final TransactionEntryRepository transactionRepository;
+    private final com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository;
 
     // ── Savings Goals ─────────────────────────────────────────────────────────
 
@@ -47,14 +48,48 @@ public class GoalBudgetService {
     }
 
     @Transactional
-    public SavingsGoalResponse contributeToGoal(Long goalId, UUID userId, BigDecimal amount) {
+    public SavingsGoalResponse contributeToGoal(Long goalId, UUID userId, GoalContributionRequest payload) {
         SavingsGoal goal = findGoalOwnedBy(goalId, userId);
-        goal.setSavedAmount(goal.getSavedAmount().add(amount));
+        
+        // 1. Create Transaction Entry
+        TransactionEntry entry = new TransactionEntry(
+                userId,
+                "Contribution to " + goal.getName(),
+                payload.getAmount(),
+                TransactionType.EXPENSE,
+                payload.getCurrency() != null ? payload.getCurrency() : goal.getCurrency()
+        );
+        entry.setCategory(Category.GOAL);
+        entry.setDescription(payload.getDescription());
+        if (payload.getCreatedAt() != null) {
+            entry.setCreatedAt(payload.getCreatedAt());
+        }
+        TransactionEntry savedEntry = transactionRepository.save(entry);
+        
+        // 2. Create Transaction Goal Allocation
+        TransactionGoalAllocation tga = new TransactionGoalAllocation();
+        tga.setTransaction(savedEntry);
+        tga.setGoal(goal);
+        tga.setAmount(payload.getAmount());
+        allocationRepository.save(tga);
+        
+        // 3. Update Goal
+        goal.setSavedAmount(goal.getSavedAmount().add(payload.getAmount()));
         if (goal.isCompleted() && goal.getCompletedAt() == null) {
             goal.setCompletedAt(LocalDateTime.now());
             log.info("Goal {} completed by user {}!", goalId, userId);
         }
         return toGoalResponse(goalRepository.save(goal));
+    }
+
+    @Transactional
+    public void adjustGoalSavedAmount(Long goalId, UUID userId, BigDecimal amount) {
+        SavingsGoal goal = findGoalOwnedBy(goalId, userId);
+        goal.setSavedAmount(goal.getSavedAmount().add(amount));
+        if (goal.isCompleted() && goal.getCompletedAt() == null) {
+            goal.setCompletedAt(LocalDateTime.now());
+        }
+        goalRepository.save(goal);
     }
 
     @Transactional

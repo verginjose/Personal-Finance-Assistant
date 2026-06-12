@@ -1,9 +1,12 @@
 package com.authservice.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -38,12 +41,19 @@ public class TokenRedisService {
     public void revokeAllUserTokens(String email) {
         String userKey = USER_TOKENS_PREFIX + email;
         Set<String> tokens = redisTemplate.opsForSet().members(userKey);
-        if (tokens != null) {
-            for (String token : tokens) {
-                redisTemplate.delete(REFRESH_TOKEN_PREFIX + token);
-            }
+
+        if (tokens == null || tokens.isEmpty()) {
+            redisTemplate.delete(userKey);
+            return;
         }
-        redisTemplate.delete(userKey);
+
+        List<String> keysToDelete = new ArrayList<>();
+        for (String token : tokens) {
+            keysToDelete.add(REFRESH_TOKEN_PREFIX + token);
+        }
+        keysToDelete.add(userKey);
+
+        redisTemplate.delete(keysToDelete); // single pipelined batch delete
     }
 
     private static final String BLACKLIST_PREFIX = "token_blacklist:";
@@ -55,6 +65,6 @@ public class TokenRedisService {
     }
 
     public boolean isAccessTokenBlacklisted(String token) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + token));
+        return redisTemplate.hasKey(BLACKLIST_PREFIX + token);
     }
 }

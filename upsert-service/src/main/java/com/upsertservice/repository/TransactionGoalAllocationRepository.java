@@ -6,8 +6,10 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+import java.util.Optional;
+
 @Repository
 public interface TransactionGoalAllocationRepository extends JpaRepository<TransactionGoalAllocation, Long> {
-    List<TransactionGoalAllocation> findByTransactionId(Long transactionId);
+    Optional<TransactionGoalAllocation> findByTransactionId(Long transactionId);
     List<TransactionGoalAllocation> findByGoalId(Long goalId);
 }

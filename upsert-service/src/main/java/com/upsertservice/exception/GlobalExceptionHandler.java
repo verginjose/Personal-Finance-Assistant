@@ -62,6 +62,14 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse("Forbidden", List.of(ex.getMessage()), 403));
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException ex) {
+        log.warn("IllegalState: {}", ex.getMessage());
+        recordError(400);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("Invalid State", List.of(ex.getMessage()), 400));
+    }
+
     @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException ex) {
         log.warn("Data Integrity Violation: {}", ex.getMostSpecificCause().getMessage());

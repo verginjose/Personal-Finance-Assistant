@@ -60,10 +60,10 @@ export const SseManager = {
     });
 
     this.eventSource.onerror = (err) => {
-      console.error('SSE error', err);
+      console.warn('SSE connection dropped. Reconnecting...', err);
       this.disconnect();
-      // Reconnect after 5s
-      setTimeout(() => this.connect(), 5000);
+      // Reconnect after 3s
+      setTimeout(() => this.connect(), 3000);
     };
   },
   disconnect() {

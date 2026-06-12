@@ -1,7 +1,6 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
-import { esc, pageHeader } from '../utils/ui.js';
-
+import { esc, pageHeader, openModal } from '../utils/ui.js';
 export async function renderProfile(container) {
   const email = Auth.getEmail();
   const userId = Auth.getUserId();
@@ -100,23 +99,35 @@ export async function renderProfile(container) {
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const img = new Image();
-      img.onload = async () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const size = 150;
-        canvas.width = size;
-        canvas.height = size;
+      const modalBody = `
+        <div style="max-height: 60vh; display: flex; justify-content: center; align-items: center; background: #000; border-radius: 8px; overflow: hidden;">
+          <img id="crop-image" src="${event.target.result}" style="max-width: 100%; max-height: 60vh; display: block;" />
+        </div>
+        <div style="margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px;">
+          <button class="btn btn-ghost" type="button" data-modal-cancel>Cancel</button>
+          <button class="btn btn-primary" id="crop-save-btn" type="button">Save Picture</button>
+        </div>
+      `;
 
-        // Crop and center
-        const scale = Math.max(size / img.width, size / img.height);
-        const x = (size / scale - img.width) / 2;
-        const y = (size / scale - img.height) / 2;
+      const { modal, close } = openModal('Crop Profile Picture', modalBody);
+      const imgEl = modal.querySelector('#crop-image');
+      const saveBtn = modal.querySelector('#crop-save-btn');
+
+      // Initialize Cropper
+      const cropper = new Cropper(imgEl, {
+        aspectRatio: 1,
+        viewMode: 1,
+        autoCropArea: 0.8,
+        background: false,
+      });
+
+      saveBtn.onclick = async () => {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
         
-        ctx.drawImage(img, x, y, img.width, img.height, 0, 0, img.width * scale, img.height * scale);
-        
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        
+        const canvas = cropper.getCroppedCanvas({ width: 250, height: 250 });
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
         try {
           await api.put('/auth/profile', { profilePicture: dataUrl });
           avatarDiv.style.backgroundImage = `url('${dataUrl}')`;
@@ -126,7 +137,6 @@ export async function renderProfile(container) {
           
           toast('Profile picture updated', 'success');
           
-          // Try to update sidebar if possible
           const sidebarAvatar = document.querySelector('.sidebar-user-avatar');
           if (sidebarAvatar) {
             sidebarAvatar.style.backgroundImage = `url('${dataUrl}')`;
@@ -134,12 +144,15 @@ export async function renderProfile(container) {
             sidebarAvatar.style.backgroundPosition = 'center';
             sidebarAvatar.textContent = '';
           }
+          close();
         } catch (err) {
           toast('Failed to upload picture: ' + err.message, 'error');
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save Picture';
         }
       };
-      img.src = event.target.result;
     };
     reader.readAsDataURL(file);
+    e.target.value = ''; // allow picking the same file again
   };
 }

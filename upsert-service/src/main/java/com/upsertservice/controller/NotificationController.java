@@ -18,8 +18,13 @@ public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter streamNotifications(@RequestHeader("X-User-Id") UUID userId) {
+    public SseEmitter streamNotifications(@RequestHeader("X-User-Id") UUID userId, jakarta.servlet.http.HttpServletResponse response) {
         log.info("SSE connection requested for user {}", userId);
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response.setHeader("Pragma", "no-cache");
+        response.setHeader("Expires", "0");
+        response.setHeader("X-Accel-Buffering", "no");
+        response.setHeader("Connection", "keep-alive");
         return notificationService.subscribe(userId);
     }
 }

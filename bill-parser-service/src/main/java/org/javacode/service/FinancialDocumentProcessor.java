@@ -155,7 +155,9 @@ public class FinancialDocumentProcessor {
                     cached.expenseCategory(),
                     cached.incomeCategory(),
                     cached.currency(),
-                    cached.description());
+                    cached.description(),
+                    cached.date(),
+                    cached.recurring());
         }
         int attempt = 0;
         long delayMs = 500;
@@ -271,9 +273,11 @@ public class FinancialDocumentProcessor {
                 - incomeCategory: Guess the closest (e.g., SALARY, FREELANCE, BUSINESS, REFUND) or use "OTHERS"
                 - Set the unused category to null
                 - currency: 3-letter ISO code (INR for ₹)
+                - date: Date of the bill in "YYYY-MM-DD" format, or null if not found
+                - recurring: true if it looks like a subscription/recurring bill, false otherwise
 
                 JSON schema:
-                {"vendor":"string","amount":0.0,"transactionType":"string","expenseCategory":"string|null","incomeCategory":"string|null","currency":"string","description":"string"}
+                {"vendor":"string","amount":0.0,"transactionType":"string","expenseCategory":"string|null","incomeCategory":"string|null","currency":"string","description":"string","date":"string|null","recurring":false}
 
                 Receipt:
                 %s
@@ -361,7 +365,9 @@ public class FinancialDocumentProcessor {
             ExpenseCategory expenseCategory,
             IncomeCategory incomeCategory,
             String currency,
-            String description) {
+            String description,
+            String date,
+            boolean recurring) {
         @JsonCreator
         public FinancialDocument {
             if ("Expense".equalsIgnoreCase(type) && expenseCategory == null)

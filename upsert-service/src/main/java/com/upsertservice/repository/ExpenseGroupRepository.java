@@ -18,7 +18,7 @@ public interface ExpenseGroupRepository extends JpaRepository<ExpenseGroup, Long
     /** Groups where the user is a member (created or joined) */
     @Query("SELECT DISTINCT g FROM ExpenseGroup g " +
            "JOIN GroupMember m ON m.groupId = g.id " +
-           "WHERE m.userId = :userId " +
+           "WHERE m.userId = :userId AND g.isDeleted = false " +
            "ORDER BY g.createdAt DESC")
     List<ExpenseGroup> findGroupsByMember(@Param("userId") UUID userId);
 }

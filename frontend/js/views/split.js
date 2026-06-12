@@ -40,6 +40,18 @@ export async function renderSplit(container) {
 
   document.getElementById('sp-create').onclick = () => createGroupModal(userId);
   document.getElementById('sp-back').onclick = () => { currentGroupId = null; loadGroups(userId); };
+  
+  const pendingScanRaw = localStorage.getItem('pfa_pending_scan');
+  if (pendingScanRaw) {
+    try {
+      const pendingScan = JSON.parse(pendingScanRaw);
+      localStorage.removeItem('pfa_pending_scan');
+      window._pfaPendingScan = pendingScan;
+      loadGroupDetail(pendingScan.groupId, userId);
+      return;
+    } catch(e) {}
+  }
+  
   loadGroups(userId);
 }
 
@@ -135,8 +147,10 @@ async function loadGroupDetail(groupId, userId) {
         
         <div id="group-header-expanded" style="display:none; border-top:1px solid var(--border); padding-top:16px; margin-top:16px;">
           <p style="color:var(--text);margin-bottom:16px;line-height:1.5;">${esc(group.description || 'No description provided')}</p>
-          <div style="display:flex; gap:8px;">
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
              <button class="btn btn-secondary btn-sm" id="sp-edit-group">Edit Group</button>
+             <button class="btn btn-secondary btn-sm" id="sp-archive-group" style="background:var(--bg-card-h); border:1px solid var(--border);">${group.isArchived ? 'Unarchive' : 'Archive'}</button>
+             <button class="btn btn-danger btn-sm" id="sp-delete-group" style="background:rgba(239, 68, 68, 0.1); color:var(--accent);">Delete Group</button>
              <button class="btn btn-danger btn-sm" id="sp-leave-group">Leave Group</button>
           </div>
         </div>
@@ -161,8 +175,10 @@ async function loadGroupDetail(groupId, userId) {
       
       <div id="content-expenses" style="padding: 20px;">
         <button class="btn btn-primary btn-sm" style="margin-bottom:16px;width:100%" id="sp-add-expense" ${members.length ? '' : 'disabled'}>+ Add Expense</button>
-        ${expenses.length ? expenses.map(e => `
-          <div class="balance-item expense-row" data-exp='${esc(JSON.stringify(e))}' style="padding:16px 0; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
+        ${expenses.length ? expenses.map(e => {
+            const expData = { ...e, paidByName: resolveMemberNameLocally(e.paidBy) };
+            return `
+          <div class="balance-item expense-row" data-exp='${esc(JSON.stringify(expData))}' style="padding:16px 0; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
             <div>
                <div style="font-weight:600; font-size:1.05rem;">${esc(e.description || 'Expense')}</div>
                <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span></div>
@@ -171,7 +187,8 @@ async function loadGroupDetail(groupId, userId) {
               <span style="font-weight:700;color:var(--text);font-size:1.1rem;">${formatCurrency(e.amount)}</span>
               <button type="button" class="btn btn-danger btn-sm delete-expense-btn" data-id="${e.id}" title="Delete expense" style="padding:6px 10px;">×</button>
             </div>
-          </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No expenses yet</p>'}
+          </div>`;
+        }).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No expenses yet</p>'}
       </div>
       
       <div id="content-balances" style="padding: 20px; display:none;">
@@ -314,6 +331,26 @@ async function loadGroupDetail(groupId, userId) {
       };
     });
     document.getElementById('sp-edit-group').onclick = () => editGroupModal(group, userId);
+
+    document.getElementById('sp-archive-group').onclick = async () => {
+      const action = group.isArchived ? 'Unarchive' : 'Archive';
+      if (!(await confirmModal(`${action} Group`, `Are you sure you want to ${action.toLowerCase()} this group?`, action))) return;
+      try {
+        await api.put(`/upsert/groups/${group.id}/archive?archive=${!group.isArchived}`);
+        toast(`Group ${action.toLowerCase()}d successfully`, 'success');
+        if (!group.isArchived) { document.getElementById('sp-back').click(); } 
+        else { loadGroupDetail(group.id, userId); }
+      } catch(e) { toast(e.message, 'error'); }
+    };
+
+    document.getElementById('sp-delete-group').onclick = async () => {
+      if (!(await confirmModal('Delete Group', 'Warning: This will permanently delete the group and all its expenses. This action cannot be undone. All balances MUST be settled first.', 'Delete Permanently'))) return;
+      try {
+        await api.delete(`/upsert/groups/${group.id}`, { userId });
+        toast('Group deleted successfully', 'success');
+        document.getElementById('sp-back').click();
+      } catch(e) { toast(e.message, 'error'); }
+    };
     document.getElementById('sp-leave-group').onclick = async () => {
       if (!(await confirmModal('Leave Group', 'Are you sure you want to leave this group? You must have a settled balance to leave.', 'Leave Group'))) return;
       try {
@@ -324,6 +361,18 @@ async function loadGroupDetail(groupId, userId) {
         toast(e.message, 'error');
       }
     };
+
+    if (window._pfaPendingScan && String(window._pfaPendingScan.groupId) === String(groupId)) {
+       const scan = window._pfaPendingScan;
+       delete window._pfaPendingScan;
+       
+       // Call directly instead of setTimeout, openModal handles DOM attachment safely.
+       try {
+           addExpenseModal(groupId, acceptedMembers, userId, scan);
+       } catch (err) {
+           toast('Could not auto-open expense modal: ' + err.message, 'error');
+       }
+    }
   } catch (err) {
     el.innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
   }
@@ -336,7 +385,7 @@ function openMobileExpenseModal(e, groupId, userId) {
         ${formatCurrency(e.amount, e.currency || 'INR')}
       </div>
       <div style="font-size: 1.1rem; font-weight: 600;">${esc(e.description)}</div>
-      <div style="color: var(--text-dim); font-size: 0.9rem; margin-top: 4px;">Paid by @${esc(resolveMemberNameLocally(e.paidBy))}</div>
+      <div style="color: var(--text-dim); font-size: 0.9rem; margin-top: 4px;">Paid by @${esc(e.paidByName || e.paidBy)}</div>
     </div>
     
     <div style="background: var(--bg-input); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 20px;">
@@ -394,6 +443,7 @@ function editGroupModal(group, userId) {
       <div class="form-group"><label for="eg-name">Group Name</label><input class="form-input" id="eg-name" required maxlength="100" value="${esc(group.name)}"></div>
       <div class="form-group"><label for="eg-desc">Description</label><textarea class="form-textarea" id="eg-desc" maxlength="300">${esc(group.description || '')}</textarea></div>
       <div class="form-group"><label for="eg-currency">Currency</label><input class="form-input" id="eg-currency" value="${esc(group.currency || 'INR')}" maxlength="3" required></div>
+
       ${modalActions('Cancel', 'Save Changes')}
     </form>`, {
     onSubmit: async () => {
@@ -406,6 +456,28 @@ function editGroupModal(group, userId) {
       loadGroupDetail(group.id, userId);
     }
   });
+
+  setTimeout(() => {
+      document.getElementById('eg-archive-btn').onclick = async () => {
+          if (!(await confirmModal('Archive Group', 'Are you sure you want to archive this group? It will be hidden from the active list.', 'Archive'))) return;
+          try {
+              await api.post(`/upsert/groups/${group.id}/archive`, null, { params: { userId } });
+              toast('Group archived status updated', 'success');
+              document.querySelector('.modal-close').click();
+              loadGroups(userId); // reload groups list to show/hide it
+          } catch (err) { toast(err.message, 'error'); }
+      };
+
+      document.getElementById('eg-delete-btn').onclick = async () => {
+          if (!(await confirmModal('Delete Group', 'Are you sure you want to PERMANENTLY delete this group? All expenses must be settled.', 'Delete'))) return;
+          try {
+              await api.delete(`/upsert/groups/${group.id}`, { userId });
+              toast('Group deleted', 'success');
+              document.querySelector('.modal-close').click();
+              document.getElementById('sp-back').click(); // Go back to list
+          } catch (err) { toast(err.message, 'error'); }
+      };
+  }, 50);
 }
 
 function createGroupModal(userId) {
@@ -520,16 +592,22 @@ function activityTypeLabel(type) {
   return map[(type || '').toUpperCase()] || type || 'Activity';
 }
 
-function addExpenseModal(groupId, members, userId) {
+function addExpenseModal(groupId, members, userId, initialData = null) {
   if (!members.length) {
     toast('Add at least one member before creating an expense', 'error');
     return;
   }
+  
+  const defaultDesc = initialData ? esc(initialData.description) : '';
+  const defaultAmt = initialData && initialData.amount ? initialData.amount : '';
+  const defaultCur = initialData && initialData.currency ? esc(initialData.currency) : 'INR';
+  const defaultDate = initialData && initialData.date ? esc(initialData.date) : '';
+
   openModal('Add Shared Expense', `
     <form id="ae-form">
-      <div class="form-group"><label for="ae-desc">Description</label><input class="form-input" id="ae-desc" required maxlength="100"></div>
+      <div class="form-group"><label for="ae-desc">Description</label><input class="form-input" id="ae-desc" required maxlength="100" value="${defaultDesc}"></div>
       <div class="form-row">
-        <div class="form-group"><label for="ae-amt">Amount</label><input class="form-input" id="ae-amt" type="text" inputmode="decimal" required></div>
+        <div class="form-group"><label for="ae-amt">Amount</label><input class="form-input" id="ae-amt" type="text" inputmode="decimal" required value="${defaultAmt}"></div>
         <div class="form-group"><label for="ae-paid">Paid By</label>
           <select class="form-select" id="ae-paid" required>
             ${members.map(m => `<option value="${m.userId}">@${esc(m.name)}</option>`).join('')}
@@ -537,7 +615,7 @@ function addExpenseModal(groupId, members, userId) {
         </div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label for="ae-currency">Currency</label><input class="form-input" id="ae-currency" value="INR" maxlength="3" required></div>
+        <div class="form-group"><label for="ae-currency">Currency</label><input class="form-input" id="ae-currency" value="${defaultCur}" maxlength="3" required></div>
         <div class="form-group">
           <label for="ae-split-type">Split Type</label>
           <select class="form-select" id="ae-split-type">
@@ -547,19 +625,41 @@ function addExpenseModal(groupId, members, userId) {
           </select>
         </div>
       </div>
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label for="ae-date">Expense Date</label>
+        <input class="form-input" id="ae-date" type="date" value="${defaultDate}">
+      </div>
       <div id="ae-split-details" hidden></div>
       ${modalActions('Cancel', 'Add')}
     </form>`, {
     onSubmit: async () => {
       const splitType = document.getElementById('ae-split-type').value;
       const amount = parseFloat(document.getElementById('ae-amt').value);
+      const expenseDate = document.getElementById('ae-date').value;
       const payload = {
         description: document.getElementById('ae-desc').value.trim(),
-        amount,
-        paidBy: document.getElementById('ae-paid').value,
+        amount: amount,
         currency: document.getElementById('ae-currency').value.trim().toUpperCase(),
-        splitType
+        paidBy: document.getElementById('ae-paid').value,
+        splitType: splitType
       };
+      
+      let timeStr = '00:00:00';
+      let isoDate = null;
+      if (expenseDate) {
+        const today = new Date();
+        const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+        if (expenseDate === todayStr) {
+          timeStr = String(today.getHours()).padStart(2, '0') + ':' + 
+                    String(today.getMinutes()).padStart(2, '0') + ':' + 
+                    String(today.getSeconds()).padStart(2, '0');
+        }
+        isoDate = new Date(`${expenseDate}T${timeStr}`).toISOString();
+      }
+
+      if (isoDate) {
+         payload.expenseDate = isoDate;
+      }
 
       if (splitType === 'PERCENTAGE' || splitType === 'EXACT') {
         const splitDetails = members.map(m => ({

@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -60,6 +61,23 @@ public class SplitController {
         return splitService.getGroup(groupId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/{groupId}")
+    public ResponseEntity<Void> deleteGroup(
+            @RequestHeader("X-User-Id") String xUserId,
+            @PathVariable Long groupId) {
+        splitService.deleteGroup(groupId, requireUserId(xUserId));
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{groupId}/archive")
+    public ResponseEntity<Void> archiveGroup(
+            @RequestHeader("X-User-Id") String xUserId,
+            @PathVariable Long groupId,
+            @RequestParam boolean archive) {
+        splitService.archiveGroup(groupId, requireUserId(xUserId), archive);
+        return ResponseEntity.noContent().build();
     }
 
     /* ── MEMBERS ── */

@@ -50,7 +50,7 @@ public class SplitControllerTest {
         request.setCreatedBy(userId);
         request.setCurrency("INR");
 
-        ExpenseGroup group = new ExpenseGroup(1L, "Trip to Goa", "Goa description", userId, "INR", LocalDateTime.now());
+        ExpenseGroup group = new ExpenseGroup(1L, "Trip to Goa", "Goa description", userId, "INR", LocalDateTime.now(), false, null);
 
         when(splitService.createGroup(any())).thenReturn(group);
 
@@ -66,7 +66,7 @@ public class SplitControllerTest {
     @DisplayName("GET /upsert/groups: returns user groups")
     void getUserGroups_succeeds() throws Exception {
         UUID userId = UUID.randomUUID();
-        ExpenseGroup group = new ExpenseGroup(1L, "Trip to Goa", "Goa description", userId, "INR", LocalDateTime.now());
+        ExpenseGroup group = new ExpenseGroup(1L, "Trip to Goa", "Goa description", userId, "INR", LocalDateTime.now(), false, null);
 
         when(splitService.getUserGroups(userId)).thenReturn(List.of(group));
 

@@ -19,7 +19,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import com.upsertservice.cache.CacheKeyRegistry;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -44,13 +45,15 @@ public class TransactionEntryService {
     private final OutboxEventRepository outboxEventRepository;
     private final GoalBudgetService goalBudgetService;
     private final com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository;
+    private final CacheKeyRegistry cacheKeyRegistry;
 
     public TransactionEntryService(
             TransactionEntryRepository repository,
             StringRedisTemplate redisTemplate,
             MeterRegistry meterRegistry, OutboxEventRepository outboxEventRepository,
             GoalBudgetService goalBudgetService,
-            com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository
+            com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository,
+            CacheKeyRegistry cacheKeyRegistry
     ) {
         this.repository = repository;
         this.redisTemplate = redisTemplate;
@@ -59,6 +62,7 @@ public class TransactionEntryService {
         this.outboxEventRepository = outboxEventRepository;
         this.goalBudgetService = goalBudgetService;
         this.allocationRepository = allocationRepository;
+        this.cacheKeyRegistry = cacheKeyRegistry;
     }
 
     // ── Create ────────────────────────────────────────────────────────────────
@@ -112,6 +116,8 @@ public class TransactionEntryService {
             outboxEventRepository.save(event);
         }
         createCounter.increment();
+        cacheKeyRegistry.evictForUser(request.getUserId());
+        
         log.info("Idempotency key {}",idempotencyKey);
         if (redisKey != null) {
             redisTemplate.opsForValue().set(redisKey, String.valueOf(saved.getId()), Duration.ofHours(24));
@@ -133,7 +139,8 @@ public class TransactionEntryService {
         entry.setRecurring(request.isRecurring());
         entry.setRecurringPeriod(request.getRecurringPeriod());
         if (request.isRecurring() && request.getRecurringPeriod() != null) {
-            entry.setNextRunDate(calculateNextRunDate(LocalDateTime.now(), request.getRecurringPeriod()));
+            LocalDateTime baseDate = request.getCreatedAt() != null ? request.getCreatedAt() : LocalDateTime.now();
+            entry.setNextRunDate(calculateNextRunDate(baseDate, request.getRecurringPeriod()));
         }
         if (request.getCreatedAt() != null) {
             entry.setCreatedAt(request.getCreatedAt());
@@ -143,12 +150,13 @@ public class TransactionEntryService {
 
     public static LocalDateTime calculateNextRunDate(LocalDateTime from, com.upsertservice.model.RecurringPeriod period) {
         if (period == null) return null;
-        return switch (period) {
+        LocalDateTime next = switch (period) {
             case DAILY -> from.plusDays(1);
             case WEEKLY -> from.plusWeeks(1);
             case MONTHLY -> from.plusMonths(1);
             case YEARLY -> from.plusYears(1);
         };
+        return next.toLocalDate().atStartOfDay();
     }
 
     // ── Update (full) ─────────────────────────────────────────────────────────
@@ -198,6 +206,8 @@ public class TransactionEntryService {
         event.setEntityId(updated.getId());
         outboxEventRepository.save(event);
         
+        cacheKeyRegistry.evictForUser(request.getUserId());
+        
         log.info("Transaction updated: id={}", updated.getId());
         return convertToResponse(updated);
     }
@@ -233,6 +243,8 @@ public class TransactionEntryService {
         event.setEventType("PATCH");
         event.setEntityId(id);
         outboxEventRepository.save(event);
+        
+        cacheKeyRegistry.evictForUser(userId);
         
         log.info("Transaction amount patched: id={}, newAmount={}", id, newAmount);
         return convertToResponse(saved);
@@ -271,6 +283,8 @@ public class TransactionEntryService {
         outboxEventRepository.save(event);
         
         deleteCounter.increment();
+        cacheKeyRegistry.evictForUser(userId);
+        
         log.info("Transaction deleted: id={}, user={}", id, userId);
     }
 
@@ -294,6 +308,7 @@ public class TransactionEntryService {
     // ── Read — paginated list with optional date range ────────────────────────
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "transactions", key = "#userId + ':' + (#type != null ? #type : 'ALL') + ':' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX') + ':' + #page + ':' + #size", sync = true)
     public Page<TransactionEntry> getEntriesByUserId(
             UUID userId, TransactionType type,
             LocalDate startDate, LocalDate endDate,
@@ -308,6 +323,7 @@ public class TransactionEntryService {
     // ── Read — search ─────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "transactions", key = "#userId + ':search:' + #query + ':' + #page + ':' + #size", sync = true)
     public Page<TransactionEntry> searchEntries(UUID userId, String query, int page, int size) {
         return repository.searchByUserId(userId, query, PageRequest.of(page, size));
     }
@@ -315,6 +331,7 @@ public class TransactionEntryService {
     // ── Read — summary ────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "transactions", key = "#userId + ':summary'", sync = true)
     public Map<String, Object> getSummary(UUID userId) {
         List<TransactionEntry> all = repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
         BigDecimal income  = all.stream().filter(e -> e.getType() == TransactionType.INCOME)
@@ -332,6 +349,7 @@ public class TransactionEntryService {
     // ── Read — recurring transactions ─────────────────────────────────────────
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "transactions", key = "#userId + ':recurring'", sync = true)
     public List<TransactionEntry> getRecurringEntries(UUID userId) {
         return repository.findByUserIdAndRecurringTrueAndDeletedAtIsNull(userId);
     }

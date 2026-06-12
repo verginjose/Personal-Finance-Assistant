@@ -44,6 +44,7 @@ export async function renderDashboard(container) {
 
     // Budget Alerts
     const alertsContainer = document.getElementById('d-alerts');
+    if (!alertsContainer) return; // User navigated away
     const alertsHtml = [];
     for (const b of budgets) {
         if (b.utilizationPercentage >= 100) {
@@ -58,7 +59,9 @@ export async function renderDashboard(container) {
         alertsContainer.innerHTML = alertsHtml.join('');
     }
 
-    document.getElementById('d-kpis').innerHTML = `
+    const kpisContainer = document.getElementById('d-kpis');
+    if (kpisContainer) {
+      kpisContainer.innerHTML = `
       <div class="card-grid card-grid-4 fade-up">
         <div class="card stat-card income">
           <div class="stat-card-top"><div class="stat-label">Total Income</div><div class="stat-icon">${icon('trending-up')}</div></div>
@@ -77,10 +80,12 @@ export async function renderDashboard(container) {
           <div class="stat-value">${summary.totalCount ?? 0}</div>
         </div>
       </div>`;
+    }
 
     // Goal Forecasting
     const goalsContainer = document.getElementById('d-goals');
-    goalsContainer.style.display = 'grid';
+    if (goalsContainer) {
+      goalsContainer.style.display = 'grid';
     const activeGoals = goals.filter(g => !g.completed);
     
     if (activeGoals.length > 0) {
@@ -108,12 +113,14 @@ export async function renderDashboard(container) {
                     <div style="font-size:0.9rem;color:var(--text-muted);">Create a savings goal in the Goals & Budgets page to track your progress and get AI forecasts!</div>
                 </div>
             </div>`;
+        }
     }
 
     renderHealthData('d', health);
     renderAiData('d', ai);
 
     const pieWrap = document.getElementById('d-pie-wrap');
+    if (!pieWrap) return;
     pieWrap.innerHTML = '<canvas id="d-pie"></canvas>';
     pieChart = destroyChart(pieChart);
     if (pie?.labels?.length && pie.datasets?.[0]?.data) {
@@ -133,6 +140,7 @@ export async function renderDashboard(container) {
     }
 
     const lineWrap = document.getElementById('d-line-wrap');
+    if (!lineWrap) return;
     lineWrap.innerHTML = '<canvas id="d-line"></canvas>';
     lineChart = destroyChart(lineChart);
     if (timeline?.labels?.length && timeline.datasets) {

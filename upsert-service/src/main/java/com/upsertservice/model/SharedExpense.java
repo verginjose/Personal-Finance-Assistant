@@ -50,6 +50,9 @@ public class SharedExpense {
     @Column(name = "expense_category")
     private ExpenseCategory expenseCategory;
 
+    @Column(name = "expense_date")
+    private LocalDateTime expenseDate;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -139,5 +142,8 @@ public class SharedExpense {
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+        if (expenseDate == null) {
+            expenseDate = createdAt;
+        }
     }
 }

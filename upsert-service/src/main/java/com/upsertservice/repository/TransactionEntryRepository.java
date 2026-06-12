@@ -37,6 +37,8 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
 
     List<TransactionEntry> findByRecurringTrueAndDeletedAtIsNullAndNextRunDateLessThanEqual(java.time.LocalDateTime nextRunDate);
 
+    Page<TransactionEntry> findByRecurringTrueAndDeletedAtIsNullAndNextRunDateLessThanEqual(java.time.LocalDateTime nextRunDate, Pageable pageable);
+
     @Query("SELECT t FROM TransactionEntry t JOIN TransactionGoalAllocation a ON t.id = a.transactionId WHERE a.goalId = :goalId AND t.userId = :userId AND t.deletedAt IS NULL ORDER BY t.createdAt DESC")
     List<TransactionEntry> findByGoalIdAndUserId(@Param("goalId") Long goalId, @Param("userId") UUID userId);
 

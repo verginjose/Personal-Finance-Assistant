@@ -41,6 +41,9 @@ public class GroupMember {
     @Column(nullable = false, length = 20)
     private InvitationStatus status = InvitationStatus.PENDING;
 
+    @Column(name = "is_archived", nullable = false)
+    private boolean isArchived = false;
+
     @PrePersist
     protected void onCreate() {
         joinedAt = LocalDateTime.now();

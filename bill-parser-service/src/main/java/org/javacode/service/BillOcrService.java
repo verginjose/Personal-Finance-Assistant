@@ -78,7 +78,9 @@ public class BillOcrService {
                     doc.expenseCategory() != null ? doc.expenseCategory().name() : null,
                     doc.incomeCategory()  != null ? doc.incomeCategory().name()  : null,
                     doc.currency(),
-                    doc.description()
+                    doc.description(),
+                    doc.date(),
+                    doc.recurring()
             );
         } catch (Exception e) {
             log.error("Groq processing failed for user={}: {}", userId, e.getMessage(), e);

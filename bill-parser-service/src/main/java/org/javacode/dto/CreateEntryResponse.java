@@ -24,4 +24,6 @@ public class CreateEntryResponse {
 
     private String currency;
     private String description;
+    private String date;
+    private boolean recurring;
 }

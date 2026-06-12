@@ -70,8 +70,8 @@ export async function renderTransactions(container) {
   const closePanel = () => { panel.classList.remove('open'); overlay.classList.remove('open'); };
 
   if (window.flatpickr) {
-    flatpickr('#t-start', { dateFormat: 'Y-m-d' });
-    flatpickr('#t-end', { dateFormat: 'Y-m-d' });
+    flatpickr('#t-start', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
+    flatpickr('#t-end', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
   }
 
   document.getElementById('t-filter-btn').onclick = openPanel;
@@ -196,7 +196,7 @@ async function showModal(userId, existing, onDone) {
     <form id="txn-form">
       <div class="form-row">
         <div class="form-group" style="flex:2"><label for="m-name">Name</label><input class="form-input" id="m-name" required value="${esc(existing?.name || '')}"></div>
-        <div class="form-group" style="flex:1"><label for="m-amount">Amount</label><input class="form-input" id="m-amount" type="number" step="0.01" min="0.01" required value="${existing?.amount || ''}"></div>
+        <div class="form-group" style="flex:1"><label for="m-amount">Amount</label><input class="form-input" id="m-amount" type="text" inputmode="decimal" pattern="^\\d+(\\.\\d{1,2})?$" title="Enter a valid amount (e.g., 100.50)" required value="${existing?.amount || ''}"></div>
         <div class="form-group" style="flex:1.5"><label for="m-date">Date</label><input class="form-input" id="m-date" type="date" value="${existing?.createdAt ? existing.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]}"></div>
       </div>
       <div class="form-row">
@@ -237,6 +237,20 @@ async function showModal(userId, existing, onDone) {
       const recurring = document.getElementById('m-recurring').checked;
       const amount = parseFloat(document.getElementById('m-amount').value);
       const dateVal = document.getElementById('m-date').value;
+      
+      let timeStr = '00:00:00';
+      let isoDate = null;
+      if (dateVal) {
+        const today = new Date();
+        const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+        if (dateVal === todayStr) {
+          timeStr = String(today.getHours()).padStart(2, '0') + ':' + 
+                    String(today.getMinutes()).padStart(2, '0') + ':' + 
+                    String(today.getSeconds()).padStart(2, '0');
+        }
+        isoDate = new Date(`${dateVal}T${timeStr}`).toISOString();
+      }
+
       const payload = {
         userId,
         name: document.getElementById('m-name').value,
@@ -247,7 +261,7 @@ async function showModal(userId, existing, onDone) {
         category: document.getElementById('m-cat').value,
         recurring,
         recurringPeriod: recurring ? document.getElementById('m-recurring-period').value : null,
-        createdAt: dateVal ? `${dateVal}T12:00:00` : null
+        createdAt: isoDate
       };
 
       if (isEdit) {

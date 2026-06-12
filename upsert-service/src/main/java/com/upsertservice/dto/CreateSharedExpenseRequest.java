@@ -5,6 +5,7 @@ import jakarta.validation.constraints.*;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,6 +32,8 @@ public class CreateSharedExpenseRequest {
 
     /** FOOD_AND_DINING | TRANSPORTATION | SHOPPING | etc. */
     private String expenseCategory;
+
+    private LocalDateTime expenseDate;
 
     private List<SplitDetailRequest> splitDetails;
 

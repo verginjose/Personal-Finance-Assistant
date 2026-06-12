@@ -229,7 +229,7 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
       allowInput: true,
       altInput: true,
       altFormat: "F j, Y",
-      disableMobile: "true"
+      disableMobile: true
     });
   }
 

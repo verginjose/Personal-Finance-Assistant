@@ -1,17 +1,17 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    app.js — SPA Router + Shell
    ═══════════════════════════════════════════════════════════════════════════ */
-import { Auth, SseManager } from './utils/api.js?v=3';
-import { icon } from './utils/icons.js?v=3';
-import { renderAuth }          from './views/auth.js?v=3';
-import { renderDashboard }     from './views/dashboard.js?v=3';
-import { renderTransactions }  from './views/transactions.js?v=3';
-import { renderBillScanner }   from './views/bill-scanner.js?v=3';
-import { renderSplit }         from './views/split.js?v=3';
-import { renderAnalytics }     from './views/analytics.js?v=3';
-import { renderProfile }       from './views/profile.js?v=3';
-import { renderSubscriptions } from './views/subscriptions.js?v=3';
-import { renderGoals }         from './views/goals.js?v=3';
+import { Auth, SseManager, api } from './utils/api.js?v=12';
+import { icon } from './utils/icons.js?v=12';
+import { renderAuth }          from './views/auth.js?v=12';
+import { renderDashboard }     from './views/dashboard.js?v=12';
+import { renderTransactions }  from './views/transactions.js?v=12';
+import { renderBillScanner }   from './views/bill-scanner.js?v=12';
+import { renderSplit }         from './views/split.js?v=12';
+import { renderAnalytics }     from './views/analytics.js?v=12';
+import { renderProfile }       from './views/profile.js?v=12';
+import { renderSubscriptions } from './views/subscriptions.js?v=12';
+import { renderGoals }         from './views/goals.js?v=12';
 
 const NAV_ITEMS = [
   { id: 'dashboard',      icon: 'dashboard',      label: 'Dashboard' },
@@ -41,6 +41,8 @@ function renderShell() {
   const email = Auth.getEmail() || 'User';
   const initial = email[0].toUpperCase();
 
+  let profilePicHtml = `<div class="sidebar-user-avatar" id="shell-avatar">${initial}</div>`;
+  
   root.innerHTML = `
     <div id="app-shell">
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
@@ -53,7 +55,7 @@ function renderShell() {
             </a>`).join('')}
         </nav>
         <div class="sidebar-user" id="sidebar-user" role="button" tabindex="0" aria-label="Open profile">
-          <div class="sidebar-user-avatar">${initial}</div>
+          ${profilePicHtml}
           <div class="sidebar-user-info">
             <div class="sidebar-user-email">${email}</div>
             <div class="sidebar-user-role">Account</div>
@@ -182,7 +184,6 @@ function renderShell() {
     e.preventDefault();
     closeBottomSheets();
     navigateTo('transactions');
-    // We can trigger the add expense modal dynamically here if we want, but for now just go to transactions
     setTimeout(() => {
         const addBtn = document.getElementById('t-add-btn');
         if (addBtn) addBtn.click();
@@ -190,6 +191,19 @@ function renderShell() {
   };
 
   renderView();
+
+  // Load profile picture async
+  api.get('/auth/me').then(me => {
+    if (me.profilePicture) {
+      const sidebarAvatar = document.getElementById('shell-avatar');
+      if (sidebarAvatar) {
+        sidebarAvatar.style.backgroundImage = `url('${me.profilePicture}')`;
+        sidebarAvatar.style.backgroundSize = 'cover';
+        sidebarAvatar.style.backgroundPosition = 'center';
+        sidebarAvatar.textContent = '';
+      }
+    }
+  }).catch(() => {});
 }
 
 export function navigateTo(view) {

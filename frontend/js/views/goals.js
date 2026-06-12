@@ -229,6 +229,19 @@ async function viewGoalDetails(goalParam, uid, reloadData = false) {
     `, {
       onSubmit: async () => {
         const cDate = document.getElementById('c-date').value;
+        let timeStr = '00:00:00';
+        let isoDate = null;
+        if (cDate) {
+          const today = new Date();
+          const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+          if (cDate === todayStr) {
+            timeStr = String(today.getHours()).padStart(2, '0') + ':' + 
+                      String(today.getMinutes()).padStart(2, '0') + ':' + 
+                      String(today.getSeconds()).padStart(2, '0');
+          }
+          isoDate = new Date(`${cDate}T${timeStr}`).toISOString();
+        }
+
         const payload = {
           userId: uid,
           name: `Contribution to ${goal.name}`,
@@ -238,7 +251,7 @@ async function viewGoalDetails(goalParam, uid, reloadData = false) {
           currency: goal.currency,
           description: document.getElementById('c-desc').value,
           allocations: [{ goalId: goal.id, amount: parseFloat(document.getElementById('c-amount').value) }],
-          createdAt: cDate ? `${cDate}T12:00:00` : null
+          createdAt: isoDate
         };
         await api.post('/upsert/create', payload);
         toast('Contribution added successfully', 'success');

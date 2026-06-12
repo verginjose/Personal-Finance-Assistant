@@ -7,12 +7,16 @@ import com.upsertservice.model.GroupActivity.ActivityType;
 import com.upsertservice.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -32,9 +36,15 @@ public class SplitService {
     private final GroupActivityService groupActivityService;
     private final CacheEvictPublisher cacheEvictPublisher;
     private final NotificationService notificationService;
+    private final org.springframework.cache.CacheManager cacheManager;
+
+    @Lazy
+    @Autowired
+    private SplitService self;
 
     /* ─── GROUPS ─── */
 
+    @CacheEvict(value = "user-groups", key = "#req.createdBy")
     public ExpenseGroup createGroup(CreateGroupRequest req) {
         ExpenseGroup group = new ExpenseGroup();
         group.setName(req.getName());
@@ -55,6 +65,7 @@ public class SplitService {
         return group;
     }
 
+    @CacheEvict(value = {"group-details", "group-balances", "group-expenses"}, key = "#groupId")
     public ExpenseGroup updateGroup(Long groupId, UpdateGroupRequest req, UUID actorUserId) {
         ExpenseGroup group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));
@@ -76,17 +87,64 @@ public class SplitService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "user-groups", key = "#userId", sync = true)
     public List<ExpenseGroup> getUserGroups(UUID userId) {
-        return groupRepo.findGroupsByMember(userId);
+        // Find groups and set the transient isArchived field manually
+        List<ExpenseGroup> groups = groupRepo.findGroupsByMember(userId);
+        for (ExpenseGroup group : groups) {
+            memberRepo.findByGroupId(group.getId()).stream()
+                    .filter(m -> m.getUserId().equals(userId))
+                    .findFirst()
+                    .ifPresent(m -> group.setIsArchived(m.isArchived()));
+        }
+        return groups;
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "group-details", key = "#groupId", sync = true)
     public java.util.Optional<ExpenseGroup> getGroup(Long groupId) {
-        return groupRepo.findById(groupId);
+        return groupRepo.findById(groupId).filter(g -> !g.isDeleted());
+    }
+
+    @CacheEvict(value = {"group-details", "group-balances", "group-expenses"}, key = "#groupId")
+    public void deleteGroup(Long groupId, UUID actorUserId) {
+        ExpenseGroup group = groupRepo.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Group not found"));
+        requireGroupMember(groupId, actorUserId);
+
+        GroupBalanceResponse balances = self.getGroupBalances(groupId);
+        boolean hasDebt = balances.getMemberBalances().stream()
+                .anyMatch(b -> b.getNetBalance().compareTo(BigDecimal.ZERO) != 0);
+
+        if (hasDebt) {
+            throw new IllegalArgumentException("Cannot delete group: all debts must be settled first.");
+        }
+
+        group.setDeleted(true);
+        groupRepo.save(group);
+
+        List<GroupMember> members = memberRepo.findByGroupId(groupId);
+        if (cacheManager.getCache("user-groups") != null) {
+            members.forEach(m -> Objects.requireNonNull(cacheManager.getCache("user-groups")).evict(m.getUserId()));
+        }
+        if (cacheManager.getCache("group-activity") != null) {
+            Objects.requireNonNull(cacheManager.getCache("group-activity")).evict(groupId);
+        }
+    }
+
+    @CacheEvict(value = "user-groups", key = "#userId")
+    public void archiveGroup(Long groupId, UUID userId, boolean archive) {
+        GroupMember member = memberRepo.findByGroupId(groupId).stream()
+                .filter(m -> m.getUserId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Membership not found"));
+        member.setArchived(archive);
+        memberRepo.save(member);
     }
 
     /* ─── MEMBERS ─── */
 
+    @CacheEvict(value = "user-groups", key = "#req.userId")
     public GroupMember addMember(Long groupId, AddMemberRequest req, UUID actorUserId) {
         groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));
@@ -106,14 +164,11 @@ public class SplitService {
                 member.getId());
 
         // Push notification
-        ExpenseGroup group = groupRepo.findById(groupId).orElse(null);
-        if (group != null) {
-            notificationService.sendNotification(req.getUserId(), Map.of(
-                    "status", "INFO",
-                    "message", "You've been invited to join the group: " + group.getName(),
-                    "event", "group-invite",
-                    "groupId", groupId));
-        }
+        groupRepo.findById(groupId).ifPresent(group -> notificationService.sendNotification(req.getUserId(), Map.of(
+                "status", "INFO",
+                "message", "You've been invited to join the group: " + group.getName(),
+                "event", "group-invite",
+                "groupId", groupId)));
 
         return member;
     }
@@ -127,6 +182,7 @@ public class SplitService {
         return memberRepo.save(m);
     }
 
+    @CacheEvict(value = "user-groups", key = "#userId")
     public void acceptInvitation(Long groupId, UUID userId) {
         GroupMember member = memberRepo.findByGroupId(groupId).stream()
                 .filter(m -> m.getUserId().equals(userId))
@@ -147,6 +203,7 @@ public class SplitService {
                 member.getId());
     }
 
+    @CacheEvict(value = "user-groups", key = "#userId")
     public void rejectInvitation(Long groupId, UUID userId) {
         GroupMember member = memberRepo.findByGroupId(groupId).stream()
                 .filter(m -> m.getUserId().equals(userId))
@@ -161,6 +218,7 @@ public class SplitService {
         memberRepo.delete(member);
     }
 
+    @CacheEvict(value = "user-groups", key = "#userId")
     public void leaveGroup(Long groupId, UUID userId) {
         GroupMember member = memberRepo.findByGroupId(groupId).stream()
                 .filter(m -> m.getUserId().equals(userId))
@@ -168,7 +226,7 @@ public class SplitService {
                 .orElseThrow(() -> new IllegalArgumentException("Membership not found"));
 
         // Ensure balance is 0
-        GroupBalanceResponse balances = getGroupBalances(groupId);
+        GroupBalanceResponse balances = self.getGroupBalances(groupId);
         boolean hasBalance = balances.getMemberBalances().stream()
                 .filter(b -> b.getUserId().equals(userId))
                 .anyMatch(b -> b.getNetBalance().compareTo(BigDecimal.ZERO) != 0);
@@ -195,6 +253,10 @@ public class SplitService {
 
     /* ─── SHARED EXPENSES ─── */
 
+    @Caching(evict = {
+        @CacheEvict(value = "group-expenses", key = "#req.groupId"),
+        @CacheEvict(value = "group-balances", key = "#req.groupId")
+    })
     public SharedExpense addSharedExpense(CreateSharedExpenseRequest req, UUID actorUserId) {
         ExpenseGroup group = groupRepo.findById(req.getGroupId())
                 .orElseThrow(() -> new IllegalArgumentException("Group " + req.getGroupId() + " not found"));
@@ -213,6 +275,7 @@ public class SplitService {
         expense.setSplitType(req.getSplitType() != null
                 ? SharedExpense.SplitType.valueOf(req.getSplitType().toUpperCase())
                 : SharedExpense.SplitType.EQUAL);
+        expense.setExpenseDate(req.getExpenseDate());
         if (req.getExpenseCategory() != null && !req.getExpenseCategory().isBlank()) {
             try {
                 expense.setExpenseCategory(
@@ -258,6 +321,10 @@ public class SplitService {
         return expense;
     }
 
+    @Caching(evict = {
+        @CacheEvict(value = "group-expenses", key = "#groupId"),
+        @CacheEvict(value = "group-balances", key = "#groupId")
+    })
     public void deleteSharedExpense(Long groupId, Long expenseId, UUID actorUserId) {
         ExpenseGroup group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));
@@ -370,7 +437,9 @@ public class SplitService {
     }
 
     private void generateSplits(SharedExpense expense, CreateSharedExpenseRequest req) {
-        List<GroupMember> members = memberRepo.findByGroupId(req.getGroupId());
+        List<GroupMember> members = memberRepo.findByGroupId(req.getGroupId()).stream()
+                .filter(m -> m.getStatus() == GroupMember.InvitationStatus.ACCEPTED)
+                .collect(Collectors.toList());
         if (members.isEmpty())
             return;
 
@@ -446,6 +515,7 @@ public class SplitService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "group-expenses", key = "#groupId", sync = true)
     public List<SharedExpense> getGroupExpenses(Long groupId) {
         return expenseRepo.findByGroupIdOrderByCreatedAtDesc(groupId);
     }
@@ -460,6 +530,7 @@ public class SplitService {
     /* ─── BALANCES (debt minimization) ─── */
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "group-balances", key = "#groupId", sync = true)
     public GroupBalanceResponse getGroupBalances(Long groupId) {
         ExpenseGroup group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));
@@ -479,9 +550,7 @@ public class SplitService {
 
         Map<UUID, BigDecimal> totalOwed = new HashMap<>();
         for (ExpenseSplit s : allSplits) {
-            if (!s.isSettled()) {
-                totalOwed.merge(s.getUserId(), s.getAmount(), BigDecimal::add);
-            }
+            totalOwed.merge(s.getUserId(), s.getAmount(), BigDecimal::add);
         }
 
         List<GroupBalanceResponse.MemberBalance> memberBalances = members.stream().map(m -> {
@@ -563,10 +632,14 @@ public class SplitService {
 
     /* ─── SETTLEMENT ─── */
 
+    @Caching(evict = {
+        @CacheEvict(value = "group-expenses", key = "#groupId"),
+        @CacheEvict(value = "group-balances", key = "#groupId")
+    })
     public void settleDebt(Long groupId, UUID fromUserId, UUID toUserId, UUID actorUserId) {
         requireGroupMember(groupId, actorUserId);
 
-        GroupBalanceResponse balances = getGroupBalances(groupId);
+        GroupBalanceResponse balances = self.getGroupBalances(groupId);
 
         // Calculate how much fromUserId actually owes to toUserId based on suggestions
         BigDecimal settledTotal = balances.getSimplifiedDebts().stream()

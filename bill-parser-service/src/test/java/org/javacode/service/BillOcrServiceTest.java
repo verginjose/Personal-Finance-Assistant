@@ -72,7 +72,9 @@ public class BillOcrServiceTest {
                 FinancialDocumentProcessor.ExpenseCategory.SHOPPING,
                 null,
                 "USD",
-                "Ocr parsed receipt"
+                "Ocr parsed receipt",
+                null,
+                false
         );
         ProcessedFinancialDocument processed = new ProcessedFinancialDocument(doc, 12450.0, 150.0, "2026-06-09");
 

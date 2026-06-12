@@ -56,6 +56,9 @@ public class User implements UserDetails {
   @Builder.Default
   private boolean accountNonLocked = true;
 
+  @Column(name = "profile_picture", columnDefinition = "TEXT")
+  private String profilePicture;
+
   // ── UserDetails contract ──────────────────────────────────────────────────
 
   @Override

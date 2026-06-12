@@ -14,12 +14,16 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+import com.authservice.repository.UserRepository;
+import com.authservice.model.User;
+
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
   private final AuthService authService;
+  private final UserRepository userRepository;
 
   // ── Public endpoints ──────────────────────────────────────────────────────
 
@@ -48,11 +52,25 @@ public class AuthController {
   @GetMapping("/me")
   @PreAuthorize("isAuthenticated()")
   public ResponseEntity<Map<String, Object>> me(Authentication authentication) {
+    User user = userRepository.findByEmail(authentication.getName()).orElse(null);
     return ResponseEntity.ok(Map.of(
             "email", authentication.getName(),
             "role",  authentication.getAuthorities()
-                    .iterator().next().getAuthority()  // "ROLE_USER"
+                    .iterator().next().getAuthority(),
+            "profilePicture", user != null && user.getProfilePicture() != null ? user.getProfilePicture() : ""
     ));
+  }
+
+  @PutMapping("/profile-picture")
+  @PreAuthorize("isAuthenticated()")
+  public ResponseEntity<Map<String, String>> updateProfilePicture(
+          Authentication authentication,
+          @RequestBody Map<String, String> body) {
+    User user = userRepository.findByEmail(authentication.getName())
+            .orElseThrow(() -> new RuntimeException("User not found"));
+    user.setProfilePicture(body.get("profilePicture"));
+    userRepository.save(user);
+    return ResponseEntity.ok(Map.of("message", "Profile picture updated"));
   }
 
 

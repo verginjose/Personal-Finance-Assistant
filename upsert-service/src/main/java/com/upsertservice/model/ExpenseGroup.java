@@ -39,6 +39,12 @@ public class ExpenseGroup {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "is_deleted", nullable = false)
+    private boolean isDeleted = false;
+
+    @Transient
+    private Boolean isArchived;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

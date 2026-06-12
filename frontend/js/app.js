@@ -1,8 +1,17 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   app.js — SPA Router + Shell (with lazy loading & view lifecycle)
+   app.js — SPA Router + Shell
    ═══════════════════════════════════════════════════════════════════════════ */
-import { Auth, SseManager, api, abortPendingRequests } from './utils/api.js?v=19';
-import { icon } from './utils/icons.js?v=19';
+import { Auth, SseManager, api } from './utils/api.js?v=18';
+import { icon } from './utils/icons.js?v=18';
+import { renderAuth }          from './views/auth.js?v=18';
+import { renderDashboard }     from './views/dashboard.js?v=18';
+import { renderTransactions }  from './views/transactions.js?v=18';
+import { renderBillScanner }   from './views/bill-scanner.js?v=18';
+import { renderSplit }         from './views/split.js?v=18';
+import { renderAnalytics }     from './views/analytics.js?v=18';
+import { renderProfile }       from './views/profile.js?v=18';
+import { renderSubscriptions } from './views/subscriptions.js?v=18';
+import { renderGoals }         from './views/goals.js?v=18';
 
 const NAV_ITEMS = [
   { id: 'dashboard',      icon: 'dashboard',      label: 'Dashboard' },
@@ -15,43 +24,7 @@ const NAV_ITEMS = [
   { id: 'profile',        icon: 'profile',        label: 'Profile' },
 ];
 
-/* ── View module cache (avoids re-fetching on back-navigation) ───────────── */
-const viewModuleCache = new Map();
-
-/** Lazily import a view module, caching for subsequent navigations. */
-async function loadViewModule(viewId) {
-  if (viewModuleCache.has(viewId)) return viewModuleCache.get(viewId);
-  const loaders = {
-    'dashboard':     () => import('./views/dashboard.js?v=19'),
-    'transactions':  () => import('./views/transactions.js?v=19'),
-    'bill-scanner':  () => import('./views/bill-scanner.js?v=19'),
-    'split':         () => import('./views/split.js?v=19'),
-    'analytics':     () => import('./views/analytics.js?v=19'),
-    'subscriptions': () => import('./views/subscriptions.js?v=19'),
-    'goals':         () => import('./views/goals.js?v=19'),
-    'profile':       () => import('./views/profile.js?v=19'),
-  };
-  const loader = loaders[viewId] || loaders.dashboard;
-  const mod = await loader();
-  viewModuleCache.set(viewId, mod);
-  return mod;
-}
-
-/* ── View render-function map (resolved lazily) ──────────────────────────── */
-const VIEW_FN_MAP = {
-  dashboard:      'renderDashboard',
-  transactions:   'renderTransactions',
-  'bill-scanner': 'renderBillScanner',
-  split:          'renderSplit',
-  analytics:      'renderAnalytics',
-  subscriptions:  'renderSubscriptions',
-  goals:          'renderGoals',
-  profile:        'renderProfile',
-};
-
 let currentView = 'dashboard';
-/** Holds the current view's cleanup function (if provided). */
-let currentViewCleanup = null;
 
 function renderShell() {
   const root = document.getElementById('app');
@@ -59,12 +32,7 @@ function renderShell() {
   if (!Auth.isLoggedIn()) {
     SseManager.disconnect();
     root.innerHTML = '<div id="view-root"></div>';
-    // Auth view is small and critical — load eagerly on first visit, cached thereafter
-    loadViewModule('auth-inline').then(() => {}).catch(() => {});
-    import('./views/auth.js?v=19').then(({ renderAuth }) => {
-      const vr = document.getElementById('view-root');
-      if (vr) renderAuth(vr);
-    });
+    renderAuth(document.getElementById('view-root'));
     return;
   }
 
@@ -258,44 +226,23 @@ export function navigateTo(view) {
   renderView();
 }
 
-async function renderView() {
+function renderView() {
   const root = document.getElementById('view-root');
   if (!root) return;
+  root.innerHTML = '';
 
-  // ── View lifecycle: cleanup previous view ─────────────────────────────
-  if (typeof currentViewCleanup === 'function') {
-    try { currentViewCleanup(); } catch (e) { console.warn('View cleanup error:', e); }
-    currentViewCleanup = null;
-  }
+  const views = {
+    dashboard:       renderDashboard,
+    transactions:    renderTransactions,
+    'bill-scanner':  renderBillScanner,
+    split:           renderSplit,
+    analytics:       renderAnalytics,
+    subscriptions:   renderSubscriptions,
+    goals:           renderGoals,
+    profile:         renderProfile,
+  };
 
-  // Cancel any in-flight API requests from the previous view
-  abortPendingRequests();
-
-  // Show a lightweight loading skeleton while the module is fetched
-  root.innerHTML = '<div class="spinner-center" style="padding:80px"><span class="spinner"></span></div>';
-
-  try {
-    const mod = await loadViewModule(currentView);
-    const fnName = VIEW_FN_MAP[currentView] || 'renderDashboard';
-    const renderFn = mod[fnName] || mod.default;
-    if (!renderFn) {
-      root.innerHTML = '<p style="color:var(--accent);padding:40px">View not found</p>';
-      return;
-    }
-
-    // Clear the skeleton before rendering the actual view
-    root.innerHTML = '';
-
-    // Call the render function. If it returns a cleanup function, store it.
-    const cleanup = await renderFn(root);
-    if (typeof cleanup === 'function') {
-      currentViewCleanup = cleanup;
-    }
-  } catch (err) {
-    if (err.name === 'AbortError') return; // Silently ignore — user navigated away
-    console.error('Failed to render view:', err);
-    root.innerHTML = `<p style="color:var(--accent);padding:40px">Failed to load view: ${err.message}</p>`;
-  }
+  (views[currentView] || renderDashboard)(root);
 }
 
 window.addEventListener('auth-change', () => { currentView = 'dashboard'; renderShell(); });

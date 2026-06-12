@@ -1,14 +1,13 @@
 import { api, Auth, toast } from '../utils/api.js';
+import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js';
 import {
   pageHeader, healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, skeletonChart
 } from '../utils/ui.js';
-import { loadChartJs, loadFlatpickr } from '../utils/loader.js';
 
 let charts = [];
-let chartUtils = null;
 
 export async function renderAnalytics(container) {
-  if (chartUtils) { charts.forEach(c => chartUtils.destroyChart(c)); }
+  charts.forEach(c => destroyChart(c));
   charts = [];
   const userId = Auth.getUserId();
 
@@ -54,12 +53,10 @@ export async function renderAnalytics(container) {
       <div class="chart-container" id="a-bar-wrap">${skeletonChart()}</div>
     </div>`;
 
-  loadFlatpickr().then(() => {
-    if (window.flatpickr) {
-      flatpickr('#a-start', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
-      flatpickr('#a-end', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
-    }
-  }).catch(() => {});
+  if (window.flatpickr) {
+    flatpickr('#a-start', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
+    flatpickr('#a-end', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
+  }
 
   document.getElementById('a-apply').onclick = () => loadAnalytics(userId);
   document.getElementById('a-export').onclick = async () => {
@@ -82,7 +79,7 @@ export async function renderAnalytics(container) {
 }
 
 async function loadAnalytics(userId) {
-  if (chartUtils) { charts.forEach(c => chartUtils.destroyChart(c)); }
+  charts.forEach(c => destroyChart(c));
   charts = [];
   const timelineType = document.getElementById('a-timeline')?.value || 'MONTHLY';
   const startDate = document.getElementById('a-start')?.value;
@@ -92,17 +89,13 @@ async function loadAnalytics(userId) {
   if (endDate) params.endDate = new Date(endDate + 'T23:59:59').toISOString();
 
   try {
-    // Load Chart.js lazily while fetching data in parallel
-    const [, expPie, incPie, timeline, health, ai] = await Promise.all([
-      loadChartJs(),
-      api.cachedGet('/analytics/category-pie-chart', { ...params, transactionFilter: 'EXPENSE' }),
-      api.cachedGet('/analytics/category-pie-chart', { ...params, transactionFilter: 'INCOME' }),
-      api.cachedGet('/analytics/timeline-chart', params),
-      api.cachedGet('/analytics/health-score', { userId }),
-      api.cachedGet('/analytics/ai-insights', { userId })
+    const [expPie, incPie, timeline, health, ai] = await Promise.all([
+      api.get('/analytics/category-pie-chart', { ...params, transactionFilter: 'EXPENSE' }),
+      api.get('/analytics/category-pie-chart', { ...params, transactionFilter: 'INCOME' }),
+      api.get('/analytics/timeline-chart', params),
+      api.get('/analytics/health-score', { userId }),
+      api.get('/analytics/ai-insights', { userId })
     ]);
-
-    if (!chartUtils) chartUtils = await import('../utils/charts.js');
 
     renderHealthData('a', health);
     renderAiData('a', ai);
@@ -112,7 +105,6 @@ async function loadAnalytics(userId) {
     mountTimeline('a-timeline-wrap', 'a-timeline-chart', timeline);
     mountChart('a-bar-wrap', 'a-income-bar', incPie, 'bar');
   } catch (err) {
-    if (err.name === 'AbortError') return;
     toast('Analytics error: ' + err.message, 'error');
   }
 }
@@ -127,9 +119,9 @@ function mountChart(wrapId, canvasId, data, type) {
   wrap.innerHTML = `<canvas id="${canvasId}"></canvas>`;
   const ctx = document.getElementById(canvasId);
   if (type === 'bar') {
-    charts.push(chartUtils.createBar(ctx, data.labels, data.datasets[0].data));
+    charts.push(createBar(ctx, data.labels, data.datasets[0].data));
   } else {
-    charts.push(chartUtils.createDoughnut(ctx, data.labels, data.datasets[0].data));
+    charts.push(createDoughnut(ctx, data.labels, data.datasets[0].data));
   }
 }
 
@@ -141,5 +133,5 @@ function mountTimeline(wrapId, canvasId, timeline) {
     return;
   }
   wrap.innerHTML = `<canvas id="${canvasId}"></canvas>`;
-  charts.push(chartUtils.createLine(document.getElementById(canvasId), timeline.labels, timeline.datasets));
+  charts.push(createLine(document.getElementById(canvasId), timeline.labels, timeline.datasets));
 }

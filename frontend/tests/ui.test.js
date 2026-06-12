@@ -80,8 +80,8 @@ describe('ui utilities', () => {
   });
 
   it('generates category option elements', () => {
-    const html = categoryOptions(EXPENSE_CATS.slice(0, 2), 'RENT');
-    expect(html).toContain('value="RENT"');
+    const html = categoryOptions(EXPENSE_CATS.slice(0, 2), 'FOOD_AND_DINING');
+    expect(html).toContain('value="FOOD_AND_DINING"');
     expect(html).toContain('selected');
   });
 

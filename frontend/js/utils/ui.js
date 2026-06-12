@@ -2,7 +2,6 @@
    ui.js — Shared UI helpers, formatters, and component builders
    ═══════════════════════════════════════════════════════════════════════════ */
 import { icon } from './icons.js';
-import { loadFlatpickr, loadTomSelect } from './loader.js';
 
 export function esc(s) {
   const d = document.createElement('div');
@@ -223,20 +222,15 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
     };
   }
 
-  // Initialize Flatpickr for industrial grade date pickers (lazy load)
-  const dateInputs = overlay.querySelectorAll('input[type="date"]');
-  if (dateInputs.length) {
-    loadFlatpickr().then(() => {
-      if (window.flatpickr) {
-        flatpickr(dateInputs, {
-          dateFormat: "Y-m-d",
-          allowInput: true,
-          altInput: true,
-          altFormat: "F j, Y",
-          disableMobile: true
-        });
-      }
-    }).catch(() => {}); // Graceful fallback to native date input
+  // Initialize Flatpickr for industrial grade date pickers
+  if (window.flatpickr) {
+    flatpickr(overlay.querySelectorAll('input[type="date"]'), {
+      dateFormat: "Y-m-d",
+      allowInput: true,
+      altInput: true,
+      altFormat: "F j, Y",
+      disableMobile: true
+    });
   }
 
   return { overlay, close };
@@ -315,7 +309,7 @@ export function categoryOptions(cats, selected) {
   ).join('');
 }
 
-export async function setupCategorySearch(inputId, selectId) {
+export function setupCategorySearch(inputId, selectId) {
   const input = document.getElementById(inputId);
   const selectElement = document.getElementById(selectId);
   if (!selectElement) return;
@@ -325,15 +319,7 @@ export async function setupCategorySearch(inputId, selectId) {
     input.style.display = 'none';
   }
 
-  // Lazy-load Tom Select
-  try {
-    await loadTomSelect();
-  } catch {
-    // Fallback: keep native select visible
-    if (input) input.style.display = '';
-    return;
-  }
-
+  // If Tom Select is loaded, initialize it
   if (window.TomSelect) {
     // Check if it's already initialized to avoid errors on re-renders
     if (selectElement.tomselect) {

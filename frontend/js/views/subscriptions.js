@@ -1,5 +1,5 @@
-import { api, Auth, toast } from '../utils/api.js';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, confirmModal, openModal, modalActions } from '../utils/ui.js';
+import { api, Auth, toast } from '../utils/api.js?v=22';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, confirmModal, openModal, modalActions } from '../utils/ui.js?v=22';
 
 export async function renderSubscriptions(container) {
   const userId = Auth.getUserId();

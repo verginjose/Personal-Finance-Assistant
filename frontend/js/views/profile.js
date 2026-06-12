@@ -1,7 +1,6 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import { esc, pageHeader, openModal } from '../utils/ui.js';
-import { loadCropperJs } from '../utils/loader.js';
 export async function renderProfile(container) {
   const email = Auth.getEmail();
   const userId = Auth.getUserId();
@@ -130,8 +129,7 @@ export async function renderProfile(container) {
       const imgEl = overlay.querySelector('#crop-image');
       const saveBtn = overlay.querySelector('#crop-save-btn');
 
-      // Lazy-load Cropper.js
-      await loadCropperJs();
+      // Initialize Cropper
       const cropper = new Cropper(imgEl, {
         aspectRatio: 1,
         viewMode: 1,

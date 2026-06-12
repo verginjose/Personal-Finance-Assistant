@@ -1,6 +1,5 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
-import { loadFlatpickr, loadTomSelect } from '../utils/loader.js';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
   typeBadge, openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions, setupCategorySearch
@@ -70,12 +69,10 @@ export async function renderTransactions(container) {
   const openPanel = () => { panel.classList.add('open'); overlay.classList.add('open'); };
   const closePanel = () => { panel.classList.remove('open'); overlay.classList.remove('open'); };
 
-  loadFlatpickr().then(() => {
-    if (window.flatpickr) {
-      flatpickr('#t-start', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
-      flatpickr('#t-end', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
-    }
-  }).catch(() => {});
+  if (window.flatpickr) {
+    flatpickr('#t-start', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
+    flatpickr('#t-end', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
+  }
 
   document.getElementById('t-filter-btn').onclick = openPanel;
   document.getElementById('t-filter-close').onclick = closePanel;
@@ -178,7 +175,6 @@ async function loadTransactions(userId) {
     }
     renderPagination();
   } catch (err) {
-    if (err.name === 'AbortError') return;
     tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--accent)">${esc(err.message)}</td></tr>`;
   }
 }
@@ -303,12 +299,10 @@ async function showModal(userId, existing, onDone) {
   updateCats();
   document.getElementById('m-type').onchange = updateCats;
 
-  loadTomSelect().then(() => {
-    if (window.TomSelect) {
-      new TomSelect('#m-type', { create: false, controlInput: null });
-      new TomSelect('#m-recurring-period', { create: false, controlInput: null });
-    }
-  }).catch(() => {});
+  if (window.TomSelect) {
+    new TomSelect('#m-type', { create: false, controlInput: null });
+    new TomSelect('#m-recurring-period', { create: false, controlInput: null });
+  }
 }
 
 async function editTransaction(userId, id) {

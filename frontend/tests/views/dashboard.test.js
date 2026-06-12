@@ -2,30 +2,20 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderDashboard } from '../../js/views/dashboard.js';
 import { Auth } from '../../js/utils/api.js';
 
-// Mock charts.js since it's dynamically imported in dashboard
-vi.mock('../../js/utils/charts.js', () => ({
-  createDoughnut: vi.fn(() => ({ destroy: vi.fn() })),
-  createLine: vi.fn(() => ({ destroy: vi.fn() })),
-  destroyChart: vi.fn(() => null),
-}));
+function mockFetchJson(data) {
+  global.fetch.mockResolvedValueOnce({
+    status: 200,
+    ok: true,
+    text: async () => JSON.stringify(data),
+  });
+}
 
 function mockDashboardApis() {
-  global.fetch.mockImplementation(async (url) => {
-    let data = {};
-    if (url.includes('/summary')) data = { totalIncome: 50000, totalExpense: 30000, netBalance: 20000, totalCount: 12 };
-    else if (url.includes('transactionFilter=EXPENSE')) data = { labels: ['Food'], datasets: [{ data: [100] }] };
-    else if (url.includes('transactionFilter=INCOME')) data = { labels: ['Salary'], datasets: [{ data: [5000] }] };
-    else if (url.includes('/timeline-chart')) data = { labels: ['Jan'], datasets: [{ label: 'Income', data: [1000] }] };
-    else if (url.includes('/health-score')) data = { totalScore: 720, grade: 'A', summary: 'Solid', breakdown: { savings: 80 } };
-    else if (url.includes('/ai-insights')) data = { summary: 'All good', insights: [{ title: 'Tip', message: 'Save more', type: 'INFO' }] };
-    else if (url.includes('/budgets')) data = [];
-    else if (url.includes('/goals')) data = [];
-
-    return {
-      status: 200, ok: true,
-      text: async () => JSON.stringify(data)
-    };
-  });
+  mockFetchJson({ totalIncome: 50000, totalExpense: 30000, netBalance: 20000, totalCount: 12 });
+  mockFetchJson({ labels: ['Food'], datasets: [{ data: [100] }] });
+  mockFetchJson({ labels: ['Jan'], datasets: [{ label: 'Income', data: [1000] }] });
+  mockFetchJson({ totalScore: 720, grade: 'A', summary: 'Solid', breakdown: { savings: 80 } });
+  mockFetchJson({ summary: 'All good', insights: [{ title: 'Tip', message: 'Save more', type: 'INFO' }] });
 }
 
 describe('renderDashboard', () => {
@@ -53,8 +43,7 @@ describe('renderDashboard', () => {
 
     await vi.waitFor(() => {
       const income = container.querySelector('.stat-card.income .stat-value');
-      if (!income) console.log('CONTAINER HTML:', container.innerHTML);
-      expect(income?.textContent || '').toContain('50,000');
+      expect(income?.textContent).toContain('50,000');
     });
     expect(container.querySelector('#d-health-score')?.textContent).toBe('720');
     expect(container.querySelector('#d-health-grade')?.textContent).toBe('Grade A');

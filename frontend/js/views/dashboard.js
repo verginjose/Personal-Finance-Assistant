@@ -1,11 +1,11 @@
 import { api, Auth, toast } from '../utils/api.js';
+import { createDoughnut, createLine, destroyChart } from '../utils/charts.js';
 import { navigateTo } from '../app.js';
 import { icon } from '../utils/icons.js';
 import {
   pageHeader, skeletonKpiRow, skeletonChart,
   healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, formatCurrency
 } from '../utils/ui.js';
-import { loadChartJs } from '../utils/loader.js';
 
 let pieChart = null, lineChart = null;
 
@@ -32,19 +32,15 @@ export async function renderDashboard(container) {
     </div>`;
 
   try {
-    // Load Chart.js lazily while fetching data in parallel
-    const [, summary, pie, timeline, health, ai, budgets, goals] = await Promise.all([
-      loadChartJs(),
-      api.cachedGet('/upsert/summary', { userId }),
-      api.cachedGet('/analytics/category-pie-chart', { userId, transactionFilter: 'EXPENSE' }),
-      api.cachedGet('/analytics/timeline-chart', { userId, timelineType: 'MONTHLY' }),
-      api.cachedGet('/analytics/health-score', { userId }),
-      api.cachedGet('/analytics/ai-insights', { userId }),
+    const [summary, pie, timeline, health, ai, budgets, goals] = await Promise.all([
+      api.get('/upsert/summary', { userId }),
+      api.get('/analytics/category-pie-chart', { userId, transactionFilter: 'EXPENSE' }),
+      api.get('/analytics/timeline-chart', { userId, timelineType: 'MONTHLY' }),
+      api.get('/analytics/health-score', { userId }),
+      api.get('/analytics/ai-insights', { userId }),
       api.get('/upsert/budgets', { userId }).catch(() => []),
       api.get('/upsert/goals', { userId }).catch(() => [])
     ]);
-
-    const { createDoughnut, createLine, destroyChart } = await import('../utils/charts.js');
 
     // Budget Alerts
     const alertsContainer = document.getElementById('d-alerts');
@@ -153,8 +149,6 @@ export async function renderDashboard(container) {
       lineWrap.innerHTML = '<div class="empty-state" style="padding:40px"><p>No timeline data yet</p></div>';
     }
   } catch (err) {
-    if (err.name === 'AbortError') return;
-    console.error('DASHBOARD RENDER ERROR:', err);
     toast('Failed to load dashboard: ' + err.message, 'error');
   }
 }

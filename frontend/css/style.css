@@ -105,7 +105,6 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
   top: 0; left: 0; bottom: 0;
   z-index: 100;
   transition: transform 0.3s ease;
-  will-change: transform;
 }
 
 .sidebar .logo {
@@ -233,8 +232,6 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
   padding: var(--space-6);
   transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
   backdrop-filter: blur(8px);
-  contain: content;
-  will-change: transform;
 }
 
 .card:hover {
@@ -637,7 +634,6 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
   overflow-y: auto;
   animation: fadeUp 0.28s ease;
   box-shadow: var(--shadow);
-  will-change: transform, opacity;
 }
 
 .modal.modal-lg { max-width: 640px; }
@@ -1089,6 +1085,46 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
   .card-grid-2 { grid-template-columns: 1fr; }
 }
 
+
+
+/* ── Tom Select Customization ────────────────────────────────────────────── */
+.ts-control {
+  background: var(--bg-input) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  border-radius: var(--radius-xs) !important;
+  padding: 10px 14px !important;
+  transition: all var(--transition) !important;
+}
+.ts-control > input {
+  color: var(--text) !important;
+}
+.ts-dropdown {
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: var(--shadow) !important;
+  margin-top: 4px !important;
+}
+.ts-dropdown .option {
+  padding: 10px 14px !important;
+  color: var(--text-dim) !important;
+  transition: background 0.15s ease !important;
+}
+.ts-dropdown .active {
+  background: var(--bg-card-h) !important;
+  color: var(--text) !important;
+}
+.ts-dropdown .selected {
+  background: var(--primary) !important;
+  color: #000 !important;
+  font-weight: 600 !important;
+}
+.ts-wrapper.focus .ts-control {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.2) !important;
+}
 
 /* ── Bottom Nav & Sheets (Hidden on Desktop) ─────────────────────────────── */
 .bottom-nav, .bottom-sheet-overlay, .bottom-sheet {

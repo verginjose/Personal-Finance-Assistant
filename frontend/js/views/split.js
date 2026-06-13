@@ -68,10 +68,17 @@ async function loadGroups(userId) {
     }
     el.innerHTML = `<div class="card-grid card-grid-3">${groups.map(g => {
       const isPending = g.currentUserStatus === 'PENDING';
+      let balHtml = '';
+      if (g.currentUserNetBalance > 0) {
+        balHtml = `<div style="margin-top:8px; font-size:0.85rem; font-weight:600; color:var(--accent-g);">You get back ${formatCurrency(g.currentUserNetBalance, g.currency)}</div>`;
+      } else if (g.currentUserNetBalance < 0) {
+        balHtml = `<div style="margin-top:8px; font-size:0.85rem; font-weight:600; color:var(--accent);">You owe ${formatCurrency(Math.abs(g.currentUserNetBalance), g.currency)}</div>`;
+      }
       return `
       <div class="card group-card" data-id="${g.id}" role="button" tabindex="0" ${isPending ? 'style="border: 2px solid var(--accent-y);"' : ''}>
         <div class="group-name">${esc(g.name)}</div>
         <div class="group-meta">${esc(g.description || 'No description')}</div>
+        ${balHtml}
         ${isPending ? `
           <div style="margin-top: 12px; display:flex; gap: 8px;" class="sp-pending-actions">
             <button class="btn btn-primary btn-sm sp-outside-accept" data-id="${g.id}">Accept</button>
@@ -121,10 +128,21 @@ async function loadGroupDetail(groupId, userId) {
   document.getElementById('sp-create').style.display = 'none';
   el.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
   try {
-    const [group, members] = await Promise.all([
+    const [group, membersRaw] = await Promise.all([
       api.get(`/upsert/groups/${groupId}`),
       api.get(`/upsert/groups/${groupId}/members`)
     ]);
+
+    let profilePicMap = {};
+    try {
+      const userIds = membersRaw.map(m => m.userId);
+      if (userIds.length > 0) {
+        const users = await api.post('/auth/users/bulk', userIds);
+        users.forEach(u => { profilePicMap[u.userId] = u.profilePicture; });
+      }
+    } catch(e) { console.warn('Failed to fetch avatars', e); }
+
+    const members = membersRaw.map(m => ({ ...m, profilePicture: profilePicMap[m.userId] }));
 
     let pendingScan = null;
     if (window._pfaPendingScan && String(window._pfaPendingScan.groupId) === String(groupId)) {
@@ -177,6 +195,11 @@ async function loadGroupDetail(groupId, userId) {
       return m ? m.name : id.substring(0, 8);
     };
 
+    const resolveMemberAvatarLocally = (id) => {
+      const m = members.find(x => x.userId === id);
+      return m ? m.profilePicture : null;
+    };
+
     const myBalanceObj = balances?.memberBalances?.find(b => b.userId === userId);
     const myNetBalance = myBalanceObj ? myBalanceObj.netBalance : 0;
 
@@ -226,7 +249,7 @@ async function loadGroupDetail(groupId, userId) {
           <div class="balance-item expense-row" data-exp='${esc(JSON.stringify(expData))}' style="padding:16px 0; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
             <div>
                <div style="font-weight:600; font-size:1.05rem;">${esc(e.description || 'Expense')}</div>
-               <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by ${avatar(resolveMemberNameLocally(e.paidBy), 16)} @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span></div>
+               <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by ${avatar(resolveMemberNameLocally(e.paidBy), 16, resolveMemberAvatarLocally(e.paidBy))} @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span></div>
             </div>
             <div class="expense-row-actions" style="display:flex; align-items:center; gap: 12px;">
               <span style="font-weight:700;color:var(--text);font-size:1.1rem;">${formatCurrency(e.amount)}</span>
@@ -242,7 +265,7 @@ async function loadGroupDetail(groupId, userId) {
           ${balances?.memberBalances?.length ? balances.memberBalances.map(b => `
             <div style="background:var(--bg-card); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border); display:flex; flex-direction:column; gap:4px;">
               <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
-                ${avatar(b.userName || b.userId, 20)}
+                ${avatar(b.userName || b.userId, 20, resolveMemberAvatarLocally(b.userId))}
                 <span style="color:var(--text-dim); font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@${esc(b.userName || b.userId?.substring(0, 8))}</span>
               </div>
               <span style="font-weight:700;color:${b.netBalance >= 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-size:1.1rem;">
@@ -257,15 +280,15 @@ async function loadGroupDetail(groupId, userId) {
           let amountColor = 'var(--text)';
           let amountSign = '';
           if (s.fromUserId === userId) {
-            text = `You owe ${avatar(s.toUserName, 24)} <strong>${esc(s.toUserName)}</strong>`;
+            text = `You owe ${avatar(s.toUserName, 24, resolveMemberAvatarLocally(s.toUserId))} <strong>${esc(s.toUserName)}</strong>`;
             amountColor = 'var(--accent)';
             amountSign = '-';
           } else if (s.toUserId === userId) {
-            text = `${avatar(s.fromUserName, 24)} <strong>${esc(s.fromUserName)}</strong> owes you`;
+            text = `${avatar(s.fromUserName, 24, resolveMemberAvatarLocally(s.fromUserId))} <strong>${esc(s.fromUserName)}</strong> owes you`;
             amountColor = 'var(--accent-g)';
             amountSign = '+';
           } else {
-            text = `${avatar(s.fromUserName, 24)} <strong>${esc(s.fromUserName)}</strong> owes ${avatar(s.toUserName, 24)} <strong>${esc(s.toUserName)}</strong>`;
+            text = `${avatar(s.fromUserName, 24, resolveMemberAvatarLocally(s.fromUserId))} <strong>${esc(s.fromUserName)}</strong> owes ${avatar(s.toUserName, 24, resolveMemberAvatarLocally(s.toUserId))} <strong>${esc(s.toUserName)}</strong>`;
           }
           return `
           <div class="settlement-row" style="display:flex; justify-content:space-between; align-items:center; padding:16px 0; border-bottom:1px solid var(--border); gap: 16px;">
@@ -457,7 +480,7 @@ function viewMembersModal(members, groupId, userId) {
   openModal('Group Members', `
     <div style="margin-bottom: 20px; max-height: 400px; overflow-y: auto;">
       ${members.map(m => `<div style="padding:12px; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center;">
-        <div style="display:flex; align-items:center; gap:8px;">${avatar(m.name, 28)}<span style="font-size:1.05rem; font-weight:500;">@${esc(m.name)}</span></div>
+        <div style="display:flex; align-items:center; gap:8px;">${avatar(m.name, 28, m.profilePicture)}<span style="font-size:1.05rem; font-weight:500;">@${esc(m.name)}</span></div>
         ${m.status === 'PENDING' ? '<span class="badge badge-warning" style="font-size:.68rem">Pending</span>' : '<span class="badge badge-success" style="font-size:.68rem; background:var(--accent-g); color:#000;">Accepted</span>'}
       </div>`).join('')}
     </div>

@@ -58,7 +58,8 @@ public class AuthDtos {
     public record UserSearchResult(
             String userId,
             String username,
-            String email
+            String email,
+            String profilePicture
     ) {}
 
     public record ErrorResponse(

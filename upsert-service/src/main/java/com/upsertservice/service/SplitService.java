@@ -100,6 +100,16 @@ public class SplitService {
                         group.setIsArchived(m.isArchived());
                         group.setCurrentUserStatus(m.getStatus().name());
                     });
+            
+            try {
+                GroupBalanceResponse balances = self.getGroupBalances(group.getId());
+                balances.getMemberBalances().stream()
+                    .filter(b -> b.getUserId().equals(userId))
+                    .findFirst()
+                    .ifPresent(b -> group.setCurrentUserNetBalance(b.getNetBalance()));
+            } catch (Exception e) {
+                // Ignore if balances fail to load
+            }
         }
         return groups;
     }

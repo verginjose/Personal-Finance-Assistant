@@ -48,6 +48,9 @@ public class ExpenseGroup {
     @Transient
     private String currentUserStatus;
 
+    @Transient
+    private java.math.BigDecimal currentUserNetBalance;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

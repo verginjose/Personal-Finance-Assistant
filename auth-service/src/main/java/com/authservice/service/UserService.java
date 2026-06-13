@@ -27,7 +27,20 @@ public class UserService {
                 .map(u -> new UserSearchResult(
                         u.getId().toString(),
                         u.getActualUsername(),
-                        u.getEmail()))
+                        u.getEmail(),
+                        u.getProfilePicture()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserSearchResult> getBulkUsers(List<java.util.UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) return List.of();
+        return userRepository.findAllById(userIds).stream()
+                .map(u -> new UserSearchResult(
+                        u.getId().toString(),
+                        u.getActualUsername(),
+                        u.getEmail(),
+                        u.getProfilePicture()))
                 .toList();
     }
 }

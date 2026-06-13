@@ -27,4 +27,11 @@ public class UserController {
             @RequestParam(defaultValue = "0") int page) {
         return ResponseEntity.ok(userService.searchUsers(q, limit, page));
     }
+
+    @org.springframework.web.bind.annotation.PostMapping("/bulk")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<UserSearchResult>> getBulkUsers(
+            @org.springframework.web.bind.annotation.RequestBody List<java.util.UUID> userIds) {
+        return ResponseEntity.ok(userService.getBulkUsers(userIds));
+    }
 }

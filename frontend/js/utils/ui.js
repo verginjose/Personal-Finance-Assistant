@@ -9,7 +9,10 @@ export function esc(s) {
   return d.innerHTML;
 }
 
-export function avatar(name, size = 32) {
+export function avatar(name, size = 32, profilePicUrl = null) {
+  if (profilePicUrl) {
+    return `<img src="${profilePicUrl}" alt="${esc(name)}" class="avatar" style="width:${size}px; height:${size}px; border-radius:50%; vertical-align:middle; object-fit:cover;">`;
+  }
   const encoded = encodeURIComponent(name || 'User');
   const url = `https://ui-avatars.com/api/?name=${encoded}&background=random&color=fff&rounded=true&size=${size}&bold=true`;
   return `<img src="${url}" alt="${esc(name)}" class="avatar" style="width:${size}px; height:${size}px; border-radius:50%; vertical-align:middle; object-fit:cover;">`;

@@ -130,7 +130,7 @@ async function loadGroupDetail(groupId, userId) {
     if (window._pfaPendingScan && String(window._pfaPendingScan.groupId) === String(groupId)) {
        pendingScan = window._pfaPendingScan;
        delete window._pfaPendingScan;
-       const eligibleMembers = members.filter(m => !m.isArchived && m.status === 'ACCEPTED');
+       const eligibleMembers = members.filter(m => m.status === 'ACCEPTED');
        // Open modal immediately while background loads
        try { addExpenseModal(groupId, eligibleMembers, userId, pendingScan); } catch (err) {}
     }
@@ -327,7 +327,7 @@ async function loadGroupDetail(groupId, userId) {
       };
     });
     
-    const eligibleMembers = members.filter(m => !m.isArchived && m.status === 'ACCEPTED');
+    const eligibleMembers = members.filter(m => m.status === 'ACCEPTED');
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, eligibleMembers, userId);
     
     // Mobile expense tap

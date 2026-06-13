@@ -451,7 +451,7 @@ public class SplitService {
 
     private void generateSplits(SharedExpense expense, CreateSharedExpenseRequest req) {
         List<GroupMember> members = memberRepo.findByGroupId(req.getGroupId()).stream()
-                .filter(m -> !m.isArchived() && m.getStatus() == GroupMember.InvitationStatus.ACCEPTED)
+                .filter(m -> m.getStatus() == GroupMember.InvitationStatus.ACCEPTED)
                 .collect(Collectors.toList());
         if (members.isEmpty())
             return;

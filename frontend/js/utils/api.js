@@ -155,6 +155,12 @@ async function request(method, path, { body, params, headers = {}, raw = false }
           // Update tokens without overwriting existing email/name with undefined
           localStorage.setItem('pfa_token', data.token);
           localStorage.setItem('pfa_refresh', data.refreshToken);
+          
+          // Re-establish SSE connection with the fresh token immediately
+          // This prevents missed background events (like OCR completion)
+          SseManager.disconnect();
+          SseManager.connect();
+
           return data.token;
         }).catch((err) => {
           Auth.clear();

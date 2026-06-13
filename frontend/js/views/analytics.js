@@ -1,8 +1,8 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781328592';
-import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=1781328592';
+import { api, Auth, toast } from '../utils/api.js?v=1781332774';
+import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=1781332774';
 import {
   pageHeader, healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, skeletonChart
-} from '../utils/ui.js?v=1781328592';
+} from '../utils/ui.js?v=1781332774';
 
 let charts = [];
 

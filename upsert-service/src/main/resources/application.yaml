@@ -12,6 +12,10 @@ spring:
         default_schema: finance
     open-in-view: false
 
+  mvc:
+    async:
+      request-timeout: 1800000
+
   cache:
     type: redis
 

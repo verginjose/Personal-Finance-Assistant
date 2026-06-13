@@ -1,7 +1,7 @@
-import {api, Auth, toast} from '../utils/api.js?v=1781328592';
-import {icon} from '../utils/icons.js?v=1781328592';
-import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=1781328592';
-import {navigateTo} from '../app.js?v=1781328592';
+import {api, Auth, toast} from '../utils/api.js?v=1781332774';
+import {icon} from '../utils/icons.js?v=1781332774';
+import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=1781332774';
+import {navigateTo} from '../app.js?v=1781332774';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();

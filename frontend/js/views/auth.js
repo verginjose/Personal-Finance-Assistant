@@ -1,5 +1,5 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781328592';
-import { icon } from '../utils/icons.js?v=1781328592';
+import { api, Auth, toast } from '../utils/api.js?v=1781332774';
+import { icon } from '../utils/icons.js?v=1781332774';
 
 export function renderAuth(container) {
   let mode = 'login';

@@ -1,10 +1,10 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781328592';
-import { icon } from '../utils/icons.js?v=1781328592';
+import { api, Auth, toast } from '../utils/api.js?v=1781332774';
+import { icon } from '../utils/icons.js?v=1781332774';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
   progressBar, budgetStatusColor, budgetStatusBadge, badge, openModal, confirmModal, modalActions,
   EXPENSE_CATS, categoryOptions, setupCategorySearch
-} from '../utils/ui.js?v=1781328592';
+} from '../utils/ui.js?v=1781332774';
 
 export async function renderGoals(container) {
   const userId = Auth.getUserId();

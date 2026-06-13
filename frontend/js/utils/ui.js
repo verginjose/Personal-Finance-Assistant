@@ -183,17 +183,20 @@ export function renderHealthData(prefix, health) {
   if (!health) return;
   const elScore = document.getElementById(`${prefix}-health-score`);
   const elRing = document.getElementById(`${prefix}-health-ring`);
+  
+  const isNew = health.grade === 'N/A';
+  
   if (elScore) {
-    elScore.textContent = health.totalScore;
-    elScore.style.color = healthScoreColor(health.totalScore);
+    elScore.textContent = isNew ? '—' : health.totalScore;
+    elScore.style.color = isNew ? 'var(--text-muted)' : healthScoreColor(health.totalScore);
   }
   if (elRing) {
-    const pct = Math.min(health.totalScore / 10, 100);
+    const pct = isNew ? 0 : Math.min(health.totalScore / 10, 100);
     elRing.style.setProperty('--ring-pct', pct);
-    elRing.style.setProperty('--ring-color', healthScoreColor(health.totalScore));
+    elRing.style.setProperty('--ring-color', isNew ? 'var(--bg-lighter)' : healthScoreColor(health.totalScore));
   }
   const elGrade = document.getElementById(`${prefix}-health-grade`);
-  if (elGrade) elGrade.textContent = `Grade ${health.grade}`;
+  if (elGrade) elGrade.textContent = isNew ? 'Unranked' : `Grade ${health.grade}`;
   const elSummary = document.getElementById(`${prefix}-health-summary`);
   if (elSummary) elSummary.textContent = health.summary;
   const elBreakdown = document.getElementById(`${prefix}-health-breakdown`);
@@ -338,7 +341,7 @@ export const EXPENSE_CATS = [
   'CLOTHING', 'ELECTRONICS', 'HOME_APPLIANCES', 'PERSONAL_CARE', 'GIFTS_GIVEN',
   'MOVIES_AND_EVENTS', 'GAMING', 'SPORTS_AND_HOBBIES', 'BOOKS_AND_MAGAZINES', 'TRAVEL_VACATION', 'HOTEL_AND_STAYS',
   'LIFE_INSURANCE', 'VEHICLE_INSURANCE', 'CREDIT_CARD_PAYMENT', 'LOAN_REPAYMENT', 'MUTUAL_FUNDS_SIP', 'STOCKS_AND_TRADING', 'CRYPTO', 'EMERGENCY_FUND', 'FIXED_DEPOSIT',
-  'CHARITY_AND_DONATIONS', 'TAXES', 'FINES_AND_PENALTIES', 'PETS', 'CHILDCARE', 'ELDER_CARE', 'OTHERS'
+  'CHARITY_AND_DONATIONS', 'TAXES', 'FINES_AND_PENALTIES', 'PETS', 'CHILDCARE', 'ELDER_CARE', 'GOAL', 'SETTLEMENT', 'OTHERS'
 ];
 
 export const INCOME_CATS = [

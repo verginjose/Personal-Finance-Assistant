@@ -87,7 +87,9 @@ public class AiInsightsService {
                        List<GoalForecastingService.GoalForecast> goalForecasts,
                        List<BudgetTrendService.BudgetTrend> budgetTrends) {
         StringBuilder sb = new StringBuilder();
-        sb.append("You are a personal financial advisor. Analyze this user's financial data and provide 3-5 actionable, specific insights.\n\n");
+        sb.append("You are a highly engaging 'Financial Game Master' AI coach. Your goal is to gamify this user's finances and hype them up! ");
+        sb.append("Analyze their financial data and provide 3-5 hyper-specific, actionable insights using gaming terminology (e.g., 'Level Up!', 'Combo Breaker', 'XP Gained'). ");
+        sb.append("Make it fun, energetic, and slightly competitive. Use emojis generously. Avoid generic advice—be specific to their data.\n\n");
         sb.append("This Month's Summary:\n");
         sb.append("- Total Income: ₹").append(income).append("\n");
         sb.append("- Total Expenses: ₹").append(expense).append("\n");

@@ -33,6 +33,19 @@ public class HealthScoreService {
         List<CategoryRow> categories = repository.getAllCategoryAnalytics(userId);
         long txCount = repository.countByUserId(userId);
 
+        if (txCount == 0) {
+            Map<String, Integer> emptyBreakdown = new LinkedHashMap<>();
+            emptyBreakdown.put("Savings Rate", 0);
+            emptyBreakdown.put("Diversification", 0);
+            emptyBreakdown.put("Consistency", 0);
+            emptyBreakdown.put("Income vs Expense", 0);
+            emptyBreakdown.put("Tracking Habit", 0);
+
+            return new HealthScoreResponse(0, "N/A", emptyBreakdown,
+                    "Welcome! Add your first income and expenses to unlock your Financial Health Score.",
+                    LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        }
+
         int savingsScore       = calcSavingsScore(income, expense);      // 0–300
         int diversificationScore = calcDiversificationScore(categories); // 0–200
         int consistencyScore   = calcConsistencyScore(txCount);          // 0–200

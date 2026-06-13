@@ -1,18 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    app.js — SPA Router + Shell
    ═══════════════════════════════════════════════════════════════════════════ */
-import { Auth, SseManager, api } from './utils/api.js?v=1781332774';
-import { icon } from './utils/icons.js?v=1781332774';
-import { renderAuth }          from './views/auth.js?v=1781332774';
-import { esc }                 from './utils/ui.js?v=1781332774';
-import { renderDashboard }     from './views/dashboard.js?v=1781332774';
-import { renderTransactions }  from './views/transactions.js?v=1781332774';
-import { renderBillScanner }   from './views/bill-scanner.js?v=1781332774';
-import { renderSplit }         from './views/split.js?v=1781332774';
-import { renderAnalytics }     from './views/analytics.js?v=1781332774';
-import { renderProfile }       from './views/profile.js?v=1781332774';
-import { renderSubscriptions } from './views/subscriptions.js?v=1781332774';
-import { renderGoals }         from './views/goals.js?v=1781332774';
+import { Auth, SseManager, api } from './utils/api.js?v=1781336666';
+import { icon } from './utils/icons.js?v=1781336666';
+import { renderAuth }          from './views/auth.js?v=1781336666';
+import { esc }                 from './utils/ui.js?v=1781336666';
+import { renderDashboard }     from './views/dashboard.js?v=1781336666';
+import { renderTransactions }  from './views/transactions.js?v=1781336666';
+import { renderBillScanner }   from './views/bill-scanner.js?v=1781336666';
+import { renderSplit }         from './views/split.js?v=1781336666';
+import { renderAnalytics }     from './views/analytics.js?v=1781336666';
+import { renderProfile }       from './views/profile.js?v=1781336666';
+import { renderSubscriptions } from './views/subscriptions.js?v=1781336666';
+import { renderGoals }         from './views/goals.js?v=1781336666';
 
 const NAV_ITEMS = [
   { id: 'dashboard',      icon: 'dashboard',      label: 'Dashboard' },
@@ -40,7 +40,9 @@ function renderShell() {
   SseManager.connect();
 
   const email = Auth.getEmail() || 'User';
-  const name  = Auth.getName()  || email.split('@')[0];
+  let savedName = Auth.getName();
+  if (savedName === 'undefined') savedName = '';
+  const name  = savedName  || email.split('@')[0];
   const initial = name[0].toUpperCase();
 
   let profilePicHtml = `<div class="sidebar-user-avatar" id="shell-avatar">${initial}</div>`;

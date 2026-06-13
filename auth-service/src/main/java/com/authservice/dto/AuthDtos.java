@@ -45,6 +45,7 @@ public class AuthDtos {
             String refreshToken,
             String userId,
             String email,
+            String username,
             String role
     ) {}
 

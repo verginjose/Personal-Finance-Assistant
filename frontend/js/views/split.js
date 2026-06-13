@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781332774';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1781332774';
-import { icon } from '../utils/icons.js?v=1781332774';
+import { api, Auth, toast } from '../utils/api.js?v=1781336666';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1781336666';
+import { icon } from '../utils/icons.js?v=1781336666';
 
 let currentGroupId = null;
 
@@ -128,21 +128,27 @@ async function loadGroupDetail(groupId, userId) {
   document.getElementById('sp-create').style.display = 'none';
   el.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
   try {
-    const [group, membersRaw] = await Promise.all([
+    const [group, membersRaw, expenses, balances, activity] = await Promise.all([
       api.get(`/upsert/groups/${groupId}`),
-      api.get(`/upsert/groups/${groupId}/members`)
+      api.get(`/upsert/groups/${groupId}/members`),
+      api.get(`/upsert/groups/${groupId}/expenses`),
+      api.get(`/upsert/groups/${groupId}/balances`),
+      api.get(`/upsert/groups/${groupId}/activity`)
     ]);
 
-    let profilePicMap = {};
+    let usersMap = {};
     try {
       const userIds = membersRaw.map(m => m.userId);
       if (userIds.length > 0) {
         const users = await api.post('/auth/users/bulk', userIds);
-        users.forEach(u => { profilePicMap[u.userId] = u.profilePicture; });
+        users.forEach(u => { usersMap[u.userId] = u; });
       }
-    } catch(e) { console.warn('Failed to fetch avatars', e); }
+    } catch(e) { console.warn('Failed to fetch user profiles', e); }
 
-    const members = membersRaw.map(m => ({ ...m, profilePicture: profilePicMap[m.userId] }));
+    const members = membersRaw.map(m => {
+      const u = usersMap[m.userId] || {};
+      return { ...m, profilePicture: u.profilePicture, email: u.email, username: u.username };
+    });
 
     let pendingScan = null;
     if (window._pfaPendingScan && String(window._pfaPendingScan.groupId) === String(groupId)) {
@@ -152,12 +158,6 @@ async function loadGroupDetail(groupId, userId) {
        // Open modal immediately while background loads
        try { addExpenseModal(groupId, eligibleMembers, userId, pendingScan); } catch (err) {}
     }
-
-    const [expenses, balances, activity] = await Promise.all([
-      api.get(`/upsert/groups/${groupId}/expenses`),
-      api.get(`/upsert/groups/${groupId}/balances`),
-      api.get(`/upsert/groups/${groupId}/activity`)
-    ]);
     const currentUserMember = members.find(m => m.userId === userId);
     const isPending = currentUserMember && currentUserMember.status === 'PENDING';
 
@@ -479,7 +479,7 @@ function openMobileExpenseModal(e, groupId, userId) {
 function viewMembersModal(members, groupId, userId) {
   openModal('Group Members', `
     <div style="margin-bottom: 20px; max-height: 400px; overflow-y: auto;">
-      ${members.map(m => `<div style="padding:12px; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center;">
+      ${members.map((m, i) => `<div class="member-row" data-index="${i}" style="padding:12px; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center; cursor:pointer; transition: background 0.2s;" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background='transparent'">
         <div style="display:flex; align-items:center; gap:8px;">${avatar(m.name, 28, m.profilePicture)}<span style="font-size:1.05rem; font-weight:500;">@${esc(m.name)}</span></div>
         ${m.status === 'PENDING' ? '<span class="badge badge-warning" style="font-size:.68rem">Pending</span>' : '<span class="badge badge-success" style="font-size:.68rem; background:var(--accent-g); color:#000;">Accepted</span>'}
       </div>`).join('')}
@@ -494,6 +494,54 @@ function viewMembersModal(members, groupId, userId) {
     document.getElementById('vm-add-member').onclick = () => {
       document.querySelector('.modal-close').click();
       addMemberModal(groupId, userId);
+    };
+    
+    document.querySelectorAll('.member-row').forEach(row => {
+      row.onclick = () => {
+        const index = parseInt(row.getAttribute('data-index'));
+        const member = members[index];
+        document.querySelector('.modal-close').click();
+        viewMemberProfileModal(member, members, groupId, userId);
+      };
+    });
+  }, 50);
+}
+
+function viewMemberProfileModal(member, members, groupId, userId) {
+  const isMe = member.userId === userId;
+  openModal('Member Profile', `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:10px 10px 30px 10px;text-align:center;">
+      <div style="position:relative;">
+        ${member.profilePicture 
+          ? `<img src="${member.profilePicture}" style="width:160px;height:160px;border-radius:50%;object-fit:cover;box-shadow:0 8px 24px rgba(0,0,0,0.2);" />` 
+          : `<div style="width:160px;height:160px;border-radius:50%;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;font-size:3.5rem;color:var(--text-dim);box-shadow:0 8px 24px rgba(0,0,0,0.2);">${(member.name || 'U')[0].toUpperCase()}</div>`
+        }
+      </div>
+      <div>
+        <h2 style="margin-bottom:4px; font-size:1.6rem;">@${esc(member.name)}</h2>
+        <div style="color:var(--text-dim); font-size:1.05rem;">${esc(member.email || 'No email available')}</div>
+      </div>
+      
+      <div style="width:100%; max-width:300px; margin-top:16px;">
+        <div style="display:flex; justify-content:space-between; padding:12px; border-bottom:1px solid var(--border-light);">
+          <span style="color:var(--text-dim);">Status</span>
+          <span style="font-weight:600;">${member.status}</span>
+        </div>
+      </div>
+    </div>
+    
+    <div style="display:flex; gap:12px;">
+      <button class="btn btn-secondary" style="flex:1" id="vmp-back">Back to Members</button>
+      ${isMe ? '' : '<button class="btn btn-primary" style="flex:1" disabled title="Coming soon">Send Money</button>'}
+    </div>
+  `, {
+    onSubmit: () => {}
+  });
+
+  setTimeout(() => {
+    document.getElementById('vmp-back').onclick = () => {
+      document.querySelector('.modal-close').click();
+      viewMembersModal(members, groupId, userId);
     };
   }, 50);
 }

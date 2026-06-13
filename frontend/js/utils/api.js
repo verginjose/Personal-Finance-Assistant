@@ -17,7 +17,7 @@ export const Auth = {
     localStorage.setItem('pfa_refresh', data.refreshToken);
     localStorage.setItem('pfa_userId',  data.userId);
     localStorage.setItem('pfa_email',   data.email);
-    localStorage.setItem('pfa_name', data.name);
+    localStorage.setItem('pfa_name',    data.name || data.username || '');
   },
 
   clear() {

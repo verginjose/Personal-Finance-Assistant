@@ -47,7 +47,7 @@ public class AuthControllerTest {
     @DisplayName("POST /auth/login: returns status 200 and login response on success")
     void login_succeeds_returns200() throws Exception {
         LoginRequest request = new LoginRequest("test@example.com", "password");
-        LoginResponse response = new LoginResponse("token", "refresh", "user-id", "test@example.com", "USER");
+        LoginResponse response = new LoginResponse("token", "refresh", "user-id", "test@example.com", "testuser", "USER");
 
         when(authService.login(any(LoginRequest.class))).thenReturn(response);
 
@@ -78,7 +78,7 @@ public class AuthControllerTest {
     @DisplayName("POST /auth/refresh: returns new tokens")
     void refresh_succeeds_returnsTokens() throws Exception {
         RefreshTokenRequest request = new RefreshTokenRequest("old-refresh-token");
-        LoginResponse response = new LoginResponse("new-token", "new-refresh", "user-id", "test@example.com", "USER");
+        LoginResponse response = new LoginResponse("new-token", "new-refresh", "user-id", "test@example.com", "testuser", "USER");
 
         when(authService.refresh(any(RefreshTokenRequest.class))).thenReturn(response);
 

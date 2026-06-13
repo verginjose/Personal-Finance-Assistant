@@ -1,11 +1,11 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781332774';
-import { createDoughnut, createLine, destroyChart } from '../utils/charts.js?v=1781332774';
-import { navigateTo } from '../app.js?v=1781332774';
-import { icon } from '../utils/icons.js?v=1781332774';
+import { api, Auth, toast } from '../utils/api.js?v=1781336666';
+import { createDoughnut, createLine, destroyChart } from '../utils/charts.js?v=1781336666';
+import { navigateTo } from '../app.js?v=1781336666';
+import { icon } from '../utils/icons.js?v=1781336666';
 import {
   pageHeader, skeletonKpiRow, skeletonChart,
   healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, formatCurrency, alertBanner
-} from '../utils/ui.js?v=1781332774';
+} from '../utils/ui.js?v=1781336666';
 
 let pieChart = null, lineChart = null;
 

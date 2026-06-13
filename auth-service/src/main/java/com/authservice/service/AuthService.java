@@ -50,7 +50,7 @@ public class AuthService {
         tokenRedisService.saveRefreshToken(refreshToken, user.getEmail(), user.getId().toString(), user.getRole().name(), refreshExpirationMs);
         log.info("User logged in: {} [{}]", user.getEmail(), user.getRole());
 
-        return new LoginResponse(token, refreshToken, user.getId().toString(), user.getEmail(), user.getRole().name());
+        return new LoginResponse(token, refreshToken, user.getId().toString(), user.getEmail(), user.getActualUsername(), user.getRole().name());
     }
 
     // ── Register ──────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ public class AuthService {
 
         log.info("Tokens rotated for user: {} — no DB query performed", email);
 
-        return new LoginResponse(newAccessToken, newRefreshToken, userId, email, role);
+        return new LoginResponse(newAccessToken, newRefreshToken, userId, email, "", role);
     }
 
     // ── Logout ────────────────────────────────────────────────────────────────

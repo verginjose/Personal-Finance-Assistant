@@ -57,8 +57,10 @@ public class SplitController {
     }
 
     @GetMapping("/{groupId}")
-    public ResponseEntity<ExpenseGroup> getGroup(@PathVariable Long groupId) {
-        return splitService.getGroup(groupId)
+    public ResponseEntity<ExpenseGroup> getGroup(
+            @RequestHeader("X-User-Id") String xUserId,
+            @PathVariable Long groupId) {
+        return splitService.getGroup(groupId, requireUserId(xUserId))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }

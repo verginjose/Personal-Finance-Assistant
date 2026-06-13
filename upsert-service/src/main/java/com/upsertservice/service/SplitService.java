@@ -115,9 +115,20 @@ public class SplitService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "group-details", key = "#groupId", sync = true)
-    public java.util.Optional<ExpenseGroup> getGroup(Long groupId) {
-        return groupRepo.findById(groupId).filter(g -> !g.isDeleted());
+    @Cacheable(value = "group-details", key = "#groupId + '-' + #userId", sync = true)
+    public java.util.Optional<ExpenseGroup> getGroup(Long groupId, UUID userId) {
+        return groupRepo.findById(groupId)
+            .filter(g -> !g.isDeleted())
+            .map(group -> {
+                memberRepo.findByGroupId(group.getId()).stream()
+                    .filter(m -> m.getUserId().equals(userId))
+                    .findFirst()
+                    .ifPresent(m -> {
+                        group.setIsArchived(m.isArchived());
+                        group.setCurrentUserStatus(m.getStatus().name());
+                    });
+                return group;
+            });
     }
 
     @CacheEvict(value = {"group-details", "group-balances", "group-expenses"}, key = "#groupId")
@@ -146,7 +157,10 @@ public class SplitService {
         }
     }
 
-    @CacheEvict(value = "user-groups", key = "#userId")
+    @Caching(evict = {
+        @CacheEvict(value = "user-groups", key = "#userId"),
+        @CacheEvict(value = "group-details", key = "#groupId + '-' + #userId")
+    })
     public void archiveGroup(Long groupId, UUID userId, boolean archive) {
         GroupMember member = memberRepo.findByGroupId(groupId).stream()
                 .filter(m -> m.getUserId().equals(userId))

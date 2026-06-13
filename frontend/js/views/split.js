@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781336666';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1781336666';
-import { icon } from '../utils/icons.js?v=1781336666';
+import { api, Auth, toast } from '../utils/api.js?v=1781337777';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1781337777';
+import { icon } from '../utils/icons.js?v=1781337777';
 
 let currentGroupId = null;
 
@@ -66,7 +66,12 @@ async function loadGroups(userId) {
       el.innerHTML = emptyState('users', 'No groups yet', 'Create a group to start splitting expenses.');
       return;
     }
-    el.innerHTML = `<div class="card-grid card-grid-3">${groups.map(g => {
+    const activeGroups = groups.filter(g => !g.isArchived);
+    const archivedGroups = groups.filter(g => g.isArchived);
+
+    let html = '';
+
+    const renderCard = (g) => {
       const isPending = g.currentUserStatus === 'PENDING';
       let balHtml = '';
       if (g.currentUserNetBalance > 0) {
@@ -86,7 +91,30 @@ async function loadGroups(userId) {
           </div>
         ` : ''}
       </div>`;
-    }).join('')}</div>`;
+    };
+
+    if (activeGroups.length > 0) {
+      html += `<div class="card-grid card-grid-3">${activeGroups.map(renderCard).join('')}</div>`;
+    } else if (archivedGroups.length === 0) {
+      html += `<div style="text-align:center; padding: 40px; color: var(--text-dim);">No active groups.</div>`;
+    }
+
+    if (archivedGroups.length > 0) {
+      html += `
+        <div style="margin-top: 40px; border-top: 1px solid var(--border-light); padding-top: 20px;">
+          <div style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-dim); padding:12px; background:var(--bg-card-h); border-radius:8px; width:max-content; transition: background 0.2s;" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background='var(--bg-card-h)'" onclick="const c = document.getElementById('archived-groups-container'); c.style.display = c.style.display === 'none' ? 'block' : 'none';">
+            ${icon('archive', 18)} <span style="font-weight: 500;">Archived Groups (${archivedGroups.length})</span>
+          </div>
+          <div id="archived-groups-container" style="display:none; margin-top:20px;">
+            <div class="card-grid card-grid-3" style="opacity: 0.7;">
+              ${archivedGroups.map(renderCard).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    el.innerHTML = html;
 
     el.querySelectorAll('.sp-outside-accept').forEach(btn => {
       btn.onclick = async (e) => {

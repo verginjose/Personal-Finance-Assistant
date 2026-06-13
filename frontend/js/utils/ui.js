@@ -9,6 +9,12 @@ export function esc(s) {
   return d.innerHTML;
 }
 
+export function avatar(name, size = 32) {
+  const encoded = encodeURIComponent(name || 'User');
+  const url = `https://ui-avatars.com/api/?name=${encoded}&background=random&color=fff&rounded=true&size=${size}&bold=true`;
+  return `<img src="${url}" alt="${esc(name)}" class="avatar" style="width:${size}px; height:${size}px; border-radius:50%; vertical-align:middle; object-fit:cover;">`;
+}
+
 export function formatCurrency(n, currency = 'INR') {
   const sym = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '';
   const num = Number(n || 0);

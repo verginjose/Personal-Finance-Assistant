@@ -90,13 +90,16 @@ public class SplitService {
     @Transactional(readOnly = true)
     @Cacheable(value = "user-groups", key = "#userId", sync = true)
     public List<ExpenseGroup> getUserGroups(UUID userId) {
-        // Find groups and set the transient isArchived field manually
+        // Find groups and set the transient fields manually
         List<ExpenseGroup> groups = groupRepo.findGroupsByMember(userId);
         for (ExpenseGroup group : groups) {
             memberRepo.findByGroupId(group.getId()).stream()
                     .filter(m -> m.getUserId().equals(userId))
                     .findFirst()
-                    .ifPresent(m -> group.setIsArchived(m.isArchived()));
+                    .ifPresent(m -> {
+                        group.setIsArchived(m.isArchived());
+                        group.setCurrentUserStatus(m.getStatus().name());
+                    });
         }
         return groups;
     }
@@ -448,7 +451,7 @@ public class SplitService {
 
     private void generateSplits(SharedExpense expense, CreateSharedExpenseRequest req) {
         List<GroupMember> members = memberRepo.findByGroupId(req.getGroupId()).stream()
-                .filter(m -> m.getStatus() == GroupMember.InvitationStatus.ACCEPTED)
+                .filter(m -> !m.isArchived() && m.getStatus() == GroupMember.InvitationStatus.ACCEPTED)
                 .collect(Collectors.toList());
         if (members.isEmpty())
             return;

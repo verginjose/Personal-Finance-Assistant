@@ -45,6 +45,9 @@ public class ExpenseGroup {
     @Transient
     private Boolean isArchived;
 
+    @Transient
+    private String currentUserStatus;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

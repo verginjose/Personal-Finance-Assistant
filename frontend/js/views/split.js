@@ -1,5 +1,5 @@
 import { api, Auth, toast } from '../utils/api.js?v=1781332774';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions } from '../utils/ui.js?v=1781332774';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1781332774';
 import { icon } from '../utils/icons.js?v=1781332774';
 
 let currentGroupId = null;
@@ -66,14 +66,47 @@ async function loadGroups(userId) {
       el.innerHTML = emptyState('users', 'No groups yet', 'Create a group to start splitting expenses.');
       return;
     }
-    el.innerHTML = `<div class="card-grid card-grid-3">${groups.map(g => `
-      <div class="card group-card" data-id="${g.id}" role="button" tabindex="0">
+    el.innerHTML = `<div class="card-grid card-grid-3">${groups.map(g => {
+      const isPending = g.currentUserStatus === 'PENDING';
+      return `
+      <div class="card group-card" data-id="${g.id}" role="button" tabindex="0" ${isPending ? 'style="border: 2px solid var(--accent-y);"' : ''}>
         <div class="group-name">${esc(g.name)}</div>
         <div class="group-meta">${esc(g.description || 'No description')}</div>
-      </div>`).join('')}</div>`;
+        ${isPending ? `
+          <div style="margin-top: 12px; display:flex; gap: 8px;" class="sp-pending-actions">
+            <button class="btn btn-primary btn-sm sp-outside-accept" data-id="${g.id}">Accept</button>
+            <button class="btn btn-secondary btn-sm sp-outside-decline" data-id="${g.id}">Decline</button>
+          </div>
+        ` : ''}
+      </div>`;
+    }).join('')}</div>`;
+
+    el.querySelectorAll('.sp-outside-accept').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        try {
+          await api.post(`/upsert/groups/${btn.dataset.id}/members/${userId}/accept`);
+          toast('Invitation accepted!', 'success');
+          loadGroups(userId);
+        } catch(err) { toast(err.message, 'error'); }
+      };
+    });
+
+    el.querySelectorAll('.sp-outside-decline').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        if (!(await confirmModal('Decline', 'Are you sure you want to decline this invitation?', 'Decline'))) return;
+        try {
+          await api.post(`/upsert/groups/${btn.dataset.id}/members/${userId}/reject`);
+          toast('Invitation declined', 'info');
+          loadGroups(userId);
+        } catch(err) { toast(err.message, 'error'); }
+      };
+    });
+
     el.querySelectorAll('.group-card').forEach(c => {
       const open = () => loadGroupDetail(+c.dataset.id, userId);
-      c.onclick = open;
+      c.onclick = (e) => { if(!e.target.closest('.sp-pending-actions')) open(); };
       c.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
     });
   } catch (err) {
@@ -97,9 +130,9 @@ async function loadGroupDetail(groupId, userId) {
     if (window._pfaPendingScan && String(window._pfaPendingScan.groupId) === String(groupId)) {
        pendingScan = window._pfaPendingScan;
        delete window._pfaPendingScan;
-       const acceptedMembers = members.filter(m => m.status === 'ACCEPTED');
+       const eligibleMembers = members.filter(m => !m.isArchived && m.status === 'ACCEPTED');
        // Open modal immediately while background loads
-       try { addExpenseModal(groupId, acceptedMembers, userId, pendingScan); } catch (err) {}
+       try { addExpenseModal(groupId, eligibleMembers, userId, pendingScan); } catch (err) {}
     }
 
     const [expenses, balances, activity] = await Promise.all([
@@ -193,7 +226,7 @@ async function loadGroupDetail(groupId, userId) {
           <div class="balance-item expense-row" data-exp='${esc(JSON.stringify(expData))}' style="padding:16px 0; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
             <div>
                <div style="font-weight:600; font-size:1.05rem;">${esc(e.description || 'Expense')}</div>
-               <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span></div>
+               <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by ${avatar(resolveMemberNameLocally(e.paidBy), 16)} @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span></div>
             </div>
             <div class="expense-row-actions" style="display:flex; align-items:center; gap: 12px;">
               <span style="font-weight:700;color:var(--text);font-size:1.1rem;">${formatCurrency(e.amount)}</span>
@@ -208,7 +241,10 @@ async function loadGroupDetail(groupId, userId) {
         <div style="margin-bottom:24px; display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:12px;">
           ${balances?.memberBalances?.length ? balances.memberBalances.map(b => `
             <div style="background:var(--bg-card); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border); display:flex; flex-direction:column; gap:4px;">
-              <span style="color:var(--text-dim); font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@${esc(b.userName || b.userId?.substring(0, 8))}</span>
+              <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
+                ${avatar(b.userName || b.userId, 20)}
+                <span style="color:var(--text-dim); font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@${esc(b.userName || b.userId?.substring(0, 8))}</span>
+              </div>
               <span style="font-weight:700;color:${b.netBalance >= 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-size:1.1rem;">
                 ${b.netBalance >= 0 ? '+' : ''}${formatCurrency(b.netBalance)}
               </span>
@@ -221,15 +257,15 @@ async function loadGroupDetail(groupId, userId) {
           let amountColor = 'var(--text)';
           let amountSign = '';
           if (s.fromUserId === userId) {
-            text = `You owe <strong>${esc(s.toUserName)}</strong>`;
+            text = `You owe ${avatar(s.toUserName, 24)} <strong>${esc(s.toUserName)}</strong>`;
             amountColor = 'var(--accent)';
             amountSign = '-';
           } else if (s.toUserId === userId) {
-            text = `<strong>${esc(s.fromUserName)}</strong> owes you`;
+            text = `${avatar(s.fromUserName, 24)} <strong>${esc(s.fromUserName)}</strong> owes you`;
             amountColor = 'var(--accent-g)';
             amountSign = '+';
           } else {
-            text = `<strong>${esc(s.fromUserName)}</strong> owes <strong>${esc(s.toUserName)}</strong>`;
+            text = `${avatar(s.fromUserName, 24)} <strong>${esc(s.fromUserName)}</strong> owes ${avatar(s.toUserName, 24)} <strong>${esc(s.toUserName)}</strong>`;
           }
           return `
           <div class="settlement-row" style="display:flex; justify-content:space-between; align-items:center; padding:16px 0; border-bottom:1px solid var(--border); gap: 16px;">
@@ -291,8 +327,8 @@ async function loadGroupDetail(groupId, userId) {
       };
     });
     
-    const acceptedMembers = members.filter(m => m.status === 'ACCEPTED');
-    document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, acceptedMembers, userId);
+    const eligibleMembers = members.filter(m => !m.isArchived && m.status === 'ACCEPTED');
+    document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, eligibleMembers, userId);
     
     // Mobile expense tap
     document.querySelectorAll('.expense-row').forEach(row => {
@@ -420,8 +456,8 @@ function openMobileExpenseModal(e, groupId, userId) {
 function viewMembersModal(members, groupId, userId) {
   openModal('Group Members', `
     <div style="margin-bottom: 20px; max-height: 400px; overflow-y: auto;">
-      ${members.map(m => `<div style="padding:12px; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between;">
-        <span style="font-size:1.05rem; font-weight:500;">@${esc(m.name)}</span>
+      ${members.map(m => `<div style="padding:12px; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:8px;">${avatar(m.name, 28)}<span style="font-size:1.05rem; font-weight:500;">@${esc(m.name)}</span></div>
         ${m.status === 'PENDING' ? '<span class="badge badge-warning" style="font-size:.68rem">Pending</span>' : '<span class="badge badge-success" style="font-size:.68rem; background:var(--accent-g); color:#000;">Accepted</span>'}
       </div>`).join('')}
     </div>

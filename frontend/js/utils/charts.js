@@ -38,7 +38,12 @@ const tooltipPlugin = {
   boxPadding: 4,
   callbacks: {
     label(ctx) {
-      const val = ctx.parsed.y ?? ctx.parsed ?? ctx.raw ?? 0;
+      let val = ctx.raw;
+      if (val === undefined || typeof val === 'object') {
+        const isHorizontal = ctx.chart?.options?.indexAxis === 'y';
+        val = isHorizontal ? ctx.parsed.x : ctx.parsed.y;
+      }
+      val = val ?? ctx.parsed ?? 0;
       const num = Number(val);
       if (isNaN(num)) return ` ${val}`;
       return ` ₹${num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
@@ -93,7 +98,9 @@ export function createLine(ctx, labels, datasets, title = '') {
     data: {
       labels,
       datasets: datasets.map((ds, i) => {
-        const color = COLORS[i % COLORS.length];
+        let color = COLORS[i % COLORS.length];
+        if (ds.label && ds.label.toLowerCase() === 'income') color = '#10b981'; // Green
+        if (ds.label && ds.label.toLowerCase() === 'expense') color = '#f43f5e'; // Red
         return {
           ...ds,
           borderColor: color,

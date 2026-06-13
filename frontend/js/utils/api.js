@@ -27,23 +27,35 @@ export const Auth = {
 
 export const SseManager = {
   eventSource: null,
+  _reconnectTimer: null,
+  _retryDelay: 3000,
+  _maxRetryDelay: 30000,
+
   connect() {
-    if (this.eventSource) return;
+    if (this.eventSource) return;          // already connected
+    if (this._reconnectTimer) return;      // reconnect already scheduled
+
     const userId = Auth.getUserId();
     const token = Auth.getToken();
     if (!userId || !token) return;
 
     this.eventSource = new EventSource(`${API_BASE}/upsert/notifications/stream?token=${encodeURIComponent(token)}`);
-    
-    this.eventSource.onopen = () => console.log('SSE connected');
-    
+
+    this.eventSource.onopen = () => {
+      console.log('SSE connected');
+      this._retryDelay = 3000;             // reset backoff on successful connect
+    };
+
+    // Listen to heartbeat pings so the browser doesn't treat them as unknown events
+    this.eventSource.addEventListener('ping', () => { /* heartbeat — keep alive */ });
+
     this.eventSource.addEventListener('notification', (e) => {
       try {
         const data = JSON.parse(e.data);
         if (data.status === 'SUCCESS' || data.status === 'ERROR' || data.status === 'INFO') {
           // INFO type is new, typically for alerts. Toast the message.
           toast(data.message, data.status === 'SUCCESS' ? 'success' : (data.status === 'ERROR' ? 'error' : 'info'));
-          
+
           // Dispatch specific event if provided, otherwise a generic one
           if (data.event) {
             window.dispatchEvent(new CustomEvent(data.event, { detail: data }));
@@ -60,17 +72,44 @@ export const SseManager = {
     });
 
     this.eventSource.onerror = (err) => {
-      console.warn('SSE connection dropped. Reconnecting...', err);
-      this.disconnect();
-      // Reconnect after 3s
-      setTimeout(() => this.connect(), 3000);
+      // EventSource fires onerror for both transient network hiccups AND
+      // permanent failures. If readyState is CONNECTING, the browser is
+      // already retrying automatically — don't pile on a manual retry.
+      if (this.eventSource && this.eventSource.readyState === EventSource.CONNECTING) {
+        console.debug('SSE reconnecting (browser auto-retry)...');
+        return;
+      }
+
+      console.warn('SSE connection closed. Will reconnect in', this._retryDelay / 1000, 's');
+      this._closeSource();
+      this._scheduleReconnect();
     };
   },
-  disconnect() {
+
+  _closeSource() {
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
     }
+  },
+
+  _scheduleReconnect() {
+    if (this._reconnectTimer) return;      // already scheduled
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      this.connect();
+    }, this._retryDelay);
+    // Exponential backoff: 3s → 6s → 12s → 24s → 30s (capped)
+    this._retryDelay = Math.min(this._retryDelay * 2, this._maxRetryDelay);
+  },
+
+  disconnect() {
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    this._retryDelay = 3000;
+    this._closeSource();
   }
 };
 

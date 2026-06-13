@@ -1,10 +1,10 @@
-import { api, Auth, toast } from '../utils/api.js?v=22';
-import { icon } from '../utils/icons.js?v=22';
+import { api, Auth, toast } from '../utils/api.js?v=1781328592';
+import { icon } from '../utils/icons.js?v=1781328592';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
   progressBar, budgetStatusColor, budgetStatusBadge, badge, openModal, confirmModal, modalActions,
   EXPENSE_CATS, categoryOptions, setupCategorySearch
-} from '../utils/ui.js?v=22';
+} from '../utils/ui.js?v=1781328592';
 
 export async function renderGoals(container) {
   const userId = Auth.getUserId();
@@ -59,31 +59,48 @@ async function loadBudgets(uid) {
 function goalCard(g) {
   const pct = Math.min(g.progressPercentage, 100);
   const color = g.completed ? 'var(--accent-g)' : pct >= 80 ? 'var(--accent-y)' : 'var(--primary)';
-  const priorityBadge = g.priority ? `<span class="badge" style="background:var(--bg-lighter);margin-left:8px;font-size:0.7rem;vertical-align:middle;">${esc(g.priority)} PRIORITY</span>` : '';
+  const PRIORITY_COLORS = {
+    CRITICAL: { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444',        label: '🔴 Critical' },
+    HIGH:     { bg: 'rgba(249,115,22,0.12)', color: 'var(--accent)',   label: '🟠 High' },
+    MEDIUM:   { bg: 'rgba(234,179,8,0.12)',  color: 'var(--accent-y)', label: '🟡 Medium' },
+    LOW:      { bg: 'rgba(34,197,94,0.12)',  color: 'var(--accent-g)', label: '🟢 Low' },
+  };
+  const pri = g.priority ? PRIORITY_COLORS[g.priority] : null;
+  const priorityBadge = pri
+    ? `<span class="badge" style="background:${pri.bg};color:${pri.color};font-size:0.68rem;">${pri.label}</span>`
+    : '';
   return `
     <div class="card goal-card">
-      <div class="section-header" style="margin-bottom:8px">
-        <h4 style="font-weight:700">${esc(g.name)} ${g.completed ? badge('Complete', 'income') : ''}${priorityBadge}</h4>
+      <div class="section-header" style="margin-bottom:10px">
+        <div>
+          <h4 style="font-weight:700;margin-bottom:4px">${g.completed ? icon('check-circle','sm') + ' ' : ''}${esc(g.name)}</h4>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            ${g.completed ? '<span class="badge badge-income">Complete</span>' : ''}
+            ${priorityBadge}
+            ${g.deadline ? `<span style="font-size:0.75rem;color:var(--text-muted)">${icon('flag','xs')} ${formatDate(g.deadline)}</span>` : ''}
+          </div>
+        </div>
         <div style="display:flex;gap:6px">
           <button id="view-goal-${g.id}" class="btn btn-secondary btn-sm">View Details</button>
           <button id="del-goal-${g.id}" class="btn btn-danger btn-icon btn-sm" aria-label="Delete goal">${icon('trash', 'sm')}</button>
         </div>
       </div>
-      ${progressBar(pct, color)}
-      <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-dim);margin-top:10px">
+      ${progressBar(pct, color, true)}
+      <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-dim);margin-top:8px">
         <span>${formatCurrency(g.savedAmount, g.currency)} saved</span>
-        <span>${pct.toFixed(1)}% of ${formatCurrency(g.targetAmount, g.currency)}</span>
+        <span>${formatCurrency(g.targetAmount - g.savedAmount, g.currency)} remaining</span>
       </div>
-      ${g.deadline ? `<div style="font-size:.78rem;color:var(--text-muted);margin-top:6px">🗓 Deadline: ${formatDate(g.deadline)}</div>` : ''}
     </div>`;
 }
+
 
 function budgetCard(b) {
   const pct = Math.min(b.utilizationPercentage, 100);
   const color = budgetStatusColor(b.status);
+  const remaining = b.budgetAmount - b.spentAmount;
   let periodText = esc(b.period);
   if (b.period === 'CUSTOM' && b.customStartDate && b.customEndDate) {
-      periodText = `${formatDate(b.customStartDate)} to ${formatDate(b.customEndDate)}`;
+    periodText = `${formatDate(b.customStartDate)} → ${formatDate(b.customEndDate)}`;
   }
   return `
     <div class="card budget-card" style="--budget-color:${color}">
@@ -91,20 +108,21 @@ function budgetCard(b) {
         <div>
           <h4 style="font-weight:700">${esc(formatCategory(b.expenseCategory))}</h4>
           <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-            <span style="font-size:.78rem;color:var(--text-muted)">${periodText}</span>
+            <span style="font-size:.75rem;color:var(--text-muted)">${periodText}</span>
             ${budgetStatusBadge(b.status)}
             ${b.carryForward ? `<span class="badge badge-recurring">${icon('repeat', 'xs')} Rollover</span>` : ''}
           </div>
         </div>
         <button id="del-budget-${b.budgetId}" class="btn btn-danger btn-icon btn-sm" aria-label="Delete budget">${icon('trash', 'sm')}</button>
       </div>
-      ${progressBar(pct, color)}
-      <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-dim);margin-top:10px">
-        <span>${formatCurrency(b.spentAmount, b.currency)} spent</span>
-        <span>Budget: ${formatCurrency(b.budgetAmount, b.currency)}</span>
+      ${progressBar(pct, color, true)}
+      <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-dim);margin-top:8px">
+        <span style="color:${color};font-weight:600">${formatCurrency(b.spentAmount, b.currency)} spent</span>
+        <span>${remaining > 0 ? formatCurrency(remaining, b.currency) + ' left' : 'Limit reached'}</span>
       </div>
     </div>`;
 }
+
 
 async function deleteGoal(id, uid, cardElement) {
   if (!(await confirmModal('Delete Goal', 'Are you sure you want to delete this goal? This action cannot be undone.', 'Delete'))) return;

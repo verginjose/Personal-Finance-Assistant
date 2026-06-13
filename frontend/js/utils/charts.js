@@ -14,10 +14,39 @@ export function getColors(n) {
   return out;
 }
 
-Chart.defaults.color = '#8888a4';
+/* ── Global defaults ───────────────────────────────────────────────────── */
+Chart.defaults.color = '#8fa8a3';
 Chart.defaults.borderColor = 'rgba(255,255,255,.06)';
 Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+Chart.defaults.font.size = 12;
 
+/* ── Shared dark-glass tooltip plugin ──────────────────────────────────── */
+const tooltipPlugin = {
+  backgroundColor: 'rgba(10, 20, 25, 0.92)',
+  borderColor: 'rgba(20, 184, 166, 0.35)',
+  borderWidth: 1,
+  titleColor: '#e8f4f2',
+  bodyColor: '#8fa8a3',
+  padding: { top: 10, bottom: 10, left: 14, right: 14 },
+  cornerRadius: 10,
+  titleFont: { family: "'Plus Jakarta Sans', 'Inter', system-ui", weight: '700', size: 13 },
+  bodyFont: { family: "'Inter', system-ui", size: 12 },
+  caretSize: 6,
+  displayColors: true,
+  boxWidth: 10,
+  boxHeight: 10,
+  boxPadding: 4,
+  callbacks: {
+    label(ctx) {
+      const val = ctx.parsed.y ?? ctx.parsed ?? ctx.raw ?? 0;
+      const num = Number(val);
+      if (isNaN(num)) return ` ${val}`;
+      return ` ₹${num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+    }
+  }
+};
+
+/* ── Doughnut ───────────────────────────────────────────────────────────── */
 export function createDoughnut(ctx, labels, data, title = '', onClickHandler = null) {
   return new Chart(ctx, {
     type: 'doughnut',
@@ -26,13 +55,16 @@ export function createDoughnut(ctx, labels, data, title = '', onClickHandler = n
       datasets: [{
         data,
         backgroundColor: getColors(data.length),
-        borderWidth: 0,
-        hoverOffset: 8
+        borderWidth: 2,
+        borderColor: 'rgba(5, 13, 18, 0.8)',
+        hoverOffset: 10,
+        hoverBorderWidth: 0,
       }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      cutout: '68%',
+      cutout: '70%',
+      animation: { animateRotate: true, animateScale: true, duration: 700, easing: 'easeInOutQuart' },
       onClick: (e, elements) => {
         if (elements.length > 0 && onClickHandler) {
           const index = elements[0].index;
@@ -43,44 +75,71 @@ export function createDoughnut(ctx, labels, data, title = '', onClickHandler = n
         e.native.target.style.cursor = (elements.length > 0 && onClickHandler) ? 'pointer' : 'default';
       },
       plugins: {
-        legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyleWidth: 10 } },
-        title: { display: !!title, text: title, font: { size: 14, weight: 600 } }
+        legend: {
+          position: 'bottom',
+          labels: { padding: 18, usePointStyle: true, pointStyleWidth: 10, color: '#8fa8a3' }
+        },
+        title: { display: !!title, text: title, font: { size: 14, weight: '700' }, color: '#e8f4f2' },
+        tooltip: tooltipPlugin,
       }
     }
   });
 }
 
+/* ── Line ───────────────────────────────────────────────────────────────── */
 export function createLine(ctx, labels, datasets, title = '') {
   return new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets: datasets.map((ds, i) => {
-      const color = COLORS[i % COLORS.length];
-      return {
-        ...ds,
-        borderColor: color,
-        backgroundColor: color + '18',
-        fill: true,
-        tension: .4,
-        pointRadius: 3,
-        pointHoverRadius: 6,
-        borderWidth: 2
-      };
-    })},
+    data: {
+      labels,
+      datasets: datasets.map((ds, i) => {
+        const color = COLORS[i % COLORS.length];
+        return {
+          ...ds,
+          borderColor: color,
+          backgroundColor: color + '15',
+          fill: true,
+          tension: 0.45,
+          pointRadius: 4,
+          pointHoverRadius: 8,
+          pointBackgroundColor: color,
+          pointBorderColor: 'rgba(5,13,18,0.8)',
+          pointBorderWidth: 2,
+          borderWidth: 2.5,
+        };
+      })
+    },
     options: {
       responsive: true, maintainAspectRatio: false,
+      animation: { duration: 600, easing: 'easeInOutCubic' },
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true } },
-        title: { display: !!title, text: title, font: { size: 14, weight: 600 } }
+        legend: {
+          position: 'bottom',
+          labels: { padding: 18, usePointStyle: true, color: '#8fa8a3' }
+        },
+        title: { display: !!title, text: title, font: { size: 14, weight: '700' }, color: '#e8f4f2' },
+        tooltip: { ...tooltipPlugin },
       },
       scales: {
-        x: { grid: { display: false } },
-        y: { beginAtZero: true }
+        x: {
+          grid: { display: false },
+          ticks: { color: '#5a726d', maxRotation: 0 },
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255,255,255,.04)' },
+          ticks: {
+            color: '#5a726d',
+            callback: (v) => '₹' + Number(v).toLocaleString('en-IN'),
+          },
+        }
       }
     }
   });
 }
 
+/* ── Bar (horizontal, income by category) ───────────────────────────────── */
 export function createBar(ctx, labels, data, title = '') {
   return new Chart(ctx, {
     type: 'bar',
@@ -88,22 +147,35 @@ export function createBar(ctx, labels, data, title = '') {
       labels,
       datasets: [{
         data,
-        backgroundColor: getColors(data.length),
-        borderRadius: 6,
+        backgroundColor: getColors(data.length).map(c => c + 'bb'),
+        hoverBackgroundColor: getColors(data.length),
+        borderRadius: 8,
         borderWidth: 0,
-        maxBarThickness: 40
+        maxBarThickness: 36,
       }]
     },
     options: {
       indexAxis: 'y',
       responsive: true, maintainAspectRatio: false,
+      animation: { duration: 600, easing: 'easeInOutCubic' },
       plugins: {
         legend: { display: false },
-        title: { display: !!title, text: title, font: { size: 14, weight: 600 } }
+        title: { display: !!title, text: title, font: { size: 14, weight: '700' }, color: '#e8f4f2' },
+        tooltip: { ...tooltipPlugin },
       },
       scales: {
-        x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.04)' } },
-        y: { grid: { display: false } }
+        x: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255,255,255,.04)' },
+          ticks: {
+            color: '#5a726d',
+            callback: (v) => '₹' + Number(v).toLocaleString('en-IN'),
+          },
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: '#8fa8a3' },
+        }
       }
     }
   });

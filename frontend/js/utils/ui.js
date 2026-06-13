@@ -19,7 +19,8 @@ export function formatCurrency(n, currency = 'INR') {
 }
 
 export function formatCategory(cat) {
-  return (cat || '—').replace(/_/g, ' ');
+  if (!cat) return '—';
+  return cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
 export function formatDate(iso) {
@@ -50,12 +51,50 @@ export function pageHeader(title, subtitle, actionsHtml = '') {
     </div>`;
 }
 
-export function emptyState(iconName, title, subtitle = '') {
+export function emptyState(iconName, title, subtitle = '', actionHtml = '') {
   return `
     <div class="empty-state">
       <div class="empty-icon">${icon(iconName, 'lg')}</div>
       <h3>${esc(title)}</h3>
       ${subtitle ? `<p>${esc(subtitle)}</p>` : ''}
+      ${actionHtml ? `<div style="margin-top:16px">${actionHtml}</div>` : ''}
+    </div>`;
+}
+
+/** Renders a coloured alert banner strip.
+ *  @param {string} message
+ *  @param {'error'|'warning'|'info'|'success'} level
+ */
+export function alertBanner(message, level = 'warning', iconName = null) {
+  const cfg = {
+    error:   { bg: 'rgba(239,68,68,0.10)',  border: 'rgba(239,68,68,0.30)',   color: 'var(--accent)',   defaultIcon: 'alert-circle' },
+    warning: { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.30)',  color: 'var(--accent-y)', defaultIcon: 'alert-triangle' },
+    info:    { bg: 'rgba(56,189,248,0.10)',  border: 'rgba(56,189,248,0.30)',  color: 'var(--accent-b)', defaultIcon: 'info' },
+    success: { bg: 'rgba(34,197,94,0.10)',   border: 'rgba(34,197,94,0.30)',   color: 'var(--accent-g)', defaultIcon: 'check-circle' },
+  };
+  const { bg, border, color, defaultIcon } = cfg[level] || cfg.info;
+  const ic = icon(iconName || defaultIcon, 'sm');
+  return `
+    <div class="alert-banner" style="background:${bg};border:1px solid ${border};color:${color};" role="alert">
+      <span class="alert-banner-icon" style="color:${color}">${ic}</span>
+      <span>${message}</span>
+    </div>`;
+}
+
+/** Renders a KPI delta indicator e.g. ▲ 12.3% vs last month.
+ *  @param {number} pct  positive = up, negative = down
+ *  @param {string} [label]
+ */
+export function kpiDelta(pct, label = 'vs last month') {
+  if (pct == null || isNaN(pct)) return '';
+  const up = pct >= 0;
+  const color = up ? 'var(--accent-g)' : 'var(--accent)';
+  const arrow = up ? 'arrow-up' : 'arrow-down';
+  return `
+    <div class="kpi-delta" style="color:${color}">
+      ${icon(arrow, 'xs')}
+      <span>${Math.abs(pct).toFixed(1)}%</span>
+      <span class="kpi-delta-label">${esc(label)}</span>
     </div>`;
 }
 
@@ -69,11 +108,14 @@ export function skeletonChart(height = 280) {
   return `<div class="skeleton skeleton-chart" style="height:${height}px"></div>`;
 }
 
-export function progressBar(pct, color = 'var(--primary)') {
+export function progressBar(pct, color = 'var(--primary)', showLabel = false) {
   const width = Math.min(Math.max(pct, 0), 100);
   return `
-    <div class="progress-track" role="progressbar" aria-valuenow="${width}" aria-valuemin="0" aria-valuemax="100">
-      <div class="progress-fill" style="width:${width}%;background:${color}"></div>
+    <div class="progress-wrap">
+      <div class="progress-track" role="progressbar" aria-valuenow="${width}" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-fill" style="width:${width}%;background:${color}"></div>
+      </div>
+      ${showLabel ? `<span class="progress-label" style="color:${color}">${width.toFixed(0)}%</span>` : ''}
     </div>`;
 }
 

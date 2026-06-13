@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions } from '../utils/ui.js';
-import { icon } from '../utils/icons.js';
+import { api, Auth, toast } from '../utils/api.js?v=1781328592';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions } from '../utils/ui.js?v=1781328592';
+import { icon } from '../utils/icons.js?v=1781328592';
 
 let currentGroupId = null;
 

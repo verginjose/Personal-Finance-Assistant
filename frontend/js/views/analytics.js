@@ -1,8 +1,8 @@
-import { api, Auth, toast } from '../utils/api.js';
-import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js';
+import { api, Auth, toast } from '../utils/api.js?v=1781328592';
+import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=1781328592';
 import {
   pageHeader, healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, skeletonChart
-} from '../utils/ui.js';
+} from '../utils/ui.js?v=1781328592';
 
 let charts = [];
 
@@ -17,22 +17,25 @@ export async function renderAnalytics(container) {
       ${healthPanelHtml('a')}
       ${aiPanelHtml('a')}
     </div>
-    <div class="toolbar fade-up" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:12px; align-items:end; background:var(--surface); padding:16px; border-radius:12px; border:1px solid var(--border); margin-bottom:24px;">
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <label for="a-timeline" style="font-size:0.75rem; color:var(--text-dim); font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">View By</label>
+    <div class="analytics-toolbar fade-up">
+      <div>
+        <label for="a-timeline">View By</label>
         <select class="form-select" id="a-timeline" style="height:40px;" aria-label="Timeline granularity">
           <option value="MONTHLY">Monthly</option><option value="WEEKLY">Weekly</option><option value="DAILY">Daily</option>
         </select>
       </div>
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <label for="a-start" style="font-size:0.75rem; color:var(--text-dim); font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">From Date</label>
-        <input class="form-input" id="a-start" type="date" placeholder="Start Date" style="height:40px; font-size:0.9rem;" aria-label="Start date">
+      <div>
+        <label for="a-start">From Date</label>
+        <input class="form-input" id="a-start" type="date" style="height:40px;" aria-label="Start date">
       </div>
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <label for="a-end" style="font-size:0.75rem; color:var(--text-dim); font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">To Date</label>
-        <input class="form-input" id="a-end" type="date" placeholder="End Date" style="height:40px; font-size:0.9rem;" aria-label="End date">
+      <div>
+        <label for="a-end">To Date</label>
+        <input class="form-input" id="a-end" type="date" style="height:40px;" aria-label="End date">
       </div>
-      <button class="btn btn-primary" id="a-apply" style="height:40px; width:100%;">Apply Filters</button>
+      <div>
+        <label>&nbsp;</label>
+        <button class="btn btn-primary" id="a-apply" style="height:40px;width:100%;">Apply Filters</button>
+      </div>
     </div>
     <div class="card-grid card-grid-2 fade-up">
       <div class="card">

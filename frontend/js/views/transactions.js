@@ -1,9 +1,10 @@
-import { api, Auth, toast } from '../utils/api.js';
-import { icon } from '../utils/icons.js';
+import { api, Auth, toast } from '../utils/api.js?v=1781328592';
+import { icon } from '../utils/icons.js?v=1781328592';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
   typeBadge, openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions, setupCategorySearch
-} from '../utils/ui.js';
+} from '../utils/ui.js?v=1781328592';
+
 
 let currentPage = 0, totalPages = 0;
 
@@ -130,30 +131,36 @@ async function loadTransactions(userId) {
     if (!items.length) {
       tbody.innerHTML = `<tr><td colspan="6">${emptyState('receipt', 'No transactions found', 'Add a transaction or adjust your filters.')}</td></tr>`;
     } else {
-      tbody.innerHTML = items.map(t => `<tr data-txn='${esc(JSON.stringify(t))}'>
+      tbody.innerHTML = items.map(t => {
+        const isIncome = t.type === 'INCOME';
+        const txnIcon  = isIncome ? 'trending-up' : 'trending-down';
+        const iconBg   = isIncome ? 'rgba(34,201,147,0.12)' : 'rgba(249,115,22,0.12)';
+        const iconClr  = isIncome ? 'var(--accent-g)' : 'var(--accent)';
+        return `<tr data-txn='${esc(JSON.stringify(t))}'>
         <td>
           <div style="display:flex;align-items:center;gap:12px;">
-            <div style="width:36px;height:36px;border-radius:50%;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;color:var(--text-dim);">
-              ${icon(t.type === 'INCOME' ? 'transactions' : 'dashboard', 'sm')}
+            <div style="width:36px;height:36px;border-radius:50%;background:${iconBg};display:flex;align-items:center;justify-content:center;color:${iconClr};flex-shrink:0">
+              ${icon(txnIcon, 'sm')}
             </div>
             <div>
-              <strong style="font-size:0.95rem;">${esc(t.name)}</strong>
+              <strong style="font-size:0.93rem;">${esc(t.name)}</strong>
               ${t.recurring ? `<span class="badge badge-recurring" style="margin-left:6px;">${icon('repeat', 'xs')} ${esc(t.recurringPeriod)}</span>` : ''}
               ${t.description ? `<br><small style="color:var(--text-dim)" class="desktop-only">${esc(t.description)}</small>` : ''}
             </div>
           </div>
         </td>
         <td>${typeBadge(t.type)}</td>
-        <td>${esc(t.category)}</td>  
-        <td style="font-weight:700;font-size:1.05rem;color:${t.type === 'INCOME' ? 'var(--accent-g)' : 'var(--text)'}">
-          ${t.type === 'INCOME' ? '+' : ''}${formatCurrency(t.amount, t.currency)}
+        <td><span style="font-size:0.85rem;color:var(--text-dim)">${formatCategory(t.category)}</span></td>
+        <td style="text-align:right;font-weight:700;font-size:1.05rem;color:${isIncome ? 'var(--accent-g)' : 'var(--text)'}">
+          ${isIncome ? '+' : ''}${formatCurrency(t.amount, t.currency)}
         </td>
         <td style="font-size:.82rem;color:var(--text-dim)">${formatDate(t.createdAt)}</td>
         <td class="td-actions">
           <button class="btn btn-secondary btn-icon btn-sm t-edit" data-id="${t.id}" title="Edit" aria-label="Edit">${icon('edit', 'sm')}</button>
           <button class="btn btn-danger btn-icon btn-sm t-del" data-id="${t.id}" title="Delete" aria-label="Delete">${icon('trash', 'sm')}</button>
         </td>
-      </tr>`).join('');
+      </tr>`;
+      }).join('');
 
       tbody.querySelectorAll('.t-edit').forEach(b => b.onclick = (e) => {
         e.stopPropagation();

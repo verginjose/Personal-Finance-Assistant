@@ -1,11 +1,11 @@
-import { api, Auth, toast } from '../utils/api.js';
-import { createDoughnut, createLine, destroyChart } from '../utils/charts.js';
-import { navigateTo } from '../app.js';
-import { icon } from '../utils/icons.js';
+import { api, Auth, toast } from '../utils/api.js?v=1781328592';
+import { createDoughnut, createLine, destroyChart } from '../utils/charts.js?v=1781328592';
+import { navigateTo } from '../app.js?v=1781328592';
+import { icon } from '../utils/icons.js?v=1781328592';
 import {
   pageHeader, skeletonKpiRow, skeletonChart,
-  healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, formatCurrency
-} from '../utils/ui.js';
+  healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, formatCurrency, alertBanner
+} from '../utils/ui.js?v=1781328592';
 
 let pieChart = null, lineChart = null;
 
@@ -47,16 +47,16 @@ export async function renderDashboard(container) {
     if (!alertsContainer) return; // User navigated away
     const alertsHtml = [];
     for (const b of budgets) {
-        if (b.utilizationPercentage >= 100) {
-            alertsHtml.push(`<div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--accent);padding:12px 16px;border-radius:8px;display:flex;align-items:center;gap:12px;">${icon('alert-triangle')} <strong>Budget Exceeded:</strong> You have spent ${b.utilizationPercentage.toFixed(1)}% of your ${b.expenseCategory} budget!</div>`);
-        } else if (b.utilizationPercentage >= 90) {
-            alertsHtml.push(`<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:var(--accent-y);padding:12px 16px;border-radius:8px;display:flex;align-items:center;gap:12px;">${icon('alert-triangle')} <strong>Critical Warning:</strong> You have spent ${b.utilizationPercentage.toFixed(1)}% of your ${b.expenseCategory} budget.</div>`);
-        } else if (b.utilizationPercentage >= 80) {
-            alertsHtml.push(`<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:var(--accent-y);padding:12px 16px;border-radius:8px;display:flex;align-items:center;gap:12px;">${icon('alert-circle')} <strong>Warning:</strong> You are nearing your ${b.expenseCategory} budget limit (${b.utilizationPercentage.toFixed(1)}%).</div>`);
-        }
+      if (b.utilizationPercentage >= 100) {
+        alertsHtml.push(alertBanner(`<strong>Budget Exceeded:</strong> You have spent ${b.utilizationPercentage.toFixed(1)}% of your ${b.expenseCategory.replace(/_/g,' ')} budget!`, 'error'));
+      } else if (b.utilizationPercentage >= 90) {
+        alertsHtml.push(alertBanner(`<strong>Critical Warning:</strong> You have spent ${b.utilizationPercentage.toFixed(1)}% of your ${b.expenseCategory.replace(/_/g,' ')} budget.`, 'error', 'alert-triangle'));
+      } else if (b.utilizationPercentage >= 80) {
+        alertsHtml.push(alertBanner(`<strong>Budget Warning:</strong> Approaching ${b.expenseCategory.replace(/_/g,' ')} limit (${b.utilizationPercentage.toFixed(1)}%).`, 'warning'));
+      }
     }
     if (alertsHtml.length > 0) {
-        alertsContainer.innerHTML = alertsHtml.join('');
+      alertsContainer.innerHTML = alertsHtml.join('');
     }
 
     const kpisContainer = document.getElementById('d-kpis');
@@ -89,31 +89,36 @@ export async function renderDashboard(container) {
     const activeGoals = goals.filter(g => !g.completed);
     
     if (activeGoals.length > 0) {
-        let goalsHtml = '';
-        for (const g of activeGoals) {
-            try {
-                const forecast = await api.get(`/analytics/goals/${g.id}/forecast`);
-                let velocityText = forecast.monthlyVelocity > 0 ? `<br><small style="color:var(--text-dim)">Velocity: ${formatCurrency(forecast.monthlyVelocity, g.currency)}/mo</small>` : '';
-                goalsHtml += `
-                <div class="card" style="border-left:4px solid var(--accent-g)">
-                    <div style="font-weight:600;margin-bottom:4px;">🎯 ${g.name}</div>
-                    <div style="font-size:0.9rem;color:var(--text-muted);">${forecast.message}${velocityText}</div>
-                </div>`;
-            } catch (e) { console.error('Failed to forecast goal', g.id); }
-        }
-        goalsContainer.innerHTML = goalsHtml;
-    } else {
-        goalsContainer.innerHTML = `
-            <div class="card" style="border-left:4px solid var(--border); grid-column: 1 / -1; display:flex; align-items:center; gap: 16px; padding: 20px;">
-                <div style="background:var(--bg-lighter); width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--text-dim);">
-                    ${icon('target')}
-                </div>
-                <div>
-                    <div style="font-weight:600;margin-bottom:4px;">No Active Goals</div>
-                    <div style="font-size:0.9rem;color:var(--text-muted);">Create a savings goal in the Goals & Budgets page to track your progress and get AI forecasts!</div>
-                </div>
+      let goalsHtml = '';
+      for (const g of activeGoals) {
+        try {
+          const forecast = await api.get(`/analytics/goals/${g.id}/forecast`);
+          const velocityLine = forecast.monthlyVelocity > 0
+            ? `<span style="color:var(--accent-g);font-size:0.8rem">${icon('trending-up','xs')} ${formatCurrency(forecast.monthlyVelocity, g.currency)}/mo velocity</span>`
+            : '';
+          goalsHtml += `
+            <div class="card" style="border-left:3px solid var(--accent-g);display:flex;align-items:flex-start;gap:14px;padding:16px 20px">
+              <div style="width:36px;height:36px;border-radius:50%;background:rgba(34,201,147,0.12);display:flex;align-items:center;justify-content:center;color:var(--accent-g);flex-shrink:0">${icon('target','sm')}</div>
+              <div style="min-width:0">
+                <div style="font-weight:700;margin-bottom:2px">${g.name}</div>
+                <div style="font-size:0.85rem;color:var(--text-dim);line-height:1.5">${forecast.message}</div>
+                ${velocityLine}
+              </div>
             </div>`;
-        }
+        } catch (e) { console.error('Failed to forecast goal', g.id); }
+      }
+      goalsContainer.innerHTML = goalsHtml;
+    } else {
+      goalsContainer.innerHTML = `
+        <div class="card" style="border-left:3px solid var(--border);grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:18px 20px">
+          <div style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;color:var(--text-muted);flex-shrink:0">${icon('target')}</div>
+          <div>
+            <div style="font-weight:600;margin-bottom:2px">No Active Goals</div>
+            <div style="font-size:0.85rem;color:var(--text-dim)">Create a savings goal to track progress and get AI forecasts!</div>
+          </div>
+          <a href="#" onclick="event.preventDefault();navigateTo('goals')" style="margin-left:auto;" class="btn btn-secondary btn-sm">Set a Goal</a>
+        </div>`;
+    }
     }
 
     renderHealthData('d', health);
@@ -136,7 +141,12 @@ export async function renderDashboard(container) {
         navigateTo('transactions');
       });
     } else {
-      pieWrap.innerHTML = '<div class="empty-state" style="padding:40px"><p>No expense data yet</p></div>';
+      pieWrap.innerHTML = `
+        <div class="empty-state" style="padding:40px">
+          <div class="empty-icon">${icon('pie-chart','lg')}</div>
+          <p>No expense data yet</p>
+          <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="navigateTo('transactions')">Add Transaction</button></div>
+        </div>`;
     }
 
     const lineWrap = document.getElementById('d-line-wrap');
@@ -146,7 +156,12 @@ export async function renderDashboard(container) {
     if (timeline?.labels?.length && timeline.datasets) {
       lineChart = createLine(document.getElementById('d-line'), timeline.labels, timeline.datasets);
     } else {
-      lineWrap.innerHTML = '<div class="empty-state" style="padding:40px"><p>No timeline data yet</p></div>';
+      lineWrap.innerHTML = `
+        <div class="empty-state" style="padding:40px">
+          <div class="empty-icon">${icon('analytics','lg')}</div>
+          <p>No timeline data yet</p>
+          <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="navigateTo('transactions')">Add Transaction</button></div>
+        </div>`;
     }
   } catch (err) {
     toast('Failed to load dashboard: ' + err.message, 'error');

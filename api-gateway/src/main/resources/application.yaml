@@ -28,6 +28,9 @@ spring:
 
   cloud:
     gateway:
+      httpclient:
+        response-timeout: 30s
+        connect-timeout: 5000
       routes:
         - id: auth-service
           uri: http://auth-service:8082
@@ -48,7 +51,10 @@ spring:
             - Path=/api/upsert/notifications/**
           filters:
             - StripPrefix=2
-            
+          metadata:
+            response-timeout: 1800000
+            connect-timeout: 5000
+
         - id: upsert-service
           uri: http://upsert-service:8081
           predicates:

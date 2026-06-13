@@ -1,17 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    app.js — SPA Router + Shell
    ═══════════════════════════════════════════════════════════════════════════ */
-import { Auth, SseManager, api } from './utils/api.js?v=18';
-import { icon } from './utils/icons.js?v=18';
-import { renderAuth }          from './views/auth.js?v=18';
-import { renderDashboard }     from './views/dashboard.js?v=18';
-import { renderTransactions }  from './views/transactions.js?v=18';
-import { renderBillScanner }   from './views/bill-scanner.js?v=18';
-import { renderSplit }         from './views/split.js?v=18';
-import { renderAnalytics }     from './views/analytics.js?v=18';
-import { renderProfile }       from './views/profile.js?v=18';
-import { renderSubscriptions } from './views/subscriptions.js?v=18';
-import { renderGoals }         from './views/goals.js?v=18';
+import { Auth, SseManager, api } from './utils/api.js?v=1781328588';
+import { icon } from './utils/icons.js?v=1781328588';
+import { renderAuth }          from './views/auth.js?v=1781328588';
+import { esc }                 from './utils/ui.js?v=1781328588';
+import { renderDashboard }     from './views/dashboard.js?v=1781328588';
+import { renderTransactions }  from './views/transactions.js?v=1781328588';
+import { renderBillScanner }   from './views/bill-scanner.js?v=1781328588';
+import { renderSplit }         from './views/split.js?v=1781328588';
+import { renderAnalytics }     from './views/analytics.js?v=1781328588';
+import { renderProfile }       from './views/profile.js?v=1781328588';
+import { renderSubscriptions } from './views/subscriptions.js?v=1781328588';
+import { renderGoals }         from './views/goals.js?v=1781328588';
 
 const NAV_ITEMS = [
   { id: 'dashboard',      icon: 'dashboard',      label: 'Dashboard' },
@@ -39,7 +40,8 @@ function renderShell() {
   SseManager.connect();
 
   const email = Auth.getEmail() || 'User';
-  const initial = email[0].toUpperCase();
+  const name  = Auth.getName()  || email.split('@')[0];
+  const initial = name[0].toUpperCase();
 
   let profilePicHtml = `<div class="sidebar-user-avatar" id="shell-avatar">${initial}</div>`;
   
@@ -57,11 +59,13 @@ function renderShell() {
         <div class="sidebar-user" id="sidebar-user" role="button" tabindex="0" aria-label="Open profile">
           ${profilePicHtml}
           <div class="sidebar-user-info">
-            <div class="sidebar-user-email">${email}</div>
-            <div class="sidebar-user-role">Account</div>
+            <div class="sidebar-user-name">${esc(name)}</div>
+            <div class="sidebar-user-email">${esc(email)}</div>
           </div>
         </div>
-        <div class="sidebar-footer">Personal Finance Assistant v2.0</div>
+        <div class="sidebar-footer">
+          <span class="sidebar-online-dot"></span> PFA v2.0
+        </div>
       </aside>
       <div class="main-content">
         <div class="mobile-header">

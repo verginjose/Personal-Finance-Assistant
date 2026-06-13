@@ -304,19 +304,6 @@ services:
     networks:
       - finance-network
 
-  zipkin:
-    image: openzipkin/zipkin:latest
-    container_name: zipkin
-    profiles: [ "observability" ]
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    ports:
-      - "9411:9411"
-    networks:
-      - finance-network
-
   vector:
     image: timberio/vector:0.41.1-debian
     container_name: vector

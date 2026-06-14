@@ -42,6 +42,8 @@ const PATHS = {
   document:       '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
   'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
   'chevron-up':   '<polyline points="18 15 12 9 6 15"/>',
+  'chevron-left': '<polyline points="15 18 9 12 15 6"/>',
+  'chevron-right':'<polyline points="9 18 15 12 9 6"/>',
   filter:         '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
 
   /* ── Previously missing — caused silent empty renders ─── */

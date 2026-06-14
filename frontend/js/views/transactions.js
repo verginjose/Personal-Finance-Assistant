@@ -1,9 +1,9 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781338888';
-import { icon } from '../utils/icons.js?v=1781338888';
+import { api, Auth, toast } from '../utils/api.js?v=1781338889';
+import { icon } from '../utils/icons.js?v=1781338889';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
   typeBadge, openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions, setupCategorySearch
-} from '../utils/ui.js?v=1781338888';
+} from '../utils/ui.js?v=1781338889';
 
 
 let currentPage = 0, totalPages = 0;
@@ -115,14 +115,14 @@ async function loadTransactions(userId) {
   if (!tbody) return;
 
   try {
-    const params = { userId, page: currentPage, size: 15 };
+    const params = { userId, page: currentPage, size: 8 };
     if (type) params.type = type;
     if (category) params.category = category;
     if (start) params.startDate = start;
     if (end) params.endDate = end;
 
     const result = search
-      ? await api.get('/upsert/search', { userId, q: search, page: currentPage, size: 15 })
+      ? await api.get('/upsert/search', { userId, q: search, page: currentPage, size: 8 })
       : await api.get('/upsert/entries', params);
 
     const items = result.content || [];
@@ -190,10 +190,32 @@ function renderPagination() {
   const el = document.getElementById('t-pagination');
   if (!el || totalPages <= 1) { if (el) el.innerHTML = ''; return; }
   const userId = Auth.getUserId();
-  el.innerHTML = Array.from({ length: totalPages }, (_, i) =>
-    `<button class="${i === currentPage ? 'active' : ''}" data-p="${i}" aria-label="Page ${i + 1}">${i + 1}</button>`
-  ).join('');
-  el.querySelectorAll('button').forEach(b => b.onclick = () => { currentPage = +b.dataset.p; loadTransactions(userId); });
+  
+  let html = `<button class="btn btn-secondary btn-icon" id="t-prev" ${currentPage === 0 ? 'disabled' : ''} aria-label="Previous Page">${icon('chevron-left', 'sm')}</button>`;
+  
+  // Show max 5 page numbers
+  let startPage = Math.max(0, currentPage - 2);
+  let endPage = Math.min(totalPages - 1, startPage + 4);
+  if (endPage - startPage < 4) startPage = Math.max(0, endPage - 4);
+  
+  for (let i = startPage; i <= endPage; i++) {
+    html += `<button class="${i === currentPage ? 'active' : ''}" data-p="${i}" aria-label="Page ${i + 1}">${i + 1}</button>`;
+  }
+  
+  html += `<button class="btn btn-secondary btn-icon" id="t-next" ${currentPage === totalPages - 1 ? 'disabled' : ''} aria-label="Next Page">${icon('chevron-right', 'sm')}</button>`;
+  
+  el.innerHTML = html;
+  
+  if (currentPage > 0) {
+    document.getElementById('t-prev').onclick = () => { currentPage--; loadTransactions(userId); };
+  }
+  if (currentPage < totalPages - 1) {
+    document.getElementById('t-next').onclick = () => { currentPage++; loadTransactions(userId); };
+  }
+  
+  el.querySelectorAll('button[data-p]').forEach(b => {
+    b.onclick = () => { currentPage = +b.dataset.p; loadTransactions(userId); };
+  });
 }
 
 async function showModal(userId, existing, onDone) {

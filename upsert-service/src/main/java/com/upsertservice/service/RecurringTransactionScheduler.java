@@ -22,7 +22,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class RecurringTransactionScheduler {
 
     private final TransactionEntryRepository repository;
-    private final TransactionEntryService transactionEntryService;
     private final com.upsertservice.repository.OutboxEventRepository outboxEventRepository;
     private final NotificationService notificationService;
     private final TransactionTemplate transactionTemplate;

@@ -9,7 +9,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "outbox_events", schema = "finance")
+@Table(name = "outbox_events", schema = "finance",
+        indexes = @Index(name = "idx_outbox_events_created_at", columnList = "createdAt"))
 @Getter
 @Setter
 public class OutboxEvent {

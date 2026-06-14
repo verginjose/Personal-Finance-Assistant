@@ -16,7 +16,7 @@ public interface ExpenseGroupRepository extends JpaRepository<ExpenseGroup, Long
     List<ExpenseGroup> findByCreatedByOrderByCreatedAtDesc(UUID userId);
 
     /** Groups where the user is a member (created or joined) */
-    @Query("SELECT DISTINCT g FROM ExpenseGroup g " +
+    @Query("SELECT g FROM ExpenseGroup g " +
            "JOIN GroupMember m ON m.groupId = g.id " +
            "WHERE m.userId = :userId AND g.isDeleted = false " +
            "ORDER BY g.createdAt DESC")

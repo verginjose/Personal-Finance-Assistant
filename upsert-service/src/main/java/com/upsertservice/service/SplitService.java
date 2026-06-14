@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.security.auth.callback.LanguageCallback;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
@@ -66,7 +67,7 @@ public class SplitService {
         return group;
     }
 
-    @CacheEvict(value = {"group-details", "group-balances", "group-expenses"}, key = "#groupId")
+    @CacheEvict(value = {"group-details"}, key = "#groupId")
     public ExpenseGroup updateGroup(Long groupId, UpdateGroupRequest req, UUID actorUserId) {
         ExpenseGroup group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));
@@ -116,7 +117,7 @@ public class SplitService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = "group-details", key = "#groupId + '-' + #userId", sync = true)
-    public java.util.Optional<ExpenseGroup> getGroup(Long groupId, UUID userId) {
+    public Optional<ExpenseGroup> getGroup(Long groupId, UUID userId) {
         return groupRepo.findById(groupId)
             .filter(g -> !g.isDeleted())
             .map(group -> {
@@ -210,7 +211,10 @@ public class SplitService {
         return memberRepo.save(m);
     }
 
-    @CacheEvict(value = "user-groups", key = "#userId")
+    @Caching(evict = {
+            @CacheEvict(value = "user-groups", key = "#userId"),
+            @CacheEvict(value = "group-details", key = "#groupId + '-' + #userId")
+    })
     public void acceptInvitation(Long groupId, UUID userId) {
         GroupMember member = memberRepo.findByGroupId(groupId).stream()
                 .filter(m -> m.getUserId().equals(userId))
@@ -231,7 +235,10 @@ public class SplitService {
                 member.getId());
     }
 
-    @CacheEvict(value = "user-groups", key = "#userId")
+    @Caching(evict = {
+            @CacheEvict(value = "user-groups", key = "#userId"),
+            @CacheEvict(value = "group-details", key = "#groupId + '-' + #userId")
+    })
     public void rejectInvitation(Long groupId, UUID userId) {
         GroupMember member = memberRepo.findByGroupId(groupId).stream()
                 .filter(m -> m.getUserId().equals(userId))
@@ -246,7 +253,10 @@ public class SplitService {
         memberRepo.delete(member);
     }
 
-    @CacheEvict(value = "user-groups", key = "#userId")
+    @Caching(evict = {
+            @CacheEvict(value = "user-groups", key = "#userId"),
+            @CacheEvict(value = "group-details", key = "#groupId + '-' + #userId")
+    })
     public void leaveGroup(Long groupId, UUID userId) {
         GroupMember member = memberRepo.findByGroupId(groupId).stream()
                 .filter(m -> m.getUserId().equals(userId))
@@ -346,6 +356,8 @@ public class SplitService {
             }
         });
 
+        evictUserGroupsForMembers(req.getGroupId());
+
         return expense;
     }
 
@@ -388,6 +400,7 @@ public class SplitService {
                         + "\" (" + expense.getAmount() + " " + expense.getCurrency() + ")",
                 expenseId);
         log.info("Shared expense deleted: id={}, group={}", expenseId, groupId);
+        evictUserGroupsForMembers(groupId);
     }
 
     private void createPersonalTransactions(SharedExpense expense, List<ExpenseSplit> splits, ExpenseGroup group) {
@@ -732,5 +745,12 @@ public class SplitService {
                 .findFirst()
                 .orElseGet(() -> userValidationService.displayName(
                         userValidationService.requireRegisteredUser(userId)));
+    }
+
+    private void evictUserGroupsForMembers(Long groupId) {
+        var cache = cacheManager.getCache("user-groups");
+        if (cache != null) {
+            memberRepo.findByGroupId(groupId).forEach(m -> cache.evict(m.getUserId()));
+        }
     }
 }

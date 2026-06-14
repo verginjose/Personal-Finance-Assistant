@@ -2,6 +2,7 @@
   <dictionary name="project">
     <words>
       <w>Groq</w>
+      <w>cloudflared</w>
       <w>postgre</w>
       <w>prometheus</w>
       <w>webflux</w>

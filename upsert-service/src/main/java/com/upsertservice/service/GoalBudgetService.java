@@ -19,6 +19,9 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.upsertservice.model.RecurringPeriod.WEEKLY;
+
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -167,11 +170,8 @@ public class GoalBudgetService {
             };
         }
         LocalDateTime end = LocalDateTime.now();
-        LocalDateTime start = switch (budget.getPeriod()) {
-            case WEEKLY  -> LocalDate.now().with(DayOfWeek.MONDAY).atStartOfDay();
-            case MONTHLY -> LocalDate.now().withDayOfMonth(1).atStartOfDay();
-            default      -> LocalDate.now().withDayOfMonth(1).atStartOfDay();
-        };
+        LocalDateTime start = budget.getPeriod() == WEEKLY ? LocalDate.now().with(DayOfWeek.MONDAY).atStartOfDay()
+                :LocalDate.now().withDayOfMonth(1).atStartOfDay();
         return new LocalDateTime[]{start, end};
     }
 

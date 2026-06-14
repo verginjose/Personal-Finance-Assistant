@@ -11,4 +11,5 @@ import java.util.UUID;
 public interface SharedExpenseRepository extends JpaRepository<SharedExpense, Long> {
     List<SharedExpense> findByGroupIdOrderByCreatedAtDesc(Long groupId);
     List<SharedExpense> findByGroupIdAndPaidBy(Long groupId, UUID paidBy);
+    List<SharedExpense> findByGroupIdIn(List<Long> groupIds);
 }

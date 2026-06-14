@@ -5,6 +5,7 @@ import com.upsertservice.model.OutboxEvent;
 import com.upsertservice.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,11 @@ public class OutboxProcessor {
     private final CacheEvictPublisher cacheEvictPublisher;
 
     @Scheduled(fixedDelayString = "${outbox.processor.delay:5000}")
+    @SchedulerLock(
+            name = "processOutboxEvents",
+            lockAtLeastFor = "2s",
+            lockAtMostFor = "1m"
+    )
     @Transactional
     public void processOutboxEvents() {
         List<OutboxEvent> events = repository.findByStatusOrderByCreatedAtAsc(OutboxEvent.EventStatus.PENDING);

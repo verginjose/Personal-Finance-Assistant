@@ -3,11 +3,8 @@ package com.upsertservice.service;
 import com.upsertservice.dto.CreateEntryRequest;
 import com.upsertservice.dto.CreateEntryResponse;
 import com.upsertservice.dto.UpdateEntryRequest;
-import com.upsertservice.events.CacheEvictPublisher;
-import com.upsertservice.model.IdempotencyRecord;
 import com.upsertservice.model.TransactionEntry;
 import com.upsertservice.model.TransactionType;
-import com.upsertservice.repository.IdempotencyRecordRepository;
 import com.upsertservice.repository.TransactionEntryRepository;
 import com.upsertservice.repository.OutboxEventRepository;
 import com.upsertservice.model.OutboxEvent;
@@ -16,7 +13,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.Cacheable;
@@ -46,7 +42,6 @@ public class TransactionEntryService {
     private final GoalBudgetService goalBudgetService;
     private final com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository;
     private final CacheKeyRegistry cacheKeyRegistry;
-    private final com.upsertservice.repository.SavingsGoalRepository goalRepository;
     private final com.upsertservice.repository.ExpenseTransactionLinkRepository transactionLinkRepo;
 
     public TransactionEntryService(
@@ -56,7 +51,6 @@ public class TransactionEntryService {
             GoalBudgetService goalBudgetService,
             com.upsertservice.repository.TransactionGoalAllocationRepository allocationRepository,
             CacheKeyRegistry cacheKeyRegistry,
-            com.upsertservice.repository.SavingsGoalRepository goalRepository,
             com.upsertservice.repository.ExpenseTransactionLinkRepository transactionLinkRepo
     ) {
         this.repository = repository;
@@ -67,7 +61,6 @@ public class TransactionEntryService {
         this.goalBudgetService = goalBudgetService;
         this.allocationRepository = allocationRepository;
         this.cacheKeyRegistry = cacheKeyRegistry;
-        this.goalRepository = goalRepository;
         this.transactionLinkRepo = transactionLinkRepo;
     }
 
@@ -119,6 +112,41 @@ public class TransactionEntryService {
 
         log.info("Transaction created: id={}, user={}, recurring={}", saved.getId(), saved.getUserId(), saved.isRecurring());
         return convertToResponse(saved);
+    }
+    // TransactionEntryService
+    public List<CreateEntryResponse> createEntries(List<CreateEntryRequest> requests, boolean publishCacheEvict) {
+        if (requests.isEmpty()) {
+            return List.of();
+        }
+
+        List<TransactionEntry> entries = requests.stream()
+                .map(TransactionEntryService::getTransactionEntry)
+                .toList();
+
+        List<TransactionEntry> saved = repository.saveAll(entries);
+
+        if (publishCacheEvict) {
+            List<OutboxEvent> events = saved.stream().map(s -> {
+                OutboxEvent event = new OutboxEvent();
+                event.setUserId(s.getUserId());
+                event.setEventType("CREATE");
+                event.setEntityId(s.getId());
+                return event;
+            }).toList();
+            outboxEventRepository.saveAll(events);
+        }
+
+        createCounter.increment(saved.size());
+
+        // dedupe evictions — one per distinct user instead of one per entry
+        saved.stream()
+                .map(TransactionEntry::getUserId)
+                .distinct()
+                .forEach(cacheKeyRegistry::evictForUser);
+
+        log.info("Batch created {} transaction entries", saved.size());
+
+        return saved.stream().map(this::convertToResponse).toList();
     }
 
     private static TransactionEntry getTransactionEntry(CreateEntryRequest request) {

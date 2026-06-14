@@ -88,31 +88,69 @@ public class SplitService {
         return group;
     }
 
+
     @Transactional(readOnly = true)
     @Cacheable(value = "user-groups", key = "#userId", sync = true)
     public List<ExpenseGroup> getUserGroups(UUID userId) {
-        // Find groups and set the transient fields manually
         List<ExpenseGroup> groups = groupRepo.findGroupsByMember(userId);
+        if (groups.isEmpty()) return groups;
+
+        List<Long> groupIds = groups.stream().map(ExpenseGroup::getId).toList();
+
+        Map<Long, GroupMember> membershipByGroup = memberRepo.findByGroupIdInAndUserId(groupIds, userId)
+                .stream().collect(Collectors.toMap(GroupMember::getGroupId, m -> m));
+
+        List<SharedExpense> allExpenses = expenseRepo.findByGroupIdIn(groupIds);
+        List<Long> expenseIds = allExpenses.stream().map(SharedExpense::getId).toList();
+        List<ExpenseSplit> allSplits = expenseIds.isEmpty() ? List.of()
+                : splitRepo.findBySharedExpenseIdIn(expenseIds);
+
+        Map<Long, BigDecimal> netBalances = computeNetBalancesForUser(userId, groupIds, allExpenses, allSplits);
+
         for (ExpenseGroup group : groups) {
-            memberRepo.findByGroupId(group.getId()).stream()
-                    .filter(m -> m.getUserId().equals(userId))
-                    .findFirst()
-                    .ifPresent(m -> {
-                        group.setIsArchived(m.isArchived());
-                        group.setCurrentUserStatus(m.getStatus().name());
-                    });
-            
-            try {
-                GroupBalanceResponse balances = self.getGroupBalances(group.getId());
-                balances.getMemberBalances().stream()
-                    .filter(b -> b.getUserId().equals(userId))
-                    .findFirst()
-                    .ifPresent(b -> group.setCurrentUserNetBalance(b.getNetBalance()));
-            } catch (Exception e) {
-                // Ignore if balances fail to load
+            GroupMember membership = membershipByGroup.get(group.getId());
+            if (membership != null) {
+                group.setIsArchived(membership.isArchived());
+                group.setCurrentUserStatus(membership.getStatus().name());
+            }
+            group.setCurrentUserNetBalance(netBalances.getOrDefault(group.getId(), BigDecimal.ZERO));
+        }
+
+        return groups;
+    }
+
+
+    private Map<Long, BigDecimal> computeNetBalancesForUser(UUID userId, List<Long> groupIds,
+                                                            List<SharedExpense> allExpenses, List<ExpenseSplit> allSplits) {
+
+        // map expenseId -> groupId
+        Map<Long, Long> expenseToGroup = allExpenses.stream()
+                .collect(Collectors.toMap(SharedExpense::getId, SharedExpense::getGroupId));
+
+        Map<Long, BigDecimal> paidByGroup = new HashMap<>();
+        for (SharedExpense e : allExpenses) {
+            if (e.getPaidBy().equals(userId)) {
+                paidByGroup.merge(e.getGroupId(), e.getAmount(), BigDecimal::add);
             }
         }
-        return groups;
+
+        Map<Long, BigDecimal> owedByGroup = new HashMap<>();
+        for (ExpenseSplit s : allSplits) {
+            if (s.getUserId().equals(userId)) {
+                Long gid = expenseToGroup.get(s.getSharedExpenseId());
+                if (gid != null) {
+                    owedByGroup.merge(gid, s.getAmount(), BigDecimal::add);
+                }
+            }
+        }
+
+        Map<Long, BigDecimal> result = new HashMap<>();
+        for (Long gid : groupIds) {
+            BigDecimal paid = paidByGroup.getOrDefault(gid, BigDecimal.ZERO);
+            BigDecimal owed = owedByGroup.getOrDefault(gid, BigDecimal.ZERO);
+            result.put(gid, paid.subtract(owed).setScale(2, RoundingMode.HALF_UP));
+        }
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -298,11 +336,20 @@ public class SplitService {
     public SharedExpense addSharedExpense(CreateSharedExpenseRequest req, UUID actorUserId) {
         ExpenseGroup group = groupRepo.findById(req.getGroupId())
                 .orElseThrow(() -> new IllegalArgumentException("Group " + req.getGroupId() + " not found"));
-        requireGroupMember(req.getGroupId(), actorUserId);
 
-        if (!memberRepo.existsByGroupIdAndUserId(req.getGroupId(), req.getPaidBy())) {
+        List<GroupMember> allMembers = memberRepo.findByGroupId(req.getGroupId());
+
+        GroupMember actorMember = allMembers.stream()
+                .filter(m -> m.getUserId().equals(actorUserId))
+                .findFirst()
+                .orElseThrow(() -> new SecurityException("User is not a member of this group"));
+
+        boolean payerIsMember = allMembers.stream().anyMatch(m -> m.getUserId().equals(req.getPaidBy()));
+        if (!payerIsMember) {
             throw new SecurityException("Payer is not a member of this group");
         }
+
+        String actorName = actorMember.getName();
 
         SharedExpense expense = new SharedExpense();
         expense.setGroup(groupRepo.getReferenceById(req.getGroupId()));
@@ -323,24 +370,22 @@ public class SplitService {
         }
         expense = expenseRepo.save(expense);
 
-        generateSplits(expense, req);
-        List<ExpenseSplit> splits = splitRepo.findBySharedExpenseId(expense.getId());
+        List<ExpenseSplit> splits = generateSplits(expense, req, allMembers); // see Fix #7
         createPersonalTransactions(expense, splits, group);
-        evictAnalyticsCacheForSplits(splits, expense.getId(), "SPLIT_EXPENSE");
+        evictAnalyticsCacheForSplits(splits, expense.getId(), "SPLIT_EXPENSE", expense.getPaidBy());
 
-        String actorName = resolveMemberName(req.getGroupId(), actorUserId);
         ActivityType logType = expense.getSplitType() == SharedExpense.SplitType.SETTLEMENT
                 ? ActivityType.SETTLEMENT_RECORDED
                 : ActivityType.EXPENSE_ADDED;
         String logMessage = expense.getSplitType() == SharedExpense.SplitType.SETTLEMENT
                 ? "@" + actorName + " recorded payment: " + expense.getDescription()
                 : "@" + actorName + " added expense \"" + expense.getDescription() + "\" (" + expense.getAmount() + " "
-                        + expense.getCurrency() + ")";
+                  + expense.getCurrency() + ")";
 
-        groupActivityService.log(req.getGroupId(), actorUserId, actorName,
-                logType, logMessage, expense.getId());
-        log.info("Shared expense added: id={}, group={}, amount={}", expense.getId(), req.getGroupId(),
-                req.getAmount());
+        groupActivityService.log(req.getGroupId(), actorUserId, actorName, logType, logMessage, expense.getId());
+        log.info("Shared expense added: id={}, group={}, amount={}", expense.getId(), req.getGroupId(), req.getAmount());
+
+
 
         final String desc = expense.getDescription();
         final Long gid = req.getGroupId();
@@ -391,7 +436,7 @@ public class SplitService {
         splitRepo.deleteAll(splits);
         expenseRepo.delete(expense);
 
-        evictAnalyticsCacheForSplits(splits, expenseId, "SPLIT_EXPENSE_DELETE");
+        evictAnalyticsCacheForSplits(splits, expenseId, "SPLIT_EXPENSE_DELETE",expense.getPaidBy());
 
         String actorName = resolveMemberName(groupId, actorUserId);
         groupActivityService.log(groupId, actorUserId, actorName,
@@ -407,16 +452,14 @@ public class SplitService {
         Category category = toTransactionCategory(expense);
         String groupLabel = group.getName() != null ? group.getName() : "group";
 
+        List<CreateEntryRequest> entries = new ArrayList<>();
+        List<UUID> entryUserIds = new ArrayList<>();
+
         if (expense.getSplitType() == SharedExpense.SplitType.SETTLEMENT) {
-            // SETTLEMENT: The person who paid (fromUser) is the payer, so they get an
-            // EXPENSE.
-            // The person receiving (toUser) is the one in the split list, so they get an
-            // INCOME.
             for (ExpenseSplit split : splits) {
                 if (split.getAmount().compareTo(BigDecimal.ZERO) <= 0)
                     continue;
 
-                // Expense for the Payer (fromUser)
                 CreateEntryRequest payerEntry = new CreateEntryRequest();
                 payerEntry.setUserId(expense.getPaidBy());
                 payerEntry.setName("Paid " + split.getUserName());
@@ -425,14 +468,9 @@ public class SplitService {
                 payerEntry.setCurrency(expense.getCurrency());
                 payerEntry.setCategory(Category.SETTLEMENT);
                 payerEntry.setDescription("Settlement · " + groupLabel);
-                CreateEntryResponse savedPayer = transactionEntryService.createEntry(payerEntry, null, false);
-                ExpenseTransactionLink payerLink = new ExpenseTransactionLink();
-                payerLink.setSharedExpense(expense);
-                payerLink.setUserId(expense.getPaidBy());
-                payerLink.setTransactionEntry(transactionEntryRepo.getReferenceById(savedPayer.getId()));
-                transactionLinkRepo.save(payerLink);
+                entries.add(payerEntry);
+                entryUserIds.add(expense.getPaidBy());
 
-                // Income for the Receiver (toUser)
                 CreateEntryRequest receiverEntry = new CreateEntryRequest();
                 receiverEntry.setUserId(split.getUserId());
                 receiverEntry.setName("Received from " + resolveMemberName(expense.getGroupId(), expense.getPaidBy()));
@@ -441,41 +479,55 @@ public class SplitService {
                 receiverEntry.setCurrency(expense.getCurrency());
                 receiverEntry.setCategory(Category.SETTLEMENT);
                 receiverEntry.setDescription("Settlement · " + groupLabel);
-                CreateEntryResponse savedReceiver = transactionEntryService.createEntry(receiverEntry, null, false);
-                ExpenseTransactionLink receiverLink = new ExpenseTransactionLink();
-                receiverLink.setSharedExpense(expense);
-                receiverLink.setUserId(split.getUserId());
-                receiverLink.setTransactionEntry(transactionEntryRepo.getReferenceById(savedReceiver.getId()));
-                transactionLinkRepo.save(receiverLink);
+                entries.add(receiverEntry);
+                entryUserIds.add(split.getUserId());
             }
+        } else {
+            for (ExpenseSplit split : splits) {
+                if (split.getAmount().compareTo(BigDecimal.ZERO) <= 0)
+                    continue;
+
+                CreateEntryRequest entry = new CreateEntryRequest();
+                entry.setUserId(split.getUserId());
+                entry.setName(expense.getDescription());
+                entry.setAmount(split.getAmount());
+                entry.setType(TransactionType.EXPENSE);
+                entry.setCurrency(expense.getCurrency());
+                entry.setCategory(category);
+                entry.setDescription("Split expense · " + groupLabel);
+                entries.add(entry);
+                entryUserIds.add(split.getUserId());
+            }
+        }
+
+        if (entries.isEmpty()) {
             return;
         }
 
-        for (ExpenseSplit split : splits) {
-            if (split.getAmount().compareTo(BigDecimal.ZERO) <= 0)
-                continue;
-            CreateEntryRequest entry = new CreateEntryRequest();
-            entry.setUserId(split.getUserId());
-            entry.setName(expense.getDescription());
-            entry.setAmount(split.getAmount());
-            entry.setType(TransactionType.EXPENSE);
-            entry.setCurrency(expense.getCurrency());
-            entry.setCategory(category);
-            entry.setDescription("Split expense · " + groupLabel);
-            CreateEntryResponse saved = transactionEntryService.createEntry(entry, null, false);
-            ExpenseTransactionLink splitLink = new ExpenseTransactionLink();
-            splitLink.setSharedExpense(expense);
-            splitLink.setUserId(split.getUserId());
-            splitLink.setTransactionEntry(transactionEntryRepo.getReferenceById(saved.getId()));
-            transactionLinkRepo.save(splitLink);
+        List<CreateEntryResponse> saved = transactionEntryService.createEntries(entries, false);
+
+        if (saved.size() != entries.size()) {
+            throw new IllegalStateException("Batch entry creation returned mismatched count: expected "
+                    + entries.size() + " got " + saved.size());
         }
+
+        List<ExpenseTransactionLink> links = new ArrayList<>();
+        for (int i = 0; i < saved.size(); i++) {
+            ExpenseTransactionLink link = new ExpenseTransactionLink();
+            link.setSharedExpense(expense);
+            link.setUserId(entryUserIds.get(i));
+            link.setTransactionEntry(transactionEntryRepo.getReferenceById(saved.get(i).getId()));
+            links.add(link);
+        }
+        transactionLinkRepo.saveAll(links);
     }
 
-    private void evictAnalyticsCacheForSplits(List<ExpenseSplit> splits, Long referenceId, String operation) {
+    private void evictAnalyticsCacheForSplits(List<ExpenseSplit> splits, Long referenceId, String operation, UUID payerId) {
         Set<UUID> affectedUsers = splits.stream()
                 .filter(s -> s.getAmount().compareTo(BigDecimal.ZERO) > 0)
                 .map(ExpenseSplit::getUserId)
                 .collect(Collectors.toSet());
+        if (payerId != null) affectedUsers.add(payerId);
         cacheEvictPublisher.publishForUsers(affectedUsers, operation, referenceId);
     }
 
@@ -486,21 +538,21 @@ public class SplitService {
         return Category.valueOf(expense.getExpenseCategory().name());
     }
 
-    private void generateSplits(SharedExpense expense, CreateSharedExpenseRequest req) {
-        List<GroupMember> members = memberRepo.findByGroupId(req.getGroupId()).stream()
+    private List<ExpenseSplit> generateSplits(SharedExpense expense, CreateSharedExpenseRequest req, List<GroupMember> allMembers) {
+        List<GroupMember> members = allMembers.stream()
                 .filter(m -> m.getStatus() == GroupMember.InvitationStatus.ACCEPTED)
                 .collect(Collectors.toList());
         if (members.isEmpty())
-            return;
+            return List.of();
 
-        switch (expense.getSplitType()) {
+        return switch (expense.getSplitType()) {
             case EQUAL -> generateEqualSplits(expense, members);
             case PERCENTAGE -> generatePercentageSplits(expense, req, members);
             case EXACT, SETTLEMENT -> generateExactSplits(expense, req, members);
-        }
+        };
     }
 
-    private void generateEqualSplits(SharedExpense expense, List<GroupMember> members) {
+    private List<ExpenseSplit> generateEqualSplits(SharedExpense expense, List<GroupMember> members) {
         BigDecimal each = expense.getAmount()
                 .divide(BigDecimal.valueOf(members.size()), 2, RoundingMode.HALF_UP);
         List<ExpenseSplit> splits = members.stream().map(m -> {
@@ -512,20 +564,17 @@ public class SplitService {
             s.setSettled(m.getUserId().equals(expense.getPaidBy()));
             return s;
         }).collect(Collectors.toList());
-        splitRepo.saveAll(splits);
+        return splitRepo.saveAll(splits);
     }
-
-    private void generatePercentageSplits(SharedExpense expense,
-            CreateSharedExpenseRequest req,
-            List<GroupMember> members) {
+    private List<ExpenseSplit> generatePercentageSplits(SharedExpense expense,
+                                                        CreateSharedExpenseRequest req,
+                                                        List<GroupMember> members) {
         Map<UUID, BigDecimal> pctMap = req.getSplitDetails() == null ? Map.of()
                 : req.getSplitDetails().stream()
-                        .collect(Collectors.toMap(d -> d.getUserId(), d -> d.getValue()));
+                .collect(Collectors.toMap(d -> d.getUserId(), d -> d.getValue()));
         if (pctMap.isEmpty()) {
-            generateEqualSplits(expense, members);
-            return;
+            return generateEqualSplits(expense, members);
         }
-
         List<ExpenseSplit> splits = members.stream().map(m -> {
             BigDecimal pct = pctMap.getOrDefault(m.getUserId(), BigDecimal.ZERO);
             BigDecimal share = expense.getAmount().multiply(pct)
@@ -538,15 +587,14 @@ public class SplitService {
             s.setSettled(m.getUserId().equals(expense.getPaidBy()));
             return s;
         }).collect(Collectors.toList());
-        splitRepo.saveAll(splits);
+        return splitRepo.saveAll(splits);
     }
 
-    private void generateExactSplits(SharedExpense expense,
-            CreateSharedExpenseRequest req,
-            List<GroupMember> members) {
+    private List<ExpenseSplit> generateExactSplits(SharedExpense expense,
+                                                   CreateSharedExpenseRequest req,
+                                                   List<GroupMember> members) {
         if (req.getSplitDetails() == null || req.getSplitDetails().isEmpty()) {
-            generateEqualSplits(expense, members);
-            return;
+            return generateEqualSplits(expense, members);
         }
         Map<UUID, CreateSharedExpenseRequest.SplitDetailRequest> detailMap = req.getSplitDetails().stream()
                 .collect(Collectors.toMap(d -> d.getUserId(), d -> d));
@@ -561,7 +609,7 @@ public class SplitService {
             s.setSettled(m.getUserId().equals(expense.getPaidBy()));
             return s;
         }).collect(Collectors.toList());
-        splitRepo.saveAll(splits);
+        return splitRepo.saveAll(splits);
     }
 
     @Transactional(readOnly = true)
@@ -635,6 +683,9 @@ public class SplitService {
                 credit.put(mb.getUserId(), net);
         }
 
+        if (debt.isEmpty() || credit.isEmpty()) {
+            return List.of();
+        }
         // Sort by amount descending — largest debts/credits settled first
         List<UUID> debtorList = debt.keySet().stream()
                 .sorted(Comparator.comparing(debt::get).reversed())
@@ -739,10 +790,8 @@ public class SplitService {
     }
 
     private String resolveMemberName(Long groupId, UUID userId) {
-        return memberRepo.findByGroupId(groupId).stream()
-                .filter(m -> m.getUserId().equals(userId))
+        return memberRepo.findByGroupIdAndUserId(groupId, userId)
                 .map(GroupMember::getName)
-                .findFirst()
                 .orElseGet(() -> userValidationService.displayName(
                         userValidationService.requireRegisteredUser(userId)));
     }

@@ -146,7 +146,7 @@ public class SubscriptionDetectorService {
             RecurringPeriod period = detectPeriodFromGaps(gaps);
             if (period == null) continue; // not a consistent pattern
 
-            TransactionEntry last = group.get(group.size() - 1);
+            TransactionEntry last = group.getLast();
             upsertSubscription(userId, last.getName(), last.getAmount(),
                     last.getCurrency(), period, last.getCreatedAt().toLocalDate());
         }
@@ -158,9 +158,8 @@ public class SubscriptionDetectorService {
      */
     RecurringPeriod detectPeriodFromGaps(List<Long> gaps) {
         if (gaps.isEmpty()) return null;
-        double avg = gaps.stream().mapToLong(Long::longValue).average().orElse(0);
-        if (allClose(gaps, 7, 5))   return RecurringPeriod.WEEKLY;
-        if (allClose(gaps, 30, 5))  return RecurringPeriod.MONTHLY;
+        if (allClose(gaps, 7, 0))   return RecurringPeriod.WEEKLY;
+        if (allClose(gaps, 30, 3))  return RecurringPeriod.MONTHLY;
         if (allClose(gaps, 365, 10)) return RecurringPeriod.YEARLY;
         return null;
     }

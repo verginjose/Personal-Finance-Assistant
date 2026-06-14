@@ -1,8 +1,10 @@
 package com.upsertservice.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.scheduling.annotation.Async;
 
 import java.io.IOException;
 import java.util.Map;
@@ -34,6 +36,7 @@ public class NotificationService {
         return emitter;
     }
 
+    @Async
     public void sendNotification(UUID userId, Object payload) {
         SseEmitter emitter = emitters.get(userId);
         if (emitter != null) {
@@ -49,7 +52,7 @@ public class NotificationService {
         }
     }
 
-    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 15000)
+    @Scheduled(fixedRate = 15000)
     public void sendHeartbeat() {
         for (Map.Entry<UUID, SseEmitter> entry : emitters.entrySet()) {
             try {

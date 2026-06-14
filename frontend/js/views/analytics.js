@@ -1,8 +1,8 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781337777';
-import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=1781337777';
+import { api, Auth, toast } from '../utils/api.js?v=1781338888';
+import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=1781338888';
 import {
   pageHeader, healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, skeletonChart
-} from '../utils/ui.js?v=1781337777';
+} from '../utils/ui.js?v=1781338888';
 
 let charts = [];
 
@@ -91,25 +91,31 @@ async function loadAnalytics(userId) {
   if (startDate) params.startDate = new Date(startDate + 'T00:00:00').toISOString();
   if (endDate) params.endDate = new Date(endDate + 'T23:59:59').toISOString();
 
-  try {
-    const [expPie, incPie, timeline, health, ai] = await Promise.all([
-      api.get('/analytics/category-pie-chart', { ...params, transactionFilter: 'EXPENSE' }),
-      api.get('/analytics/category-pie-chart', { ...params, transactionFilter: 'INCOME' }),
-      api.get('/analytics/timeline-chart', params),
-      api.get('/analytics/health-score', { userId }),
-      api.get('/analytics/ai-insights', { userId })
-    ]);
+  api.get('/analytics/category-pie-chart', { ...params, transactionFilter: 'EXPENSE' })
+    .then(expPie => mountChart('a-expense-wrap', 'a-expense-pie', expPie, 'doughnut'))
+    .catch(err => document.getElementById('a-expense-wrap').innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`);
 
-    renderHealthData('a', health);
-    renderAiData('a', ai);
+  api.get('/analytics/category-pie-chart', { ...params, transactionFilter: 'INCOME' })
+    .then(incPie => {
+      mountChart('a-income-wrap', 'a-income-pie', incPie, 'doughnut');
+      mountChart('a-bar-wrap', 'a-income-bar', incPie, 'bar');
+    })
+    .catch(err => {
+      document.getElementById('a-income-wrap').innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
+      document.getElementById('a-bar-wrap').innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
+    });
 
-    mountChart('a-expense-wrap', 'a-expense-pie', expPie, 'doughnut');
-    mountChart('a-income-wrap', 'a-income-pie', incPie, 'doughnut');
-    mountTimeline('a-timeline-wrap', 'a-timeline-chart', timeline);
-    mountChart('a-bar-wrap', 'a-income-bar', incPie, 'bar');
-  } catch (err) {
-    toast('Analytics error: ' + err.message, 'error');
-  }
+  api.get('/analytics/timeline-chart', params)
+    .then(timeline => mountTimeline('a-timeline-wrap', 'a-timeline-chart', timeline))
+    .catch(err => document.getElementById('a-timeline-wrap').innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`);
+
+  api.get('/analytics/health-score', { userId })
+    .then(health => renderHealthData('a', health))
+    .catch(err => toast('Health Score error: ' + err.message, 'error'));
+
+  api.get('/analytics/ai-insights', { userId })
+    .then(ai => renderAiData('a', ai))
+    .catch(err => toast('AI Insights error: ' + err.message, 'error'));
 }
 
 function mountChart(wrapId, canvasId, data, type) {

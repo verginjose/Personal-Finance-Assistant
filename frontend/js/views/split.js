@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781337777';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1781337777';
-import { icon } from '../utils/icons.js?v=1781337777';
+import { api, Auth, toast } from '../utils/api.js?v=1781338888';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1781338888';
+import { icon } from '../utils/icons.js?v=1781338888';
 
 let currentGroupId = null;
 
@@ -156,12 +156,12 @@ async function loadGroupDetail(groupId, userId) {
   document.getElementById('sp-create').style.display = 'none';
   el.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
   try {
-    const [group, membersRaw, expenses, balances, activity] = await Promise.all([
+    const activityPromise = api.get(`/upsert/groups/${groupId}/activity`);
+    const [group, membersRaw, expenses, balances] = await Promise.all([
       api.get(`/upsert/groups/${groupId}`),
       api.get(`/upsert/groups/${groupId}/members`),
       api.get(`/upsert/groups/${groupId}/expenses`),
-      api.get(`/upsert/groups/${groupId}/balances`),
-      api.get(`/upsert/groups/${groupId}/activity`)
+      api.get(`/upsert/groups/${groupId}/balances`)
     ]);
 
     let usersMap = {};
@@ -334,14 +334,7 @@ async function loadGroupDetail(groupId, userId) {
       </div>
       
       <div id="content-activity" style="padding: 20px; display:none;">
-        ${activity?.length ? activity.slice(0, 20).map(a => `
-          <div class="activity-item" style="padding:12px 0; border-bottom:1px solid var(--border-light);">
-            <div class="activity-message" style="font-weight:500; display:flex; justify-content:space-between; align-items:center; gap: 12px;">
-              <span style="flex: 1; min-width: 0; word-break: break-word;">${esc(a.message)}</span>
-              ${a.activityType === 'SETTLEMENT_RECORDED' ? `<button class="btn btn-danger btn-sm revert-btn" data-id="${a.referenceId}" title="Revert Settlement" style="padding:4px 8px; font-size:0.75rem; flex-shrink: 0;">Revert</button>` : ''}
-            </div>
-            <div class="activity-meta" style="font-size:0.8rem; color:var(--text-dim); margin-top:6px;">${formatDate(a.createdAt)} · ${esc(activityTypeLabel(a.activityType))}</div>
-          </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No activity yet</p>'}
+        <div id="activity-container"><div class="spinner-center" style="padding: 40px;"><span class="spinner"></span></div></div>
       </div>
     </div>`;
 
@@ -461,6 +454,36 @@ async function loadGroupDetail(groupId, userId) {
       }
     };
 
+    // Load activity asynchronously
+    activityPromise.then(activity => {
+      const container = document.getElementById('activity-container');
+      if (!container) return;
+      container.innerHTML = activity?.length ? activity.slice(0, 20).map(a => `
+        <div class="activity-item" style="padding:12px 0; border-bottom:1px solid var(--border-light);">
+          <div class="activity-message" style="font-weight:500; display:flex; justify-content:space-between; align-items:center; gap: 12px;">
+            <span style="flex: 1; min-width: 0; word-break: break-word;">${esc(a.message)}</span>
+            ${a.activityType === 'SETTLEMENT_RECORDED' ? `<button class="btn btn-danger btn-sm revert-btn" data-id="${a.referenceId}" title="Revert Settlement" style="padding:4px 8px; font-size:0.75rem; flex-shrink: 0;">Revert</button>` : ''}
+          </div>
+          <div class="activity-meta" style="font-size:0.8rem; color:var(--text-dim); margin-top:6px;">${formatDate(a.createdAt)} · ${esc(activityTypeLabel(a.activityType))}</div>
+        </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No activity yet</p>';
+        
+      // Reattach revert event listeners for async loaded activity
+      document.querySelectorAll('#content-activity .revert-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const expenseId = e.currentTarget.dataset.id;
+          if (await confirmModal('Revert Settlement', 'Are you sure you want to revert this settlement? The balances will be restored.', 'Revert')) {
+            try {
+              await api.delete(`/upsert/groups/${groupId}/expenses/${expenseId}`, { userId });
+              toast('Settlement reverted successfully', 'success');
+              loadGroupDetail(groupId, userId);
+            } catch (err) { toast(err.message, 'error'); }
+          }
+        });
+      });
+    }).catch(e => {
+      const container = document.getElementById('activity-container');
+      if (container) container.innerHTML = `<p style="color:var(--accent);text-align:center;padding:20px;">Failed to load activity.</p>`;
+    });
 
   } catch (err) {
     el.innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;

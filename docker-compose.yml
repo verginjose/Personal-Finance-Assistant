@@ -128,6 +128,8 @@ services:
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       GROQ_API_KEY: ${GROQ_API_KEY}
       UPSERT_SERVICE_URL: http://upsert-service:8081
+      OCR_USE_ANGLE_CLS: "false"
+      OCR_DET_LIMIT_SIDE_LEN: "736"
     networks:
       - finance-network
     healthcheck:

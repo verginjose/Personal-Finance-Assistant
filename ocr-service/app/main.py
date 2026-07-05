@@ -30,29 +30,41 @@ ocr_cache: TTLCache   = TTLCache(maxsize=500, ttl=86400)  # 24h
 llm_cache: TTLCache   = TTLCache(maxsize=200, ttl=86400)  # 24h
 rate_cache: dict      = {}   # {"rates": {...}, "date": "..."}
 
-# ── PaddleOCR engine (global, loaded once) ────────────────────────────────────
+# ── PaddleOCR engine & HTTP Client (global, loaded once) ──────────────────────
 ocr_engine: Optional[PaddleOCR] = None
+http_client: Optional[httpx.AsyncClient] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global ocr_engine
+    global ocr_engine, http_client
     log.info("Loading PaddleOCR model onto GPU...")
+    
+    use_angle_cls = os.getenv("OCR_USE_ANGLE_CLS", "false").lower() == "true"
+    det_limit_side_len = int(os.getenv("OCR_DET_LIMIT_SIDE_LEN", "736"))
+    
     ocr_engine = PaddleOCR(
-        use_angle_cls=True,
+        use_angle_cls=use_angle_cls,
         lang="en",
         use_gpu=True,
         det_db_thresh=0.3,
         det_db_box_thresh=0.5,
         rec_batch_num=6,
-        det_limit_side_len=960,
+        det_limit_side_len=det_limit_side_len,
         show_log=False,
     )
-    log.info("PaddleOCR ready.")
+    log.info(f"PaddleOCR ready. use_angle_cls={use_angle_cls}, det_limit_side_len={det_limit_side_len}")
+    
+    # Initialize global HTTP client with connection pooling
+    limits = httpx.Limits(max_keepalive_connections=20, max_connections=50)
+    http_client = httpx.AsyncClient(limits=limits, timeout=30.0)
+    
     # Pre-load exchange rates
     await _refresh_rates()
     yield
     ocr_engine = None
+    await http_client.aclose()
+    http_client = None
 
 
 app = FastAPI(title="Bill Parser & OCR Service", version="2.0.0", lifespan=lifespan)
@@ -72,7 +84,8 @@ def _decode_image(data: bytes) -> np.ndarray:
 
 def _run_ocr_on_image(img: np.ndarray) -> dict:
     t0 = time.perf_counter()
-    result = ocr_engine.ocr(img, cls=True)
+    use_angle_cls = os.getenv("OCR_USE_ANGLE_CLS", "false").lower() == "true"
+    result = ocr_engine.ocr(img, cls=use_angle_cls)
     ms = round((time.perf_counter() - t0) * 1000, 2)
     lines, texts = [], []
     if result and result[0]:
@@ -119,11 +132,11 @@ def _extract_text_from_pdf(data: bytes) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def _refresh_rates():
-    global rate_cache
+    global rate_cache, http_client
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(CURRENCY_URL)
-            if r.status_code == 200:
+        client = http_client if http_client else httpx.AsyncClient()
+        r = await client.get(CURRENCY_URL, timeout=5.0)
+        if r.status_code == 200:
                 body = r.json()
                 rates = body.get("rates", {})
                 rates["USD"] = 1.0
@@ -180,13 +193,14 @@ async def _call_groq(text: str) -> dict:
         "messages": [{"role": "user", "content": GROQ_PROMPT_TEMPLATE.format(text=text)}],
     }
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(
-            GROQ_URL,
-            json=payload,
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-        )
-        if r.status_code != 200:
+    client = http_client if http_client else httpx.AsyncClient()
+    r = await client.post(
+        GROQ_URL,
+        json=payload,
+        headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+        timeout=30.0
+    )
+    if r.status_code != 200:
             raise RuntimeError(f"Groq HTTP {r.status_code}: {r.text}")
 
     content = r.json()["choices"][0]["message"]["content"]
@@ -252,10 +266,10 @@ async def _process_and_notify(user_id: str, data: bytes, filename: str, content_
         payload = {"userId": user_id, "status": "ERROR", "message": f"Failed to parse bill: {e}"}
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            print(f"[DEBUG] Sending payload to {UPSERT_URL}/internal/ocr-complete", flush=True)
-            res = await client.post(f"{UPSERT_URL}/internal/ocr-complete", json=payload)
-            print(f"[DEBUG] Upsert service responded with {res.status_code}", flush=True)
+        client = http_client if http_client else httpx.AsyncClient()
+        print(f"[DEBUG] Sending payload to {UPSERT_URL}/internal/ocr-complete", flush=True)
+        res = await client.post(f"{UPSERT_URL}/internal/ocr-complete", json=payload, timeout=10.0)
+        print(f"[DEBUG] Upsert service responded with {res.status_code}", flush=True)
     except Exception as e:
         print(f"[ERROR] Failed to notify upsert-service for user {user_id}: {e}", flush=True)
 

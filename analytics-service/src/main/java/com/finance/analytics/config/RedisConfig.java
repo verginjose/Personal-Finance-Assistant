@@ -199,6 +199,7 @@ public class RedisConfig {
                 .activateDefaultTyping(
                         BasicPolymorphicTypeValidator.builder()
                                 .allowIfSubType("com.finance.analytics")
+                                .allowIfSubType("org.springframework.data.domain.")
                                 .allowIfSubType("java.util.")
                                 .allowIfSubType("java.time.")
                                 .build(),

@@ -1,8 +1,10 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781338889';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1781338889';
-import { icon } from '../utils/icons.js?v=1781338889';
+import { api, Auth, toast } from '../utils/api.js?v=1781339999';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1781339999';
+import { icon } from '../utils/icons.js?v=1781339999';
 
 let currentGroupId = null;
+let expensesPage = 0, expensesTotal = 1;
+let activityPage = 0, activityTotal = 1;
 
 // Global notification listeners for Split view
 window.addEventListener('group-invite', () => {
@@ -151,18 +153,23 @@ async function loadGroups(userId) {
 
 async function loadGroupDetail(groupId, userId) {
   currentGroupId = groupId;
+  expensesPage = 0;
+  activityPage = 0;
   const el = document.getElementById('sp-content');
   document.getElementById('sp-back').style.display = '';
   document.getElementById('sp-create').style.display = 'none';
   el.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
   try {
-    const activityPromise = api.get(`/upsert/groups/${groupId}/activity`);
-    const [group, membersRaw, expenses, balances] = await Promise.all([
+    const activityPromise = api.get(`/upsert/groups/${groupId}/activity`, { page: activityPage, size: 8 });
+    const [group, membersRaw, expensesResult, balances] = await Promise.all([
       api.get(`/upsert/groups/${groupId}`),
       api.get(`/upsert/groups/${groupId}/members`),
-      api.get(`/upsert/groups/${groupId}/expenses`),
+      api.get(`/upsert/groups/${groupId}/expenses`, { page: expensesPage, size: 8 }),
       api.get(`/upsert/groups/${groupId}/balances`)
     ]);
+
+    expensesTotal = expensesResult.totalPages || 1;
+    const expenses = expensesResult.content || [];
 
     let usersMap = {};
     try {
@@ -271,32 +278,20 @@ async function loadGroupDetail(groupId, userId) {
       
       <div id="content-expenses" style="padding: 20px;">
         <button class="btn btn-primary btn-sm" style="margin-bottom:16px;width:100%" id="sp-add-expense" ${members.length ? '' : 'disabled'}>+ Add Expense</button>
-        ${expenses.length ? expenses.map(e => {
-            const expData = { ...e, paidByName: resolveMemberNameLocally(e.paidBy) };
-            return `
-          <div class="balance-item expense-row" data-exp='${esc(JSON.stringify(expData))}' style="padding:16px 0; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-            <div>
-               <div style="font-weight:600; font-size:1.05rem;">${esc(e.description || 'Expense')}</div>
-               <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by ${avatar(resolveMemberNameLocally(e.paidBy), 16, resolveMemberAvatarLocally(e.paidBy))} @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span></div>
-            </div>
-            <div class="expense-row-actions" style="display:flex; align-items:center; gap: 12px;">
-              <span style="font-weight:700;color:var(--text);font-size:1.1rem;">${formatCurrency(e.amount)}</span>
-              <button type="button" class="btn btn-danger btn-sm delete-expense-btn" data-id="${e.id}" title="Delete expense" style="padding:6px 10px;">×</button>
-            </div>
-          </div>`;
-        }).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No expenses yet</p>'}
+        <div id="expenses-list"></div>
+        <div id="expenses-pagination" class="pagination" style="margin-top: 20px; justify-content: center;"></div>
       </div>
       
       <div id="content-balances" style="padding: 20px; display:none;">
         <h4 style="margin-bottom:12px; color:var(--text-muted); text-transform:uppercase; font-size:0.8rem; letter-spacing:0.5px;">Net Balances</h4>
         <div style="margin-bottom:24px; display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:12px;">
           ${balances?.memberBalances?.length ? balances.memberBalances.map(b => `
-            <div style="background:var(--bg-card); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border); display:flex; flex-direction:column; gap:4px;">
+            <div style="background:var(--bg-card); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:12px;">
               <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
-                ${avatar(b.userName || b.userId, 20, resolveMemberAvatarLocally(b.userId))}
-                <span style="color:var(--text-dim); font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@${esc(b.userName || b.userId?.substring(0, 8))}</span>
+                ${avatar(b.userName || b.userId, 24, resolveMemberAvatarLocally(b.userId))}
+                <span style="color:var(--text-dim); font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@${esc(b.userName || b.userId?.substring(0, 8))}</span>
               </div>
-              <span style="font-weight:700;color:${b.netBalance >= 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-size:1.1rem;">
+              <span style="font-weight:700;color:${b.netBalance >= 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-size:1.1rem; flex-shrink: 0;">
                 ${b.netBalance >= 0 ? '+' : ''}${formatCurrency(b.netBalance)}
               </span>
             </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;">No balance data</p>'}
@@ -319,22 +314,25 @@ async function loadGroupDetail(groupId, userId) {
             text = `${avatar(s.fromUserName, 24, resolveMemberAvatarLocally(s.fromUserId))} <strong>${esc(s.fromUserName)}</strong> owes ${avatar(s.toUserName, 24, resolveMemberAvatarLocally(s.toUserId))} <strong>${esc(s.toUserName)}</strong>`;
           }
           return `
-          <div class="settlement-row" style="display:flex; justify-content:space-between; align-items:center; padding:16px 0; border-bottom:1px solid var(--border); gap: 16px;">
-            <div style="font-size: 1rem; flex: 1; min-width: 0; word-break: break-word;">
+          <div class="settlement-row" style="display:flex; justify-content:space-between; align-items:center; padding:16px 0; border-bottom:1px solid var(--border); gap: 16px; flex-wrap: wrap;">
+            <div style="font-size: 1rem; flex: 1 1 auto; min-width: 200px; word-break: break-word;">
               ${text}
-              <span style="font-weight:800;color:${amountColor};margin-left:8px;font-size:1.1rem;">${amountSign}${formatCurrency(s.amount)}</span>
             </div>
-            <button class="btn btn-secondary btn-sm settle-btn" style="flex-shrink: 0;"
-              data-from="${s.fromUserId}" data-to="${s.toUserId}"
-              data-from-name="${esc(s.fromUserName)}" data-to-name="${esc(s.toUserName)}">
-              Record Payment
-            </button>
+            <div style="display:flex; align-items:center; gap: 16px; flex-shrink: 0;">
+              <span style="font-weight:800;color:${amountColor};font-size:1.1rem; text-align:right; min-width: 80px;">${amountSign}${formatCurrency(s.amount)}</span>
+              <button class="btn btn-secondary btn-sm settle-btn"
+                data-from="${s.fromUserId}" data-to="${s.toUserId}"
+                data-from-name="${esc(s.fromUserName)}" data-to-name="${esc(s.toUserName)}">
+                Record Payment
+              </button>
+            </div>
           </div>`;
         }).join('') : '<p style="color:var(--text-dim);margin:0;text-align:center;padding:20px;">All balances are settled.</p>'}
       </div>
       
       <div id="content-activity" style="padding: 20px; display:none;">
-        <div id="activity-container"><div class="spinner-center" style="padding: 40px;"><span class="spinner"></span></div></div>
+        <div id="activity-list"></div>
+        <div id="activity-pagination" class="pagination" style="margin-top: 20px; justify-content: center;"></div>
       </div>
     </div>`;
 
@@ -374,91 +372,90 @@ async function loadGroupDetail(groupId, userId) {
     const eligibleMembers = members.filter(m => m.status === 'ACCEPTED');
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, eligibleMembers, userId);
     
-    // Mobile expense tap
-    document.querySelectorAll('.expense-row').forEach(row => {
-      row.onclick = () => {
-        if (window.innerWidth > 768) return; // Only open modal on mobile
-        const exp = JSON.parse(row.dataset.exp);
-        openMobileExpenseModal(exp, groupId, userId);
-      };
-    });
+    const renderExpenses = (exps) => {
+      const elList = document.getElementById('expenses-list');
+      if (!elList) return;
+      elList.innerHTML = exps.length ? exps.map(e => {
+        const expData = { ...e, paidByName: resolveMemberNameLocally(e.paidBy) };
+        return `
+        <div class="balance-item expense-row" data-exp='${esc(JSON.stringify(expData))}' style="padding:16px 0; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
+          <div>
+             <div style="font-weight:600; font-size:1.05rem;">${esc(e.description || 'Expense')}</div>
+             <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by ${avatar(resolveMemberNameLocally(e.paidBy), 16, resolveMemberAvatarLocally(e.paidBy))} @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span></div>
+          </div>
+          <div class="expense-row-actions" style="display:flex; align-items:center; gap: 12px;">
+            <span style="font-weight:700;color:var(--text);font-size:1.1rem;">${formatCurrency(e.amount)}</span>
+            <button type="button" class="btn btn-danger btn-sm delete-expense-btn" data-id="${e.id}" title="Delete expense" style="padding:6px 10px;">×</button>
+          </div>
+        </div>`;
+      }).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No expenses yet</p>';
 
-    // Delete Expense
-    document.querySelectorAll('.delete-expense-btn').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const expenseId = e.currentTarget.dataset.id;
-        if (await confirmModal('Delete Expense', 'Are you sure you want to delete this expense? This action cannot be undone.', 'Delete')) {
-          try {
-            await api.delete(`/upsert/groups/${groupId}/expenses/${expenseId}`, { userId });
-            toast('Expense deleted', 'success');
-            loadGroupDetail(groupId, userId);
-          } catch (err) { toast(err.message, 'error'); }
-        }
+      elList.querySelectorAll('.expense-row').forEach(row => {
+        row.onclick = () => {
+          if (window.innerWidth > 768) return;
+          const exp = JSON.parse(row.dataset.exp);
+          openMobileExpenseModal(exp, groupId, userId);
+        };
       });
-    });
 
-    // Revert Settlement
-    document.querySelectorAll('.revert-btn').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const expenseId = e.currentTarget.dataset.id;
-        if (await confirmModal('Revert Settlement', 'Are you sure you want to revert this settlement? The balances will be restored.', 'Revert')) {
-          try {
-            await api.delete(`/upsert/groups/${groupId}/expenses/${expenseId}`, { userId });
-            toast('Settlement reverted successfully', 'success');
-            loadGroupDetail(groupId, userId);
-          } catch (err) { toast(err.message, 'error'); }
-        }
+      elList.querySelectorAll('.delete-expense-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const expenseId = e.currentTarget.dataset.id;
+          if (await confirmModal('Delete Expense', 'Are you sure you want to delete this expense? This action cannot be undone.', 'Delete')) {
+            try {
+              await api.delete(`/upsert/groups/${groupId}/expenses/${expenseId}`, { userId });
+              toast('Expense deleted', 'success');
+              loadGroupDetail(groupId, userId);
+            } catch (err) { toast(err.message, 'error'); }
+          }
+        });
       });
-    });
-
-    el.querySelectorAll('.settle-btn').forEach(btn => {
-      btn.onclick = async () => {
-        if (!(await confirmModal('Record Settlement', `Record settlement: did ${btn.dataset.fromName} pay ${btn.dataset.toName}?`, 'Record'))) return;
-        try {
-          await api.post(`/upsert/groups/${groupId}/settle`, null, { params: { fromUserId: btn.dataset.from, toUserId: btn.dataset.to } });
-          toast('Settlement recorded!', 'success');
-          await loadGroupDetail(groupId, userId);
-        } catch (e) { toast(e.message, 'error'); }
-      };
-    });
-    document.getElementById('sp-edit-group').onclick = () => editGroupModal(group, userId);
-
-    document.getElementById('sp-archive-group').onclick = async () => {
-      const action = group.isArchived ? 'Unarchive' : 'Archive';
-      if (!(await confirmModal(`${action} Group`, `Are you sure you want to ${action.toLowerCase()} this group?`, action))) return;
-      try {
-        await api.put(`/upsert/groups/${group.id}/archive?archive=${!group.isArchived}`);
-        toast(`Group ${action.toLowerCase()}d successfully`, 'success');
-        if (!group.isArchived) { document.getElementById('sp-back').click(); } 
-        else { loadGroupDetail(group.id, userId); }
-      } catch(e) { toast(e.message, 'error'); }
+      renderExpensesPagination();
     };
 
-    document.getElementById('sp-delete-group').onclick = async () => {
-      if (!(await confirmModal('Delete Group', 'Warning: This will permanently delete the group and all its expenses. This action cannot be undone. All balances MUST be settled first.', 'Delete Permanently'))) return;
+    const loadGroupExpenses = async () => {
       try {
-        await api.delete(`/upsert/groups/${group.id}`, { userId });
-        toast('Group deleted successfully', 'success');
-        document.getElementById('sp-back').click();
-      } catch(e) { toast(e.message, 'error'); }
+        const res = await api.get(`/upsert/groups/${groupId}/expenses`, { page: expensesPage, size: 8 });
+        expensesTotal = res.totalPages || 1;
+        renderExpenses(res.content || []);
+      } catch (err) { toast(err.message, 'error'); }
     };
-    document.getElementById('sp-leave-group').onclick = async () => {
-      if (!(await confirmModal('Leave Group', 'Are you sure you want to leave this group? You must have a settled balance to leave.', 'Leave Group'))) return;
-      try {
-        await api.delete(`/upsert/groups/${groupId}/members/${userId}`);
-        toast('You left the group.', 'success');
-        document.getElementById('sp-back').click();
-      } catch (e) {
-        toast(e.message, 'error');
+
+    const renderExpensesPagination = () => {
+      const el = document.getElementById('expenses-pagination');
+      if (!el || expensesTotal <= 1) { if (el) el.innerHTML = ''; return; }
+      
+      let html = `<button class="btn btn-secondary btn-icon" id="ep-prev" ${expensesPage === 0 ? 'disabled' : ''} aria-label="Previous Page">${icon('chevron-left', 'sm')}</button>`;
+      
+      let startPage = Math.max(0, expensesPage - 2);
+      let endPage = Math.min(expensesTotal - 1, startPage + 4);
+      if (endPage - startPage < 4) startPage = Math.max(0, endPage - 4);
+      
+      for (let i = startPage; i <= endPage; i++) {
+        html += `<button class="${i === expensesPage ? 'active' : ''}" data-p="${i}" aria-label="Page ${i + 1}">${i + 1}</button>`;
       }
+      
+      html += `<button class="btn btn-secondary btn-icon" id="ep-next" ${expensesPage === expensesTotal - 1 ? 'disabled' : ''} aria-label="Next Page">${icon('chevron-right', 'sm')}</button>`;
+      
+      el.innerHTML = html;
+      
+      if (expensesPage > 0) {
+        document.getElementById('ep-prev').onclick = () => { expensesPage--; loadGroupExpenses(); };
+      }
+      if (expensesPage < expensesTotal - 1) {
+        document.getElementById('ep-next').onclick = () => { expensesPage++; loadGroupExpenses(); };
+      }
+      
+      el.querySelectorAll('button[data-p]').forEach(b => {
+        b.onclick = () => { expensesPage = +b.dataset.p; loadGroupExpenses(); };
+      });
     };
 
-    // Load activity asynchronously
-    activityPromise.then(activity => {
-      const container = document.getElementById('activity-container');
+    const renderActivity = (actList) => {
+      const container = document.getElementById('activity-list');
       if (!container) return;
-      container.innerHTML = activity?.length ? activity.slice(0, 20).map(a => `
+      container.innerHTML = actList?.length ? actList.map(a => `
         <div class="activity-item" style="padding:12px 0; border-bottom:1px solid var(--border-light);">
           <div class="activity-message" style="font-weight:500; display:flex; justify-content:space-between; align-items:center; gap: 12px;">
             <span style="flex: 1; min-width: 0; word-break: break-word;">${esc(a.message)}</span>
@@ -467,8 +464,7 @@ async function loadGroupDetail(groupId, userId) {
           <div class="activity-meta" style="font-size:0.8rem; color:var(--text-dim); margin-top:6px;">${formatDate(a.createdAt)} · ${esc(activityTypeLabel(a.activityType))}</div>
         </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No activity yet</p>';
         
-      // Reattach revert event listeners for async loaded activity
-      document.querySelectorAll('#content-activity .revert-btn').forEach(btn => {
+      container.querySelectorAll('.revert-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           const expenseId = e.currentTarget.dataset.id;
           if (await confirmModal('Revert Settlement', 'Are you sure you want to revert this settlement? The balances will be restored.', 'Revert')) {
@@ -480,8 +476,56 @@ async function loadGroupDetail(groupId, userId) {
           }
         });
       });
+      renderActivityPagination();
+    };
+
+    const loadGroupActivity = async () => {
+      try {
+        const res = await api.get(`/upsert/groups/${groupId}/activity`, { page: activityPage, size: 8 });
+        activityTotal = res.totalPages || 1;
+        renderActivity(res.content || []);
+      } catch (err) { toast(err.message, 'error'); }
+    };
+
+    const renderActivityPagination = () => {
+      const el = document.getElementById('activity-pagination');
+      if (!el || activityTotal <= 1) { if (el) el.innerHTML = ''; return; }
+      
+      let html = `<button class="btn btn-secondary btn-icon" id="ap-prev" ${activityPage === 0 ? 'disabled' : ''} aria-label="Previous Page">${icon('chevron-left', 'sm')}</button>`;
+      
+      let startPage = Math.max(0, activityPage - 2);
+      let endPage = Math.min(activityTotal - 1, startPage + 4);
+      if (endPage - startPage < 4) startPage = Math.max(0, endPage - 4);
+      
+      for (let i = startPage; i <= endPage; i++) {
+        html += `<button class="${i === activityPage ? 'active' : ''}" data-p="${i}" aria-label="Page ${i + 1}">${i + 1}</button>`;
+      }
+      
+      html += `<button class="btn btn-secondary btn-icon" id="ap-next" ${activityPage === activityTotal - 1 ? 'disabled' : ''} aria-label="Next Page">${icon('chevron-right', 'sm')}</button>`;
+      
+      el.innerHTML = html;
+      
+      if (activityPage > 0) {
+        document.getElementById('ap-prev').onclick = () => { activityPage--; loadGroupActivity(); };
+      }
+      if (activityPage < activityTotal - 1) {
+        document.getElementById('ap-next').onclick = () => { activityPage++; loadGroupActivity(); };
+      }
+      
+      el.querySelectorAll('button[data-p]').forEach(b => {
+        b.onclick = () => { activityPage = +b.dataset.p; loadGroupActivity(); };
+      });
+    };
+
+    // Initial render for expenses
+    renderExpenses(expenses);
+
+    // Load activity asynchronously
+    activityPromise.then(activityResult => {
+      activityTotal = activityResult.totalPages || 1;
+      renderActivity(activityResult.content || []);
     }).catch(e => {
-      const container = document.getElementById('activity-container');
+      const container = document.getElementById('activity-list');
       if (container) container.innerHTML = `<p style="color:var(--accent);text-align:center;padding:20px;">Failed to load activity.</p>`;
     });
 

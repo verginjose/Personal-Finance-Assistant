@@ -103,14 +103,16 @@ public class TransactionEntryController {
 
     @GetMapping("/goals/{id}/transactions")
     @Operation(summary = "Get transaction history for a savings goal")
-    public ResponseEntity<List<CreateEntryResponse>> getGoalTransactions(
+    public ResponseEntity<org.springframework.data.domain.Page<CreateEntryResponse>> getGoalTransactions(
             @RequestHeader("X-User-Id") String xUserId,
             @PathVariable Long id,
-            @RequestParam UUID userId) {
+            @RequestParam UUID userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "8") int size) {
         if (!userId.toString().equalsIgnoreCase(xUserId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: User ID mismatch");
         }
-        return ResponseEntity.ok(service.getGoalContributions(id, userId));
+        return ResponseEntity.ok(service.getGoalContributions(id, userId, page, size));
     }
 
     // ── Read — paginated list with optional date-range filter ─────────────────

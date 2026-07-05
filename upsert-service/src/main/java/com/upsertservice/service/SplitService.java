@@ -613,16 +613,16 @@ public class SplitService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "group-expenses", key = "#groupId", sync = true)
-    public List<SharedExpense> getGroupExpenses(Long groupId) {
-        return expenseRepo.findByGroupIdOrderByCreatedAtDesc(groupId);
+    @Cacheable(value = "group-expenses", key = "#groupId + '-' + #page + '-' + #size", sync = true)
+    public org.springframework.data.domain.Page<SharedExpense> getGroupExpenses(Long groupId, int page, int size) {
+        return expenseRepo.findByGroupIdOrderByCreatedAtDesc(groupId, org.springframework.data.domain.PageRequest.of(page, size));
     }
 
     @Transactional(readOnly = true)
-    public List<GroupActivity> getGroupActivity(Long groupId) {
+    public org.springframework.data.domain.Page<GroupActivity> getGroupActivity(Long groupId, int page, int size) {
         groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));
-        return groupActivityService.getGroupActivity(groupId);
+        return groupActivityService.getGroupActivity(groupId, page, size);
     }
 
     /* ─── BALANCES (debt minimization) ─── */

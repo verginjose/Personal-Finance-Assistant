@@ -1,10 +1,10 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781338889';
-import { icon } from '../utils/icons.js?v=1781338889';
+import { api, Auth, toast } from '../utils/api.js?v=1781339999';
+import { icon } from '../utils/icons.js?v=1781339999';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
   progressBar, budgetStatusColor, budgetStatusBadge, badge, openModal, confirmModal, modalActions,
   EXPENSE_CATS, categoryOptions, setupCategorySearch
-} from '../utils/ui.js?v=1781338889';
+} from '../utils/ui.js?v=1781339999';
 
 export async function renderGoals(container) {
   const userId = Auth.getUserId();
@@ -204,29 +204,69 @@ async function viewGoalDetails(goalParam, uid, reloadData = false) {
     <div id="goal-txns-list" style="max-height:300px; overflow-y:auto;">
       ${txnsHTML}
     </div>
+    <div id="goal-txns-pagination" class="pagination" style="margin-top: 12px; justify-content: center;"></div>
   `);
 
   const txnsContainer = document.getElementById('goal-txns-list');
-  try {
-    const txns = await api.get(`/upsert/goals/${goal.id}/transactions`, { userId: uid });
-    if (!txns || txns.length === 0) {
-      txnsContainer.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:0.9rem">No contributions yet.</div>';
-    } else {
-      txnsContainer.innerHTML = txns.map(t => `
-        <div class="card" style="padding:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-           <div>
-             <div style="font-weight:600; font-size:0.95rem;">${formatCurrency(t.amount, t.currency)}</div>
-             <div style="font-size:0.8rem; color:var(--text-dim);">${formatDate(t.createdAt)} • ${esc(t.description || 'Contribution')}</div>
-           </div>
-           <button class="btn btn-danger btn-icon btn-sm" onclick="window.deleteContribution(${t.id}, ${goal.id}, '${uid}')" title="Delete Contribution">
-              ${icon('trash', 'xs')}
-           </button>
-        </div>
-      `).join('');
+  let txnsPage = 0;
+  let txnsTotal = 1;
+
+  const loadTxns = async () => {
+    try {
+      const res = await api.get(`/upsert/goals/${goal.id}/transactions`, { userId: uid, page: txnsPage, size: 8 });
+      txnsTotal = res.totalPages || 1;
+      const txns = res.content || [];
+      if (!txns || txns.length === 0) {
+        txnsContainer.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:0.9rem">No contributions yet.</div>';
+      } else {
+        txnsContainer.innerHTML = txns.map(t => `
+          <div class="card" style="padding:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+             <div>
+               <div style="font-weight:600; font-size:0.95rem;">${formatCurrency(t.amount, t.currency)}</div>
+               <div style="font-size:0.8rem; color:var(--text-dim);">${formatDate(t.createdAt)} • ${esc(t.description || 'Contribution')}</div>
+             </div>
+             <button class="btn btn-danger btn-icon btn-sm" onclick="window.deleteContribution(${t.id}, ${goal.id}, '${uid}')" title="Delete Contribution">
+                ${icon('trash', 'xs')}
+             </button>
+          </div>
+        `).join('');
+      }
+      renderTxnsPagination();
+    } catch(e) {
+      txnsContainer.innerHTML = `<div style="color:var(--accent-r);padding:10px">Failed to load history</div>`;
     }
-  } catch(e) {
-    txnsContainer.innerHTML = `<div style="color:var(--accent-r);padding:10px">Failed to load history</div>`;
-  }
+  };
+
+  const renderTxnsPagination = () => {
+    const el = document.getElementById('goal-txns-pagination');
+    if (!el || txnsTotal <= 1) { if (el) el.innerHTML = ''; return; }
+    
+    let html = `<button class="btn btn-secondary btn-icon" id="gp-prev" ${txnsPage === 0 ? 'disabled' : ''}>${icon('chevron-left', 'sm')}</button>`;
+    
+    let startPage = Math.max(0, txnsPage - 2);
+    let endPage = Math.min(txnsTotal - 1, startPage + 4);
+    if (endPage - startPage < 4) startPage = Math.max(0, endPage - 4);
+    
+    for (let i = startPage; i <= endPage; i++) {
+      html += `<button class="${i === txnsPage ? 'active' : ''}" data-p="${i}">${i + 1}</button>`;
+    }
+    
+    html += `<button class="btn btn-secondary btn-icon" id="gp-next" ${txnsPage === txnsTotal - 1 ? 'disabled' : ''}>${icon('chevron-right', 'sm')}</button>`;
+    
+    el.innerHTML = html;
+    
+    if (txnsPage > 0) {
+      document.getElementById('gp-prev').onclick = () => { txnsPage--; loadTxns(); };
+    }
+    if (txnsPage < txnsTotal - 1) {
+      document.getElementById('gp-next').onclick = () => { txnsPage++; loadTxns(); };
+    }
+    el.querySelectorAll('button[data-p]').forEach(b => {
+      b.onclick = () => { txnsPage = +b.dataset.p; loadTxns(); };
+    });
+  };
+
+  loadTxns();
 
   document.getElementById('btn-add-contrib')?.addEventListener('click', () => {
     openModal('Add Contribution', `

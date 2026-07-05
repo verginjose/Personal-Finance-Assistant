@@ -4,20 +4,55 @@
   "tags": ["latency", "performance"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "application",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
+        "query": "label_values(http_server_requests_seconds_count, application)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": ["$__all"] }
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
-      "title": "API Latency (p95) — per service (last 1h)",
+      "title": "API Latency — $application",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
-      "targets": [{
-        "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, application))",
-        "legendFormat": "{{application}}",
-        "refId": "A"
-      }],
+      "repeat": "application",
+      "repeatDirection": "h",
+      "maxPerRow": 2,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application=~\"^$application$\"}[5m])) by (le))",
+          "legendFormat": "Max (p99)",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application=~\"^$application$\"}[5m])) by (le))",
+          "legendFormat": "p95 Latency",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(http_server_requests_seconds_sum{application=~\"^$application$\"}[5m])) / sum(rate(http_server_requests_seconds_count{application=~\"^$application$\"}[5m]))",
+          "legendFormat": "Average Latency",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{application=~\"^$application$\"}[5m])) by (le))",
+          "legendFormat": "Min (p50)",
+          "refId": "D"
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -28,9 +63,13 @@
       },
       "options": {
         "tooltip": { "mode": "multi" },
-        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "mean"] }
+        "legend": { 
+          "displayMode": "table", 
+          "placement": "bottom", 
+          "calcs": ["min", "max", "mean"] 
+        }
       },
-      "gridPos": { "h": 20, "w": 24, "x": 0, "y": 0 }
+      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 0 }
     }
   ]
 }

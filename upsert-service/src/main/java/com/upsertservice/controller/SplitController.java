@@ -147,8 +147,11 @@ public class SplitController {
     }
 
     @GetMapping("/{groupId}/expenses")
-    public ResponseEntity<List<SharedExpense>> getExpenses(@PathVariable Long groupId) {
-        return ResponseEntity.ok(splitService.getGroupExpenses(groupId));
+    public ResponseEntity<org.springframework.data.domain.Page<SharedExpense>> getExpenses(
+            @PathVariable Long groupId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "8") int size) {
+        return ResponseEntity.ok(splitService.getGroupExpenses(groupId, page, size));
     }
 
     @DeleteMapping("/{groupId}/expenses/{expenseId}")
@@ -163,8 +166,11 @@ public class SplitController {
     /* ── ACTIVITY ── */
 
     @GetMapping("/{groupId}/activity")
-    public ResponseEntity<List<GroupActivity>> getActivity(@PathVariable Long groupId) {
-        return ResponseEntity.ok(splitService.getGroupActivity(groupId));
+    public ResponseEntity<org.springframework.data.domain.Page<GroupActivity>> getActivity(
+            @PathVariable Long groupId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "8") int size) {
+        return ResponseEntity.ok(splitService.getGroupActivity(groupId, page, size));
     }
 
     /* ── BALANCES ── */

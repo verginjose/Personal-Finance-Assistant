@@ -321,10 +321,9 @@ public class TransactionEntryService {
     // ── Read — single entry & goal contributions ──────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<CreateEntryResponse> getGoalContributions(Long goalId, UUID userId) {
-        return repository.findByGoalIdAndUserId(goalId, userId).stream()
-                .map(this::convertToResponse)
-                .toList();
+    public org.springframework.data.domain.Page<CreateEntryResponse> getGoalContributions(Long goalId, UUID userId, int page, int size) {
+        return repository.findByGoalIdAndUserId(goalId, userId, org.springframework.data.domain.PageRequest.of(page, size))
+                .map(this::convertToResponse);
     }
 
     @Transactional(readOnly = true)

@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.CacheEvict;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,8 +37,8 @@ public class GroupActivityService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "group-activity", key = "#groupId", sync = true)
-    public List<GroupActivity> getGroupActivity(Long groupId) {
-        return activityRepo.findByGroupIdOrderByCreatedAtDesc(groupId);
+    @Cacheable(value = "group-activity", key = "#groupId + '-' + #page + '-' + #size", sync = true)
+    public Page<GroupActivity> getGroupActivity(Long groupId, int page, int size) {
+        return activityRepo.findByGroupIdOrderByCreatedAtDesc(groupId, PageRequest.of(page, size));
     }
 }

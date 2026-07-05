@@ -16,8 +16,8 @@ public class SecurityInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         String uri = request.getRequestURI();
-        // Allow public/health/actuator endpoints without validation
-        if (uri.contains("/health") || uri.contains("/actuator") || uri.contains("/error")) {
+        // Allow public/health/actuator/internal endpoints without validation
+        if (uri.contains("/health") || uri.contains("/actuator") || uri.contains("/error") || uri.startsWith("/internal")) {
             return true;
         }
 

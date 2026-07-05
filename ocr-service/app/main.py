@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import time
+import asyncio
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from typing import Optional
@@ -204,12 +205,17 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
     filename = filename or "file"
     is_pdf = filename.lower().endswith(".pdf") or content_type == "application/pdf"
 
-    raw_text = _extract_text_from_pdf(data) if is_pdf else _extract_text_from_image_bytes(data, filename)
+    # Offload the heavily blocking OCR engine to a threadpool to prevent freezing the FastAPI event loop
+    if is_pdf:
+        raw_text = await asyncio.to_thread(_extract_text_from_pdf, data)
+    else:
+        raw_text = await asyncio.to_thread(_extract_text_from_image_bytes, data, filename)
+
     clean_text = " ".join(raw_text.split()).strip()
-    log.info("Extracted %d chars from '%s'", len(clean_text), filename)
+    print(f"[DEBUG] Extracted {len(clean_text)} chars from '{filename}'", flush=True)
 
     if len(clean_text) < 10:
-        log.warning("Extracted text too short (%d). Returning empty response.", len(clean_text))
+        print(f"[WARNING] Extracted text too short ({len(clean_text)}). Returning empty response.", flush=True)
         return {}
 
     doc = await _call_groq(clean_text)
@@ -234,19 +240,24 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
 
 async def _process_and_notify(user_id: str, data: bytes, filename: str, content_type: str):
     """Background task: parse bill then POST result to upsert-service SSE webhook."""
+    print(f"[DEBUG] Started processing bill for user: {user_id}", flush=True)
     try:
         result = await _parse_bill(user_id, data, filename, content_type)
         payload = {"userId": user_id, "status": "SUCCESS", "data": result, "message": "Bill parsed successfully"}
-        log.info("Bill parsed for user=%s, notifying upsert-service", user_id)
+        print(f"[DEBUG] Bill parsed successfully for user {user_id}, notifying upsert-service", flush=True)
     except Exception as e:
-        log.error("Bill parsing failed for user=%s: %s", user_id, e)
+        print(f"[ERROR] Bill parsing failed for user {user_id}: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         payload = {"userId": user_id, "status": "ERROR", "message": f"Failed to parse bill: {e}"}
 
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(f"{UPSERT_URL}/internal/ocr-complete", json=payload)
+        async with httpx.AsyncClient(timeout=10) as client:
+            print(f"[DEBUG] Sending payload to {UPSERT_URL}/internal/ocr-complete", flush=True)
+            res = await client.post(f"{UPSERT_URL}/internal/ocr-complete", json=payload)
+            print(f"[DEBUG] Upsert service responded with {res.status_code}", flush=True)
     except Exception as e:
-        log.error("Failed to notify upsert-service for user=%s: %s", user_id, e)
+        print(f"[ERROR] Failed to notify upsert-service for user {user_id}: {e}", flush=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

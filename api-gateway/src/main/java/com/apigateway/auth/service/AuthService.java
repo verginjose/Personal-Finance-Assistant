@@ -30,9 +30,9 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.email()).orElseThrow(() -> new RuntimeException("Bad credentials"));
+        User user = userRepository.findByEmail(request.email()).orElseThrow(() -> new org.springframework.security.authentication.BadCredentialsException("Bad credentials"));
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            throw new RuntimeException("Bad credentials");
+            throw new org.springframework.security.authentication.BadCredentialsException("Bad credentials");
         }
         String token = jwtService.generateToken(user);
         String refreshToken = UUID.randomUUID().toString();

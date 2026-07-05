@@ -33,17 +33,6 @@ spring:
           min-idle: 2
           max-wait: 200ms
 
-  # ── Kafka ───────────────────────────────────────────────────────────────────
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: analytics-cache-evict-group
-      auto-offset-reset: latest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "com.upsertservice.events,com.finance.analytics.events"
-        spring.json.type.mapping: "cacheEvictEvent:com.finance.analytics.events.CacheEvictEvent"
 
 # ── Groq AI Configuration (for AI Insights feature) ──────────────────────────
 groq:

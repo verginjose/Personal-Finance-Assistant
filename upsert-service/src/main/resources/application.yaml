@@ -26,13 +26,11 @@ spring:
       password: ${REDIS_PASSWORD:}
       timeout: 2000ms
 
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      properties:
-        spring.json.type.mapping: "cacheEvictEvent:com.upsertservice.events.CacheEvictEvent"
+
+# ── Downstream service URLs ───────────────────────────────────────────────────
+analytics:
+  service:
+    url: ${ANALYTICS_SERVICE_URL:http://analytics-service:8084}
 
 # ── Custom DataSources for Read/Write Split ──────────────────────────────────
 app:

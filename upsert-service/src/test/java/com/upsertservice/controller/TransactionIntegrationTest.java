@@ -13,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -25,7 +24,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -36,9 +34,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = {
-        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration"
-})
+@SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
 @DisplayName("TransactionEntryService — Integration Tests with Testcontainers")
@@ -80,15 +76,9 @@ public class TransactionIntegrationTest {
     @Autowired
     private TransactionEntryRepository repository;
 
-    @MockitoBean
-    private KafkaTemplate<String, com.upsertservice.events.CacheEvictEvent> kafkaTemplate;
-
     @BeforeEach
     void setupMock() {
         repository.deleteAll();
-        // Mock Kafka send to return completed future using raw type to avoid compilation error
-        CompletableFuture future = CompletableFuture.completedFuture(null);
-        when(kafkaTemplate.send(anyString(), anyString(), any())).thenReturn(future);
     }
 
     @Test

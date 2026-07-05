@@ -15,16 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 
+ARG CACHEBUST=1
 RUN pip install --no-cache-dir \
         paddlepaddle-gpu==3.2.1 \
         -i https://www.paddlepaddle.org.cn/packages/stable/cu126/ \
-    && pip install --no-cache-dir \
-        paddleocr==2.8.1 \
-        fastapi==0.115.0 \
-        "uvicorn[standard]==0.30.6" \
-        python-multipart==0.0.9 \
-        opencv-python-headless==4.10.0.84 \
-        numpy==1.26.4
+    && pip install --no-cache-dir -r requirements.txt
 
 WORKDIR /app
 COPY app/ .

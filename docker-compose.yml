@@ -45,37 +45,6 @@ services:
     networks:
       - finance-network
 
-  auth-service:
-    build:
-      context: ./auth-service
-      dockerfile: Dockerfile
-    container_name: auth-service
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: on-failure
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
-      SPRING_DATASOURCE_USERNAME: ${DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
-      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${AUTH_DB_SCHEMA}
-      SPRING_DATASOURCE_HIKARI_SCHEMA: ${AUTH_DB_SCHEMA}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION: ${JWT_EXPIRATION}
-      REDIS_HOST: redis
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
-    ports:
-      - "${AUTH_SERVICE_PORT}:8082"
-    networks:
-      - finance-network
-
   upsert-service:
     build:
       context: ./upsert-service
@@ -99,8 +68,8 @@ services:
       SPRING_DATASOURCE_HIKARI_SCHEMA: ${FINANCE_DB_SCHEMA}
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
+      ANALYTICS_SERVICE_URL: http://analytics-service:8084
     ports:
       - "${UPSERT_SERVICE_PORT}:8081"
     networks:
@@ -114,13 +83,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
-        condition: service_started
     restart: on-failure
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 1G
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
@@ -132,36 +99,10 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       GROQ_API_KEY: ${GROQ_API_KEY}
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
     ports:
       - "${ANALYTICS_SERVICE_PORT}:8084"
-    networks:
-      - finance-network
-
-  bill-parser-service:
-    build:
-      context: ./bill-parser-service
-      dockerfile: Dockerfile
-    container_name: bill-parser-service
-    depends_on:
-      ocr-service:
-        condition: service_healthy
-      kafka:
-        condition: service_started
-    restart: on-failure
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-    ports:
-      - "${OCR_SERVICE_PORT}:8083"
-    environment:
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      OCR_SERVICE_URL: http://ocr-service:8100 # add this
     networks:
       - finance-network
 
@@ -178,13 +119,15 @@ services:
               count: 1
               capabilities: [ gpu ]
     volumes:
-      - paddle-model-cache:/root/.paddleocr # ← add this
+      - paddle-model-cache:/root/.paddleocr
     ports:
-      - "8100:8100"
+      - "${OCR_SERVICE_PORT:-8100}:8100"
     environment:
       FLAGS_fraction_of_gpu_memory_to_use: "0.65"
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      UPSERT_SERVICE_URL: http://upsert-service:8081
     networks:
       - finance-network
     healthcheck:
@@ -202,12 +145,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
       upsert-service:
         condition: service_started
-      auth-service:
-        condition: service_started
-      bill-parser-service:
-        condition: service_started
+      ocr-service:
+        condition: service_healthy
       analytics-service:
         condition: service_started
     restart: on-failure
@@ -224,9 +167,16 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
 
-      # Auth service URL
-      AUTH_SERVICE_URL: http://auth-service:8082
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
+      # Auth Database
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${AUTH_DB_SCHEMA}
+      SPRING_DATASOURCE_HIKARI_SCHEMA: ${AUTH_DB_SCHEMA}
+
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
     ports:
       - "${API_GATEWAY_PORT}:8080"
     networks:
@@ -312,39 +262,7 @@ services:
     restart: on-failure
     networks:
       - finance-network
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    container_name: zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
-    volumes:
-      - zookeeper-data:/var/lib/zookeeper/data
-      - zookeeper-logs:/var/lib/zookeeper/log
-    networks:
-      - finance-network # ← was missing
 
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    container_name: kafka
-    depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-      KAFKA_LOG_RETENTION_HOURS: 168
-      KAFKA_LOG_RETENTION_BYTES: 1073741824
-    volumes:
-      - kafka-data:/var/lib/kafka/data
-    networks:
-      - finance-network # ← was missing        # message storage
 
   frontend:
     build: ./frontend
@@ -372,11 +290,7 @@ volumes:
   grafana_data:
   redis-data:
   loki_data:
-  zookeeper-data:
-  zookeeper-logs:
-  kafka-data:
   paddle-model-cache:
-    # ← add to volumes section
 
 networks:
   finance-network:

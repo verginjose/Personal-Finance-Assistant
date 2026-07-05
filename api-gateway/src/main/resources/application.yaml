@@ -5,10 +5,6 @@ jwt:
   secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION}
 
-auth:
-  service:
-    url: http://auth-service:8082
-
 spring:
   threads:
     virtual:
@@ -31,23 +27,6 @@ spring:
       httpclient:
         connect-timeout: 5000
       routes:
-        - id: auth-service
-          uri: http://auth-service:8082
-          predicates:
-            - Path=/api/auth/**
-          filters:
-            - StripPrefix=1
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 2
-                redis-rate-limiter.burstCapacity: 5
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@ipPathKeyResolver}"
-            - name: CircuitBreaker
-              args:
-                name: auth-cb
-                fallbackUri: forward:/fallback/auth
-
         - id: upsert-service-sse
           uri: http://upsert-service:8081
           predicates:
@@ -92,8 +71,8 @@ spring:
                 name: analytics-cb
                 fallbackUri: forward:/fallback/analytics
 
-        - id: bill-parser-service
-          uri: http://bill-parser-service:8083
+        - id: ocr-service
+          uri: http://ocr-service:8100
           predicates:
             - Path=/api/bill/**
           filters:
@@ -112,13 +91,6 @@ spring:
 resilience4j:
   circuitbreaker:
     instances:
-      auth-cb:
-        sliding-window-size: 10
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 30s
-        permitted-number-of-calls-in-half-open-state: 3
-        slow-call-duration-threshold: 5s
-        slow-call-rate-threshold: 80
       upsert-cb:
         sliding-window-size: 10
         failure-rate-threshold: 50
@@ -142,8 +114,6 @@ resilience4j:
         slow-call-rate-threshold: 60
   timelimiter:
     instances:
-      auth-cb:
-        timeout-duration: 30s
       upsert-cb:
         timeout-duration: 5s
       analytics-cb:

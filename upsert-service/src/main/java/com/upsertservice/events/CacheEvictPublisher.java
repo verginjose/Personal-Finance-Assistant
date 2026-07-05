@@ -1,62 +1,48 @@
 package com.upsertservice.events;
 
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+
 import java.util.Collection;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
+/**
+ * Publishes cache-evict events to the analytics-service via direct HTTP POST.
+ * Replaces the previous Kafka-based implementation (KafkaTemplate).
+ *
+ * Fire-and-forget: runs async, swallows errors so the caller's HTTP response
+ * is never delayed or failed due to analytics unavailability.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class CacheEvictPublisher {
 
-    private static final String TOPIC = "transaction-cache-evict";
+    @Value("${analytics.service.url:http://analytics-service:8084}")
+    private String analyticsServiceUrl;
 
-    private final KafkaTemplate<String, CacheEvictEvent> kafkaTemplate;
+    private final RestClient restClient = RestClient.create();
 
     public void publishForUsers(Collection<UUID> userIds, String operation, Long referenceId) {
         if (userIds == null || userIds.isEmpty()) return;
         userIds.stream().distinct().forEach(userId -> publish(userId, operation, referenceId));
     }
 
+    @Async
     public void publish(UUID userId, String operation, Long transactionId) {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        CompletableFuture.runAsync(() -> {
-            ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
-            Thread.currentThread().setContextClassLoader(classLoader);
-            try {
-                CacheEvictEvent event = CacheEvictEvent.of(userId, operation, transactionId);
-
-                // Use userId as partition key so same user's events go to same partition → ordered processing.
-                // Wrapped in try-catch: Kafka is optional infrastructure — a missing topic or broker
-                // unavailability must NEVER propagate as a 503 to the caller.
-                try {
-                    CompletableFuture<SendResult<String, CacheEvictEvent>> future =
-                            kafkaTemplate.send(TOPIC, userId.toString(), event);
-
-                    future.whenComplete((result, ex) -> {
-                        if (ex != null) {
-                            log.warn("Cache evict event delivery failed for user={}, operation={}: {}",
-                                    userId, operation, ex.getMessage());
-                        } else {
-                            log.debug("Cache evict event published: user={}, operation={}, partition={}",
-                                    userId, operation,
-                                    result.getRecordMetadata().partition());
-                        }
-                    });
-                } catch (Exception ex) {
-                    // Fire-and-forget: swallow synchronous Kafka errors (e.g. unknown topic, broker down)
-                    log.warn("Could not send cache evict event for user={}, operation={}",
-                            userId, operation, ex.getMessage());
-                }
-            } finally {
-                Thread.currentThread().setContextClassLoader(originalClassLoader);
-            }
-        });
+        try {
+            restClient.post()
+                    .uri(analyticsServiceUrl + "/internal/cache-evict/" + userId)
+                    .retrieve()
+                    .toBodilessEntity();
+            log.debug("Cache evict HTTP sent: user={}, operation={}", userId, operation);
+        } catch (Exception ex) {
+            // Fire-and-forget: swallow errors — stale cache is better than blocking the caller
+            log.warn("Cache evict HTTP failed for user={}, operation={}: {}", userId, operation, ex.getMessage());
+        }
     }
 }

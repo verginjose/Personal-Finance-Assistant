@@ -64,6 +64,7 @@ public class SplitService {
                 "@" + creatorName + " created the group \"" + group.getName() + "\"",
                 group.getId());
         log.info("Group created: id={}, name={}", group.getId(), group.getName());
+        cacheEvictPublisher.publishForUsers(Set.of(req.getCreatedBy()), "GROUP_CREATED", group.getId());
         return group;
     }
 
@@ -194,6 +195,10 @@ public class SplitService {
         if (cacheManager.getCache("group-activity") != null) {
             Objects.requireNonNull(cacheManager.getCache("group-activity")).evict(groupId);
         }
+        cacheEvictPublisher.publishForUsers(
+                members.stream().map(GroupMember::getUserId).collect(Collectors.toSet()), 
+                "GROUP_DELETED", 
+                groupId);
     }
 
     @Caching(evict = {
@@ -207,6 +212,7 @@ public class SplitService {
                 .orElseThrow(() -> new IllegalArgumentException("Membership not found"));
         member.setArchived(archive);
         memberRepo.save(member);
+        cacheEvictPublisher.publishForUsers(Set.of(userId), "GROUP_ARCHIVED", groupId);
     }
 
     /* ─── MEMBERS ─── */
@@ -236,7 +242,8 @@ public class SplitService {
                 "message", "You've been invited to join the group: " + group.getName(),
                 "event", "group-invite",
                 "groupId", groupId)));
-
+                
+        cacheEvictPublisher.publishForUsers(Set.of(req.getUserId()), "MEMBER_ADDED", groupId);
         return member;
     }
 
@@ -271,6 +278,7 @@ public class SplitService {
                 ActivityType.MEMBER_ADDED,
                 "@" + actorName + " joined the group",
                 member.getId());
+        cacheEvictPublisher.publishForUsers(Set.of(userId), "MEMBER_ACCEPTED", groupId);
     }
 
     @Caching(evict = {
@@ -289,6 +297,7 @@ public class SplitService {
         }
 
         memberRepo.delete(member);
+        cacheEvictPublisher.publishForUsers(Set.of(userId), "MEMBER_REJECTED", groupId);
     }
 
     @Caching(evict = {
@@ -320,6 +329,7 @@ public class SplitService {
                                            // for now
                 "@" + actorName + " left the group",
                 member.getId());
+        cacheEvictPublisher.publishForUsers(Set.of(userId), "MEMBER_LEFT", groupId);
     }
 
     @Transactional(readOnly = true)
@@ -797,9 +807,14 @@ public class SplitService {
     }
 
     private void evictUserGroupsForMembers(Long groupId) {
+        var members = memberRepo.findByGroupId(groupId);
         var cache = cacheManager.getCache("user-groups");
         if (cache != null) {
-            memberRepo.findByGroupId(groupId).forEach(m -> cache.evict(m.getUserId()));
+            members.forEach(m -> cache.evict(m.getUserId()));
         }
+        cacheEvictPublisher.publishForUsers(
+                members.stream().map(GroupMember::getUserId).collect(Collectors.toSet()), 
+                "GROUP_UPDATED", 
+                groupId);
     }
 }

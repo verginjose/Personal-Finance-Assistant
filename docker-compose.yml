@@ -26,6 +26,15 @@ services:
   postgres-replica:
     image: ankane/pgvector:v0.5.1
     container_name: postgres-replica
+    command: |
+      bash -c "
+      if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+        echo 'Starting base backup from postgres-primary...'
+        export PGPASSWORD=$${POSTGRES_PASSWORD}
+        pg_basebackup -h postgres-primary -p 5432 -U $${POSTGRES_USER} -D /var/lib/postgresql/data -Fp -Xs -P -R
+      fi
+      exec docker-entrypoint.sh postgres
+      "
     deploy:
       resources:
         limits:

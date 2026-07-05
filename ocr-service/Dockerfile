@@ -26,7 +26,7 @@ RUN pip install --no-cache-dir \
         opencv-python-headless==4.10.0.84 \
         numpy==1.26.4
 
-RUN pip install --no-cache-dir cachetools httpx pymupdf
+RUN pip install --no-cache-dir cachetools httpx pymupdf minio==7.2.7 aio-pika==9.4.1
 
 WORKDIR /app
 COPY app/ .

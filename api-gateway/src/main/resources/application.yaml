@@ -19,6 +19,12 @@ spring:
     init:
       mode: always
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
   data:
     redis:
       host: ${REDIS_HOST:redis}

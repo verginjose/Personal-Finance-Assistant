@@ -26,8 +26,8 @@ public class AuthDtos {
             String email,
 
             @NotBlank
-            @Size(min = 3, max = 30, message = "Username must be 3–30 characters")
-            @Pattern(regexp = "^[a-zA-Z0-9_]+$", message = "Username may only contain letters, numbers, and underscores")
+            @Size(min = 3, max = 50, message = "Username must be 3–50 characters")
+            @Pattern(regexp = "^[a-zA-Z0-9_@.-]+$", message = "Username may only contain letters, numbers, underscores, @, ., and -")
             String username,
 
             @NotBlank

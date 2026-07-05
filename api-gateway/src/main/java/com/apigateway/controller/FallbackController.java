@@ -16,7 +16,7 @@ public class FallbackController {
                 .body(Map.of(
                         "error", "Service Unavailable",
                         "message", "Upsert service is temporarily unavailable.",
-                        "service", "upsert-service"
+                        "service", "command-service"
                 )));
     }
 
@@ -26,7 +26,7 @@ public class FallbackController {
                 .body(Map.of(
                         "error", "Service Unavailable",
                         "message", "Analytics service is temporarily unavailable.",
-                        "service", "analytics-service"
+                        "service", "query-service"
                 )));
     }
 

@@ -3,6 +3,8 @@ import logging
 import os
 import time
 import asyncio
+import json
+import io
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from typing import Optional
@@ -11,9 +13,11 @@ import cv2
 import httpx
 import numpy as np
 from cachetools import TTLCache
-from fastapi import FastAPI, File, HTTPException, UploadFile, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from paddleocr import PaddleOCR
+from minio import Minio
+import aio_pika
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -22,8 +26,14 @@ log = logging.getLogger(__name__)
 GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL     = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_URL       = "https://api.groq.com/openai/v1/chat/completions"
-UPSERT_URL     = os.getenv("UPSERT_SERVICE_URL", "http://upsert-service:8081")
+UPSERT_URL     = os.getenv("UPSERT_SERVICE_URL", "http://command-service:8081")
 CURRENCY_URL   = "https://api.frankfurter.dev/v1/latest?from=USD"
+
+RABBITMQ_URL   = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "admin")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "password123")
+MINIO_SECURE   = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
 # ── In-memory caches ─────────────────────────────────────────────────────────
 ocr_cache: TTLCache   = TTLCache(maxsize=500, ttl=86400)  # 24h
@@ -33,12 +43,58 @@ rate_cache: dict      = {}   # {"rates": {...}, "date": "..."}
 # ── PaddleOCR engine & HTTP Client (global, loaded once) ──────────────────────
 ocr_engine: Optional[PaddleOCR] = None
 http_client: Optional[httpx.AsyncClient] = None
+minio_client: Optional[Minio] = None
+mq_connection: Optional[aio_pika.RobustConnection] = None
+
+
+async def process_mq_message(message: aio_pika.abc.AbstractIncomingMessage):
+    async with message.process():
+        try:
+            body = json.loads(message.body.decode("utf-8"))
+            user_id = body.get("userId")
+            object_name = body.get("objectName")
+            bucket = body.get("bucket", "receipts")
+            
+            log.info("Received OCR job from RabbitMQ for user %s: s3://%s/%s", user_id, bucket, object_name)
+            
+            # Download file from Minio in a background thread to avoid blocking asyncio loop
+            def download_minio():
+                response = minio_client.get_object(bucket, object_name)
+                return response.read()
+                
+            data = await asyncio.to_thread(download_minio)
+            
+            # Process OCR
+            content_type = "application/pdf" if object_name.lower().endswith(".pdf") else "image/jpeg"
+            await _process_and_notify(user_id, data, object_name, content_type)
+            
+        except Exception as e:
+            log.error("Failed to process RabbitMQ message: %s", e)
+
+
+async def start_rabbitmq_consumer():
+    global mq_connection
+    while True:
+        try:
+            log.info("Connecting to RabbitMQ at %s", RABBITMQ_URL)
+            mq_connection = await aio_pika.connect_robust(RABBITMQ_URL)
+            channel = await mq_connection.channel()
+            queue = await channel.declare_queue("ocr-jobs", durable=True)
+            
+            log.info("Started consuming from RabbitMQ queue 'ocr-jobs'")
+            async with queue.iterator() as queue_iter:
+                async for message in queue_iter:
+                    await process_mq_message(message)
+            break
+        except Exception as e:
+            log.error("RabbitMQ connection failed, retrying in 5s: %s", e)
+            await asyncio.sleep(5)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global ocr_engine, http_client
-    log.info("Loading PaddleOCR model onto GPU...")
+    global ocr_engine, http_client, minio_client, mq_connection
+    log.info("Initializing OCR Service resources...")
     
     use_angle_cls = os.getenv("OCR_USE_ANGLE_CLS", "false").lower() == "true"
     det_limit_side_len = int(os.getenv("OCR_DET_LIMIT_SIDE_LEN", "736"))
@@ -53,25 +109,34 @@ async def lifespan(app: FastAPI):
         det_limit_side_len=det_limit_side_len,
         show_log=False,
     )
-    log.info(f"PaddleOCR ready. use_angle_cls={use_angle_cls}, det_limit_side_len={det_limit_side_len}")
     
-    # Initialize global HTTP client with connection pooling
     limits = httpx.Limits(max_keepalive_connections=20, max_connections=50)
     http_client = httpx.AsyncClient(limits=limits, timeout=30.0)
     
-    # Pre-load exchange rates
+    minio_client = Minio(
+        MINIO_ENDPOINT,
+        access_key=MINIO_ACCESS_KEY,
+        secret_key=MINIO_SECRET_KEY,
+        secure=MINIO_SECURE
+    )
+    
     await _refresh_rates()
+    
+    # Start RabbitMQ Consumer in background
+    asyncio.create_task(start_rabbitmq_consumer())
+    
     yield
-    ocr_engine = None
+    
+    if mq_connection:
+        await mq_connection.close()
     await http_client.aclose()
-    http_client = None
 
 
-app = FastAPI(title="Bill Parser & OCR Service", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="Asynchronous OCR Service", version="3.0.0", lifespan=lifespan)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# OCR helpers
+# Core Logic (Same as before)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _decode_image(data: bytes) -> np.ndarray:
@@ -96,10 +161,8 @@ def _run_ocr_on_image(img: np.ndarray) -> dict:
 
 
 def _extract_text_from_image_bytes(data: bytes, filename: str) -> str:
-    """Extract text from image bytes with SHA256-based cache."""
     file_hash = hashlib.sha256(data).hexdigest()
     if file_hash in ocr_cache:
-        log.debug("OCR cache hit for %s", filename)
         return ocr_cache[file_hash]
     img = _decode_image(data)
     result = _run_ocr_on_image(img)
@@ -109,27 +172,19 @@ def _extract_text_from_image_bytes(data: bytes, filename: str) -> str:
 
 
 def _extract_text_from_pdf(data: bytes) -> str:
-    """Extract text from PDF — direct text layer first, OCR fallback."""
-    import fitz  # pymupdf
+    import fitz
     doc = fitz.open(stream=data, filetype="pdf")
     text = ""
     for page in doc:
         text += page.get_text()
     if len(text.strip()) >= 10:
-        log.debug("PDF text extracted directly (%d chars)", len(text))
         return text
-    # Scanned PDF — render first page to image and OCR
-    log.debug("PDF has no text layer, falling back to OCR")
     page = doc[0]
-    mat = fitz.Matrix(300 / 72, 300 / 72)  # 300 DPI
+    mat = fitz.Matrix(300 / 72, 300 / 72)
     pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB)
     img_data = pix.tobytes("png")
     return _extract_text_from_image_bytes(img_data, "scanned-page.png")
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Currency exchange rates (refreshed daily)
-# ─────────────────────────────────────────────────────────────────────────────
 
 async def _refresh_rates():
     global rate_cache, http_client
@@ -141,7 +196,6 @@ async def _refresh_rates():
                 rates = body.get("rates", {})
                 rates["USD"] = 1.0
                 rate_cache = {"rates": rates, "date": body.get("date", "")}
-                log.info("Exchange rates refreshed: %d currencies, date=%s", len(rates), rate_cache["date"])
     except Exception as e:
         log.error("Exchange rate fetch error: %s", e)
 
@@ -153,10 +207,6 @@ def _convert_currency(amount: float, currency: str) -> dict:
     in_inr = in_usd * rates.get("INR", 83.0)
     return {"amountInr": round(in_inr, 2), "amountUsd": round(in_usd, 2)}
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Groq LLM — financial document extraction
-# ─────────────────────────────────────────────────────────────────────────────
 
 GROQ_PROMPT_TEMPLATE = """Extract financial data from this receipt/document. Return ONLY valid JSON.
 
@@ -180,7 +230,6 @@ Receipt:
 async def _call_groq(text: str) -> dict:
     text_hash = hashlib.sha256(text.encode()).hexdigest()
     if text_hash in llm_cache:
-        log.debug("LLM cache hit, skipping Groq")
         return llm_cache[text_hash]
 
     if not GROQ_API_KEY:
@@ -204,38 +253,25 @@ async def _call_groq(text: str) -> dict:
             raise RuntimeError(f"Groq HTTP {r.status_code}: {r.text}")
 
     content = r.json()["choices"][0]["message"]["content"]
-    import json
     result = json.loads(content)
     llm_cache[text_hash] = result
     return result
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Bill parsing pipeline
-# ─────────────────────────────────────────────────────────────────────────────
-
 async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: str) -> dict:
-    """Full pipeline: extract text → Groq LLM → currency convert → response."""
-    filename = filename or "file"
     is_pdf = filename.lower().endswith(".pdf") or content_type == "application/pdf"
-
-    # Offload the heavily blocking OCR engine to a threadpool to prevent freezing the FastAPI event loop
     if is_pdf:
         raw_text = await asyncio.to_thread(_extract_text_from_pdf, data)
     else:
         raw_text = await asyncio.to_thread(_extract_text_from_image_bytes, data, filename)
 
     clean_text = " ".join(raw_text.split()).strip()
-    print(f"[DEBUG] Extracted {len(clean_text)} chars from '{filename}'", flush=True)
-
     if len(clean_text) < 10:
-        print(f"[WARNING] Extracted text too short ({len(clean_text)}). Returning empty response.", flush=True)
         return {}
 
     doc = await _call_groq(clean_text)
     conversion = _convert_currency(float(doc.get("amount", 0)), doc.get("currency", "INR"))
 
-    # Map to CreateEntryResponse shape expected by upsert-service
     return {
         "userId": user_id,
         "name": doc.get("vendor"),
@@ -253,89 +289,21 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
 
 
 async def _process_and_notify(user_id: str, data: bytes, filename: str, content_type: str):
-    """Background task: parse bill then POST result to upsert-service SSE webhook."""
-    print(f"[DEBUG] Started processing bill for user: {user_id}", flush=True)
     try:
         result = await _parse_bill(user_id, data, filename, content_type)
         payload = {"userId": user_id, "status": "SUCCESS", "data": result, "message": "Bill parsed successfully"}
-        print(f"[DEBUG] Bill parsed successfully for user {user_id}, notifying upsert-service", flush=True)
     except Exception as e:
-        print(f"[ERROR] Bill parsing failed for user {user_id}: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
+        log.error("Bill parsing failed: %s", e)
         payload = {"userId": user_id, "status": "ERROR", "message": f"Failed to parse bill: {e}"}
 
     try:
         client = http_client if http_client else httpx.AsyncClient()
-        print(f"[DEBUG] Sending payload to {UPSERT_URL}/internal/ocr-complete", flush=True)
         res = await client.post(f"{UPSERT_URL}/internal/ocr-complete", json=payload, timeout=10.0)
-        print(f"[DEBUG] Upsert service responded with {res.status_code}", flush=True)
+        log.info("Notified command-service: %s", res.status_code)
     except Exception as e:
-        print(f"[ERROR] Failed to notify upsert-service for user {user_id}: {e}", flush=True)
+        log.error("Failed to notify command-service: %s", e)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Routes
-# ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "engine": "PaddleOCR", "gpu": True, "bill_parsing": True}
-
-
-@app.post("/ocr")
-async def ocr(file: UploadFile = File(...)):
-    """Raw OCR endpoint — returns extracted text lines."""
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image files accepted")
-    try:
-        data = await file.read()
-        img = _decode_image(data)
-        return JSONResponse(content=_run_ocr_on_image(img))
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        log.error("OCR failed: %s", e)
-        raise HTTPException(status_code=500, detail="OCR processing failed")
-
-
-@app.post("/bill/process/{user_id}")
-async def process_bill(
-    user_id: str,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-):
-    """
-    Accepts a bill image or PDF.
-    Returns 202 immediately; processes asynchronously and POSTs result
-    to upsert-service /internal/ocr-complete for SSE notification.
-    """
-    MAX_SIZE = 10 * 1024 * 1024  # 10 MB
-    content_type = file.content_type or ""
-
-    if not (content_type.startswith("image/") or content_type == "application/pdf"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type: {content_type}. Only image/* and application/pdf are accepted.",
-        )
-
-    data = await file.read()
-    if len(data) > MAX_SIZE:
-        raise HTTPException(status_code=400, detail="File exceeds the 10 MB size limit.")
-
-    background_tasks.add_task(
-        _process_and_notify, user_id, data, file.filename or "bill", content_type
-    )
-
-    log.info("OCR job enqueued: user=%s, file=%s, size=%dKB", user_id, file.filename, len(data) // 1024)
-    return JSONResponse(
-        status_code=202,
-        content={"status": "processing", "message": "Bill uploaded and is being processed asynchronously."},
-    )
-
-
-@app.post("/internal/refresh-rates")
-async def refresh_rates():
-    """Internal endpoint to manually trigger exchange rate refresh."""
-    await _refresh_rates()
-    return {"status": "ok", "date": rate_cache.get("date")}
+    return {"status": "ok", "engine": "PaddleOCR", "async_mq": True}

@@ -1,26 +1,86 @@
 services:
-  postgres:
-    image: postgres:15
-    container_name: postgres-db
+  postgres-primary:
+    image: ankane/pgvector:v0.5.1
+    container_name: postgres-primary
     deploy:
       resources:
         limits:
-          memory: 2.5G
-    command: postgres -c shared_buffers=1GB -c work_mem=64MB -c maintenance_work_mem=128MB -c max_connections=200
+          memory: 1G
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "${DB_HOST_PORT}:5432"
+      - "${DB_HOST_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_primary:/var/lib/postgresql/data
       - ./db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}" ]
       interval: 5s
       timeout: 3s
       retries: 15
+    networks:
+      - finance-network
+
+  postgres-replica:
+    image: ankane/pgvector:v0.5.1
+    container_name: postgres-replica
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_replica:/var/lib/postgresql/data
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    networks:
+      - finance-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - finance-network
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     networks:
       - finance-network
 
@@ -67,13 +127,13 @@ services:
     networks:
       - finance-network
 
-  upsert-service:
+  command-service:
     build:
-      context: ./upsert-service
+      context: ./command-service
       dockerfile: Dockerfile
-    container_name: upsert-service
+    container_name: command-service
     depends_on:
-      postgres:
+      postgres-primary:
         condition: service_healthy
     restart: on-failure
     deploy:
@@ -81,7 +141,7 @@ services:
         limits:
           memory: 2G
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-primary:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
@@ -91,19 +151,19 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
-      ANALYTICS_SERVICE_URL: http://analytics-service:8084
+      ANALYTICS_SERVICE_URL: http://query-service:8084
     ports:
       - "${UPSERT_SERVICE_PORT}:8081"
     networks:
       - finance-network
 
-  analytics-service:
+  query-service:
     build:
-      context: ./analytics-service
+      context: ./query-service
       dockerfile: Dockerfile
-    container_name: analytics-service
+    container_name: query-service
     depends_on:
-      postgres:
+      postgres-primary:
         condition: service_healthy
     restart: on-failure
     deploy:
@@ -111,7 +171,7 @@ services:
         limits:
           memory: 2G
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-replica:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
@@ -149,7 +209,7 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       GROQ_API_KEY: ${GROQ_API_KEY}
-      UPSERT_SERVICE_URL: http://upsert-service:8081
+      UPSERT_SERVICE_URL: http://command-service:8081
       OCR_USE_ANGLE_CLS: "false"
       OCR_DET_LIMIT_SIDE_LEN: "736"
     networks:
@@ -169,13 +229,13 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      postgres:
+      postgres-primary:
         condition: service_healthy
-      upsert-service:
+      command-service:
         condition: service_started
       ocr-service:
         condition: service_healthy
-      analytics-service:
+      query-service:
         condition: service_started
     restart: on-failure
     deploy:
@@ -192,7 +252,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
 
       # Auth Database
-      SPRING_R2DBC_URL: r2dbc:postgresql://postgres:5432/${DB_NAME}?schema=${AUTH_DB_SCHEMA}
+      SPRING_R2DBC_URL: r2dbc:postgresql://postgres-primary:5432/${DB_NAME}?schema=${AUTH_DB_SCHEMA}
       SPRING_R2DBC_USERNAME: ${DB_USER}
       SPRING_R2DBC_PASSWORD: ${DB_PASSWORD}
 
@@ -305,7 +365,8 @@ services:
       - finance-network
 
 volumes:
-  postgres_data:
+  postgres_data_primary:
+  postgres_data_replica:
   clickhouse_data:
   grafana_data:
   redis-data:

@@ -38,8 +38,8 @@ spring:
       httpclient:
         connect-timeout: 5000
       routes:
-        - id: upsert-service-sse
-          uri: http://upsert-service:8081
+        - id: command-service-sse
+          uri: http://command-service:8081
           predicates:
             - Path=/api/upsert/notifications/**
           filters:
@@ -48,10 +48,11 @@ spring:
             response-timeout: 1800000
             connect-timeout: 5000
 
-        - id: upsert-service
-          uri: http://upsert-service:8081
+        - id: command-service-command
+          uri: http://command-service:8081
           predicates:
             - Path=/api/upsert/**
+            - Method=POST,PUT,PATCH,DELETE
           filters:
             - StripPrefix=1
             - name: RequestRateLimiter
@@ -65,8 +66,26 @@ spring:
                 name: upsert-cb
                 fallbackUri: forward:/fallback/upsert
 
-        - id: analytics-service
-          uri: http://analytics-service:8084
+        - id: command-service-query
+          uri: http://query-service:8084
+          predicates:
+            - Path=/api/upsert/**
+            - Method=GET
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: analytics-cb
+                fallbackUri: forward:/fallback/analytics
+
+        - id: query-service
+          uri: http://query-service:8084
           predicates:
             - Path=/api/analytics/**
           filters:
@@ -82,22 +101,7 @@ spring:
                 name: analytics-cb
                 fallbackUri: forward:/fallback/analytics
 
-        - id: ocr-service
-          uri: http://ocr-service:8100
-          predicates:
-            - Path=/api/bill/**
-          filters:
-            - StripPrefix=1
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 1
-                redis-rate-limiter.burstCapacity: 3
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@userKeyResolver}"
-            - name: CircuitBreaker
-              args:
-                name: ocr-cb
-                fallbackUri: forward:/fallback/bill
+
 
 resilience4j:
   circuitbreaker:

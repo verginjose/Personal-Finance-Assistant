@@ -8,23 +8,15 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="api-gateway" />
-        <module name="upsert-service" />
-        <module name="analytics-service" />
-        <module name="auth-service" />
-      </profile>
-      <profile name="Annotation profile for bill-parser-service" enabled="true">
-        <sourceOutputDir name="target/generated-sources/annotations" />
-        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
-        <outputRelativeToContentRoot value="true" />
-        <processorPath useClasspath="false">
-          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.36/lombok-1.18.36.jar" />
-        </processorPath>
-        <module name="bill-parser-service" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
+      <module name="analytics-service" target="21" />
+      <module name="auth-service" target="21" />
+      <module name="bill-parser-service" target="21" />
       <module name="finance-service" target="21" />
       <module name="untitled" target="21" />
+      <module name="upsert-service" target="21" />
     </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">

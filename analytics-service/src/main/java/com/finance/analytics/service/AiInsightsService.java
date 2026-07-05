@@ -48,12 +48,9 @@ public class AiInsightsService {
     // Cache AI insights for 24 hours per user (avoid repeated LLM calls)
     @Cacheable(value = "ai-insights", key = "#userId")
     public AiInsightResponse generateInsights(UUID userId) {
-        LocalDateTime monthStart = LocalDateTime.now().withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
-        LocalDateTime monthEnd = monthStart.plusMonths(1).minusSeconds(1);
-
-        BigDecimal income  = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.valueOf("INCOME"),  monthStart, monthEnd));
-        BigDecimal expense = safeAmount(repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.valueOf("EXPENSE"), monthStart, monthEnd));
-        List<CategoryRow> categories = repository.getCategoryAnalyticsByDateRange(userId, monthStart, monthEnd);
+        BigDecimal income  = safeAmount(repository.getTotalAmountByType(userId, TransactionType.valueOf("INCOME")));
+        BigDecimal expense = safeAmount(repository.getTotalAmountByType(userId, TransactionType.valueOf("EXPENSE")));
+        List<CategoryRow> categories = repository.getAllCategoryAnalytics(userId);
 
         if (income.compareTo(BigDecimal.ZERO) == 0 && expense.compareTo(BigDecimal.ZERO) == 0) {
             return buildDefaultResponse();
@@ -90,7 +87,7 @@ public class AiInsightsService {
         sb.append("You are a highly engaging 'Financial Game Master' AI coach. Your goal is to gamify this user's finances and hype them up! ");
         sb.append("Analyze their financial data and provide 3-5 hyper-specific, actionable insights using gaming terminology (e.g., 'Level Up!', 'Combo Breaker', 'XP Gained'). ");
         sb.append("Make it fun, energetic, and slightly competitive. Use emojis generously. Avoid generic advice—be specific to their data.\n\n");
-        sb.append("This Month's Summary:\n");
+        sb.append("Overall Summary:\n");
         sb.append("- Total Income: ₹").append(income).append("\n");
         sb.append("- Total Expenses: ₹").append(expense).append("\n");
         sb.append("- Net Balance: ₹").append(income.subtract(expense)).append("\n");
@@ -169,19 +166,19 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
         if (net.compareTo(BigDecimal.ZERO) < 0) {
             insights.add(new AiInsightResponse.Insight(
                     "Spending Exceeds Income",
-                    "You've spent ₹" + expense.subtract(income).toPlainString() + " more than you earned this month. Consider reviewing your biggest expense categories.",
+                    "You've spent ₹" + expense.subtract(income).toPlainString() + " more than you earned overall. Consider reviewing your biggest expense categories.",
                     "WARNING", 1));
         } else {
             double savingsRate = net.doubleValue() / income.doubleValue() * 100;
             if (savingsRate >= 20) {
                 insights.add(new AiInsightResponse.Insight(
                         "Great Savings Rate! 🎉",
-                        "You're saving " + String.format("%.1f", savingsRate) + "% of your income. Keep it up!",
+                        "You're saving " + String.format("%.1f", savingsRate) + "% of your income overall. Keep it up!",
                         "ACHIEVEMENT", 2));
             } else {
                 insights.add(new AiInsightResponse.Insight(
                         "Boost Your Savings",
-                        "Your savings rate is " + String.format("%.1f", savingsRate) + "%. Financial advisors recommend saving at least 20% of income.",
+                        "Your overall savings rate is " + String.format("%.1f", savingsRate) + "%. Financial advisors recommend saving at least 20% of income.",
                         "TIP", 2));
             }
         }
@@ -192,8 +189,8 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
                 "TIP", 5));
 
         String summary = net.compareTo(BigDecimal.ZERO) >= 0
-                ? "Good job staying in the positive this month! Net balance: ₹" + net.toPlainString()
-                : "This month you overspent by ₹" + net.abs().toPlainString() + ". Review your spending patterns.";
+                ? "Good job staying in the positive overall! Net balance: ₹" + net.toPlainString()
+                : "Overall you overspent by ₹" + net.abs().toPlainString() + ". Review your spending patterns.";
 
         return new AiInsightResponse(insights, summary,
                 LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));

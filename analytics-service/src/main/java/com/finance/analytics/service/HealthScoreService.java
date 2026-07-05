@@ -133,7 +133,7 @@ public class HealthScoreService {
         String grade = HealthScoreResponse.toGrade(score);
         BigDecimal net = income.subtract(expense);
         return String.format(
-            "Your Financial Health Score is %d (%s). Net balance this period: ₹%s. %s",
+            "Your Financial Health Score is %d (%s). Overall net balance: ₹%s. %s",
             score, grade, net.toPlainString(),
             score >= 700 ? "Great financial habits! Keep it up." :
             score >= 500 ? "Room for improvement — focus on savings and consistency." :

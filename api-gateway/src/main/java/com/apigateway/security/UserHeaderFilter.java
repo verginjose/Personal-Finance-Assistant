@@ -21,9 +21,14 @@ import java.util.Base64;
 public class UserHeaderFilter implements GlobalFilter, Ordered {
 
     private final SecretKey secretKey;
+    private final com.github.benmanes.caffeine.cache.Cache<String, Claims> claimsCache;
 
     public UserHeaderFilter(@Value("${jwt.secret}") String secret) {
         this.secretKey = buildKey(secret);
+        this.claimsCache = com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
+                .maximumSize(5000)
+                .expireAfterWrite(java.time.Duration.ofMinutes(5))
+                .build();
     }
 
     @Override
@@ -41,11 +46,11 @@ public class UserHeaderFilter implements GlobalFilter, Ordered {
 
         if (token != null) {
             try {
-                Claims claims = Jwts.parser()
+                Claims claims = claimsCache.get(token, t -> Jwts.parser()
                         .verifyWith(secretKey)
                         .build()
-                        .parseSignedClaims(token)
-                        .getPayload();
+                        .parseSignedClaims(t)
+                        .getPayload());
                 String userId = claims.get("userId", String.class);
                 if (userId != null) {
                     // Remove any client-supplied X-User-Id header first (prevent injection),

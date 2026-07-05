@@ -24,12 +24,17 @@ public class JwtReactiveAuthenticationManager
 
     private final SecretKey secretKey;
     private final org.springframework.data.redis.core.ReactiveStringRedisTemplate redisTemplate;
+    private final com.github.benmanes.caffeine.cache.Cache<String, Claims> claimsCache;
 
     public JwtReactiveAuthenticationManager(
             @Value("${jwt.secret}") String secret,
             org.springframework.data.redis.core.ReactiveStringRedisTemplate redisTemplate) {
         this.secretKey = buildKey(secret);
         this.redisTemplate = redisTemplate;
+        this.claimsCache = com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
+                .maximumSize(5000)
+                .expireAfterWrite(java.time.Duration.ofMinutes(5))
+                .build();
     }
 
     @Override
@@ -47,11 +52,11 @@ public class JwtReactiveAuthenticationManager
                         return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Token is blacklisted"));
                     }
                     try {
-                        Claims claims = Jwts.parser()
+                        Claims claims = claimsCache.get(token, t -> Jwts.parser()
                                 .verifyWith(secretKey)
                                 .build()
-                                .parseSignedClaims(token)
-                                .getPayload();
+                                .parseSignedClaims(t)
+                                .getPayload());
 
                         String email = claims.getSubject();
 

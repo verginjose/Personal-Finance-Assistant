@@ -7,7 +7,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.UUID;
@@ -25,15 +24,15 @@ public class UserController {
             @RequestParam String q,
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(defaultValue = "0") int page) {
-        return Mono.fromCallable(() -> ResponseEntity.ok(userService.searchUsers(q, limit, page)))
-                .subscribeOn(Schedulers.boundedElastic());
+        return userService.searchUsers(q, limit, page).collectList()
+                .map(ResponseEntity::ok);
     }
 
     @PostMapping("/bulk")
     @PreAuthorize("isAuthenticated()")
     public Mono<ResponseEntity<List<UserSearchResult>>> getBulkUsers(
             @RequestBody Mono<List<UUID>> userIdsMono) {
-        return userIdsMono.publishOn(Schedulers.boundedElastic())
-                .map(userIds -> ResponseEntity.ok(userService.getBulkUsers(userIds)));
+        return userIdsMono.flatMap(userIds -> userService.getBulkUsers(userIds).collectList())
+                .map(ResponseEntity::ok);
     }
 }

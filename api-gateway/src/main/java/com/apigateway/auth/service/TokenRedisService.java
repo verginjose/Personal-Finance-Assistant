@@ -1,70 +1,56 @@
 package com.apigateway.auth.service;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisCallback;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
+import java.time.Duration;
 
 @Service
 @RequiredArgsConstructor
 public class TokenRedisService {
 
-    private final StringRedisTemplate redisTemplate;
+    private final ReactiveStringRedisTemplate redisTemplate;
 
     private static final String REFRESH_TOKEN_PREFIX = "refresh_token:";
     private static final String USER_TOKENS_PREFIX = "user_tokens:";
+    private static final String BLACKLIST_PREFIX = "token_blacklist:";
 
-    public void saveRefreshToken(String token, String email, String userId, String role, long expiryMs) {
+    public Mono<Void> saveRefreshTokenReactive(String token, String email, String userId, String role, long expiryMs) {
         String tokenKey = REFRESH_TOKEN_PREFIX + token;
         String userKey = USER_TOKENS_PREFIX + email;
         String value = userId + "|" + email + "|" + role;
 
-        redisTemplate.opsForValue().set(tokenKey, value, expiryMs, TimeUnit.MILLISECONDS);
-        redisTemplate.opsForSet().add(userKey, token);
-        redisTemplate.expire(userKey, expiryMs, TimeUnit.MILLISECONDS);
+        return redisTemplate.opsForValue().set(tokenKey, value, Duration.ofMillis(expiryMs))
+                .then(redisTemplate.opsForSet().add(userKey, token))
+                .then(redisTemplate.expire(userKey, Duration.ofMillis(expiryMs)))
+                .then();
     }
 
-    public String getRefreshTokenValue(String token) {
+    public Mono<String> getRefreshTokenValueReactive(String token) {
         return redisTemplate.opsForValue().get(REFRESH_TOKEN_PREFIX + token);
     }
 
-    public void deleteRefreshToken(String token, String email) {
-        redisTemplate.delete(REFRESH_TOKEN_PREFIX + token);
-        redisTemplate.opsForSet().remove(USER_TOKENS_PREFIX + email, token);
+    public Mono<Void> deleteRefreshTokenReactive(String token, String email) {
+        return redisTemplate.delete(REFRESH_TOKEN_PREFIX + token)
+                .then(redisTemplate.opsForSet().remove(USER_TOKENS_PREFIX + email, token))
+                .then();
     }
 
-    public void revokeAllUserTokens(String email) {
+    public Mono<Void> revokeAllUserTokensReactive(String email) {
         String userKey = USER_TOKENS_PREFIX + email;
-        Set<String> tokens = redisTemplate.opsForSet().members(userKey);
-
-        if (tokens == null || tokens.isEmpty()) {
-            redisTemplate.delete(userKey);
-            return;
-        }
-
-        List<String> keysToDelete = new ArrayList<>();
-        for (String token : tokens) {
-            keysToDelete.add(REFRESH_TOKEN_PREFIX + token);
-        }
-        keysToDelete.add(userKey);
-
-        redisTemplate.delete(keysToDelete); // single pipelined batch delete
+        return redisTemplate.opsForSet().members(userKey)
+                .flatMap(token -> redisTemplate.delete(REFRESH_TOKEN_PREFIX + token))
+                .then(redisTemplate.delete(userKey))
+                .then();
     }
 
-    private static final String BLACKLIST_PREFIX = "token_blacklist:";
-
-    public void blacklistAccessToken(String token, long expiryMs) {
+    public Mono<Void> blacklistAccessTokenReactive(String token, long expiryMs) {
         if (expiryMs > 0) {
-            redisTemplate.opsForValue().set(BLACKLIST_PREFIX + token, "revoked", expiryMs, TimeUnit.MILLISECONDS);
+            return redisTemplate.opsForValue().set(BLACKLIST_PREFIX + token, "revoked", Duration.ofMillis(expiryMs))
+                    .then();
         }
-    }
-
-    public boolean isAccessTokenBlacklisted(String token) {
-        return redisTemplate.hasKey(BLACKLIST_PREFIX + token);
+        return Mono.empty();
     }
 }

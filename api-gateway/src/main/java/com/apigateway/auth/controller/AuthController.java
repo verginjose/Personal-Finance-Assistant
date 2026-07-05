@@ -12,7 +12,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.Map;
 
@@ -28,14 +27,14 @@ public class AuthController {
 
     @PostMapping("/login")
     public Mono<ResponseEntity<LoginResponse>> login(@Valid @RequestBody Mono<LoginRequest> requestMono) {
-        return requestMono.publishOn(Schedulers.boundedElastic())
-                .map(request -> ResponseEntity.ok(authService.login(request)));
+        return requestMono.flatMap(authService::login)
+                .map(ResponseEntity::ok);
     }
 
     @PostMapping("/register")
     public Mono<ResponseEntity<RegisterResponse>> register(@Valid @RequestBody Mono<RegisterRequest> requestMono) {
-        return requestMono.publishOn(Schedulers.boundedElastic())
-                .map(request -> ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request)));
+        return requestMono.flatMap(authService::register)
+                .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response));
     }
 
     @GetMapping("/health")
@@ -48,15 +47,19 @@ public class AuthController {
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
     public Mono<ResponseEntity<Map<String, String>>> me(Authentication authentication) {
-        return Mono.fromCallable(() -> {
-            User user = userRepository.findByEmail(authentication.getName()).orElse(null);
-            return ResponseEntity.ok(Map.of(
-                    "email", authentication.getName(),
-                    "role",  authentication.getAuthorities().iterator().next().getAuthority(),
-                    "profilePicture", user != null && user.getProfilePicture() != null ? user.getProfilePicture() : "",
-                    "username", user != null ? user.getActualUsername() : ""
-            ));
-        }).subscribeOn(Schedulers.boundedElastic());
+        return userRepository.findByEmail(authentication.getName())
+                .map(user -> ResponseEntity.ok(Map.of(
+                        "email", authentication.getName(),
+                        "role",  authentication.getAuthorities().iterator().next().getAuthority(),
+                        "profilePicture", user.getProfilePicture() != null ? user.getProfilePicture() : "",
+                        "username", user.getActualUsername()
+                )))
+                .defaultIfEmpty(ResponseEntity.ok(Map.of(
+                        "email", authentication.getName(),
+                        "role",  authentication.getAuthorities().iterator().next().getAuthority(),
+                        "profilePicture", "",
+                        "username", ""
+                )));
     }
 
     @PutMapping("/profile")
@@ -65,37 +68,42 @@ public class AuthController {
             Authentication authentication,
             @RequestBody Mono<Map<String, String>> bodyMono) {
         
-        return bodyMono.publishOn(Schedulers.boundedElastic()).map(body -> {
-            User user = userRepository.findByEmail(authentication.getName())
-                    .orElseThrow(() -> new RuntimeException("User not found"));
+        return bodyMono.flatMap(body -> 
+            userRepository.findByEmail(authentication.getName())
+                    .switchIfEmpty(Mono.error(new RuntimeException("User not found")))
+                    .flatMap(user -> {
+                        if (body.containsKey("profilePicture")) {
+                            user.setProfilePicture(body.get("profilePicture"));
+                        }
 
-            if (body.containsKey("profilePicture")) {
-                user.setProfilePicture(body.get("profilePicture"));
-            }
+                        if (body.containsKey("username")) {
+                            String newUsername = body.get("username").trim();
+                            if (newUsername.length() < 3 || newUsername.length() > 30) {
+                                return Mono.just(ResponseEntity.badRequest().body(Map.of("message", "Username must be between 3 and 30 characters")));
+                            }
+                            if (!newUsername.matches("^[a-zA-Z0-9_]+$")) {
+                                return Mono.just(ResponseEntity.badRequest().body(Map.of("message", "Username may only contain letters, numbers, and underscores")));
+                            }
+                            if (!newUsername.equalsIgnoreCase(user.getActualUsername())) {
+                                return userRepository.existsByUsername(newUsername).flatMap(exists -> {
+                                    if (exists) {
+                                        return Mono.just(ResponseEntity.badRequest().body(Map.of("message", "Username is already taken")));
+                                    }
+                                    user.setUsername(newUsername);
+                                    return userRepository.save(user).map(u -> ResponseEntity.ok(Map.of("message", "Profile updated successfully")));
+                                });
+                            }
+                        }
 
-            if (body.containsKey("username")) {
-                String newUsername = body.get("username").trim();
-                if (newUsername.length() < 3 || newUsername.length() > 30) {
-                    return ResponseEntity.badRequest().body(Map.of("message", "Username must be between 3 and 30 characters"));
-                }
-                if (!newUsername.matches("^[a-zA-Z0-9_]+$")) {
-                    return ResponseEntity.badRequest().body(Map.of("message", "Username may only contain letters, numbers, and underscores"));
-                }
-                if (!newUsername.equalsIgnoreCase(user.getActualUsername()) && userRepository.existsByUsername(newUsername)) {
-                    return ResponseEntity.badRequest().body(Map.of("message", "Username is already taken"));
-                }
-                user.setUsername(newUsername);
-            }
-
-            userRepository.save(user);
-            return ResponseEntity.ok(Map.of("message", "Profile updated successfully"));
-        });
+                        return userRepository.save(user).map(u -> ResponseEntity.ok(Map.of("message", "Profile updated successfully")));
+                    })
+        );
     }
 
     @PostMapping("/refresh")
     public Mono<ResponseEntity<LoginResponse>> refresh(@Valid @RequestBody Mono<RefreshTokenRequest> requestMono) {
-        return requestMono.publishOn(Schedulers.boundedElastic())
-                .map(request -> ResponseEntity.ok(authService.refresh(request)));
+        return requestMono.flatMap(authService::refresh)
+                .map(ResponseEntity::ok);
     }
 
     @PostMapping("/logout")
@@ -103,11 +111,8 @@ public class AuthController {
     public Mono<ResponseEntity<Map<String, String>>> logout(
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             @Valid @RequestBody Mono<LogoutRequest> requestMono) {
-        return requestMono.publishOn(Schedulers.boundedElastic())
-                .map(request -> {
-                    authService.logout(request.refreshToken(), authHeader);
-                    return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
-                });
+        return requestMono.flatMap(request -> authService.logout(request.refreshToken(), authHeader))
+                .thenReturn(ResponseEntity.ok(Map.of("message", "Logged out successfully")));
     }
 
     @PostMapping("/change-password")
@@ -115,10 +120,7 @@ public class AuthController {
     public Mono<ResponseEntity<Map<String, String>>> changePassword(
             Authentication authentication,
             @Valid @RequestBody Mono<ChangePasswordRequest> requestMono) {
-        return requestMono.publishOn(Schedulers.boundedElastic())
-                .map(request -> {
-                    authService.changePassword(authentication.getName(), request);
-                    return ResponseEntity.ok(Map.of("message", "Password changed successfully"));
-                });
+        return requestMono.flatMap(request -> authService.changePassword(authentication.getName(), request))
+                .thenReturn(ResponseEntity.ok(Map.of("message", "Password changed successfully")));
     }
 }

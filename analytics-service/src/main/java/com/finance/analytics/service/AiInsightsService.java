@@ -59,7 +59,7 @@ public class AiInsightsService {
         // Fetch goals & budgets
         List<GoalForecastingService.GoalForecast> goalForecasts = new ArrayList<>();
         for (com.finance.analytics.model.SavingsGoal goal : savingsGoalRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(userId)) {
-            goalForecasts.add(goalForecastingService.forecastGoal(goal.getId(), userId));
+            goalForecasts.add(goalForecastingService.forecastGoal(goal));
         }
         List<BudgetTrendService.BudgetTrend> budgetTrends = budgetTrendService.getTrends(userId);
 

@@ -37,8 +37,12 @@ public class GoalForecastingService {
             throw new SecurityException("Not authorized");
         }
 
+        return forecastGoal(goal);
+    }
+
+    public GoalForecast forecastGoal(SavingsGoal goal) {
         GoalForecast forecast = new GoalForecast();
-        forecast.setGoalId(goalId);
+        forecast.setGoalId(goal.getId());
 
         if (goal.isCompleted()) {
             forecast.setMessage("Goal is already completed!");

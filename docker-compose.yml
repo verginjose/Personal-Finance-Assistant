@@ -45,6 +45,28 @@ services:
     networks:
       - finance-network
 
+  redis-replica:
+    image: redis:7-alpine
+    container_name: redis-replica
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    ports:
+      - "6380:6379"
+    command: redis-server --replicaof redis 6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - finance-network
+
   upsert-service:
     build:
       context: ./upsert-service
@@ -170,13 +192,9 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
 
       # Auth Database
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME}
-      SPRING_DATASOURCE_USERNAME: ${DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
-      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${AUTH_DB_SCHEMA}
-      SPRING_DATASOURCE_HIKARI_SCHEMA: ${AUTH_DB_SCHEMA}
+      SPRING_R2DBC_URL: r2dbc:postgresql://postgres:5432/${DB_NAME}?schema=${AUTH_DB_SCHEMA}
+      SPRING_R2DBC_USERNAME: ${DB_USER}
+      SPRING_R2DBC_PASSWORD: ${DB_PASSWORD}
 
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
     ports:

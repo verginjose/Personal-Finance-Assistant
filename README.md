@@ -35,7 +35,7 @@ flowchart LR
         OCR[OCR Service]
     end
     subgraph Infrastructure
-        PG[PostgreSQL (Primary/Replica)]
+        PG["PostgreSQL (Primary/Replica)"]
         Redis[Redis Cache]
         RMQ[RabbitMQ]
         MinIO[MinIO Storage]

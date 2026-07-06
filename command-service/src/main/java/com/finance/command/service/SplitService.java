@@ -39,6 +39,7 @@ public class SplitService {
     private final CacheEvictPublisher cacheEvictPublisher;
     private final NotificationService notificationService;
     private final org.springframework.cache.CacheManager cacheManager;
+    private final com.finance.command.cache.QueryCacheEvictor queryCacheEvictor;
 
     @Lazy
     @Autowired
@@ -68,7 +69,6 @@ public class SplitService {
         return group;
     }
 
-    @CacheEvict(value = {"group-details"}, key = "#groupId")
     public ExpenseGroup updateGroup(Long groupId, UpdateGroupRequest req, UUID actorUserId) {
         ExpenseGroup group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));
@@ -81,9 +81,24 @@ public class SplitService {
         }
         group = groupRepo.save(group);
 
+        // Evict own caches (finance:upsert:v1:*)
+        var members = memberRepo.findByGroupId(groupId);
+        var detailsCache = cacheManager.getCache("group-details");
+        if (detailsCache != null) {
+            members.forEach(m -> detailsCache.evict(groupId + "-" + m.getUserId()));
+        }
+        var userGroupsCache = cacheManager.getCache("user-groups");
+        if (userGroupsCache != null) {
+            members.forEach(m -> userGroupsCache.evict(m.getUserId()));
+        }
+
+        // Directly evict query-service keys on the shared Redis instance — no pub/sub needed
+        Set<UUID> memberIds = members.stream().map(GroupMember::getUserId).collect(Collectors.toSet());
+        queryCacheEvictor.evictGroupKeys(groupId, memberIds);
+
         String actorName = resolveMemberName(groupId, actorUserId);
         groupActivityService.log(groupId, actorUserId, actorName,
-                ActivityType.GROUP_CREATED, // Reuse or create new ActivityType, currently reuse
+                ActivityType.GROUP_CREATED,
                 "@" + actorName + " updated group details",
                 groupId);
         return group;
@@ -808,13 +823,13 @@ public class SplitService {
 
     private void evictUserGroupsForMembers(Long groupId) {
         var members = memberRepo.findByGroupId(groupId);
+        // Evict own user-groups cache
         var cache = cacheManager.getCache("user-groups");
         if (cache != null) {
             members.forEach(m -> cache.evict(m.getUserId()));
         }
-        cacheEvictPublisher.publishForUsers(
-                members.stream().map(GroupMember::getUserId).collect(Collectors.toSet()), 
-                "GROUP_UPDATED", 
-                groupId);
+        // Directly evict query-service user-groups keys — same Redis, no pub/sub needed
+        Set<UUID> memberIds = members.stream().map(GroupMember::getUserId).collect(Collectors.toSet());
+        queryCacheEvictor.evictUserGroupsKeys(memberIds);
     }
 }

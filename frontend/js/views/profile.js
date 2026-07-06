@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781339999';
-import { icon } from '../utils/icons.js?v=1781339999';
-import { esc, pageHeader, openModal } from '../utils/ui.js?v=1781339999';
+import { api, Auth, toast } from '../utils/api.js?v=1783271597';
+import { icon } from '../utils/icons.js?v=1783302413';
+import { esc, pageHeader, openModal } from '../utils/ui.js?v=1783271597';
 export async function renderProfile(container) {
   const email = Auth.getEmail();
   const userId = Auth.getUserId();
@@ -142,31 +142,51 @@ export async function renderProfile(container) {
         saveBtn.textContent = 'Saving...';
         
         const canvas = cropper.getCroppedCanvas({ width: 250, height: 250 });
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-
-        try {
-          await api.put('/auth/profile', { profilePicture: dataUrl });
-          profilePicture = dataUrl;
-          avatarDiv.style.backgroundImage = `url('${dataUrl}')`;
-          avatarDiv.innerHTML = `<div class="avatar-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;color:#fff;">${icon('camera', 'sm')}</div>`;
-          avatarDiv.onmouseenter = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '1';
-          avatarDiv.onmouseleave = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '0';
-          
-          toast('Profile picture updated', 'success');
-          
-          const sidebarAvatar = document.querySelector('.sidebar-user-avatar');
-          if (sidebarAvatar) {
-            sidebarAvatar.style.backgroundImage = `url('${dataUrl}')`;
-            sidebarAvatar.style.backgroundSize = 'cover';
-            sidebarAvatar.style.backgroundPosition = 'center';
-            sidebarAvatar.textContent = '';
+        canvas.toBlob(async (blob) => {
+          if (!blob) {
+            toast('Failed to crop image', 'error');
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Picture';
+            return;
           }
-          close();
-        } catch (err) {
-          toast('Failed to upload picture: ' + err.message, 'error');
-          saveBtn.disabled = false;
-          saveBtn.textContent = 'Save Picture';
-        }
+
+          const formData = new FormData();
+          formData.append('file', blob, 'profile.jpg');
+
+          try {
+            // First, upload the image to MinIO
+            const uploadRes = await fetch('/api/profile/upload', {
+              method: 'POST',
+              body: formData,
+              headers: { 'Authorization': 'Bearer ' + Auth.getToken() }
+            });
+            if (!uploadRes.ok) throw new Error('Upload failed: ' + uploadRes.status);
+            const { url: imageUrl } = await uploadRes.json();
+
+            // Save the URL (not base64) to the database
+            await api.put('/auth/profile', { profilePicture: imageUrl });
+            profilePicture = imageUrl;
+            avatarDiv.style.backgroundImage = `url('${imageUrl}')`;
+            avatarDiv.innerHTML = `<div class="avatar-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;color:#fff;">${icon('camera', 'sm')}</div>`;
+            avatarDiv.onmouseenter = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '1';
+            avatarDiv.onmouseleave = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '0';
+
+            toast('Profile picture updated', 'success');
+
+            const sidebarAvatar = document.querySelector('.sidebar-user-avatar');
+            if (sidebarAvatar) {
+              sidebarAvatar.style.backgroundImage = `url('${imageUrl}')`;
+              sidebarAvatar.style.backgroundSize = 'cover';
+              sidebarAvatar.style.backgroundPosition = 'center';
+              sidebarAvatar.textContent = '';
+            }
+            close();
+          } catch (err) {
+            toast('Failed to upload picture: ' + err.message, 'error');
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save Picture';
+          }
+        }, 'image/jpeg', 0.85);
       };
     };
     reader.readAsDataURL(file);

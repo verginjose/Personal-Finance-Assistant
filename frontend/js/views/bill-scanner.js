@@ -1,27 +1,29 @@
-import {api, Auth, toast} from '../utils/api.js?v=1781339999';
-import {icon} from '../utils/icons.js?v=1781339999';
-import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=1781339999';
-import {navigateTo} from '../app.js?v=1781339999';
+import {api, Auth, toast} from '../utils/api.js?v=1783271597';
+import { icon } from '../utils/icons.js?v=1783302413';
+import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=1783271597';
+import {navigateTo} from '../app.js?v=1783271597';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
   container.innerHTML = `
     ${pageHeader('Bill Scanner', 'Upload a receipt and let AI extract the details')}
-    <div class="card fade-up" style="max-width:680px">
-      <div class="drop-zone" id="bs-drop" role="button" tabindex="0" aria-label="Upload receipt">
-        <div class="drop-icon">${icon('document', 'lg')}</div>
-        <p>Drag & drop a receipt image or PDF here</p>
-        <p style="margin-top:6px;font-size:.78rem;color:var(--text-muted)">JPEG, PNG, PDF — max 10 MB</p>
-        <div class="file-name" id="bs-fname"></div>
+    <div class="scanner-container fade-up">
+      <div class="card" style="height:fit-content;">
+        <div class="drop-zone" id="bs-drop" role="button" tabindex="0" aria-label="Upload receipt">
+          <div class="drop-icon">${icon('document', 'lg')}</div>
+          <p>Drag & drop a receipt image or PDF here</p>
+          <p style="margin-top:6px;font-size:.78rem;color:var(--text-muted)">JPEG, PNG, PDF — max 10 MB</p>
+          <div class="file-name" id="bs-fname"></div>
+        </div>
+        <input type="file" id="bs-file" accept="image/*,application/pdf" hidden>
+        <button class="btn btn-primary" id="bs-upload" style="width:100%;margin-top:20px" disabled>
+          ${icon('scan', 'sm')} Process Receipt
+        </button>
       </div>
-      <input type="file" id="bs-file" accept="image/*,application/pdf" hidden>
-      <button class="btn btn-primary" id="bs-upload" style="width:100%;margin-top:20px" disabled>
-        ${icon('scan', 'sm')} Process Receipt
-      </button>
-    </div>
-    <div class="card fade-up" id="bs-result" style="max-width:680px;margin-top:20px;display:none">
-      <div class="card-header"><h3>Extracted Data</h3><span class="badge badge-info">OCR Preview — edit before saving</span></div>
-      <form id="bs-preview-form" style="display:grid;gap:10px"></form>
+      <div class="card" id="bs-result" style="display:none; height:fit-content;">
+        <div class="card-header"><h3>Extracted Data</h3><span class="badge badge-info">OCR Preview — edit before saving</span></div>
+        <form id="bs-preview-form" style="display:grid;gap:10px"></form>
+      </div>
     </div>`;
 
   let groupsCache = [];

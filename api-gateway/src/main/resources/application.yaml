@@ -109,6 +109,13 @@ spring:
 
 
 
+        - id: minio-storage
+          uri: http://minio:9000
+          predicates:
+            - Path=/api/storage/**
+          filters:
+            - StripPrefix=2
+
 resilience4j:
   circuitbreaker:
     instances:

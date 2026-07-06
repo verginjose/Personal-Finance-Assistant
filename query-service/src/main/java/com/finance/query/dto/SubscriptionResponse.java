@@ -24,9 +24,9 @@ public class SubscriptionResponse {
     /** Human-readable alert, e.g. "Charge in 3 days" */
     public String getAlert() {
         if (!active) return "Inactive";
-        if (daysUntilCharge == 0) return "⚠️ Charging today!";
-        if (daysUntilCharge <= 3) return "⚠️ Charge in " + daysUntilCharge + " day(s)";
-        if (daysUntilCharge <= 7) return "📅 Charge in " + daysUntilCharge + " days";
+        if (daysUntilCharge == 0) return "Charging today!";
+        if (daysUntilCharge <= 3) return "Charge in " + daysUntilCharge + " day(s)";
+        if (daysUntilCharge <= 7) return "Charge in " + daysUntilCharge + " days";
         return "Next charge: " + nextChargeDate;
     }
 }

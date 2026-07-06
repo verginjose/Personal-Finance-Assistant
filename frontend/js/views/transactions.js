@@ -1,9 +1,9 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781339999';
-import { icon } from '../utils/icons.js?v=1781339999';
+import { api, Auth, toast } from '../utils/api.js?v=1783271597';
+import { icon } from '../utils/icons.js?v=1783302413';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
   typeBadge, openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions, setupCategorySearch
-} from '../utils/ui.js?v=1781339999';
+} from '../utils/ui.js?v=1783271597';
 
 
 let currentPage = 0, totalPages = 0;
@@ -225,7 +225,7 @@ async function showModal(userId, existing, onDone) {
     <form id="txn-form">
       <div class="form-row">
         <div class="form-group" style="flex:2"><label for="m-name">Name</label><input class="form-input" id="m-name" required value="${esc(existing?.name || '')}"></div>
-        <div class="form-group" style="flex:1"><label for="m-amount">Amount</label><input class="form-input" id="m-amount" type="text" inputmode="decimal" pattern="^\\d+(\\.\\d{1,2})?$" title="Enter a valid amount (e.g., 100.50)" required value="${existing?.amount || ''}"></div>
+        <div class="form-group" style="flex:1"><label for="m-amount">Amount</label><input class="form-input" id="m-amount" type="text" inputmode="decimal" required value="${existing?.amount || ''}"></div>
         <div class="form-group" style="flex:1.5"><label for="m-date">Date</label><input class="form-input" id="m-date" type="date" value="${existing?.createdAt ? existing.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]}"></div>
       </div>
       <div class="form-row">

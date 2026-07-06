@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781339999';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1781339999';
-import { icon } from '../utils/icons.js?v=1781339999';
+import { api, Auth, toast } from '../utils/api.js?v=1783271597';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1783271597';
+import { icon } from '../utils/icons.js?v=1783302413';
 
 let currentGroupId = null;
 let expensesPage = 0, expensesTotal = 1;
@@ -237,141 +237,151 @@ async function loadGroupDetail(groupId, userId) {
 
     const myBalanceObj = balances?.memberBalances?.find(b => b.userId === userId);
     const myNetBalance = myBalanceObj ? myBalanceObj.netBalance : 0;
+    const eligibleMembers = members.filter(m => m.status === 'ACCEPTED');
+
+    // Build balance pills for members
+    const myBalancePill = myNetBalance !== 0
+      ? `<span class="group-balance-pill" style="background:rgba(${myNetBalance > 0 ? '34,201,147' : '249,115,22'},0.12); color:${myNetBalance > 0 ? 'var(--accent-g)' : 'var(--accent)'}; border:1px solid ${myNetBalance > 0 ? 'rgba(34,201,147,0.3)' : 'rgba(249,115,22,0.3)'};">
+          ${myNetBalance > 0 ? '▲ Gets back ' + formatCurrency(myNetBalance) : '▼ Owes ' + formatCurrency(Math.abs(myNetBalance))}
+        </span>`
+      : '';
 
     el.innerHTML = `
-      <div class="card" id="group-header-card" style="margin-bottom:20px;">
-        <div id="group-header-collapsed" style="cursor:pointer; display:flex; justify-content:space-between; align-items:flex-start;">
-          <div style="overflow:hidden; padding-right: 16px;">
-            <h3 style="margin:0;">${esc(group.name)}</h3>
-            <p id="gh-short-desc" style="color:var(--text-dim); margin-top:4px; margin-bottom:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(group.description || '')}</p>
-          </div>
-          <div id="gh-expand-icon" style="color:var(--text-muted); padding-top:4px; transition: transform 0.3s;">${icon('chevron-down')}</div>
-        </div>
-        
-        <div id="group-header-expanded" style="display:none; border-top:1px solid var(--border); padding-top:16px; margin-top:16px;">
-          <p style="color:var(--text);margin-bottom:16px;line-height:1.5;">${esc(group.description || 'No description provided')}</p>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-             <button class="btn btn-secondary btn-sm" id="sp-edit-group">Edit Group</button>
-             <button class="btn btn-secondary btn-sm" id="sp-archive-group" style="background:var(--bg-card-h); border:1px solid var(--border);">${group.isArchived ? 'Unarchive' : 'Archive'}</button>
-             <button class="btn btn-danger btn-sm" id="sp-delete-group" style="background:rgba(239, 68, 68, 0.1); color:var(--accent);">Delete Group</button>
-             <button class="btn btn-danger btn-sm" id="sp-leave-group">Leave Group</button>
+      <!-- Compact group header -->
+      <div class="group-compact-header fade-up">
+        <div class="group-compact-header-left">
+          <div class="group-compact-title">${esc(group.name)}</div>
+          <div class="group-compact-meta">
+            <button class="group-compact-members" id="sp-view-members">
+              ${icon('users', 'sm')} ${members.length} Member${members.length !== 1 ? 's' : ''}
+            </button>
+            ${myBalancePill}
           </div>
         </div>
-        
-        <div style="display:flex; align-items:center; margin-top:16px; gap:8px;">
-          <div id="sp-view-members" style="background:var(--bg-card); padding:6px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:0.9rem; cursor:pointer; color:var(--text); font-weight:500; transition:var(--transition); display:flex; align-items:center; gap:6px;">
-            ${icon('users', 'sm')} ${members.length} Members
-          </div>
-          ${myNetBalance !== 0 ? `
-          <div style="background:rgba(${myNetBalance > 0 ? '34, 201, 147' : '249, 115, 22'}, 0.1); padding:6px 12px; border-radius:var(--radius-sm); border:1px solid ${myNetBalance > 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-size:0.9rem; color:${myNetBalance > 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-weight:700;">
-            ${myNetBalance > 0 ? 'Gets back ' + formatCurrency(myNetBalance) : 'You owe ' + formatCurrency(Math.abs(myNetBalance))}
-          </div>` : ''}
+        <div class="group-compact-actions">
+          <button class="btn-add-expense" id="sp-add-expense" ${eligibleMembers.length ? '' : 'disabled'}>
+            ${icon('plus', 'sm')} Add Expense
+          </button>
+          <button class="btn-group-menu" id="sp-group-menu-btn" title="Group options">
+            ${icon('settings', 'sm')}
+          </button>
         </div>
       </div>
-    
-    <div class="card" style="padding:0; overflow:hidden;">
-      <div class="tab-header" style="display:flex; border-bottom: 1px solid var(--border); background: var(--bg-card-h); overflow-x: auto;">
-        <button class="tab-btn active" id="tab-expenses" style="flex:1; padding:16px; background:transparent; border:none; color:var(--text); font-weight:600; cursor:pointer; border-bottom: 2px solid var(--primary); transition: var(--transition);">Expenses</button>
-        <button class="tab-btn" id="tab-balances" style="flex:1; padding:16px; background:transparent; border:none; color:var(--text-dim); font-weight:600; cursor:pointer; border-bottom: 2px solid transparent; transition: var(--transition);">Balances</button>
-        <button class="tab-btn" id="tab-activity" style="flex:1; padding:16px; background:transparent; border:none; color:var(--text-dim); font-weight:600; cursor:pointer; border-bottom: 2px solid transparent; transition: var(--transition);">Activity</button>
+
+      <!-- Group options dropdown (hidden by default) -->
+      <div id="sp-group-menu" style="display:none; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); padding:6px; box-shadow:var(--shadow); margin-bottom:12px; animation: fadeIn 0.15s ease both;">
+        <button class="btn btn-secondary btn-sm" id="sp-edit-group" style="width:100%; justify-content:flex-start; text-align:left; margin-bottom:4px;">${icon('edit', 'sm')} Edit Group</button>
+        <button class="btn btn-secondary btn-sm" id="sp-archive-group" style="width:100%; justify-content:flex-start; text-align:left; background:var(--bg-card-h); margin-bottom:4px;">${group.isArchived ? icon('arrow-up', 'sm') + ' Unarchive' : icon('arrow-down', 'sm') + ' Archive'}</button>
+        <button class="btn btn-secondary btn-sm" id="sp-leave-group" style="width:100%; justify-content:flex-start; text-align:left; margin-bottom:4px;">${icon('log-out', 'sm')} Leave Group</button>
+        <button class="btn btn-sm" id="sp-delete-group" style="width:100%; justify-content:flex-start; text-align:left; background:rgba(239,68,68,0.1); color:var(--accent); border:1px solid rgba(239,68,68,0.2);">${icon('trash', 'sm')} Delete Group</button>
       </div>
-      
-      <div id="content-expenses" style="padding: 20px;">
-        <button class="btn btn-primary btn-sm" style="margin-bottom:16px;width:100%" id="sp-add-expense" ${members.length ? '' : 'disabled'}>+ Add Expense</button>
-        <div id="expenses-list"></div>
-        <div id="expenses-pagination" class="pagination" style="margin-top: 20px; justify-content: center;"></div>
-      </div>
-      
-      <div id="content-balances" style="padding: 20px; display:none;">
-        <h4 style="margin-bottom:12px; color:var(--text-muted); text-transform:uppercase; font-size:0.8rem; letter-spacing:0.5px;">Net Balances</h4>
-        <div style="margin-bottom:24px; display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:12px;">
-          ${balances?.memberBalances?.length ? balances.memberBalances.map(b => `
-            <div style="background:var(--bg-card); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:12px;">
-              <div style="display:flex; align-items:center; gap:6px; overflow:hidden;">
-                ${avatar(b.userName || b.userId, 24, resolveMemberAvatarLocally(b.userId))}
-                <span style="color:var(--text-dim); font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@${esc(b.userName || b.userId?.substring(0, 8))}</span>
+
+      <!-- Split pane: vertical nav + content -->
+      <div class="split-pane fade-up" style="margin-top: 20px;">
+        <!-- Left vertical nav -->
+        <nav class="split-pane-nav">
+          <button class="split-nav-btn active" data-panel="expenses">
+            ${icon('receipt', 'sm')} Expenses
+          </button>
+          <button class="split-nav-btn" data-panel="balances">
+            ${icon('bar-chart', 'sm')} Balances
+          </button>
+          <button class="split-nav-btn" data-panel="activity">
+            ${icon('list', 'sm')} Activity
+          </button>
+        </nav>
+
+        <!-- Right content area -->
+        <div class="split-pane-content">
+          <!-- Expenses panel -->
+          <div class="split-pane-panel active" id="panel-expenses">
+            <div id="expenses-list"></div>
+            <div id="expenses-pagination" class="pagination" style="margin-top:16px;"></div>
+          </div>
+
+          <!-- Balances panel -->
+          <div class="split-pane-panel" id="panel-balances">
+            <div style="margin-bottom:20px;">
+              <h4 style="margin-bottom:12px; color:var(--text-muted); text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em;">Net Balances</h4>
+              <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap:10px;">
+                ${balances?.memberBalances?.length ? balances.memberBalances.map(b => `
+                  <div style="background:var(--bg-card-h); padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                    <div style="display:flex; align-items:center; gap:7px; overflow:hidden; min-width:0;">
+                      ${avatar(b.userName || b.userId, 22, resolveMemberAvatarLocally(b.userId))}
+                      <span style="color:var(--text-dim); font-size:0.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@${esc(b.userName || b.userId?.substring(0, 8))}</span>
+                    </div>
+                    <span style="font-weight:700; color:${b.netBalance >= 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-size:1rem; flex-shrink:0;">
+                      ${b.netBalance >= 0 ? '+' : ''}${formatCurrency(b.netBalance)}
+                    </span>
+                  </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;">No balance data yet.</p>'}
               </div>
-              <span style="font-weight:700;color:${b.netBalance >= 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-size:1.1rem; flex-shrink: 0;">
-                ${b.netBalance >= 0 ? '+' : ''}${formatCurrency(b.netBalance)}
-              </span>
-            </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;">No balance data</p>'}
+            </div>
+
+            <div>
+              <h4 style="margin-bottom:12px; color:var(--text-muted); text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em;">Who Owes Who</h4>
+              ${balances?.simplifiedDebts?.length ? balances.simplifiedDebts.map(s => {
+                let text = '', amountColor = 'var(--text)', amountSign = '';
+                if (s.fromUserId === userId) {
+                  text = `You owe ${avatar(s.toUserName, 20, resolveMemberAvatarLocally(s.toUserId))} <strong>${esc(s.toUserName)}</strong>`;
+                  amountColor = 'var(--accent)'; amountSign = '-';
+                } else if (s.toUserId === userId) {
+                  text = `${avatar(s.fromUserName, 20, resolveMemberAvatarLocally(s.fromUserId))} <strong>${esc(s.fromUserName)}</strong> owes you`;
+                  amountColor = 'var(--accent-g)'; amountSign = '+';
+                } else {
+                  text = `${avatar(s.fromUserName, 20, resolveMemberAvatarLocally(s.fromUserId))} <strong>${esc(s.fromUserName)}</strong> → ${avatar(s.toUserName, 20, resolveMemberAvatarLocally(s.toUserId))} <strong>${esc(s.toUserName)}</strong>`;
+                }
+                return `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid var(--border-light); gap:14px; flex-wrap:wrap;">
+                  <div style="font-size:0.92rem; flex:1 1 auto; min-width:180px; word-break:break-word;">${text}</div>
+                  <div style="display:flex; align-items:center; gap:12px; flex-shrink:0;">
+                    <span style="font-weight:800; color:${amountColor}; font-size:1rem;">${amountSign}${formatCurrency(s.amount)}</span>
+                    <button class="btn btn-secondary btn-sm settle-btn"
+                      data-from="${s.fromUserId}" data-to="${s.toUserId}"
+                      data-from-name="${esc(s.fromUserName)}" data-to-name="${esc(s.toUserName)}">
+                      Record Payment
+                    </button>
+                  </div>
+                </div>`;
+              }).join('') : '<p style="color:var(--text-dim); text-align:center; padding:24px 0;">' + icon('check-circle', 'sm') + ' All balances are settled!</p>'}
+            </div>
+          </div>
+
+          <!-- Activity panel -->
+          <div class="split-pane-panel" id="panel-activity">
+            <div id="activity-list"></div>
+            <div id="activity-pagination" class="pagination" style="margin-top:16px;"></div>
+          </div>
         </div>
-        
-        <h4 style="margin-bottom:12px; color:var(--text-muted); text-transform:uppercase; font-size:0.8rem; letter-spacing:0.5px;">Settlements</h4>
-        ${balances?.simplifiedDebts?.length ? balances.simplifiedDebts.map(s => {
-          let text = '';
-          let amountColor = 'var(--text)';
-          let amountSign = '';
-          if (s.fromUserId === userId) {
-            text = `You owe ${avatar(s.toUserName, 24, resolveMemberAvatarLocally(s.toUserId))} <strong>${esc(s.toUserName)}</strong>`;
-            amountColor = 'var(--accent)';
-            amountSign = '-';
-          } else if (s.toUserId === userId) {
-            text = `${avatar(s.fromUserName, 24, resolveMemberAvatarLocally(s.fromUserId))} <strong>${esc(s.fromUserName)}</strong> owes you`;
-            amountColor = 'var(--accent-g)';
-            amountSign = '+';
-          } else {
-            text = `${avatar(s.fromUserName, 24, resolveMemberAvatarLocally(s.fromUserId))} <strong>${esc(s.fromUserName)}</strong> owes ${avatar(s.toUserName, 24, resolveMemberAvatarLocally(s.toUserId))} <strong>${esc(s.toUserName)}</strong>`;
-          }
-          return `
-          <div class="settlement-row" style="display:flex; justify-content:space-between; align-items:center; padding:16px 0; border-bottom:1px solid var(--border); gap: 16px; flex-wrap: wrap;">
-            <div style="font-size: 1rem; flex: 1 1 auto; min-width: 200px; word-break: break-word;">
-              ${text}
-            </div>
-            <div style="display:flex; align-items:center; gap: 16px; flex-shrink: 0;">
-              <span style="font-weight:800;color:${amountColor};font-size:1.1rem; text-align:right; min-width: 80px;">${amountSign}${formatCurrency(s.amount)}</span>
-              <button class="btn btn-secondary btn-sm settle-btn"
-                data-from="${s.fromUserId}" data-to="${s.toUserId}"
-                data-from-name="${esc(s.fromUserName)}" data-to-name="${esc(s.toUserName)}">
-                Record Payment
-              </button>
-            </div>
-          </div>`;
-        }).join('') : '<p style="color:var(--text-dim);margin:0;text-align:center;padding:20px;">All balances are settled.</p>'}
-      </div>
-      
-      <div id="content-activity" style="padding: 20px; display:none;">
-        <div id="activity-list"></div>
-        <div id="activity-pagination" class="pagination" style="margin-top: 20px; justify-content: center;"></div>
-      </div>
-    </div>`;
+      </div>`;
 
     document.getElementById('sp-view-members').onclick = () => viewMembersModal(members, groupId, userId);
-    document.getElementById('sp-view-members').onmouseover = (e) => e.target.style.background = 'var(--bg-card-h)';
-    document.getElementById('sp-view-members').onmouseout = (e) => e.target.style.background = 'var(--bg-card)';
-    
-    // Group header expand/collapse
-    document.getElementById('group-header-collapsed').onclick = () => {
-      const exp = document.getElementById('group-header-expanded');
-      const shortDesc = document.getElementById('gh-short-desc');
-      const iconWrap = document.getElementById('gh-expand-icon');
-      if (exp.style.display === 'none') {
-        exp.style.display = 'block';
-        shortDesc.style.display = 'none';
-        iconWrap.style.transform = 'rotate(180deg)';
-      } else {
-        exp.style.display = 'none';
-        shortDesc.style.display = 'block';
-        iconWrap.style.transform = 'rotate(0deg)';
-      }
+
+    // Group menu toggle
+    document.getElementById('sp-group-menu-btn').onclick = (e) => {
+      e.stopPropagation();
+      const menu = document.getElementById('sp-group-menu');
+      menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
     };
-    
-    // Tab switching logic
-    const tabs = ['expenses', 'balances', 'activity'];
-    tabs.forEach(t => {
-      document.getElementById(`tab-${t}`).onclick = () => {
-        tabs.forEach(other => {
-          const isT = other === t;
-          document.getElementById(`tab-${other}`).style.borderBottomColor = isT ? 'var(--primary)' : 'transparent';
-          document.getElementById(`tab-${other}`).style.color = isT ? 'var(--text)' : 'var(--text-dim)';
-          document.getElementById(`content-${other}`).style.display = isT ? 'block' : 'none';
-        });
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('sp-group-menu');
+      if (menu && !e.target.closest('#sp-group-menu') && !e.target.closest('#sp-group-menu-btn')) {
+        menu.style.display = 'none';
+      }
+    }, { once: false });
+
+    // Vertical split-pane nav switching
+    document.querySelectorAll('.split-nav-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.split-nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.split-pane-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`panel-${btn.dataset.panel}`)?.classList.add('active');
       };
     });
-    
-    const eligibleMembers = members.filter(m => m.status === 'ACCEPTED');
+
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, eligibleMembers, userId);
-    
+
+
     const renderExpenses = (exps) => {
       const elList = document.getElementById('expenses-list');
       if (!elList) return;
@@ -388,7 +398,7 @@ async function loadGroupDetail(groupId, userId) {
             <button type="button" class="btn btn-danger btn-sm delete-expense-btn" data-id="${e.id}" title="Delete expense" style="padding:6px 10px;">×</button>
           </div>
         </div>`;
-      }).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No expenses yet</p>';
+      }).join('') : emptyState('receipt', 'No expenses yet', 'Keep track of shared bills and tabs by adding your first expense.');
 
       elList.querySelectorAll('.expense-row').forEach(row => {
         row.onclick = () => {
@@ -529,6 +539,43 @@ async function loadGroupDetail(groupId, userId) {
       if (container) container.innerHTML = `<p style="color:var(--accent);text-align:center;padding:20px;">Failed to load activity.</p>`;
     });
 
+    // Wire group action buttons from dropdown
+    const hideMenu = () => { const m = document.getElementById('sp-group-menu'); if (m) m.style.display = 'none'; };
+
+    document.getElementById('sp-edit-group')?.addEventListener('click', () => {
+      hideMenu(); editGroupModal(group, userId);
+    });
+
+    document.getElementById('sp-archive-group')?.addEventListener('click', async () => {
+      hideMenu();
+      if (!(await confirmModal(`${group.isArchived ? 'Unarchive' : 'Archive'} Group`, `Are you sure you want to ${group.isArchived ? 'unarchive' : 'archive'} this group?`, group.isArchived ? 'Unarchive' : 'Archive'))) return;
+      try {
+        await api.put(`/upsert/groups/${groupId}/archive`, null, { params: { archive: !group.isArchived } });
+        toast(`Group ${group.isArchived ? 'unarchived' : 'archived'}`, 'success');
+        document.getElementById('sp-back').click();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    document.getElementById('sp-leave-group')?.addEventListener('click', async () => {
+      hideMenu();
+      if (!(await confirmModal('Leave Group', 'Are you sure you want to leave this group?', 'Leave'))) return;
+      try {
+        await api.delete(`/upsert/groups/${groupId}/members/${userId}`);
+        toast('Left group', 'info');
+        document.getElementById('sp-back').click();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    document.getElementById('sp-delete-group')?.addEventListener('click', async () => {
+      hideMenu();
+      if (!(await confirmModal('Delete Group', 'Are you sure you want to PERMANENTLY delete this group? All expenses must be settled.', 'Delete'))) return;
+      try {
+        await api.delete(`/upsert/groups/${groupId}`, { userId });
+        toast('Group deleted', 'success');
+        document.getElementById('sp-back').click();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
   } catch (err) {
     el.innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
   }
@@ -665,7 +712,7 @@ function editGroupModal(group, userId) {
       document.getElementById('eg-archive-btn').onclick = async () => {
           if (!(await confirmModal('Archive Group', 'Are you sure you want to archive this group? It will be hidden from the active list.', 'Archive'))) return;
           try {
-              await api.post(`/upsert/groups/${group.id}/archive`, null, { params: { userId } });
+              await api.put(`/upsert/groups/${group.id}/archive`, null, { params: { archive: true } });
               toast('Group archived status updated', 'success');
               document.querySelector('.modal-close').click();
               loadGroups(userId); // reload groups list to show/hide it

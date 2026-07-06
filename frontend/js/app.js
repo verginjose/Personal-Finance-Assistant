@@ -1,18 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    app.js — SPA Router + Shell
    ═══════════════════════════════════════════════════════════════════════════ */
-import { Auth, SseManager, api } from './utils/api.js?v=1781339999';
-import { icon } from './utils/icons.js?v=1781339999';
-import { renderAuth }          from './views/auth.js?v=1781339999';
-import { esc }                 from './utils/ui.js?v=1781339999';
-import { renderDashboard }     from './views/dashboard.js?v=1781339999';
-import { renderTransactions }  from './views/transactions.js?v=1781339999';
-import { renderBillScanner }   from './views/bill-scanner.js?v=1781339999';
-import { renderSplit }         from './views/split.js?v=1781339999';
-import { renderAnalytics }     from './views/analytics.js?v=1781339999';
-import { renderProfile }       from './views/profile.js?v=1781339999';
-import { renderSubscriptions } from './views/subscriptions.js?v=1781339999';
-import { renderGoals }         from './views/goals.js?v=1781339999';
+import { Auth, SseManager, api } from './utils/api.js?v=1783271597';
+import { icon } from './utils/icons.js?v=1783302413';
+import { renderAuth }          from './views/auth.js?v=1783271597';
+import { esc }                 from './utils/ui.js?v=1783271597';
+import { renderDashboard }     from './views/dashboard.js?v=1783271597';
+import { renderTransactions }  from './views/transactions.js?v=1783271597';
+import { renderBillScanner }   from './views/bill-scanner.js?v=1783271597';
+import { renderSplit }         from './views/split.js?v=1783271597';
+import { renderAnalytics }     from './views/analytics.js?v=1783271597';
+import { renderProfile }       from './views/profile.js?v=1783271597';
+import { renderSubscriptions } from './views/subscriptions.js?v=1783271597';
+import { renderGoals }         from './views/goals.js?v=1783271597';
 
 const NAV_ITEMS = [
   { id: 'dashboard',      icon: 'dashboard',      label: 'Dashboard' },

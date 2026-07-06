@@ -1538,3 +1538,343 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
 .ts-wrapper.single .ts-control:after {
   border-color: var(--text-dim) transparent transparent transparent !important;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   REDESIGNED GROUP DETAIL — Compact Header + Vertical Side-Tab Pane
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Back button row */
+.group-back-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+/* Compact group header card */
+.group-compact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 20px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.group-compact-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.group-compact-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-compact-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.group-compact-members {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.group-compact-members:hover {
+  border-color: var(--primary);
+  color: var(--primary-l);
+}
+
+.group-balance-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border-radius: 99px;
+  padding: 3px 10px;
+}
+
+.group-compact-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-add-expense {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #0d9488, #14b8a6);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.88rem;
+  border: none;
+  border-radius: 99px;
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.btn-add-expense:hover {
+  background: linear-gradient(135deg, #14b8a6, #22d3ee);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(20,184,166,0.35);
+}
+
+.btn-add-expense:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-group-menu {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-group-menu:hover {
+  border-color: var(--primary);
+  color: var(--primary-l);
+  background: rgba(20,184,166,0.08);
+}
+
+/* Split-Pane: the unified container below the header */
+.split-pane {
+  display: flex;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  min-height: 520px;
+}
+
+/* Left vertical nav */
+.split-pane-nav {
+  width: 148px;
+  flex-shrink: 0;
+  background: var(--bg-card-h);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 0;
+  gap: 4px;
+}
+
+.split-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-right: 2px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition);
+  width: 100%;
+  border-radius: 0;
+}
+
+.split-nav-btn:hover {
+  background: rgba(20,184,166,0.06);
+  color: var(--text);
+}
+
+.split-nav-btn.active {
+  color: var(--primary-l);
+  border-right-color: var(--primary);
+  background: rgba(20,184,166,0.10);
+}
+
+/* Right content area */
+.split-pane-content {
+  flex: 1;
+  padding: 24px;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.split-pane-panel {
+  display: none;
+  animation: fadeIn 0.25s ease both;
+}
+
+.split-pane-panel.active {
+  display: block;
+}
+
+@media (max-width: 640px) {
+  .split-pane {
+    flex-direction: column;
+  }
+  .split-pane-nav {
+    width: 100%;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 8px 8px 0;
+    overflow-x: auto;
+  }
+  .split-nav-btn {
+    border-right: none;
+    border-bottom: 2px solid transparent;
+    flex-shrink: 0;
+    padding: 8px 14px 12px;
+  }
+  .split-nav-btn.active {
+    border-right-color: transparent;
+    border-bottom-color: var(--primary);
+  }
+  .group-compact-header { flex-direction: column; align-items: flex-start; }
+  .group-compact-actions { width: 100%; }
+  .btn-add-expense { flex: 1; justify-content: center; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   REDESIGNED MISC PAGE STYLES — Unified Container Theme
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Unified section containers for dashboard / analytics etc. */
+.section-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.section-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card-h);
+}
+
+.section-card-header h3 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.section-card-body {
+  padding: 20px;
+}
+
+/* Stat cards enhanced */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: 99px 99px 0 0;
+}
+
+.stat-card.income::before  { background: var(--accent-g); }
+.stat-card.expense::before { background: var(--accent); }
+.stat-card.balance::before { background: var(--primary); }
+.stat-card.count::before   { background: var(--accent-b); }
+
+.stat-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-family: var(--font-display);
+  margin-top: 6px;
+  animation: countUp 0.5s ease both;
+}
+
+.stat-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stat-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.stat-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.05);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dim);
+}
+
+/* Goals layout refinement */
+.goals-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+/* Profile page improvements */
+.profile-grid {
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* Bill scanner improvements */
+.scanner-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .scanner-container { grid-template-columns: 1fr; }
+  .goals-layout { grid-template-columns: 1fr; }
+}
+

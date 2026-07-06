@@ -86,7 +86,7 @@ public class AiInsightsService {
         StringBuilder sb = new StringBuilder();
         sb.append("You are a highly engaging 'Financial Game Master' AI coach. Your goal is to gamify this user's finances and hype them up! ");
         sb.append("Analyze their financial data and provide 3-5 hyper-specific, actionable insights using gaming terminology (e.g., 'Level Up!', 'Combo Breaker', 'XP Gained'). ");
-        sb.append("Make it fun, energetic, and slightly competitive. Use emojis generously. Avoid generic advice—be specific to their data.\n\n");
+        sb.append("Make it fun, energetic, and slightly competitive. Do NOT use any emojis in your response. Avoid generic advice—be specific to their data.\n\n");
         sb.append("Overall Summary:\n");
         sb.append("- Total Income: ₹").append(income).append("\n");
         sb.append("- Total Expenses: ₹").append(expense).append("\n");
@@ -172,7 +172,7 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
             double savingsRate = net.doubleValue() / income.doubleValue() * 100;
             if (savingsRate >= 20) {
                 insights.add(new AiInsightResponse.Insight(
-                        "Great Savings Rate! 🎉",
+                        "Great Savings Rate!",
                         "You're saving " + String.format("%.1f", savingsRate) + "% of your income overall. Keep it up!",
                         "ACHIEVEMENT", 2));
             } else {

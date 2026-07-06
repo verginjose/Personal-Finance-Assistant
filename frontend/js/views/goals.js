@@ -1,10 +1,10 @@
-import { api, Auth, toast } from '../utils/api.js?v=1781339999';
-import { icon } from '../utils/icons.js?v=1781339999';
+import { api, Auth, toast } from '../utils/api.js?v=1783271597';
+import { icon } from '../utils/icons.js?v=1783302413';
 import {
   esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
   progressBar, budgetStatusColor, budgetStatusBadge, badge, openModal, confirmModal, modalActions,
   EXPENSE_CATS, categoryOptions, setupCategorySearch
-} from '../utils/ui.js?v=1781339999';
+} from '../utils/ui.js?v=1783271597';
 
 export async function renderGoals(container) {
   const userId = Auth.getUserId();
@@ -60,10 +60,10 @@ function goalCard(g) {
   const pct = Math.min(g.progressPercentage, 100);
   const color = g.completed ? 'var(--accent-g)' : pct >= 80 ? 'var(--accent-y)' : 'var(--primary)';
   const PRIORITY_COLORS = {
-    CRITICAL: { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444',        label: '🔴 Critical' },
-    HIGH:     { bg: 'rgba(249,115,22,0.12)', color: 'var(--accent)',   label: '🟠 High' },
-    MEDIUM:   { bg: 'rgba(234,179,8,0.12)',  color: 'var(--accent-y)', label: '🟡 Medium' },
-    LOW:      { bg: 'rgba(34,197,94,0.12)',  color: 'var(--accent-g)', label: '🟢 Low' },
+    CRITICAL: { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444',        label: 'Critical' },
+    HIGH:     { bg: 'rgba(249,115,22,0.12)', color: 'var(--accent)',   label: 'High' },
+    MEDIUM:   { bg: 'rgba(234,179,8,0.12)',  color: 'var(--accent-y)', label: 'Medium' },
+    LOW:      { bg: 'rgba(34,197,94,0.12)',  color: 'var(--accent-g)', label: 'Low' },
   };
   const pri = g.priority ? PRIORITY_COLORS[g.priority] : null;
   const priorityBadge = pri
@@ -273,7 +273,7 @@ async function viewGoalDetails(goalParam, uid, reloadData = false) {
       <form id="contrib-form">
         <div class="form-row">
           <div class="form-group" style="flex:1"><label for="c-amount">Amount</label>
-            <input class="form-input" id="c-amount" type="number" step="0.01" min="0.01" required placeholder="Amount to add">
+            <input class="form-input" id="c-amount" type="text" inputmode="decimal" required placeholder="Amount to add">
           </div>
           <div class="form-group" style="flex:1"><label for="c-date">Date</label>
             <input class="form-input" id="c-date" type="date" value="${new Date().toISOString().split('T')[0]}">
@@ -325,7 +325,7 @@ function bindEvents(uid) {
       <form id="goal-form">
         <div class="form-group"><label for="g-name">Goal Name</label><input class="form-input" id="g-name" required placeholder="MacBook Pro"></div>
         <div class="form-row">
-          <div class="form-group"><label for="g-target">Target Amount</label><input class="form-input" id="g-target" type="number" min="1" required></div>
+          <div class="form-group"><label for="g-target">Target Amount</label><input class="form-input" id="g-target" type="text" inputmode="decimal" required></div>
           <div class="form-group"><label for="g-currency">Currency</label><input class="form-input" id="g-currency" value="INR" maxlength="3"></div>
         </div>
         <div class="form-row">
@@ -369,7 +369,7 @@ function bindEvents(uid) {
           <select class="form-select category-select" id="b-cat">${categoryOptions(EXPENSE_CATS)}</select>
         </div>
         <div class="form-row">
-          <div class="form-group"><label for="b-amount">Budget Amount</label><input class="form-input" id="b-amount" type="number" min="1" required></div>
+          <div class="form-group"><label for="b-amount">Budget Amount</label><input class="form-input" id="b-amount" type="text" inputmode="decimal" required></div>
           <div class="form-group"><label for="b-period">Period</label>
             <select class="form-select" id="b-period">
                 <option value="MONTHLY">Monthly</option>

@@ -7,15 +7,16 @@
 [![Docker](https://img.shields.io/badge/docker-24.0.5-2496ED?style=for-the-badge&logo=docker)](https://www.docker.com/)
 [![PostgreSQL]( https://img.shields.io/badge/postgresql-15-336791?style=for-the-badge&logo=postgresql)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/redis-7-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
-[![Kafka](https://img.shields.io/badge/kafka-7.5.0-231F20?style=for-the-badge&logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
-[![Apache ZooKeeper](https://img.shields.io/badge/zookeeper-7.5.0-black?style=for-the-badge&logo=apachezookeeper)](https://zookeeper.apache.org/)
+[![RabbitMQ](https://img.shields.io/badge/rabbitmq-3-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white)](https://www.rabbitmq.com/)
+[![MinIO](https://img.shields.io/badge/minio-RELEASE-C7202C?style=for-the-badge&logo=minio&logoColor=white)](https://minio.io/)
+[![Groq](https://img.shields.io/badge/groq-LLM-000000?style=for-the-badge)](https://groq.com/)
 [![ClickHouse](https://img.shields.io/badge/clickhouse-24.8-FFCC01?style=for-the-badge&logo=clickhouse&logoColor=white)](https://clickhouse.com/)
 [![Vector](https://img.shields.io/badge/vector-0.41.1-000000?style=for-the-badge&logo=vector&logoColor=white)](https://vector.dev/)
 [![Grafana](https://img.shields.io/badge/grafana-11.1.4-F46800?style=for-the-badge&logo=grafana)](https://grafana.com/)
 
 A comprehensive, production-ready personal finance platform built on a microservices architecture. This application enables users to track income and expenses, manage split bills, define savings goals, automatically extract structured data from scanned receipts, and receive AI-generated financial insights. 
 
-All services communicate securely via a JWT-secured API Gateway, utilizing Redis for high-performance caching and Kafka for asynchronous event propagation. The system is also equipped with an enterprise-grade observability pipeline powered by Vector, ClickHouse, and Grafana for centralized logging and telemetry.
+All services communicate securely via a JWT-secured API Gateway, utilizing Redis for high-performance caching and RabbitMQ for asynchronous event propagation. The system is also equipped with an enterprise-grade observability pipeline powered by Vector, ClickHouse, and Grafana for centralized logging and telemetry.
 
 ---
 ## Architecture Overview
@@ -26,18 +27,18 @@ flowchart LR
         UI[Web UI / Mobile]
     end
     subgraph Gateway
-        GW[Spring Cloud Gateway]
+        GW[API Gateway]
     end
     subgraph Services
-        Auth[Auth Service]
-        Upsert[Upsert Service]
-        Bill[Bill-Parser Service]
-        Analytics[Analytics Service]
+        Command[Command Service]
+        Query[Query Service]
+        OCR[OCR Service]
     end
     subgraph Infrastructure
-        PG[PostgreSQL]
+        PG[PostgreSQL (Primary/Replica)]
         Redis[Redis Cache]
-        Kafka[Kafka Event Broker]
+        RMQ[RabbitMQ]
+        MinIO[MinIO Storage]
         Groq[Groq LLM API]
     end
     subgraph Observability
@@ -47,20 +48,20 @@ flowchart LR
         Prometheus[Prometheus Metrics]
     end
     UI --> GW
-    GW --> Auth
-    GW --> Upsert
-    GW --> Bill
-    GW --> Analytics
-    Auth --> PG
-    Upsert --> PG
-    Bill --> PG
-    Analytics --> PG
-    Auth --> Redis
-    Upsert --> Redis
-    Analytics --> Redis
-    Upsert --> Kafka
-    Analytics --> Kafka
-    Analytics --> Groq
+    GW --> Command
+    GW --> Query
+    GW --> OCR
+    GW --> MinIO
+    Command --> PG
+    Query --> PG
+    Command --> Redis
+    Query --> Redis
+    Command -.-> RMQ
+    Query -.-> RMQ
+    OCR -.-> RMQ
+    OCR --> MinIO
+    Query --> Groq
+    OCR --> Groq
     Services -.-> Vector
     Services -.-> Prometheus
     GW -.-> Prometheus
@@ -84,29 +85,28 @@ flowchart LR
 ---
 ## System Architecture & Data Flow
 
-This platform is engineered as a highly scalable, event-driven microservices ecosystem. Below is a detailed breakdown of how data flows through the system and how each component interacts.
+This platform is engineered as a highly scalable, event-driven microservices ecosystem following CQRS (Command Query Responsibility Segregation) patterns.
 
 ### 1. Client Application (Frontend)
 The user interface is engineered as a lightning-fast Single Page Application (SPA).
-- **Zero-Dependency Core**: Built purely with Vanilla JavaScript (ES6 Modules) and native HTML5/CSS3 to guarantee near-instant load times and minimal memory footprint without the overhead of heavy frameworks like React or Angular.
-- **Dynamic Data Visualization**: Leverages **Chart.js** to render real-time, interactive pie charts and trend lines for user analytics and budgets.
+- **Zero-Dependency Core**: Built purely with Vanilla JavaScript (ES6 Modules) and native HTML5/CSS3 to guarantee near-instant load times.
+- **Server-Sent Events (SSE)**: Establishes a real-time, persistent connection with the backend to receive instant UI updates (e.g., when a background AI batch job finishes).
 
-### 2. API Gateway & Security Layer
-All incoming client traffic (Web UI or Mobile) is routed through the **Spring Cloud Gateway**. 
-- **Centralized Routing & CORS**: The Gateway handles CORS configuration and dynamically routes requests to the appropriate downstream microservice (`/auth/**` to Auth Service, `/upsert/**` to Upsert Service, etc.).
-- **Security Validation**: Every protected route requires a valid JSON Web Token (JWT). The Gateway intercepts requests, cryptographically validates the JWT signature (without needing to ping the Auth service), and securely forwards the extracted `X-User-Id` downstream via HTTP headers. 
+### 2. API Gateway & Storage Layer
+All incoming client traffic is routed through the **Spring Cloud Gateway**. 
+- **Centralized Routing & CORS**: Dynamically routes requests downstream (`/api/upsert/**` to Command, `/api/analytics/**` to Query).
+- **Security Validation**: Validates JWT signatures and securely forwards the extracted `X-User-Id` to backend services. 
+- **MinIO Integration**: Intercepts direct file uploads (like Bank Statements and Receipts) and securely saves them to **MinIO** object storage before dispatching async jobs.
 
-### 3. Core Business Services (Synchronous Flow)
-Once a request passes the Gateway, it hits one of the domain-driven services:
-- **Auth Service**: Manages user registration and authentication. It verifies credentials against hashed passwords stored in PostgreSQL, generates short-lived access tokens, and utilizes Redis to track active sessions or blacklist compromised tokens.
-- **Upsert Service**: The primary operational engine. It executes all core mutations (CRUD operations) for transactions, budgets, savings goals, and shared group bills. It guarantees ACID compliance by persisting canonical state directly to its isolated schema in **PostgreSQL**.
-- **Bill-Parser Service**: A specialized microservice designed to handle file uploads. It utilizes **PaddleOCR** to perform Optical Character Recognition on receipt images. It synchronously extracts semantic data (Merchant Name, Total Amount, Date) and returns a structured JSON payload to the client for easy transaction ingestion.
+### 3. Core Business Services (CQRS Pattern)
+- **Command Service**: The primary operational engine. It executes all core mutations (CRUD operations) for transactions, budgets, goals, and shared group bills. It persists canonical state directly to its isolated schema in **PostgreSQL**.
+- **Query Service**: Optimized for ultra-fast reads, aggregations, and dashboard analytics. It maintains a highly optimized cache layer in **Redis** and provides AI-powered financial insights using the **Groq LLM**.
+- **OCR Service**: A Python/FastAPI ML worker. It leverages **PaddleOCR** and **Groq** to perform Optical Character Recognition and semantic parsing on receipt images and batch bank statements. 
 
 ### 4. Event-Driven Architecture (Asynchronous Flow)
-To ensure high performance and loose coupling, the system leverages **Apache Kafka** and **Redis** for state propagation.
-- **The Outbox Pattern**: When the Upsert Service successfully modifies data (e.g., adding a new transaction), it atomically saves the transaction to the database *and* publishes a `transaction-cache-evict` event to Kafka. 
-- **Real-Time Analytics**: The **Analytics Service** acts as a Kafka consumer. It listens to these cache eviction events. When a user's financial data changes, the Analytics Service instantly invalidates their stale, pre-computed aggregations residing in the Redis Cache.
-- **AI-Powered Insights**: When a user requests their financial health dashboard, the Analytics Service aggregates their spending history and queries the external **Groq LLM API**. This generates personalized, AI-driven financial insights (e.g., warning the user about subscription bloat), which are then cached in Redis for extremely fast subsequent retrievals.
+To ensure high performance and loose coupling, the system leverages **RabbitMQ** and **Redis** for state propagation.
+- **Cache Invalidation & Outbox**: When the Command Service modifies data, it publishes a `transaction-cache-evict` event to RabbitMQ. The Query Service consumes this and instantly invalidates stale pre-computed aggregations in Redis.
+- **Batch AI Processing**: When a user uploads a multi-page Bank Statement PDF, the API Gateway drops the file in MinIO and sends an `ocr.job` event to RabbitMQ. The OCR Service consumes the job, processes it using Groq, and posts the results back to an internal webhook. The Command Service then broadcasts this via SSE so the user's UI updates in real-time.
 
 ### 5. Telemetry & Observability Pipeline
 A robust, enterprise-grade observability stack monitors the entire cluster.

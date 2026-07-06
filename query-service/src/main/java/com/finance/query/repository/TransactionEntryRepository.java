@@ -27,6 +27,8 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
 
     // ── Basic listing ─────────────────────────────────────────────────────────
 
+    List<TransactionEntry> findByUserIdAndCreatedAtBetween(UUID userId, LocalDateTime start, LocalDateTime end);
+
     Page<TransactionEntry> findByUserId(UUID userId, Pageable pageable);
 
     Page<TransactionEntry> findByUserIdAndCategoryAndCreatedAtBetween(

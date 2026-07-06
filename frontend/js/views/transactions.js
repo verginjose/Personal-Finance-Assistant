@@ -16,6 +16,8 @@ export async function renderTransactions(container) {
       <div class="search-box">${icon('search', 'sm')}<input class="form-input" id="t-search" placeholder="Search by name or description…" aria-label="Search transactions"></div>
       <button class="btn btn-secondary btn-sm" id="t-filter-btn">${icon('filter', 'sm')} Filters</button>
       <button class="btn btn-secondary btn-sm" id="t-export">${icon('download', 'sm')} Export CSV</button>
+      <button class="btn btn-secondary btn-sm" id="t-batch-import">${icon('upload', 'sm')} Batch Import</button>
+      <input type="file" id="t-batch-file" accept=".pdf,.csv" style="display:none;">
     </div>
     <div class="table-wrap fade-up">
       <table>
@@ -130,7 +132,123 @@ export async function renderTransactions(container) {
     } catch (e) { localStorage.removeItem('pfa_pending_scan'); }
   }
 
+  document.getElementById('t-batch-import').onclick = () => {
+    document.getElementById('t-batch-file').click();
+  };
+
+  document.getElementById('t-batch-file').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    document.getElementById('t-batch-import').innerHTML = `${icon('loader', 'sm')} Uploading...`;
+    document.getElementById('t-batch-import').disabled = true;
+    
+    try {
+      const res = await api.post(`/bill/batch-process/${userId}`, formData, { raw: true });
+      if (!res.ok) throw new Error('Upload failed');
+      toast('Statement uploaded. Extracting transactions...', 'info');
+      document.getElementById('t-batch-import').innerHTML = `${icon('loader', 'sm')} Processing...`;
+    } catch (err) {
+      toast('Failed to upload file', 'error');
+      document.getElementById('t-batch-import').innerHTML = `${icon('upload', 'sm')} Batch Import`;
+      document.getElementById('t-batch-import').disabled = false;
+    }
+    e.target.value = '';
+  };
+
+  const handleBatchOcr = (e) => {
+    const detail = e.detail;
+    if (detail.type === 'batch-ocr-completed' && detail.userId === userId) {
+      document.getElementById('t-batch-import').innerHTML = `${icon('upload', 'sm')} Batch Import`;
+      document.getElementById('t-batch-import').disabled = false;
+      
+      if (detail.status === 'SUCCESS' && Array.isArray(detail.data) && detail.data.length > 0) {
+        showBatchModal(userId, detail.data, load);
+      } else {
+        toast('No transactions found or extraction failed.', 'warning');
+      }
+    }
+  };
+  
+  window.addEventListener('app-notification', handleBatchOcr);
+  
+  // Cleanup listener when navigating away
+  const observer = new MutationObserver(() => {
+    if (!document.contains(container)) {
+      window.removeEventListener('app-notification', handleBatchOcr);
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+
   load();
+}
+
+function showBatchModal(userId, transactions, onSuccess) {
+  let tableRows = transactions.map((t, idx) => `
+    <tr>
+      <td><input type="text" class="form-input form-input-sm" id="b-name-${idx}" value="${esc(t.name || '')}"></td>
+      <td>
+        <select class="form-select form-input-sm" id="b-type-${idx}">
+          <option value="EXPENSE" ${t.type === 'EXPENSE' ? 'selected' : ''}>EXPENSE</option>
+          <option value="INCOME" ${t.type === 'INCOME' ? 'selected' : ''}>INCOME</option>
+        </select>
+      </td>
+      <td><input type="number" class="form-input form-input-sm" id="b-amt-${idx}" value="${t.amount || 0}" step="0.01"></td>
+      <td><input type="date" class="form-input form-input-sm" id="b-date-${idx}" value="${t.date || ''}"></td>
+    </tr>
+  `).join('');
+
+  const bodyHtml = `
+    <p style="margin-bottom:15px; color:var(--text-dim);">Review and edit the extracted transactions before saving.</p>
+    <div style="max-height: 400px; overflow-y: auto;">
+      <table style="width:100%; border-collapse: collapse;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
+            <th style="padding:8px">Name</th>
+            <th style="padding:8px">Type</th>
+            <th style="padding:8px">Amount</th>
+            <th style="padding:8px">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  openModal(`Import ${transactions.length} Transactions`, bodyHtml, {
+    submitLabel: 'Save All',
+    size: 'lg',
+    onSubmit: async () => {
+      const payload = transactions.map((t, idx) => {
+        let parsedDate = document.getElementById(`b-date-${idx}`).value;
+        let isoDate = null;
+        if (parsedDate) {
+          const d = new Date(parsedDate);
+          if (!isNaN(d.getTime())) isoDate = d.toISOString();
+        }
+        return {
+          userId: userId,
+          name: document.getElementById(`b-name-${idx}`).value,
+          amount: parseFloat(document.getElementById(`b-amt-${idx}`).value) || 0,
+          type: document.getElementById(`b-type-${idx}`).value,
+          currency: t.currency || 'INR',
+          category: t.type === 'EXPENSE' ? (t.expenseCategory || 'OTHERS') : (t.incomeCategory || 'OTHERS'),
+          description: 'Imported from bank statement',
+          createdAt: isoDate
+        };
+      });
+
+      await api.post('/create/bulk', payload);
+      toast(`Successfully imported ${payload.length} transactions`, 'success');
+      onSuccess();
+    }
+  });
 }
 
 async function loadTransactions(userId) {

@@ -22,6 +22,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
 @Slf4j
 @Service
@@ -249,6 +254,37 @@ public class AnalyticsService {
 
     public Page<TransactionEntry> getTransactionEntriesByUserId(UUID userId, Pageable pageable) {
         return repository.findByUserId(userId, pageable);
+    }
+
+    public Object getAIAdvisorInsights(UUID userId) {
+        LocalDateTime thirtyDaysAgo = LocalDateTime.now().minusDays(30);
+        List<TransactionEntry> txns = repository.findByUserIdAndCreatedAtBetween(userId, thirtyDaysAgo, LocalDateTime.now());
+        
+        List<Map<String, Object>> mappedTxns = txns.stream().map(t -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("d", t.getCreatedAt() != null ? t.getCreatedAt().toLocalDate().toString() : "");
+            map.put("n", t.getName());
+            map.put("a", t.getAmount());
+            map.put("t", t.getType().toString());
+            map.put("c", t.getCategory() != null ? t.getCategory().name() : "");
+            return map;
+        }).collect(Collectors.toList());
+        
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("transactions", mappedTxns);
+        
+        RestTemplate restTemplate = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
+        
+        try {
+            ResponseEntity<Map> response = restTemplate.postForEntity("http://ocr-service:8000/analyze", request, Map.class);
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("Failed to get AI advisor insights", e);
+            return Map.of("error", e.getMessage());
+        }
     }
 
     public Page<TransactionEntry> findIncomeByCategoryAndDate(

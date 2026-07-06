@@ -55,7 +55,9 @@ async def process_mq_message(message: aio_pika.abc.AbstractIncomingMessage):
             object_name = body.get("objectName")
             bucket = body.get("bucket", "receipts")
             
-            log.info("Received OCR job from RabbitMQ for user %s: s3://%s/%s", user_id, bucket, object_name)
+            is_batch = str(body.get("isBatch")).lower() == "true"
+            
+            log.info("Received OCR job from RabbitMQ for user %s: s3://%s/%s (batch: %s)", user_id, bucket, object_name, is_batch)
             
             # Download file from Minio in a background thread to avoid blocking asyncio loop
             def download_minio():
@@ -66,7 +68,10 @@ async def process_mq_message(message: aio_pika.abc.AbstractIncomingMessage):
             
             # Process OCR
             content_type = "application/pdf" if object_name.lower().endswith(".pdf") else "image/jpeg"
-            await _process_and_notify(user_id, data, object_name, content_type)
+            if object_name.lower().endswith(".csv"):
+                content_type = "text/csv"
+                
+            await _process_and_notify(user_id, data, object_name, content_type, is_batch)
             
         except Exception as e:
             log.error("Failed to process RabbitMQ message: %s", e)
@@ -226,9 +231,42 @@ Receipt:
 {text}
 """
 
+GROQ_ADVISOR_PROMPT_TEMPLATE = """You are an expert AI Financial Advisor. Analyze the user's transaction history for the past period and provide actionable insights. Return ONLY valid JSON.
 
-async def _call_groq(text: str) -> dict:
-    text_hash = hashlib.sha256(text.encode()).hexdigest()
+Rules:
+- Be concise but helpful.
+- "insights": A list of 2-3 key observations (e.g. "You spent 40% of your budget on Food").
+- "warnings": A list of 0-2 warnings (e.g. "Your recurring subscriptions have increased by $20").
+- "suggestions": A list of 1-2 actionable suggestions.
+
+JSON schema:
+{{"insights":["string"],"warnings":["string"],"suggestions":["string"]}}
+
+Transactions:
+{text}
+"""
+
+GROQ_BATCH_PROMPT_TEMPLATE = """Extract all financial transactions from this bank statement/document. Return ONLY valid JSON containing an array of transactions.
+
+Rules:
+- Output should be a JSON array: `[ {...}, {...} ]`
+- If no transactions are found, return `[]`.
+- transactionType: "Expense" or "Income"
+- expenseCategory/incomeCategory: Guess the closest category or use "OTHERS". Set unused to null.
+- currency: 3-letter ISO code (e.g., INR, USD)
+- date: Date of the bill in "YYYY-MM-DD" format, or null
+- recurring: true if it looks like a subscription, false otherwise
+- amount: Float number (e.g., 20.50)
+
+JSON schema:
+[{{"vendor":"string","amount":0.0,"transactionType":"string","expenseCategory":"string|null","incomeCategory":"string|null","currency":"string","description":"string","date":"string|null","recurring":false}}]
+
+Document:
+{text}
+"""
+
+async def _call_groq_generic(prompt: str) -> dict | list:
+    text_hash = hashlib.sha256(prompt.encode()).hexdigest()
     if text_hash in llm_cache:
         return llm_cache[text_hash]
 
@@ -237,9 +275,9 @@ async def _call_groq(text: str) -> dict:
 
     payload = {
         "model": GROQ_MODEL,
-        "temperature": 0.1,
+        "temperature": 0.2,
         "response_format": {"type": "json_object"},
-        "messages": [{"role": "user", "content": GROQ_PROMPT_TEMPLATE.format(text=text)}],
+        "messages": [{"role": "user", "content": prompt}],
     }
 
     client = http_client if http_client else httpx.AsyncClient()
@@ -247,7 +285,7 @@ async def _call_groq(text: str) -> dict:
         GROQ_URL,
         json=payload,
         headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-        timeout=30.0
+        timeout=40.0
     )
     if r.status_code != 200:
             raise RuntimeError(f"Groq HTTP {r.status_code}: {r.text}")
@@ -257,21 +295,53 @@ async def _call_groq(text: str) -> dict:
     llm_cache[text_hash] = result
     return result
 
+async def _call_groq(text: str, is_batch: bool = False) -> dict | list:
+    if is_batch:
+        return await _call_groq_generic(GROQ_BATCH_PROMPT_TEMPLATE.format(text=text))
+    return await _call_groq_generic(GROQ_PROMPT_TEMPLATE.format(text=text))
 
-async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: str) -> dict:
+
+
+async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: str, is_batch: bool = False) -> dict | list:
     is_pdf = filename.lower().endswith(".pdf") or content_type == "application/pdf"
-    if is_pdf:
+    is_csv = filename.lower().endswith(".csv") or content_type == "text/csv"
+    
+    if is_csv:
+        raw_text = data.decode('utf-8', errors='ignore')
+    elif is_pdf:
         raw_text = await asyncio.to_thread(_extract_text_from_pdf, data)
     else:
         raw_text = await asyncio.to_thread(_extract_text_from_image_bytes, data, filename)
 
     clean_text = " ".join(raw_text.split()).strip()
     if len(clean_text) < 10:
-        return {}
+        return [] if is_batch else {}
 
-    doc = await _call_groq(clean_text)
+    doc = await _call_groq(clean_text, is_batch)
+    
+    if is_batch:
+        results = []
+        if not isinstance(doc, list):
+            doc = doc.get("transactions", []) if isinstance(doc, dict) else []
+        for item in doc:
+            conversion = _convert_currency(float(item.get("amount", 0)), item.get("currency", "INR"))
+            results.append({
+                "userId": user_id,
+                "name": item.get("vendor"),
+                "amount": str(item.get("amount", 0)),
+                "type": item.get("transactionType", "Expense").upper(),
+                "expenseCategory": item.get("expenseCategory"),
+                "incomeCategory": item.get("incomeCategory"),
+                "currency": item.get("currency", "INR"),
+                "description": item.get("description", ""),
+                "date": item.get("date"),
+                "recurring": item.get("recurring", False),
+                "amountInr": conversion["amountInr"],
+                "amountUsd": conversion["amountUsd"],
+            })
+        return results
+
     conversion = _convert_currency(float(doc.get("amount", 0)), doc.get("currency", "INR"))
-
     return {
         "userId": user_id,
         "name": doc.get("vendor"),
@@ -288,9 +358,9 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
     }
 
 
-async def _process_and_notify(user_id: str, data: bytes, filename: str, content_type: str):
+async def _process_and_notify(user_id: str, data: bytes, filename: str, content_type: str, is_batch: bool = False):
     try:
-        result = await _parse_bill(user_id, data, filename, content_type)
+        result = await _parse_bill(user_id, data, filename, content_type, is_batch)
         payload = {"userId": user_id, "status": "SUCCESS", "data": result, "message": "Bill parsed successfully"}
     except Exception as e:
         log.error("Bill parsing failed: %s", e)
@@ -298,7 +368,8 @@ async def _process_and_notify(user_id: str, data: bytes, filename: str, content_
 
     try:
         client = http_client if http_client else httpx.AsyncClient()
-        res = await client.post(f"{UPSERT_URL}/internal/ocr-complete", json=payload, timeout=10.0)
+        endpoint = f"{UPSERT_URL}/internal/batch-ocr-complete" if is_batch else f"{UPSERT_URL}/internal/ocr-complete"
+        res = await client.post(endpoint, json=payload, timeout=10.0)
         log.info("Notified command-service: %s", res.status_code)
     except Exception as e:
         log.error("Failed to notify command-service: %s", e)
@@ -307,3 +378,19 @@ async def _process_and_notify(user_id: str, data: bytes, filename: str, content_
 @app.get("/health")
 def health():
     return {"status": "ok", "engine": "PaddleOCR", "async_mq": True}
+
+@app.post("/analyze")
+async def analyze_transactions(payload: dict):
+    if "transactions" not in payload:
+        return {"error": "transactions field required"}
+    
+    # Format transactions tightly to save tokens
+    txns = payload["transactions"]
+    text_repr = json.dumps(txns, separators=(',', ':'))
+    
+    try:
+        res = await _call_groq_generic(GROQ_ADVISOR_PROMPT_TEMPLATE.format(text=text_repr))
+        return res
+    except Exception as e:
+        log.error("Failed to analyze: %s", e)
+        return {"insights": [], "warnings": [], "suggestions": [], "error": str(e)}

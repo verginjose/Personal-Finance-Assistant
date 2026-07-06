@@ -43,4 +43,22 @@ public class InternalController {
         }
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/batch-ocr-complete")
+    public ResponseEntity<Void> batchOcrComplete(@RequestBody Map<String, Object> event) {
+        String userIdStr = (String) event.get("userId");
+        if (userIdStr == null) {
+            log.warn("Received batch-ocr-complete event with no userId");
+            return ResponseEntity.badRequest().build();
+        }
+        try {
+            UUID userId = UUID.fromString(userIdStr);
+            event.put("type", "batch-ocr-completed"); // Differentiate event in UI
+            notificationService.sendNotification(userId, event);
+            log.info("SSE notification sent for Batch OCR completion, user={}, status={}", userId, event.get("status"));
+        } catch (Exception e) {
+            log.error("Failed to send Batch OCR completion notification: {}", e.getMessage());
+        }
+        return ResponseEntity.ok().build();
+    }
 }

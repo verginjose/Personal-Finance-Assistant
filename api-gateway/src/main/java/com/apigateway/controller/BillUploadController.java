@@ -110,4 +110,71 @@ public class BillUploadController {
                     }
                 });
     }
+
+    @PostMapping(value = "/batch-process/{userId}", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<ResponseEntity<Map<String, String>>> uploadBatchBill(
+            @PathVariable String userId,
+            @RequestPart("file") FilePart filePart) {
+
+        String receiptId = UUID.randomUUID().toString();
+        String objectName = userId + "/" + receiptId + "-batch-" + filePart.filename();
+
+        return filePart.content()
+                .map(dataBuffer -> {
+                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                    dataBuffer.read(bytes);
+                    return bytes;
+                })
+                .reduce((bytes1, bytes2) -> {
+                    byte[] combined = new byte[bytes1.length + bytes2.length];
+                    System.arraycopy(bytes1, 0, combined, 0, bytes1.length);
+                    System.arraycopy(bytes2, 0, combined, bytes1.length, bytes2.length);
+                    return combined;
+                })
+                .publishOn(Schedulers.boundedElastic())
+                .map(bytes -> {
+                    try {
+                        MinioClient minioClient = getMinioClient();
+                        
+                        boolean found = minioClient.bucketExists(io.minio.BucketExistsArgs.builder().bucket(minioBucket).build());
+                        if (!found) {
+                            minioClient.makeBucket(io.minio.MakeBucketArgs.builder().bucket(minioBucket).build());
+                        }
+                        
+                        String contentType = filePart.filename().toLowerCase().endsWith(".csv") ? "text/csv" : "application/pdf";
+                        
+                        try (java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(bytes)) {
+                            minioClient.putObject(
+                                    PutObjectArgs.builder()
+                                            .bucket(minioBucket)
+                                            .object(objectName)
+                                            .stream(bais, bytes.length, -1)
+                                            .contentType(contentType)
+                                            .build()
+                            );
+                        }
+
+                        Map<String, String> ocrJobEvent = Map.of(
+                                "userId", userId,
+                                "receiptId", receiptId,
+                                "objectName", objectName,
+                                "bucket", minioBucket,
+                                "isBatch", "true"
+                        );
+                        rabbitTemplate.convertAndSend("finance-events", "ocr.job", ocrJobEvent);
+
+                        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                                .body(Map.of(
+                                    "message", "Batch statement accepted for processing", 
+                                    "receiptId", receiptId,
+                                    "url", "/api/storage/" + minioBucket + "/" + objectName
+                                ));
+
+                    } catch (Exception e) {
+                        log.error("Failed to upload batch statement and publish event", e);
+                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .body(Map.of("message", "Internal server error"));
+                    }
+                });
+    }
 }

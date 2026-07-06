@@ -70,6 +70,20 @@ public class TransactionEntryService {
         return createEntry(request, idempotencyKey, true);
     }
 
+    @Transactional
+    public List<CreateEntryResponse> createBulkEntries(List<CreateEntryRequest> requests) {
+        List<CreateEntryResponse> responses = new ArrayList<>();
+        UUID userId = null;
+        for (CreateEntryRequest req : requests) {
+            if (userId == null) userId = req.getUserId();
+            responses.add(createEntry(req, null, false));
+        }
+        if (userId != null) {
+            eventPublisher.publishEvent(new TransactionEntryCreatedEvent(userId));
+        }
+        return responses;
+    }
+
     public CreateEntryResponse createEntry(CreateEntryRequest request, String idempotencyKey, boolean publishCacheEvict) {
         String redisKey = null;
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {

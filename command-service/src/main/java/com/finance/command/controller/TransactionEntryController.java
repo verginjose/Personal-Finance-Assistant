@@ -47,6 +47,20 @@ public class TransactionEntryController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.createEntry(request, idempotencyKey));
     }
 
+    @PostMapping("/create/bulk")
+    @Operation(summary = "Create multiple financial entries in bulk")
+    public ResponseEntity<List<CreateEntryResponse>> createBulkEntries(
+            @RequestHeader("X-User-Id") String xUserId,
+            @Valid @RequestBody List<CreateEntryRequest> requests) {
+        if (requests.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+        if (!requests.get(0).getUserId().toString().equalsIgnoreCase(xUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: User ID mismatch");
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(service.createBulkEntries(requests));
+    }
+
     // ── Update (full) ─────────────────────────────────────────────────────────
 
     @PutMapping("/update")

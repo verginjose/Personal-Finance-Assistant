@@ -36,8 +36,8 @@ export async function renderDashboard(container) {
       api.get('/upsert/summary', { userId }),
       api.get('/analytics/category-pie-chart', { userId, transactionFilter: 'EXPENSE' }),
       api.get('/analytics/timeline-chart', { userId, timelineType: 'MONTHLY' }),
-      api.get('/analytics/health-score', { userId }),
-      api.get('/analytics/ai-insights', { userId }),
+      api.get('/analytics/health-score', { userId }).catch(() => null),
+      api.get('/analytics/ai-insights', { userId }).catch((e) => ({ error: e.message })),
       api.get('/upsert/budgets', { userId }).catch(() => []),
       api.get('/upsert/goals', { userId }).catch(() => [])
     ]);
@@ -122,7 +122,25 @@ export async function renderDashboard(container) {
     }
 
     renderHealthData('d', health);
-    renderAiData('d', ai);
+    
+    let formattedAi = null;
+    if (ai && !ai.error) {
+      const insightsList = [];
+      if (ai.insights) ai.insights.forEach(i => insightsList.push({ type: 'info', title: 'Insight', message: i }));
+      if (ai.warnings) ai.warnings.forEach(w => insightsList.push({ type: 'warning', title: 'Warning', message: w }));
+      if (ai.suggestions) ai.suggestions.forEach(s => insightsList.push({ type: 'success', title: 'Suggestion', message: s }));
+      
+      formattedAi = {
+        summary: "Here is your personalized financial advice based on the last 30 days of transactions:",
+        insights: insightsList
+      };
+    } else if (ai && ai.error) {
+      formattedAi = {
+        summary: "Failed to load AI insights.",
+        insights: [{ type: 'error', title: 'Error', message: ai.error }]
+      };
+    }
+    renderAiData('d', formattedAi);
 
     const pieWrap = document.getElementById('d-pie-wrap');
     if (!pieWrap) return;

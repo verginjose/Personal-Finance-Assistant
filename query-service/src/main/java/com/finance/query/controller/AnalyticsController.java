@@ -47,6 +47,7 @@ public class AnalyticsController {
         return analyticsService.getTransactionEntriesByUserId(userId, pageable);
     }
 
+
     @GetMapping("/transactions/income-by-category")
     public Page<TransactionEntry> getIncomeByCategory(
             @RequestParam UUID userId,

@@ -23,8 +23,8 @@ public class CacheKeyRegistry {
     private final RedisTemplate<String, Object> redisTemplate;
 
     private static final Duration REGISTRY_TTL    = Duration.ofHours(2);
-    private static final String   USER_KEY_PREFIX  = "finance:upsert:v1:user-keys:";
-    private static final String   CACHE_USER_PREFIX = "finance:upsert:v1:cache-users:";
+    private static final String   USER_KEY_PREFIX  = "finance:analytics:v1:user-keys:";
+    private static final String   CACHE_USER_PREFIX = "finance:analytics:v1:cache-users:";
     private static final String EVICT_CACHE_LUA = """
     local cacheSet    = KEYS[1]
     local cachePrefix = ARGV[1]
@@ -138,7 +138,7 @@ public class CacheKeyRegistry {
 
     public void evictAllForCache(String cacheName) {
         String cacheSet    = CACHE_USER_PREFIX + cacheName;
-        String cachePrefix = "finance:upsert:v1:" + cacheName + ":";
+        String cachePrefix = "finance:analytics:v1:" + cacheName + ":";
         try {
             Long deleted = redisTemplate.execute(
                     new DefaultRedisScript<>(EVICT_CACHE_LUA, Long.class),

@@ -1,7 +1,7 @@
-import {api, Auth, toast} from '../utils/api.js?v=1783271597';
-import { icon } from '../utils/icons.js?v=1783302413';
-import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=1783271597';
-import {navigateTo} from '../app.js?v=1783271597';
+import {api, Auth, toast} from '../utils/api.js?v=2026070603';
+import { icon } from '../utils/icons.js?v=2026070603';
+import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=2026070603';
+import {navigateTo} from '../app.js?v=2026070603';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
@@ -160,7 +160,10 @@ export async function renderBillScanner(container) {
     try {
       const fd = new FormData();
       fd.append('file', selectedFile);
-      await api.upload(`/bill/process/${userId}`, fd);
+      const res = await api.upload(`/bill/process/${userId}`, fd);
+      if (res && res.url) {
+        window._bsReceiptUrl = res.url;
+      }
       toast('Bill uploaded. AI is processing...', 'info');
     } catch (err) {
       toast('OCR upload failed: ' + err.message, 'error');
@@ -218,24 +221,28 @@ async function saveTransaction(userId) {
       }
 
       if (dest === 'PERSONAL') {
-        const payload = {
-          userId, name, amount, type, currency, description,
+        localStorage.setItem('pfa_pending_scan', JSON.stringify({
+          groupId: 'PERSONAL',
+          amount,
+          currency,
+          name,
+          type,
           category: document.getElementById('bs-category').value,
-          recurring: isRecurring
-        };
-        if (isoDate) payload.createdAt = isoDate;
-      
-      await api.post('/upsert/create', payload);
-      toast('Personal transaction saved!', 'success');
-      document.getElementById('bs-result').style.display = 'none';
-      document.getElementById('bs-fname').textContent = '';
-    } else {
+          description,
+          date: dateVal,
+          recurring: isRecurring,
+          receiptUrl: window._bsReceiptUrl || null
+        }));
+        navigateTo('transactions');
+        toast('Forwarded to personal transactions page', 'info');
+      } else {
       localStorage.setItem('pfa_pending_scan', JSON.stringify({
         groupId: dest,
         amount,
         currency,
         description: name + (description ? ' - ' + description : ''),
-        date: dateVal
+        date: dateVal,
+        receiptUrl: window._bsReceiptUrl || null
       }));
       navigateTo('split');
       toast('Forwarded to group split page', 'info');

@@ -119,6 +119,12 @@ public class TransactionEntry implements Serializable {
     @Getter
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    /** MinIO receipt/bill image URL */
+    @Column(name = "receipt_url", length = 500)
+    @Getter
+    @Setter
+    private String receiptUrl;
     // Constructors
     public TransactionEntry() {}
 

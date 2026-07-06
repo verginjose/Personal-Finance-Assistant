@@ -45,4 +45,7 @@ public class CreateEntryRequest {
 
     /** Optional creation date for retroactively adding transactions. */
     private java.time.LocalDateTime createdAt;
+
+    /** Optional MinIO receipt/bill URL */
+    private String receiptUrl;
 }

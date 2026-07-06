@@ -37,6 +37,8 @@ public class CreateSharedExpenseRequest {
 
     private List<SplitDetailRequest> splitDetails;
 
+    private String receiptUrl;
+
     @Data
     public static class SplitDetailRequest {
         @NotNull

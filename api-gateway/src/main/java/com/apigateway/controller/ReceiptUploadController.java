@@ -4,7 +4,6 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,17 +12,14 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.InputStream;
 import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/bill")
+@RequestMapping("/api/receipt")
 @RequiredArgsConstructor
-public class BillUploadController {
-
-    private final RabbitTemplate rabbitTemplate;
+public class ReceiptUploadController {
 
     @Value("${minio.endpoint:http://minio:9000}")
     private String minioEndpoint;
@@ -44,8 +40,8 @@ public class BillUploadController {
                 .build();
     }
 
-    @PostMapping(value = "/process/{userId}", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Mono<ResponseEntity<Map<String, String>>> uploadBill(
+    @PostMapping(value = "/upload/{userId}", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<ResponseEntity<Map<String, String>>> uploadReceipt(
             @PathVariable String userId,
             @RequestPart("file") FilePart filePart) {
 
@@ -69,10 +65,12 @@ public class BillUploadController {
                     try {
                         MinioClient minioClient = getMinioClient();
                         
-                        // Ensure bucket exists (in a real app, do this on startup)
+                        // Ensure bucket exists
                         boolean found = minioClient.bucketExists(io.minio.BucketExistsArgs.builder().bucket(minioBucket).build());
                         if (!found) {
                             minioClient.makeBucket(io.minio.MakeBucketArgs.builder().bucket(minioBucket).build());
+                            String policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::" + minioBucket + "/*\"]}]}";
+                            minioClient.setBucketPolicy(io.minio.SetBucketPolicyArgs.builder().bucket(minioBucket).config(policy).build());
                         }
                         
                         // Upload to MinIO
@@ -82,29 +80,18 @@ public class BillUploadController {
                                             .bucket(minioBucket)
                                             .object(objectName)
                                             .stream(bais, bytes.length, -1)
-                                            .contentType("image/jpeg") // Or dynamically infer
+                                            .contentType("image/jpeg")
                                             .build()
                             );
                         }
 
-                        // Publish to RabbitMQ
-                        Map<String, String> ocrJobEvent = Map.of(
-                                "userId", userId,
-                                "receiptId", receiptId,
-                                "objectName", objectName,
-                                "bucket", minioBucket
-                        );
-                        rabbitTemplate.convertAndSend("finance-events", "ocr.job", ocrJobEvent);
+                        String fileUrl = "/api/storage/" + minioBucket + "/" + objectName;
 
-                        return ResponseEntity.status(HttpStatus.ACCEPTED)
-                                .body(Map.of(
-                                    "message", "Receipt accepted for OCR processing", 
-                                    "receiptId", receiptId,
-                                    "url", "/api/storage/" + minioBucket + "/" + objectName
-                                ));
+                        return ResponseEntity.status(HttpStatus.OK)
+                                .body(Map.of("url", fileUrl));
 
                     } catch (Exception e) {
-                        log.error("Failed to upload bill and publish event", e);
+                        log.error("Failed to upload receipt", e);
                         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                                 .body(Map.of("message", "Internal server error"));
                     }

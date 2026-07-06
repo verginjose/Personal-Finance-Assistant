@@ -391,3 +391,8 @@ export function setupCategorySearch(inputId, selectId) {
     });
   }
 }
+
+export function openReceiptLightbox(url) {
+  openModal('Receipt', `<div style="text-align:center; padding: 10px;"><img src="${url}" style="max-width:100%; max-height: 80vh; object-fit: contain; border-radius: 8px;"></div>`, { size: 'lg' });
+}
+window.openReceiptLightbox = openReceiptLightbox;

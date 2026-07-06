@@ -102,6 +102,34 @@ export async function renderTransactions(container) {
     sessionStorage.removeItem('pendingCategoryFilter');
   }
 
+  const pendingScanRaw = localStorage.getItem('pfa_pending_scan');
+  if (pendingScanRaw) {
+    try {
+      const pendingScan = JSON.parse(pendingScanRaw);
+      if (pendingScan.groupId === 'PERSONAL') {
+        localStorage.removeItem('pfa_pending_scan');
+        setTimeout(() => {
+          let isoDate = null;
+          if (pendingScan.date) {
+            const d = new Date(pendingScan.date);
+            if (!isNaN(d.getTime())) isoDate = d.toISOString();
+          }
+          showModal(userId, {
+            name: pendingScan.name,
+            amount: pendingScan.amount,
+            type: pendingScan.type || 'EXPENSE',
+            currency: pendingScan.currency || 'INR',
+            description: pendingScan.description,
+            category: pendingScan.category,
+            createdAt: isoDate,
+            recurring: pendingScan.recurring,
+            receiptUrl: pendingScan.receiptUrl
+          }, load);
+        }, 100);
+      }
+    } catch (e) { localStorage.removeItem('pfa_pending_scan'); }
+  }
+
   load();
 }
 
@@ -290,7 +318,8 @@ async function showModal(userId, existing, onDone) {
         category: document.getElementById('m-cat').value,
         recurring,
         recurringPeriod: recurring ? document.getElementById('m-recurring-period').value : null,
-        createdAt: isoDate
+        createdAt: isoDate,
+        receiptUrl: document.getElementById('m-receipt-url').value || null
       };
 
       if (isEdit) {

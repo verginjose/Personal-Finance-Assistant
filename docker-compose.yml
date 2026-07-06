@@ -84,6 +84,8 @@ services:
     environment:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: password123
+    volumes:
+      - minio_data:/data
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -381,6 +383,7 @@ volumes:
   redis-data:
   loki_data:
   paddle-model-cache:
+  minio_data:
 
 networks:
   finance-network:

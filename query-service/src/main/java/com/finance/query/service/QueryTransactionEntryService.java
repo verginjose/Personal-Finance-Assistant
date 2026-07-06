@@ -111,6 +111,6 @@ public class QueryTransactionEntryService {
         return new CreateEntryResponse(
                 entry.getId(), entry.getUserId(), entry.getName(), entry.getAmount(),
                 entry.getType(), entry.getCategory(), entry.getCurrency(), entry.getDescription(),
-                entry.isRecurring(), entry.getRecurringPeriod(), entry.getCreatedAt(), entry.getUpdatedAt());
+                entry.isRecurring(), entry.getRecurringPeriod(), entry.getCreatedAt(), entry.getUpdatedAt(), entry.getReceiptUrl());
     }
 }

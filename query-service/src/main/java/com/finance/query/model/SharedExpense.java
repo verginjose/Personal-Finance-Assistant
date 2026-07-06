@@ -62,6 +62,10 @@ public class SharedExpense {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /** MinIO receipt/bill image URL */
+    @Column(name = "receipt_url", length = 500)
+    private String receiptUrl;
+
     public enum SplitType {
         EQUAL, PERCENTAGE, EXACT, SETTLEMENT
     }

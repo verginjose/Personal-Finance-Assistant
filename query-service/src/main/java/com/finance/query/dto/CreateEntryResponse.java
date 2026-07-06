@@ -29,4 +29,5 @@ public class CreateEntryResponse {
     private com.finance.query.model.RecurringPeriod recurringPeriod;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String receiptUrl;
 }

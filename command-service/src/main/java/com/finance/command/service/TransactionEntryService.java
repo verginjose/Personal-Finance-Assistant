@@ -166,6 +166,7 @@ public class TransactionEntryService {
         if (request.getCreatedAt() != null) {
             entry.setCreatedAt(request.getCreatedAt());
         }
+        entry.setReceiptUrl(request.getReceiptUrl());
         return entry;
     }
 
@@ -207,6 +208,7 @@ public class TransactionEntryService {
         if (request.getCreatedAt() != null) {
             existing.setCreatedAt(request.getCreatedAt());
         }
+        existing.setReceiptUrl(request.getReceiptUrl());
         
         TransactionEntry updated = repository.save(existing);
         
@@ -421,7 +423,8 @@ public class TransactionEntryService {
                 entry.getType(), entry.getCategory(),
                 entry.getCurrency(), entry.getDescription(),
                 entry.isRecurring(), entry.getRecurringPeriod(),
-                entry.getCreatedAt(), entry.getUpdatedAt()
+                entry.getCreatedAt(), entry.getUpdatedAt(),
+                entry.getReceiptUrl()
         );
     }
 }

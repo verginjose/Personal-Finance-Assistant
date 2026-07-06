@@ -62,7 +62,7 @@ public class SecurityConfig {
                         .pathMatchers("/api/upsert/health").permitAll()
                         .pathMatchers("/api/analytics/health").permitAll()
                         .pathMatchers("/api/bill/health").permitAll()
-
+                        .pathMatchers("/api/storage/**").permitAll()
 
                         // Everything else requires authentication
                         .anyExchange().authenticated()

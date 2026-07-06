@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=1783271597';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=1783271597';
-import { icon } from '../utils/icons.js?v=1783302413';
+import { api, Auth, toast } from '../utils/api.js?v=2026070603';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=2026070603';
+import { icon } from '../utils/icons.js?v=2026070603';
 
 let currentGroupId = null;
 let expensesPage = 0, expensesTotal = 1;
@@ -391,7 +391,7 @@ async function loadGroupDetail(groupId, userId) {
         <div class="balance-item expense-row" data-exp='${esc(JSON.stringify(expData))}' style="padding:16px 0; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
           <div>
              <div style="font-weight:600; font-size:1.05rem;">${esc(e.description || 'Expense')}</div>
-             <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by ${avatar(resolveMemberNameLocally(e.paidBy), 16, resolveMemberAvatarLocally(e.paidBy))} @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span></div>
+             <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by ${avatar(resolveMemberNameLocally(e.paidBy), 16, resolveMemberAvatarLocally(e.paidBy))} @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span>${e.receiptUrl ? ` · <div class="badge badge-info" style="font-size:.68rem;padding: 2px 4px; cursor:pointer;" title="View receipt" onclick="event.stopPropagation(); window.openReceiptLightbox('${esc(e.receiptUrl)}')">${icon('document', 'xs')}</div>` : ''}</div>
           </div>
           <div class="expense-row-actions" style="display:flex; align-items:center; gap: 12px;">
             <span style="font-weight:700;color:var(--text);font-size:1.1rem;">${formatCurrency(e.amount)}</span>
@@ -596,10 +596,17 @@ function openMobileExpenseModal(e, groupId, userId) {
         <span style="color:var(--text-dim)">Split Type</span>
         <span style="font-weight:600">${esc(splitTypeLabel(e.splitType))}</span>
       </div>
-      <div style="display:flex; justify-content:space-between;">
+      <div style="display:flex; justify-content:space-between; ${e.receiptUrl ? 'margin-bottom: 12px;' : ''}">
         <span style="color:var(--text-dim)">Category</span>
         <span>${esc(e.expenseCategory || 'OTHERS')}</span>
       </div>
+      ${e.receiptUrl ? `
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <span style="color:var(--text-dim)">Receipt</span>
+        <div style="cursor:pointer" onclick="event.stopPropagation(); window.openReceiptLightbox('${esc(e.receiptUrl)}')">
+          <img src="${esc(e.receiptUrl)}" style="max-width:100%; max-height:200px; border-radius:8px; border:1px solid var(--border)">
+        </div>
+      </div>` : ''}
     </div>
     
     <div style="display:flex; gap: 12px;">
@@ -891,6 +898,7 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
   const defaultAmt = initialData && initialData.amount ? initialData.amount : '';
   const defaultCur = initialData && initialData.currency ? esc(initialData.currency) : 'INR';
   const defaultDate = initialData && initialData.date ? esc(initialData.date) : '';
+  const defaultReceipt = initialData && initialData.receiptUrl ? esc(initialData.receiptUrl) : '';
 
   openModal('Add Shared Expense', `
     <form id="ae-form">
@@ -919,18 +927,54 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
         <input class="form-input" id="ae-date" type="date" value="${defaultDate}">
       </div>
       <div id="ae-split-details" hidden></div>
+      <div class="form-group" style="margin-top: 12px">
+        <label>Receipt / Bill Attachment</label>
+        <div id="ae-receipt-preview" style="display:${defaultReceipt ? 'block' : 'none'};margin-bottom:8px;position:relative;width:fit-content">
+          ${defaultReceipt ? `<img src="${defaultReceipt}" style="max-height:100px;border-radius:6px;border:1px solid var(--border)">
+          <button type="button" class="btn btn-icon btn-sm btn-danger" id="ae-receipt-remove" style="position:absolute;top:-8px;right:-8px" title="Remove Receipt">×</button>` : ''}
+        </div>
+        <div id="ae-receipt-upload" style="display:${defaultReceipt ? 'none' : 'block'}">
+          <input type="file" id="ae-receipt-file" accept="image/*,application/pdf" class="form-input" style="padding:6px">
+          <p style="font-size:0.75rem;color:var(--text-dim);margin-top:4px">Upload a receipt image or PDF (max 10MB)</p>
+        </div>
+        <input type="hidden" id="ae-receipt-url" value="${defaultReceipt}">
+      </div>
       ${modalActions('Cancel', 'Add')}
     </form>`, {
     onSubmit: async () => {
       const splitType = document.getElementById('ae-split-type').value;
       const amount = parseFloat(document.getElementById('ae-amt').value);
       const expenseDate = document.getElementById('ae-date').value;
+      
+      const submitBtn = document.querySelector('#ae-form button[type="submit"]');
+      const fileInput = document.getElementById('ae-receipt-file');
+      if (fileInput && fileInput.files.length > 0) {
+        submitBtn.disabled = true;
+        const originalText = submitBtn.textContent;
+        submitBtn.innerHTML = '<span class="spinner"></span> Uploading...';
+        try {
+          const fd = new FormData();
+          fd.append('file', fileInput.files[0]);
+          const upRes = await api.upload(`/receipt/upload/${userId}`, fd);
+          if (upRes && upRes.url) {
+             document.getElementById('ae-receipt-url').value = upRes.url;
+          }
+        } catch (e) {
+          toast('Failed to upload receipt: ' + e.message, 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+          return;
+        }
+        submitBtn.textContent = originalText;
+      }
+
       const payload = {
         description: document.getElementById('ae-desc').value.trim(),
         amount: amount,
         currency: document.getElementById('ae-currency').value.trim().toUpperCase(),
         paidBy: document.getElementById('ae-paid').value,
-        splitType: splitType
+        splitType: splitType,
+        receiptUrl: document.getElementById('ae-receipt-url').value || null
       };
       
       let timeStr = '00:00:00';
@@ -981,6 +1025,15 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
   if (window.TomSelect) {
     new TomSelect('#ae-paid', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' }});
     new TomSelect('#ae-split-type', { create: false, controlInput: null });
+  }
+
+  const rmReceiptBtn = document.getElementById('ae-receipt-remove');
+  if (rmReceiptBtn) {
+    rmReceiptBtn.onclick = () => {
+      document.getElementById('ae-receipt-preview').style.display = 'none';
+      document.getElementById('ae-receipt-upload').style.display = 'block';
+      document.getElementById('ae-receipt-url').value = '';
+    };
   }
 
   function defaultSplitValue(type, amount) {

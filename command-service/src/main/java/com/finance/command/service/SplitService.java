@@ -386,6 +386,7 @@ public class SplitService {
                 ? SharedExpense.SplitType.valueOf(req.getSplitType().toUpperCase())
                 : SharedExpense.SplitType.EQUAL);
         expense.setExpenseDate(req.getExpenseDate());
+        expense.setReceiptUrl(req.getReceiptUrl());
         if (req.getExpenseCategory() != null && !req.getExpenseCategory().isBlank()) {
             try {
                 expense.setExpenseCategory(

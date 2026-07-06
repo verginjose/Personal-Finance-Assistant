@@ -47,6 +47,9 @@ public class UpdateEntryRequest {
 
     private java.time.LocalDateTime createdAt;
 
+    /** Optional MinIO receipt/bill URL */
+    private String receiptUrl;
+
     public UpdateEntryRequest() {}
 }
 

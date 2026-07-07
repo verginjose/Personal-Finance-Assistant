@@ -36,7 +36,7 @@ CREATE_RES=$(curl -s -X POST http://localhost:8080/api/upsert/create \
     "amount": 15.99,
     "type": "EXPENSE",
     "currency": "USD",
-    "category": "ENTERTAINMENT",
+    "category": "OTT_SUBSCRIPTIONS",
     "isRecurring": true,
     "recurringPeriod": "MONTHLY"
   }')
@@ -54,7 +54,7 @@ CREATE_RES_IDEM=$(curl -s -X POST http://localhost:8080/api/upsert/create \
     "amount": 15.99,
     "type": "EXPENSE",
     "currency": "USD",
-    "category": "ENTERTAINMENT",
+    "category": "OTT_SUBSCRIPTIONS",
     "isRecurring": true,
     "recurringPeriod": "MONTHLY"
   }')

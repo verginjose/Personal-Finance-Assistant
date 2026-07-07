@@ -66,6 +66,7 @@ public class SplitService {
                 group.getId());
         log.info("Group created: id={}, name={}", group.getId(), group.getName());
         cacheEvictPublisher.publishForUsers(Set.of(req.getCreatedBy()), "GROUP_CREATED", group.getId());
+        evictUserGroupsForMembers(group.getId());
         return group;
     }
 
@@ -214,6 +215,10 @@ public class SplitService {
                 members.stream().map(GroupMember::getUserId).collect(Collectors.toSet()), 
                 "GROUP_DELETED", 
                 groupId);
+        
+        Set<UUID> memberIds = members.stream().map(GroupMember::getUserId).collect(Collectors.toSet());
+        evictUserGroupsForMembers(groupId);
+        queryCacheEvictor.evictGroupKeys(groupId, memberIds);
     }
 
     @Caching(evict = {
@@ -228,6 +233,8 @@ public class SplitService {
         member.setArchived(archive);
         memberRepo.save(member);
         cacheEvictPublisher.publishForUsers(Set.of(userId), "GROUP_ARCHIVED", groupId);
+        evictUserGroupsForMembers(groupId);
+        queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
     }
 
     /* ─── MEMBERS ─── */
@@ -259,6 +266,8 @@ public class SplitService {
                 "groupId", groupId)));
                 
         cacheEvictPublisher.publishForUsers(Set.of(req.getUserId()), "MEMBER_ADDED", groupId);
+        evictUserGroupsForMembers(groupId);
+        queryCacheEvictor.evictGroupKeys(groupId, Set.of(req.getUserId()));
         return member;
     }
 
@@ -294,6 +303,8 @@ public class SplitService {
                 "@" + actorName + " joined the group",
                 member.getId());
         cacheEvictPublisher.publishForUsers(Set.of(userId), "MEMBER_ACCEPTED", groupId);
+        evictUserGroupsForMembers(groupId);
+        queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
     }
 
     @Caching(evict = {
@@ -313,6 +324,8 @@ public class SplitService {
 
         memberRepo.delete(member);
         cacheEvictPublisher.publishForUsers(Set.of(userId), "MEMBER_REJECTED", groupId);
+        evictUserGroupsForMembers(groupId);
+        queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
     }
 
     @Caching(evict = {
@@ -345,6 +358,8 @@ public class SplitService {
                 "@" + actorName + " left the group",
                 member.getId());
         cacheEvictPublisher.publishForUsers(Set.of(userId), "MEMBER_LEFT", groupId);
+        evictUserGroupsForMembers(groupId);
+        queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
     }
 
     @Transactional(readOnly = true)

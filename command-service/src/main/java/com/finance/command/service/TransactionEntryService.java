@@ -16,11 +16,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.Cacheable;
-import com.finance.command.cache.CacheKeyRegistry;
+import com.finance.command.cache.QueryCacheEvictor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +42,7 @@ public class TransactionEntryService {
     private final OutboxEventRepository outboxEventRepository;
     private final GoalBudgetService goalBudgetService;
     private final com.finance.command.repository.TransactionGoalAllocationRepository allocationRepository;
-    private final CacheKeyRegistry cacheKeyRegistry;
+    private final com.finance.command.cache.QueryCacheEvictor queryCacheEvictor;
     private final com.finance.command.repository.ExpenseTransactionLinkRepository transactionLinkRepo;
 
     public TransactionEntryService(
@@ -50,7 +51,7 @@ public class TransactionEntryService {
             MeterRegistry meterRegistry, OutboxEventRepository outboxEventRepository,
             GoalBudgetService goalBudgetService,
             com.finance.command.repository.TransactionGoalAllocationRepository allocationRepository,
-            CacheKeyRegistry cacheKeyRegistry,
+            com.finance.command.cache.QueryCacheEvictor queryCacheEvictor,
             com.finance.command.repository.ExpenseTransactionLinkRepository transactionLinkRepo
     ) {
         this.repository = repository;
@@ -60,7 +61,7 @@ public class TransactionEntryService {
         this.outboxEventRepository = outboxEventRepository;
         this.goalBudgetService = goalBudgetService;
         this.allocationRepository = allocationRepository;
-        this.cacheKeyRegistry = cacheKeyRegistry;
+        this.queryCacheEvictor = queryCacheEvictor;
         this.transactionLinkRepo = transactionLinkRepo;
     }
 
@@ -78,8 +79,12 @@ public class TransactionEntryService {
             if (userId == null) userId = req.getUserId();
             responses.add(createEntry(req, null, false));
         }
-        if (userId != null) {
-            eventPublisher.publishEvent(new TransactionEntryCreatedEvent(userId));
+        if (userId != null && !responses.isEmpty()) {
+            OutboxEvent event = new OutboxEvent();
+            event.setUserId(userId);
+            event.setEventType("CREATE");
+            event.setEntityId(responses.get(0).getId());
+            outboxEventRepository.save(event);
         }
         return responses;
     }
@@ -116,7 +121,7 @@ public class TransactionEntryService {
             outboxEventRepository.save(event);
         }
         createCounter.increment();
-        cacheKeyRegistry.evictForUser(request.getUserId());
+        queryCacheEvictor.evictUserKeysWithReplicationGuard(request.getUserId());
         
         log.info("Idempotency key {}",idempotencyKey);
         if (redisKey != null) {
@@ -156,7 +161,7 @@ public class TransactionEntryService {
         saved.stream()
                 .map(TransactionEntry::getUserId)
                 .distinct()
-                .forEach(cacheKeyRegistry::evictForUser);
+                .forEach(queryCacheEvictor::evictUserKeysWithReplicationGuard);
 
         log.info("Batch created {} transaction entries", saved.size());
 
@@ -246,7 +251,7 @@ public class TransactionEntryService {
         event.setEntityId(updated.getId());
         outboxEventRepository.save(event);
         
-        cacheKeyRegistry.evictForUser(request.getUserId());
+        queryCacheEvictor.evictUserKeysWithReplicationGuard(request.getUserId());
         
         log.info("Transaction updated: id={}", updated.getId());
         return convertToResponse(updated);
@@ -284,7 +289,7 @@ public class TransactionEntryService {
         event.setEntityId(id);
         outboxEventRepository.save(event);
         
-        cacheKeyRegistry.evictForUser(userId);
+        queryCacheEvictor.evictUserKeysWithReplicationGuard(userId);
         
         log.info("Transaction amount patched: id={}, newAmount={}", id, newAmount);
         return convertToResponse(saved);
@@ -329,7 +334,7 @@ public class TransactionEntryService {
         outboxEventRepository.save(event);
         
         deleteCounter.increment();
-        cacheKeyRegistry.evictForUser(userId);
+        queryCacheEvictor.evictUserKeysWithReplicationGuard(userId);
         
         log.info("Transaction deleted: id={}, user={}", id, userId);
     }

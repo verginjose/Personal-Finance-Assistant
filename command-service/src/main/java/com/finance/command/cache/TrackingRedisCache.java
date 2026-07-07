@@ -104,37 +104,44 @@ public class TrackingRedisCache extends RedisCache {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
+    
     private void register(Object key) {
-        resolve(key, (userId, fullKey) ->
-                registry.register(userId, getName(), fullKey));
+        resolve(key,
+                (userId, fullKey) -> registry.register(userId, getName(), fullKey),
+                (groupId, fullKey) -> registry.registerGroup(groupId, fullKey));
     }
 
     private void deregister(Object key) {
-        resolve(key, (userId, fullKey) ->
-                registry.deregister(userId, getName(), fullKey));
+        resolve(key,
+                (userId, fullKey) -> registry.deregister(userId, getName(), fullKey),
+                (groupId, fullKey) -> registry.deregisterGroup(groupId, fullKey));
     }
 
-    /**
-     * Single key parser — userId is always parts[0], separated by |
-     * Works for every @Cacheable pattern:
-     *   "ai-insights"              → key = {userId}
-     *   "comprehensive-analytics"  → key = {userId}|MONTHLY|2024-01|2024-12
-     *   "category-analytics"       → key = {userId}|FOOD|2024-01|2024-12
-     */
-    private void resolve(Object key, BiConsumer<UUID, String> action) {
+    private void resolve(Object key, BiConsumer<UUID, String> userAction, BiConsumer<Long, String> groupAction) {
         try {
             String keyStr  = key.toString();
             String fullKey = getCacheConfiguration()
                     .getKeyPrefixFor(getName()) + keyStr;
 
-            String userIdStr = keyStr.split(":")[0];
-
-            if (userIdStr.length() != 36) {
-                log.warn("Skipping non-user key: {}", keyStr);
-                return;
+            String cacheName = getName();
+            if ("group-details".equals(cacheName) || "group-expenses".equals(cacheName) || "group-balances".equals(cacheName) || "group-activity".equals(cacheName)) {
+                try {
+                    String firstPart = keyStr.split("-")[0];
+                    Long groupId = Long.parseLong(firstPart);
+                    groupAction.accept(groupId, fullKey);
+                } catch (Exception e) {
+                    log.warn("Failed to parse groupId from key={}: {}", keyStr, e.getMessage());
+                }
             }
-            action.accept(UUID.fromString(userIdStr), fullKey);
+
+            java.util.regex.Pattern uuidPattern = java.util.regex.Pattern.compile(
+                    "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
+            );
+            java.util.regex.Matcher matcher = uuidPattern.matcher(keyStr);
+            if (matcher.find()) {
+                String userIdStr = matcher.group();
+                userAction.accept(UUID.fromString(userIdStr), fullKey);
+            }
         } catch (Exception e) {
             log.warn("Key resolution failed key={}: {}", key, e.getMessage());
         }

@@ -35,11 +35,14 @@ public class CacheEvictPublisher {
     @Async
     public void publish(UUID userId, String operation, Long transactionId) {
         try {
+            Thread.sleep(500);
             restClient.post()
                     .uri(analyticsServiceUrl + "/internal/cache-evict/" + userId)
                     .retrieve()
                     .toBodilessEntity();
             log.debug("Cache evict HTTP sent: user={}, operation={}", userId, operation);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
         } catch (Exception ex) {
             // Fire-and-forget: swallow errors — stale cache is better than blocking the caller
             log.warn("Cache evict HTTP failed for user={}, operation={}: {}", userId, operation, ex.getMessage());

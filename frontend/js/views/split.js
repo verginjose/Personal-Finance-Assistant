@@ -1,5 +1,5 @@
 import { api, Auth, toast } from '../utils/api.js?v=2026070701';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar } from '../utils/ui.js?v=2026070701';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026070701';
 import { icon } from '../utils/icons.js?v=2026070701';
 
 let currentGroupId = null;
@@ -75,6 +75,7 @@ async function loadGroups(userId) {
 
     const renderCard = (g) => {
       const isPending = g.currentUserStatus === 'PENDING';
+      const isArchived = g.isArchived;
       let balHtml = '';
       if (g.currentUserNetBalance > 0) {
         balHtml = `<div style="margin-top:8px; font-size:0.85rem; font-weight:600; color:var(--accent-g);">You get back ${formatCurrency(g.currentUserNetBalance, g.currency)}</div>`;
@@ -82,7 +83,10 @@ async function loadGroups(userId) {
         balHtml = `<div style="margin-top:8px; font-size:0.85rem; font-weight:600; color:var(--accent);">You owe ${formatCurrency(Math.abs(g.currentUserNetBalance), g.currency)}</div>`;
       }
       return `
-      <div class="card group-card" data-id="${g.id}" role="button" tabindex="0" ${isPending ? 'style="border: 2px solid var(--accent-y);"' : ''}>
+      <div class="card group-card" data-id="${g.id}" role="button" tabindex="0" ${
+        isPending ? 'style="border: 2px solid var(--accent-y);"' :
+        isArchived ? 'style="opacity:0.75; border-style:dashed;"' : ''
+      }>
         <div class="group-name">${esc(g.name)}</div>
         <div class="group-meta">${esc(g.description || 'No description')}</div>
         ${balHtml}
@@ -90,6 +94,13 @@ async function loadGroups(userId) {
           <div style="margin-top: 12px; display:flex; gap: 8px;" class="sp-pending-actions">
             <button class="btn btn-primary btn-sm sp-outside-accept" data-id="${g.id}">Accept</button>
             <button class="btn btn-secondary btn-sm sp-outside-decline" data-id="${g.id}">Decline</button>
+          </div>
+        ` : ''}
+        ${isArchived ? `
+          <div style="margin-top: 12px;" class="sp-archived-actions">
+            <button class="btn btn-secondary btn-sm sp-outside-unarchive" data-id="${g.id}" style="gap:6px">
+              ${icon('arrow-up', 'sm')} Unarchive
+            </button>
           </div>
         ` : ''}
       </div>`;
@@ -108,7 +119,7 @@ async function loadGroups(userId) {
             ${icon('archive', 18)} <span style="font-weight: 500;">Archived Groups (${archivedGroups.length})</span>
           </div>
           <div id="archived-groups-container" style="display:none; margin-top:20px;">
-            <div class="card-grid card-grid-3" style="opacity: 0.7;">
+            <div class="card-grid card-grid-3">
               ${archivedGroups.map(renderCard).join('')}
             </div>
           </div>
@@ -141,9 +152,23 @@ async function loadGroups(userId) {
       };
     });
 
+    el.querySelectorAll('.sp-outside-unarchive').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        try {
+          await api.put(`/upsert/groups/${btn.dataset.id}/archive`, null, { params: { archive: false } });
+          toast('Group unarchived', 'success');
+          loadGroups(userId);
+        } catch(err) { toast(err.message, 'error'); }
+      };
+    });
+
     el.querySelectorAll('.group-card').forEach(c => {
       const open = () => loadGroupDetail(+c.dataset.id, userId);
-      c.onclick = (e) => { if(!e.target.closest('.sp-pending-actions')) open(); };
+      c.onclick = (e) => {
+        if (e.target.closest('.sp-pending-actions') || e.target.closest('.sp-archived-actions')) return;
+        open();
+      };
       c.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
     });
   } catch (err) {
@@ -402,9 +427,8 @@ async function loadGroupDetail(groupId, userId) {
 
       elList.querySelectorAll('.expense-row').forEach(row => {
         row.onclick = () => {
-          if (window.innerWidth > 768) return;
           const exp = JSON.parse(row.dataset.exp);
-          openMobileExpenseModal(exp, groupId, userId);
+          openExpenseDetailsModal(exp, groupId, userId);
         };
       });
 
@@ -581,37 +605,27 @@ async function loadGroupDetail(groupId, userId) {
   }
 }
 
-function openMobileExpenseModal(e, groupId, userId) {
+function openExpenseDetailsModal(e, groupId, userId) {
   openModal('Expense Details', `
-    <div style="text-align:center; padding: 20px 0;">
-      <div style="font-size: 2rem; font-weight: 800; color: var(--text); margin-bottom: 8px;">
-        ${formatCurrency(e.amount, e.currency || 'INR')}
-      </div>
-      <div style="font-size: 1.1rem; font-weight: 600;">${esc(e.description)}</div>
-      <div style="color: var(--text-dim); font-size: 0.9rem; margin-top: 4px;">Paid by @${esc(e.paidByName || e.paidBy)}</div>
+    <div class="modal-amount-hero">
+      <div class="amount-value" style="color:var(--text)">${formatCurrency(e.amount, e.currency || 'INR')}</div>
+      <div class="amount-name">${esc(e.description)}</div>
+      <div class="amount-date">Paid by @${esc(e.paidByName || e.paidBy)}</div>
     </div>
-    
-    <div style="background: var(--bg-input); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 20px;">
-      <div style="display:flex; justify-content:space-between; margin-bottom: 12px;">
-        <span style="color:var(--text-dim)">Split Type</span>
-        <span style="font-weight:600">${esc(splitTypeLabel(e.splitType))}</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; ${e.receiptUrl ? 'margin-bottom: 12px;' : ''}">
-        <span style="color:var(--text-dim)">Category</span>
-        <span>${esc(e.expenseCategory || 'OTHERS')}</span>
-      </div>
+
+    <div class="modal-detail-panel">
+      <div class="modal-detail-row"><span class="detail-label">Split Type</span><span class="detail-value">${esc(splitTypeLabel(e.splitType))}</span></div>
+      <div class="modal-detail-row"><span class="detail-label">Category</span><span class="detail-value">${esc(e.expenseCategory || 'Others')}</span></div>
       ${e.receiptUrl ? `
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <span style="color:var(--text-dim)">Receipt</span>
-        <div style="cursor:pointer" onclick="event.stopPropagation(); window.openReceiptLightbox('${esc(e.receiptUrl)}')">
-          <img src="${esc(e.receiptUrl)}" style="max-width:100%; max-height:200px; border-radius:8px; border:1px solid var(--border)">
-        </div>
-      </div>` : ''}
+        <div class="modal-detail-row detail-block">
+          <span class="detail-label">Receipt</span>
+          <div style="cursor:pointer;margin-top:4px" onclick="event.stopPropagation();window.openReceiptLightbox('${esc(e.receiptUrl)}')">
+            <img src="${esc(e.receiptUrl)}" style="max-width:100%;max-height:180px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block">
+          </div>
+        </div>` : ''}
     </div>
-    
-    <div style="display:flex; gap: 12px;">
-      <button class="btn btn-danger" id="m-del-exp-btn" style="flex:1; width:100%;">${icon('trash', 'sm')} Delete Expense</button>
-    </div>
+
+    <button class="btn btn-danger" id="m-del-exp-btn" style="width:100%">${icon('trash', 'sm')} Delete Expense</button>
   `);
 
   document.getElementById('m-del-exp-btn').onclick = async () => {
@@ -619,7 +633,7 @@ function openMobileExpenseModal(e, groupId, userId) {
     try {
       await api.delete(`/upsert/groups/${groupId}/expenses/${e.id}`, { userId });
       toast('Expense deleted', 'success');
-      document.querySelector('.modal-overlay').click(); // Close current modal
+      document.querySelector('.modal-overlay').click();
       loadGroupDetail(groupId, userId);
     } catch (err) { toast(err.message, 'error'); }
   };
@@ -899,47 +913,54 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
   const defaultCur = initialData && initialData.currency ? esc(initialData.currency) : 'INR';
   const defaultDate = initialData && initialData.date ? esc(initialData.date) : '';
   const defaultReceipt = initialData && initialData.receiptUrl ? esc(initialData.receiptUrl) : '';
+  const hasReceipt = !!(defaultReceipt);
+  const SPLIT_CATS = EXPENSE_CATS;
+  const splitCatOptions = categoryOptions;
 
   openModal('Add Shared Expense', `
     <form id="ae-form">
-      <div class="form-group"><label for="ae-desc">Description</label><input class="form-input" id="ae-desc" required maxlength="100" value="${defaultDesc}"></div>
       <div class="form-row">
-        <div class="form-group"><label for="ae-amt">Amount</label><input class="form-input" id="ae-amt" type="text" inputmode="decimal" required value="${defaultAmt}"></div>
+        <div class="form-group" style="flex:2"><label for="ae-desc">Description</label><input class="form-input" id="ae-desc" required maxlength="100" value="${defaultDesc}" placeholder="e.g. Dinner, Groceries"></div>
+        <div class="form-group" style="flex:1"><label for="ae-amt">Amount</label><input class="form-input" id="ae-amt" type="text" inputmode="decimal" required value="${defaultAmt}" placeholder="0.00"></div>
+      </div>
+      <div class="form-row">
         <div class="form-group"><label for="ae-paid">Paid By</label>
           <select class="form-select" id="ae-paid" required>
             ${members.map(m => `<option value="${m.userId}">@${esc(m.name)}</option>`).join('')}
           </select>
         </div>
+        <div class="form-group"><label for="ae-currency">Currency</label><input class="form-input" id="ae-currency" value="${defaultCur}" maxlength="3" required></div>
+        <div class="form-group"><label for="ae-date">Date</label><input class="form-input" id="ae-date" type="date" value="${defaultDate}"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label for="ae-currency">Currency</label><input class="form-input" id="ae-currency" value="${defaultCur}" maxlength="3" required></div>
-        <div class="form-group">
-          <label for="ae-split-type">Split Type</label>
+        <div class="form-group"><label for="ae-split-type">Split Type</label>
           <select class="form-select" id="ae-split-type">
             <option value="EQUAL">Split equally</option>
-            <option value="PERCENTAGE">Split by percentage</option>
-            <option value="EXACT">Split by exact amount</option>
+            <option value="PERCENTAGE">By percentage</option>
+            <option value="EXACT">By exact amount</option>
+          </select>
+        </div>
+        <div class="form-group"><label for="ae-cat">Category</label>
+          <select class="form-select" id="ae-cat">
+            ${SPLIT_CATS.length ? splitCatOptions(SPLIT_CATS) : '<option value="OTHERS">Others</option>'}
           </select>
         </div>
       </div>
-      <div class="form-group" style="margin-bottom: 12px;">
-        <label for="ae-date">Expense Date</label>
-        <input class="form-input" id="ae-date" type="date" value="${defaultDate}">
-      </div>
       <div id="ae-split-details" hidden></div>
-      <div class="form-group" style="margin-top: 12px">
-        <label>Receipt / Bill Attachment</label>
-        <div id="ae-receipt-preview" style="display:${defaultReceipt ? 'block' : 'none'};margin-bottom:8px;position:relative;width:fit-content">
-          ${defaultReceipt ? `<img src="${defaultReceipt}" style="max-height:100px;border-radius:6px;border:1px solid var(--border)">
-          <button type="button" class="btn btn-icon btn-sm btn-danger" id="ae-receipt-remove" style="position:absolute;top:-8px;right:-8px" title="Remove Receipt">×</button>` : ''}
+      <div class="form-group" style="margin-top:4px">
+        <label>Receipt / Bill</label>
+        <div id="ae-receipt-preview" class="receipt-preview-wrap" style="display:${hasReceipt ? 'block' : 'none'}">
+          ${hasReceipt ? `<img src="${defaultReceipt}"><button type="button" class="receipt-remove" id="ae-receipt-remove" title="Remove">×</button>` : ''}
         </div>
-        <div id="ae-receipt-upload" style="display:${defaultReceipt ? 'none' : 'block'}">
-          <input type="file" id="ae-receipt-file" accept="image/*,application/pdf" class="form-input" style="padding:6px">
-          <p style="font-size:0.75rem;color:var(--text-dim);margin-top:4px">Upload a receipt image or PDF (max 10MB)</p>
-        </div>
+        <label id="ae-receipt-upload" class="receipt-upload-zone" style="display:${hasReceipt ? 'none' : 'flex'}" for="ae-receipt-file">
+          ${icon('upload', 'sm')}
+          <span class="upload-label">Click to upload receipt or bill</span>
+          <span class="upload-hint">Image or PDF, max 10 MB</span>
+          <input type="file" id="ae-receipt-file" accept="image/*,application/pdf">
+        </label>
         <input type="hidden" id="ae-receipt-url" value="${defaultReceipt}">
       </div>
-      ${modalActions('Cancel', 'Add')}
+      ${modalActions('Cancel', 'Add Expense')}
     </form>`, {
     onSubmit: async () => {
       const splitType = document.getElementById('ae-split-type').value;
@@ -974,6 +995,7 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
         currency: document.getElementById('ae-currency').value.trim().toUpperCase(),
         paidBy: document.getElementById('ae-paid').value,
         splitType: splitType,
+        expenseCategory: document.getElementById('ae-cat')?.value || 'OTHERS',
         receiptUrl: document.getElementById('ae-receipt-url').value || null
       };
       
@@ -1022,18 +1044,19 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
   const splitDetailsEl = document.getElementById('ae-split-details');
   const amountInput = document.getElementById('ae-amt');
 
-  if (window.TomSelect) {
-    new TomSelect('#ae-paid', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' }});
-    new TomSelect('#ae-split-type', { create: false, controlInput: null });
-  }
-
   const rmReceiptBtn = document.getElementById('ae-receipt-remove');
   if (rmReceiptBtn) {
     rmReceiptBtn.onclick = () => {
       document.getElementById('ae-receipt-preview').style.display = 'none';
-      document.getElementById('ae-receipt-upload').style.display = 'block';
+      document.getElementById('ae-receipt-upload').style.display = 'flex';
       document.getElementById('ae-receipt-url').value = '';
     };
+  }
+
+  if (window.TomSelect) {
+    new TomSelect('#ae-paid', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' } });
+    new TomSelect('#ae-split-type', { create: false, controlInput: null });
+    new TomSelect('#ae-cat', { create: false, placeholder: 'Search category…', maxOptions: 100 });
   }
 
   function defaultSplitValue(type, amount) {

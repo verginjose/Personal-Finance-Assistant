@@ -125,19 +125,14 @@ export async function renderDashboard(container) {
     
     let formattedAi = null;
     if (ai && !ai.error) {
-      const insightsList = [];
-      if (ai.insights) ai.insights.forEach(i => insightsList.push({ type: 'info', title: 'Insight', message: i }));
-      if (ai.warnings) ai.warnings.forEach(w => insightsList.push({ type: 'warning', title: 'Warning', message: w }));
-      if (ai.suggestions) ai.suggestions.forEach(s => insightsList.push({ type: 'success', title: 'Suggestion', message: s }));
-      
       formattedAi = {
         summary: "Here is your personalized financial advice based on the last 30 days of transactions:",
-        insights: insightsList
+        insights: ai.insights || []
       };
     } else if (ai && ai.error) {
       formattedAi = {
         summary: "Failed to load AI insights.",
-        insights: [{ type: 'error', title: 'Error', message: ai.error }]
+        insights: [{ type: 'WARNING', title: 'Error', message: ai.error }]
       };
     }
     renderAiData('d', formattedAi);

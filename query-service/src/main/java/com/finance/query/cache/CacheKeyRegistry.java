@@ -167,4 +167,56 @@ public class CacheKeyRegistry {
             return Collections.emptySet();
         }
     }
+
+    // ─── Group key registry ───────────────────────────────────────────────────
+
+    /** Must match QueryCacheEvictor.GROUP_SET_PREFIX in command-service */
+    private static final String GROUP_KEY_PREFIX = "finance:query:v1:group-keys:";
+
+    public void registerGroup(Long groupId, String fullKey) {
+        String groupSet = GROUP_KEY_PREFIX + groupId;
+        try {
+            redisTemplate.opsForSet().add(groupSet, fullKey);
+            redisTemplate.expire(groupSet, REGISTRY_TTL);
+            log.debug("Registered group key={} for groupId={}", fullKey, groupId);
+        } catch (Exception e) {
+            log.warn("registerGroup failed key={} group={}: {}", fullKey, groupId, e.getMessage());
+        }
+    }
+
+    public void deregisterGroup(Long groupId, String fullKey) {
+        String groupSet = GROUP_KEY_PREFIX + groupId;
+        try {
+            redisTemplate.opsForSet().remove(groupSet, fullKey);
+        } catch (Exception e) {
+            log.warn("deregisterGroup failed key={} group={}: {}", fullKey, groupId, e.getMessage());
+        }
+    }
+
+    /**
+     * Batch-evict all keys tracked for this group (group-details, group-expenses,
+     * group-balances, group-activity) plus the tracking Set itself.
+     * Called from the internal cache-evict HTTP endpoint so query-service can
+     * self-evict when notified by command-service.
+     */
+    public void evictForGroup(Long groupId) {
+        String groupSet = GROUP_KEY_PREFIX + groupId;
+        try {
+            Set<Object> keys = redisTemplate.opsForSet().members(groupSet);
+            if (keys == null || keys.isEmpty()) {
+                log.debug("evictForGroup: nothing tracked for groupId={}", groupId);
+                return;
+            }
+            redisTemplate.executePipelined((RedisCallback<?>) connection -> {
+                for (Object k : keys) {
+                    connection.keyCommands().del(((String) k).getBytes());
+                }
+                connection.keyCommands().del(groupSet.getBytes());
+                return null;
+            });
+            log.info("evictForGroup: deleted {} keys for groupId={}", keys.size(), groupId);
+        } catch (Exception e) {
+            log.error("evictForGroup failed groupId={}: {}", groupId, e.getMessage());
+        }
+    }
 }

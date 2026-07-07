@@ -21,8 +21,8 @@ export async function renderTransactions(container) {
     </div>
     <div class="table-wrap fade-up">
       <table>
-        <thead><tr><th>Name</th><th>Type</th><th>Category</th><th>Amount</th><th>Date</th><th>Actions</th></tr></thead>
-        <tbody id="t-body"><tr><td colspan="6" style="text-align:center;padding:48px;color:var(--text-dim)">Loading…</td></tr></tbody>
+        <thead><tr><th>Name</th><th>Type</th><th>Category</th><th>Amount</th><th>Date</th></tr></thead>
+        <tbody id="t-body"><tr><td colspan="5" style="text-align:center;padding:48px;color:var(--text-dim)">Loading…</td></tr></tbody>
       </table>
     </div>
     <div class="pagination" id="t-pagination"></div>
@@ -188,35 +188,26 @@ export async function renderTransactions(container) {
 }
 
 function showBatchModal(userId, transactions, onSuccess) {
-  let tableRows = transactions.map((t, idx) => `
+  const tableRows = transactions.map((t, idx) => `
     <tr>
-      <td><input type="text" class="form-input form-input-sm" id="b-name-${idx}" value="${esc(t.name || '')}"></td>
+      <td><input type="text" class="form-input" id="b-name-${idx}" value="${esc(t.name || '')}"></td>
       <td>
-        <select class="form-select form-input-sm" id="b-type-${idx}">
-          <option value="EXPENSE" ${t.type === 'EXPENSE' ? 'selected' : ''}>EXPENSE</option>
-          <option value="INCOME" ${t.type === 'INCOME' ? 'selected' : ''}>INCOME</option>
+        <select class="form-select" id="b-type-${idx}">
+          <option value="EXPENSE" ${t.type === 'EXPENSE' ? 'selected' : ''}>Expense</option>
+          <option value="INCOME" ${t.type === 'INCOME' ? 'selected' : ''}>Income</option>
         </select>
       </td>
-      <td><input type="number" class="form-input form-input-sm" id="b-amt-${idx}" value="${t.amount || 0}" step="0.01"></td>
-      <td><input type="date" class="form-input form-input-sm" id="b-date-${idx}" value="${t.date || ''}"></td>
+      <td><input type="number" class="form-input" id="b-amt-${idx}" value="${t.amount || 0}" step="0.01"></td>
+      <td><input type="date" class="form-input" id="b-date-${idx}" value="${t.date || ''}"></td>
     </tr>
   `).join('');
 
   const bodyHtml = `
-    <p style="margin-bottom:15px; color:var(--text-dim);">Review and edit the extracted transactions before saving.</p>
-    <div style="max-height: 400px; overflow-y: auto;">
-      <table style="width:100%; border-collapse: collapse;">
-        <thead>
-          <tr style="text-align:left; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
-            <th style="padding:8px">Name</th>
-            <th style="padding:8px">Type</th>
-            <th style="padding:8px">Amount</th>
-            <th style="padding:8px">Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tableRows}
-        </tbody>
+    <p class="modal-section-label">Review extracted transactions before importing</p>
+    <div style="max-height:380px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--radius-sm);">
+      <table class="batch-table">
+        <thead><tr><th>Name</th><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
+        <tbody>${tableRows}</tbody>
       </table>
     </div>
   `;
@@ -226,14 +217,11 @@ function showBatchModal(userId, transactions, onSuccess) {
     size: 'lg',
     onSubmit: async () => {
       const payload = transactions.map((t, idx) => {
-        let parsedDate = document.getElementById(`b-date-${idx}`).value;
         let isoDate = null;
-        if (parsedDate) {
-          const d = new Date(parsedDate);
-          if (!isNaN(d.getTime())) isoDate = d.toISOString();
-        }
+        const parsedDate = document.getElementById(`b-date-${idx}`).value;
+        if (parsedDate) { const d = new Date(parsedDate); if (!isNaN(d.getTime())) isoDate = d.toISOString(); }
         return {
-          userId: userId,
+          userId,
           name: document.getElementById(`b-name-${idx}`).value,
           amount: parseFloat(document.getElementById(`b-amt-${idx}`).value) || 0,
           type: document.getElementById(`b-type-${idx}`).value,
@@ -243,7 +231,6 @@ function showBatchModal(userId, transactions, onSuccess) {
           createdAt: isoDate
         };
       });
-
       await api.post('/create/bulk', payload);
       toast(`Successfully imported ${payload.length} transactions`, 'success');
       onSuccess();
@@ -275,14 +262,14 @@ async function loadTransactions(userId) {
     totalPages = result.totalPages || 1;
 
     if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="6">${emptyState('receipt', 'No transactions found', 'Add a transaction or adjust your filters.')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5">${emptyState('receipt', 'No transactions found', 'Add a transaction or adjust your filters.')}</td></tr>`;
     } else {
       tbody.innerHTML = items.map(t => {
         const isIncome = t.type === 'INCOME';
         const txnIcon  = isIncome ? 'trending-up' : 'trending-down';
         const iconBg   = isIncome ? 'rgba(34,201,147,0.12)' : 'rgba(249,115,22,0.12)';
         const iconClr  = isIncome ? 'var(--accent-g)' : 'var(--accent)';
-        return `<tr data-txn='${esc(JSON.stringify(t))}'>
+        return `<tr data-txn='${esc(JSON.stringify(t))}' style="cursor:pointer;">
         <td>
           <div style="display:flex;align-items:center;gap:12px;">
             <div style="width:36px;height:36px;border-radius:50%;background:${iconBg};display:flex;align-items:center;justify-content:center;color:${iconClr};flex-shrink:0">
@@ -291,6 +278,7 @@ async function loadTransactions(userId) {
             <div>
               <strong style="font-size:0.93rem;">${esc(t.name)}</strong>
               ${t.recurring ? `<span class="badge badge-recurring" style="margin-left:6px;">${icon('repeat', 'xs')} ${esc(t.recurringPeriod)}</span>` : ''}
+              ${t.receiptUrl ? `<span class="badge badge-info" style="margin-left:6px; font-size:.68rem; padding: 2px 4px; cursor:pointer;" onclick="event.stopPropagation(); window.openReceiptLightbox('${esc(t.receiptUrl)}')" title="View receipt">${icon('document', 'xs')} Receipt</span>` : ''}
               ${t.description ? `<br><small style="color:var(--text-dim)" class="desktop-only">${esc(t.description)}</small>` : ''}
             </div>
           </div>
@@ -301,34 +289,19 @@ async function loadTransactions(userId) {
           ${isIncome ? '+' : ''}${formatCurrency(t.amount, t.currency)}
         </td>
         <td style="font-size:.82rem;color:var(--text-dim)">${formatDate(t.createdAt)}</td>
-        <td class="td-actions">
-          <button class="btn btn-secondary btn-icon btn-sm t-edit" data-id="${t.id}" title="Edit" aria-label="Edit">${icon('edit', 'sm')}</button>
-          <button class="btn btn-danger btn-icon btn-sm t-del" data-id="${t.id}" title="Delete" aria-label="Delete">${icon('trash', 'sm')}</button>
-        </td>
       </tr>`;
       }).join('');
-
-      tbody.querySelectorAll('.t-edit').forEach(b => b.onclick = (e) => {
-        e.stopPropagation();
-        editTransaction(userId, b.dataset.id);
-      });
-      tbody.querySelectorAll('.t-del').forEach(b => b.onclick = (e) => {
-        e.stopPropagation();
-        deleteTransaction(userId, b.dataset.id, b.closest('tr'));
-      });
       
-      // Row click for mobile modal
       tbody.querySelectorAll('tr').forEach(tr => {
         tr.onclick = () => {
-          if (window.innerWidth > 768) return; // Only open modal on mobile
           const t = JSON.parse(tr.dataset.txn);
-          openMobileTxnModal(t, userId);
+          openTransactionDetailsModal(t, userId);
         };
       });
     }
     renderPagination();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--accent)">${esc(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--accent)">${esc(err.message)}</td></tr>`;
   }
 }
 
@@ -365,38 +338,36 @@ function renderPagination() {
 }
 
 async function showModal(userId, existing, onDone) {
-  const isEdit = !!existing;
+  const isEdit = !!(existing && existing.id);
+  const hasReceipt = !!(existing?.receiptUrl);
 
   openModal(isEdit ? 'Edit Transaction' : 'Add Transaction', `
     <form id="txn-form">
       <div class="form-row">
-        <div class="form-group" style="flex:2"><label for="m-name">Name</label><input class="form-input" id="m-name" required value="${esc(existing?.name || '')}"></div>
-        <div class="form-group" style="flex:1"><label for="m-amount">Amount</label><input class="form-input" id="m-amount" type="text" inputmode="decimal" required value="${existing?.amount || ''}"></div>
-        <div class="form-group" style="flex:1.5"><label for="m-date">Date</label><input class="form-input" id="m-date" type="date" value="${existing?.createdAt ? existing.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]}"></div>
+        <div class="form-group" style="flex:2"><label for="m-name">Name</label><input class="form-input" id="m-name" required value="${esc(existing?.name || '')}" placeholder="e.g. Grocery Store"></div>
+        <div class="form-group" style="flex:1"><label for="m-amount">Amount</label><input class="form-input" id="m-amount" type="text" inputmode="decimal" required value="${existing?.amount || ''}" placeholder="0.00"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label for="m-type">Type</label>
           <select class="form-select" id="m-type" required>
-            <option value="EXPENSE" ${existing?.type === 'EXPENSE' ? 'selected' : ''}>Expense</option>
+            <option value="EXPENSE" ${existing?.type !== 'INCOME' ? 'selected' : ''}>Expense</option>
             <option value="INCOME" ${existing?.type === 'INCOME' ? 'selected' : ''}>Income</option>
           </select>
         </div>
         <div class="form-group"><label for="m-currency">Currency</label><input class="form-input" id="m-currency" maxlength="3" value="${esc(existing?.currency || 'INR')}" required></div>
+        <div class="form-group"><label for="m-date">Date</label><input class="form-input" id="m-date" type="date" value="${existing?.createdAt ? existing.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]}"></div>
       </div>
       <div class="form-group" id="m-cat-group">
         <label for="m-cat">Category</label>
-        <input type="text" id="m-cat-search" class="form-input category-search" placeholder="Search category..." style="margin-bottom: 8px;">
-        <select class="form-select category-select" id="m-cat" required></select>
+        <select class="form-select" id="m-cat" required></select>
       </div>
-      <div class="form-group"><label for="m-desc">Description</label><textarea class="form-textarea" id="m-desc">${esc(existing?.description || '')}</textarea></div>
-
-      <div class="form-row" style="align-items:center">
+      <div class="form-group"><label for="m-desc">Note <span style="font-weight:400;text-transform:none;font-size:0.75rem;color:var(--text-muted)">(optional)</span></label><textarea class="form-textarea" id="m-desc" placeholder="Add a note…" style="min-height:64px">${esc(existing?.description || '')}</textarea></div>
+      <div class="form-row" style="align-items:center; gap: var(--space-4)">
         <div class="form-check">
           <input type="checkbox" id="m-recurring" ${existing?.recurring ? 'checked' : ''}>
-          <label for="m-recurring">Recurring transaction</label>
+          <label for="m-recurring">Recurring</label>
         </div>
-        <div class="form-group" id="m-rec-period-group" style="display:${existing?.recurring ? 'block' : 'none'};margin-bottom:0">
-          <label for="m-recurring-period">Period</label>
+        <div class="form-group" id="m-rec-period-group" style="display:${existing?.recurring ? 'block' : 'none'};margin-bottom:0;flex:1">
           <select class="form-select" id="m-recurring-period">
             <option value="DAILY" ${existing?.recurringPeriod === 'DAILY' ? 'selected' : ''}>Daily</option>
             <option value="WEEKLY" ${existing?.recurringPeriod === 'WEEKLY' ? 'selected' : ''}>Weekly</option>
@@ -405,6 +376,20 @@ async function showModal(userId, existing, onDone) {
           </select>
         </div>
       </div>
+
+      <div class="form-group" style="margin-top:4px">
+        <label>Receipt / Bill</label>
+        <div id="m-receipt-preview" class="receipt-preview-wrap" style="display:${hasReceipt ? 'block' : 'none'}">
+          ${hasReceipt ? `<img src="${esc(existing.receiptUrl)}"><button type="button" class="receipt-remove" id="m-receipt-remove" title="Remove">×</button>` : ''}
+        </div>
+        <label id="m-receipt-upload" class="receipt-upload-zone" style="display:${hasReceipt ? 'none' : 'flex'}" for="m-receipt-file">
+          ${icon('upload', 'sm')}
+          <span class="upload-label">Click to upload receipt or bill</span>
+          <span class="upload-hint">Image or PDF, max 10 MB</span>
+          <input type="file" id="m-receipt-file" accept="image/*,application/pdf">
+        </label>
+        <input type="hidden" id="m-receipt-url" value="${existing?.receiptUrl || ''}">
+      </div>
       ${modalActions('Cancel', isEdit ? 'Update' : 'Create')}
     </form>`, {
     onSubmit: async () => {
@@ -412,6 +397,28 @@ async function showModal(userId, existing, onDone) {
       const recurring = document.getElementById('m-recurring').checked;
       const amount = parseFloat(document.getElementById('m-amount').value);
       const dateVal = document.getElementById('m-date').value;
+
+      const submitBtn = document.querySelector('#txn-form button[type="submit"]');
+      const fileInput = document.getElementById('m-receipt-file');
+      if (fileInput && fileInput.files.length > 0) {
+        submitBtn.disabled = true;
+        const originalText = submitBtn.textContent;
+        submitBtn.innerHTML = '<span class="spinner"></span> Uploading...';
+        try {
+          const fd = new FormData();
+          fd.append('file', fileInput.files[0]);
+          const upRes = await api.upload(`/receipt/upload/${userId}`, fd);
+          if (upRes && upRes.url) {
+             document.getElementById('m-receipt-url').value = upRes.url;
+          }
+        } catch (e) {
+          toast('Failed to upload receipt: ' + e.message, 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+          return;
+        }
+        submitBtn.textContent = originalText;
+      }
       
       let timeStr = '00:00:00';
       let isoDate = null;
@@ -447,10 +454,45 @@ async function showModal(userId, existing, onDone) {
       } else {
         await api.post('/upsert/create', payload);
         toast('Transaction created', 'success');
+        // Brief pause so the read replica can catch up before we reload the list
+        await new Promise(r => setTimeout(r, 500));
       }
       onDone();
     }
   });
+
+  const rmReceiptBtn = document.getElementById('m-receipt-remove');
+  if (rmReceiptBtn) {
+    rmReceiptBtn.onclick = () => clearReceiptPreview();
+  }
+
+  const receiptFile = document.getElementById('m-receipt-file');
+  if (receiptFile) {
+    receiptFile.addEventListener('change', () => {
+      const file = receiptFile.files[0];
+      if (!file) return;
+      const preview = document.getElementById('m-receipt-preview');
+      const uploadZone = document.getElementById('m-receipt-upload');
+      const objectUrl = URL.createObjectURL(file);
+      preview.innerHTML = `<img src="${objectUrl}"><button type="button" class="receipt-remove" id="m-receipt-remove" title="Remove">×</button>`;
+      preview.style.display = 'block';
+      uploadZone.style.display = 'none';
+      document.getElementById('m-receipt-url').value = '';
+      document.getElementById('m-receipt-remove').onclick = () => {
+        receiptFile.value = '';
+        URL.revokeObjectURL(objectUrl);
+        clearReceiptPreview();
+      };
+    });
+  }
+
+  function clearReceiptPreview() {
+    document.getElementById('m-receipt-preview').style.display = 'none';
+    document.getElementById('m-receipt-upload').style.display = 'flex';
+    document.getElementById('m-receipt-url').value = '';
+    const fileInput = document.getElementById('m-receipt-file');
+    if (fileInput) fileInput.value = '';
+  }
 
   const recCheckbox = document.getElementById('m-recurring');
   const recGroup = document.getElementById('m-rec-period-group');
@@ -459,26 +501,14 @@ async function showModal(userId, existing, onDone) {
   const updateCats = () => {
     const type = document.getElementById('m-type').value;
     const cats = type === 'INCOME' ? INCOME_CATS : EXPENSE_CATS;
-    const sel = existing?.type === type ? existing.category : null;  // single field
-    
+    const sel = existing?.type === type ? existing.category : null;
     const catSelect = document.getElementById('m-cat');
-    if (catSelect.tomselect) {
-        catSelect.tomselect.destroy();
-    }
-    
+    if (catSelect.tomselect) catSelect.tomselect.destroy();
     catSelect.innerHTML = categoryOptions(cats, sel);
-    
-    // Re-initialize Tom Select with new options
     setupCategorySearch('m-cat-search', 'm-cat');
   };
-
   updateCats();
   document.getElementById('m-type').onchange = updateCats;
-
-  if (window.TomSelect) {
-    new TomSelect('#m-type', { create: false, controlInput: null });
-    new TomSelect('#m-recurring-period', { create: false, controlInput: null });
-  }
 }
 
 async function editTransaction(userId, id) {
@@ -521,54 +551,52 @@ async function exportCsv(userId) {
   } catch (err) { toast(err.message, 'error'); }
 }
 
-function openMobileTxnModal(t, userId) {
+async function openTransactionDetailsModal(t, userId) {
+  try {
+    t = await api.get(`/upsert/entries/${t.id}`, { userId });
+  } catch (err) {
+    toast(err.message, 'error');
+    return;
+  }
+
+  const amtColor = t.type === 'INCOME' ? 'var(--accent-g)' : 'var(--text)';
   openModal('Transaction Details', `
-    <div style="text-align:center; padding: 20px 0;">
-      <div style="font-size: 2rem; font-weight: 800; color: ${t.type === 'INCOME' ? 'var(--accent-g)' : 'var(--text)'}; margin-bottom: 8px;">
-        ${t.type === 'INCOME' ? '+' : ''}${formatCurrency(t.amount, t.currency)}
-      </div>
-      <div style="font-size: 1.1rem; font-weight: 600;">${esc(t.name)}</div>
-      <div style="color: var(--text-dim); font-size: 0.9rem; margin-top: 4px;">${formatDate(t.createdAt)}</div>
+    <div class="modal-amount-hero">
+      <div class="amount-value" style="color:${amtColor}">${t.type === 'INCOME' ? '+' : ''}${formatCurrency(t.amount, t.currency)}</div>
+      <div class="amount-name">${esc(t.name)}</div>
+      <div class="amount-date">${formatDate(t.createdAt)}</div>
     </div>
-    
-    <div style="background: var(--bg-input); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 20px;">
-      <div style="display:flex; justify-content:space-between; margin-bottom: 12px;">
-        <span style="color:var(--text-dim)">Category</span>
-        <span style="font-weight:600">${esc(t.category)}</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; margin-bottom: 12px;">
-        <span style="color:var(--text-dim)">Type</span>
-        <span>${typeBadge(t.type)}</span>
-      </div>
-      ${t.recurring ? `
-      <div style="display:flex; justify-content:space-between; margin-bottom: 12px;">
-        <span style="color:var(--text-dim)">Recurring</span>
-        <span style="font-weight:600">${esc(t.recurringPeriod)}</span>
-      </div>` : ''}
-      ${t.description ? `
-      <div style="display:flex; flex-direction:column; gap:6px;">
-        <span style="color:var(--text-dim)">Note</span>
-        <span style="font-size:0.95rem;">${esc(t.description)}</span>
-      </div>` : ''}
+
+    <div class="modal-detail-panel">
+      <div class="modal-detail-row"><span class="detail-label">Type</span><span class="detail-value">${typeBadge(t.type)}</span></div>
+      <div class="modal-detail-row"><span class="detail-label">Category</span><span class="detail-value">${esc(formatCategory(t.category))}</span></div>
+      ${t.recurring ? `<div class="modal-detail-row"><span class="detail-label">Recurring</span><span class="detail-value">${esc(t.recurringPeriod)}</span></div>` : ''}
+      ${t.description ? `<div class="modal-detail-row detail-block"><span class="detail-label">Note</span><span class="detail-value">${esc(t.description)}</span></div>` : ''}
+      ${t.receiptUrl ? `
+        <div class="modal-detail-row detail-block">
+          <span class="detail-label">Receipt</span>
+          <div style="cursor:pointer;margin-top:4px" onclick="event.stopPropagation();window.openReceiptLightbox('${esc(t.receiptUrl)}')">
+            <img src="${esc(t.receiptUrl)}" style="max-width:100%;max-height:180px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block">
+          </div>
+        </div>` : ''}
     </div>
-    
-    <div style="display:flex; gap: 12px;">
+
+    <div style="display:flex;gap:10px">
       <button class="btn btn-secondary" id="m-edit-btn" style="flex:1">${icon('edit', 'sm')} Edit</button>
       <button class="btn btn-danger" id="m-del-btn" style="flex:1">${icon('trash', 'sm')} Delete</button>
     </div>
   `);
 
   document.getElementById('m-edit-btn').onclick = () => {
-    document.querySelector('.modal-overlay').click(); // Close current modal
-    setTimeout(() => editTransaction(userId, t.id), 50); // Reopen standard edit modal
+    document.querySelector('.modal-overlay').click();
+    setTimeout(() => editTransaction(userId, t.id), 50);
   };
-  
   document.getElementById('m-del-btn').onclick = async () => {
     if (!(await confirmModal('Delete Transaction', 'Are you sure you want to delete this transaction?', 'Delete'))) return;
     try {
       await api.delete(`/upsert/delete/${t.id}`, { userId });
       toast('Transaction deleted', 'success');
-      document.querySelector('.modal-overlay').click(); // Close current modal
+      document.querySelector('.modal-overlay').click();
       loadTransactions(userId);
     } catch (err) { toast(err.message, 'error'); }
   };

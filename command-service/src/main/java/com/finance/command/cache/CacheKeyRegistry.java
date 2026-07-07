@@ -167,4 +167,26 @@ public class CacheKeyRegistry {
             return Collections.emptySet();
         }
     }
+
+    private static final String GROUP_KEY_PREFIX = "finance:query:v1:group-keys:";
+
+    public void registerGroup(Long groupId, String fullKey) {
+        String groupSet = GROUP_KEY_PREFIX + groupId;
+        try {
+            redisTemplate.opsForSet().add(groupSet, fullKey);
+            redisTemplate.expire(groupSet, REGISTRY_TTL);
+            log.debug("Registered group key={} for groupId={}", fullKey, groupId);
+        } catch (Exception e) {
+            log.warn("registerGroup failed key={} group={}: {}", fullKey, groupId, e.getMessage());
+        }
+    }
+
+    public void deregisterGroup(Long groupId, String fullKey) {
+        String groupSet = GROUP_KEY_PREFIX + groupId;
+        try {
+            redisTemplate.opsForSet().remove(groupSet, fullKey);
+        } catch (Exception e) {
+            log.warn("deregisterGroup failed key={} group={}: {}", fullKey, groupId, e.getMessage());
+        }
+    }
 }

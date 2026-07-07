@@ -700,29 +700,168 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
 }
 
 .modal {
-  background: #10101c;
+  background: #0a1118;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   width: 100%;
   max-width: 520px;
-  max-height: 90vh;
+  max-height: 92vh;
   overflow-y: auto;
   animation: fadeUp 0.28s ease;
-  box-shadow: var(--shadow);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(20,184,166,0.08);
 }
 
-.modal.modal-lg { max-width: 640px; }
+.modal.modal-lg { max-width: 680px; }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-5) var(--space-6) 0;
+  padding: 20px 24px 0;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+  margin-bottom: 0;
 }
 
-.modal-header h2 { font-size: 1.15rem; font-weight: 700; }
-.modal-body { padding: var(--space-5) var(--space-6) var(--space-6); }
-.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: var(--space-5); }
+.modal-header h2 { font-size: 1.1rem; font-weight: 700; }
+.modal-body { padding: 20px 24px 24px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+/* ── Modal form helpers ─────────────────────────────────────────────────── */
+
+/* Subtle section label inside a modal */
+.modal-section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 16px 0 10px;
+}
+
+/* Amount hero display at top of detail modals */
+.modal-amount-hero {
+  text-align: center;
+  padding: 18px 0 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.modal-amount-hero .amount-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.modal-amount-hero .amount-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.modal-amount-hero .amount-date {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+
+/* Detail rows inside info panels */
+.modal-detail-panel {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.modal-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.88rem;
+  gap: 12px;
+}
+.modal-detail-row:last-child { border-bottom: none; }
+.modal-detail-row .detail-label { color: var(--text-dim); flex-shrink: 0; }
+.modal-detail-row .detail-value { font-weight: 600; text-align: right; }
+.modal-detail-row.detail-block { flex-direction: column; align-items: flex-start; gap: 6px; }
+.modal-detail-row.detail-block .detail-value { text-align: left; font-weight: 400; color: var(--text-dim); font-size: 0.85rem; }
+
+/* Receipt upload zone */
+.receipt-upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.02);
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: center;
+  position: relative;
+}
+.receipt-upload-zone:hover {
+  border-color: var(--primary);
+  background: rgba(20,184,166,0.04);
+}
+.receipt-upload-zone .upload-label { font-size: 0.82rem; color: var(--text-dim); }
+.receipt-upload-zone .upload-hint { font-size: 0.72rem; color: var(--text-muted); }
+.receipt-upload-zone input[type=file] { display: none; }
+
+.receipt-preview-wrap {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 8px;
+}
+.receipt-preview-wrap img {
+  max-height: 110px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  display: block;
+}
+.receipt-preview-wrap .receipt-remove {
+  position: absolute;
+  top: -8px; right: -8px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: rgba(249,115,22,0.9);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* Batch import table */
+.batch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+.batch-table th {
+  padding: 8px 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  position: sticky; top: 0;
+}
+.batch-table td { padding: 7px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.batch-table tr:last-child td { border-bottom: none; }
+.batch-table tr:hover td { background: rgba(20,184,166,0.03); }
+.batch-table .form-input, .batch-table .form-select {
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  min-width: 0;
+}
 
 /* ── Toast ───────────────────────────────────────────────────────────────── */
 .toast-container {

@@ -69,9 +69,9 @@ public class ReceiptUploadController {
                         boolean found = minioClient.bucketExists(io.minio.BucketExistsArgs.builder().bucket(minioBucket).build());
                         if (!found) {
                             minioClient.makeBucket(io.minio.MakeBucketArgs.builder().bucket(minioBucket).build());
-                            String policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::" + minioBucket + "/*\"]}]}";
-                            minioClient.setBucketPolicy(io.minio.SetBucketPolicyArgs.builder().bucket(minioBucket).config(policy).build());
                         }
+                        String policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::" + minioBucket + "/*\"]}]}";
+                        minioClient.setBucketPolicy(io.minio.SetBucketPolicyArgs.builder().bucket(minioBucket).config(policy).build());
                         
                         // Upload to MinIO
                         try (java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(bytes)) {

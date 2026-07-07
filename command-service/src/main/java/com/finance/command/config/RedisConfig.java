@@ -208,6 +208,7 @@ public class RedisConfig {
                                 .allowIfSubType("org.springframework.data.domain.")
                                 .allowIfSubType("java.util.")
                                 .allowIfSubType("java.time.")
+                                .allowIfSubType("java.math.")
                                 .build(),
                         ObjectMapper.DefaultTyping.NON_FINAL,
                         JsonTypeInfo.As.PROPERTY

@@ -11,7 +11,7 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "${DB_HOST_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"
     volumes:
       - postgres_data_primary:/var/lib/postgresql/data
       - ./db-init:/docker-entrypoint-initdb.d:ro
@@ -44,7 +44,7 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data_replica:/var/lib/postgresql/data
     depends_on:
@@ -61,8 +61,8 @@ services:
         limits:
           memory: 256M
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     healthcheck:
       test: rabbitmq-diagnostics -q ping
       interval: 5s
@@ -79,11 +79,11 @@ services:
         limits:
           memory: 256M
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     environment:
       MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: password123
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
@@ -103,7 +103,7 @@ services:
         limits:
           memory: 256M
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
@@ -124,7 +124,7 @@ services:
         limits:
           memory: 256M
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     command: redis-server --replicaof redis 6379
     depends_on:
       redis:
@@ -164,7 +164,7 @@ services:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
       ANALYTICS_SERVICE_URL: http://query-service:8084
     ports:
-      - "${UPSERT_SERVICE_PORT}:8081"
+      - "127.0.0.1:${UPSERT_SERVICE_PORT}:8081"
     networks:
       - finance-network
 
@@ -195,7 +195,7 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
     ports:
-      - "${ANALYTICS_SERVICE_PORT}:8084"
+      - "127.0.0.1:${ANALYTICS_SERVICE_PORT}:8084"
     networks:
       - finance-network
 
@@ -214,7 +214,7 @@ services:
     volumes:
       - paddle-model-cache:/root/.paddleocr
     ports:
-      - "${OCR_SERVICE_PORT:-8100}:8100"
+      - "127.0.0.1:${OCR_SERVICE_PORT:-8100}:8100"
     environment:
       FLAGS_fraction_of_gpu_memory_to_use: "0.65"
       NVIDIA_VISIBLE_DEVICES: all
@@ -269,7 +269,7 @@ services:
 
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
     ports:
-      - "${API_GATEWAY_PORT}:8080"
+      - "127.0.0.1:${API_GATEWAY_PORT}:8080"
     networks:
       - finance-network
 
@@ -282,11 +282,11 @@ services:
         limits:
           memory: 2G
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
     environment:
       CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./observability/clickhouse/init:/docker-entrypoint-initdb.d:ro
@@ -302,7 +302,7 @@ services:
         limits:
           memory: 512M
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     networks:
@@ -317,13 +317,13 @@ services:
         limits:
           memory: 256M
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
       GF_SECURITY_ALLOW_EMBEDDING: "true"
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
       GF_AUTH_DISABLE_LOGIN_FORM: "false"
       GF_SERVER_ROOT_URL: "http://localhost:3000/"
@@ -359,7 +359,7 @@ services:
     build: ./frontend
     container_name: frontend
     ports:
-      - "3001:80"
+      - "127.0.0.1:3001:80"
     depends_on:
       - api-gateway
     networks:

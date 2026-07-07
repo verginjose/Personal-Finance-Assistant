@@ -1,8 +1,8 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026070603';
-import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=2026070603';
+import { api, Auth, toast } from '../utils/api.js?v=2026070701';
+import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=2026070701';
 import {
-  pageHeader, healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, skeletonChart
-} from '../utils/ui.js?v=2026070603';
+  pageHeader, healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, skeletonChart, esc
+} from '../utils/ui.js?v=2026070701';
 
 let charts = [];
 
@@ -88,8 +88,8 @@ async function loadAnalytics(userId) {
   const startDate = document.getElementById('a-start')?.value;
   const endDate = document.getElementById('a-end')?.value;
   const params = { userId, timelineType };
-  if (startDate) params.startDate = new Date(startDate + 'T00:00:00').toISOString();
-  if (endDate) params.endDate = new Date(endDate + 'T23:59:59').toISOString();
+  if (startDate) params.startDate = startDate + 'T00:00:00';
+  if (endDate) params.endDate = endDate + 'T23:59:59';
 
   api.get('/analytics/category-pie-chart', { ...params, transactionFilter: 'EXPENSE' })
     .then(expPie => mountChart('a-expense-wrap', 'a-expense-pie', expPie, 'doughnut'))

@@ -36,13 +36,18 @@ public class OutboxProcessor {
         log.info("Processing {} outbox events...", events.size());
 
         for (OutboxEvent event : events) {
-            try {
-                cacheEvictPublisher.publish(event.getUserId(), event.getEventType(), event.getEntityId());
+            // publishSync returns true only when the HTTP call to query-service returned 2xx.
+            // Marking PROCESSED on a false (or swallowed exception) was the old bug — events
+            // would be permanently lost even when the query-service was down.
+            boolean delivered = cacheEvictPublisher.publishSync(
+                    event.getUserId(), event.getEventType(), event.getEntityId());
+
+            if (delivered) {
                 event.setStatus(OutboxEvent.EventStatus.PROCESSED);
-            } catch (Exception e) {
-                log.error("Failed to process outbox event id={}", event.getId(), e);
-                // Depending on requirements, we can increment a retry counter and set to FAILED if > maxRetries
-                event.setStatus(OutboxEvent.EventStatus.FAILED);
+            } else {
+                log.warn("Outbox event id={} delivery failed — will retry on next poll", event.getId());
+                // Leave status as PENDING so the next scheduler tick retries it.
+                // Optionally increment a retry counter here to eventually dead-letter.
             }
         }
 

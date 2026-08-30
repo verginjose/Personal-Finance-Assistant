@@ -94,13 +94,52 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             FROM TransactionEntry t
             WHERE t.userId = :userId
               AND t.deletedAt IS NULL
-              AND t.type = com.finance.command.model.TransactionType.EXPENSE
+              AND t.type = :type
               AND t.category = :category
               AND t.createdAt BETWEEN :start AND :end
             """)
     BigDecimal sumExpensesByCategory(
             @Param("userId") UUID userId,
             @Param("category") Category category,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end);
+
+    // ── Summary aggregates (avoids full table scan in getSummary()) ────────────
+
+    @Query("""
+            SELECT COALESCE(SUM(t.amount), 0)
+            FROM TransactionEntry t
+            WHERE t.userId = :userId
+              AND t.deletedAt IS NULL
+              AND t.type = :type
+            """)
+    BigDecimal sumByType(
+            @Param("userId") UUID userId,
+            @Param("type") TransactionType type);
+
+    @Query("SELECT COUNT(t) FROM TransactionEntry t WHERE t.userId = :userId AND t.deletedAt IS NULL")
+    long countActiveByUser(@Param("userId") UUID userId);
+
+    // ── Batch budget utilization (eliminates N+1) ─────────────────────────────
+
+    /**
+     * Returns expense totals grouped by category for the given set of categories
+     * within a date range — one query instead of one per budget.
+     * Result: Object[] where [0] = Category enum, [1] = BigDecimal sum.
+     */
+    @Query("""
+            SELECT t.category, COALESCE(SUM(t.amount), 0)
+            FROM TransactionEntry t
+            WHERE t.userId = :userId
+              AND t.deletedAt IS NULL
+              AND t.type = com.finance.command.model.TransactionType.EXPENSE
+              AND t.category IN :categories
+              AND t.createdAt BETWEEN :start AND :end
+            GROUP BY t.category
+            """)
+    List<Object[]> sumExpensesByCategoryBatch(
+            @Param("userId") UUID userId,
+            @Param("categories") List<Category> categories,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end);
 }

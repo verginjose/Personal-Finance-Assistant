@@ -47,6 +47,11 @@ public class ReceiptUploadController {
 
         String receiptId = UUID.randomUUID().toString();
         String objectName = userId + "/" + receiptId + "-" + filePart.filename();
+        
+        // Detect content type based on file extension
+        String contentType = filePart.filename().toLowerCase().endsWith(".pdf") 
+            ? "application/pdf" 
+            : "image/jpeg";
 
         return filePart.content()
                 .map(dataBuffer -> {
@@ -80,7 +85,7 @@ public class ReceiptUploadController {
                                             .bucket(minioBucket)
                                             .object(objectName)
                                             .stream(bais, bytes.length, -1)
-                                            .contentType("image/jpeg")
+                                            .contentType(contentType)
                                             .build()
                             );
                         }

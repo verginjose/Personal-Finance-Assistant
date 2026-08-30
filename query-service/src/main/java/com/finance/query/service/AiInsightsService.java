@@ -17,7 +17,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -41,9 +40,8 @@ public class AiInsightsService {
     private final BudgetTrendService budgetTrendService;
     private final com.finance.query.repository.SavingsGoalRepository savingsGoalRepository;
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    /** Injected from {@link com.finance.query.config.HttpClientConfig}. */
+    private final HttpClient httpClient;
 
     // Cache AI insights for 24 hours per user (avoid repeated LLM calls)
     @Cacheable(value = "ai-insights", key = "#userId")

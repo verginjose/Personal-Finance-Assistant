@@ -708,6 +708,9 @@ public class SplitService {
         return new GroupBalanceResponse(groupId, group.getName(), memberBalances, suggestions);
     }
 
+    // SYNC-WITH-QUERY-SERVICE: minimizeDebts and computeNetBalancesForUser are duplicated
+    // in query-service/SplitService.java. Any algorithmic change MUST be applied to both.
+    // Future improvement: extract to a shared Maven module (finance-common).
     private List<GroupBalanceResponse.SettlementSuggestion> minimizeDebts(
             List<GroupBalanceResponse.MemberBalance> balances,
             Map<UUID, String> nameMap,

@@ -383,16 +383,16 @@ public class TransactionEntryService {
     @Transactional(readOnly = true)
     @Cacheable(value = "transactions", key = "#userId + ':summary'", sync = true)
     public Map<String, Object> getSummary(UUID userId) {
-        List<TransactionEntry> all = repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
-        BigDecimal income  = all.stream().filter(e -> e.getType() == TransactionType.INCOME)
-                .map(TransactionEntry::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal expense = all.stream().filter(e -> e.getType() == TransactionType.EXPENSE)
-                .map(TransactionEntry::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Two SQL SUM aggregates + one COUNT — no full table scan needed.
+        BigDecimal income  = safe(repository.sumByType(userId, TransactionType.INCOME));
+        BigDecimal expense = safe(repository.sumByType(userId, TransactionType.EXPENSE));
+        long count         = repository.countActiveByUser(userId);
+
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("totalIncome",  income);
         summary.put("totalExpense", expense);
         summary.put("netBalance",   income.subtract(expense));
-        summary.put("totalCount",   all.size());
+        summary.put("totalCount",   count);
         return summary;
     }
 
@@ -434,6 +434,10 @@ public class TransactionEntryService {
             return "\"" + value.replace("\"", "\"\"") + "\"";
         }
         return value;
+    }
+
+    private BigDecimal safe(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
     }
 
     private CreateEntryResponse convertToResponse(TransactionEntry entry) {

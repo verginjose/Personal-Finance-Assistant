@@ -473,14 +473,41 @@ async function showModal(userId, existing, onDone) {
       if (!file) return;
       const preview = document.getElementById('m-receipt-preview');
       const uploadZone = document.getElementById('m-receipt-upload');
-      const objectUrl = URL.createObjectURL(file);
-      preview.innerHTML = `<img src="${objectUrl}"><button type="button" class="receipt-remove" id="m-receipt-remove" title="Remove">×</button>`;
+      const isPdf = file.type === 'application/pdf';
+      const isImage = file.type.startsWith('image/');
+      
+      let previewContent = '';
+      let objectUrl = null;
+      
+      if (isImage) {
+        objectUrl = URL.createObjectURL(file);
+        previewContent = `<img src="${objectUrl}" alt="Receipt preview">`;
+      } else if (isPdf) {
+        previewContent = `
+          <div class="receipt-pdf-preview">
+            ${icon('document', 'lg')}
+            <span>${esc(file.name)}</span>
+            <small>PDF Document</small>
+          </div>
+        `;
+      } else {
+        previewContent = `
+          <div class="receipt-file-preview">
+            ${icon('file', 'lg')}
+            <span>${esc(file.name)}</span>
+            <small>${file.type || 'Unknown file type'}</small>
+          </div>
+        `;
+      }
+      
+      preview.innerHTML = `${previewContent}<button type="button" class="receipt-remove" id="m-receipt-remove" title="Remove">×</button>`;
       preview.style.display = 'block';
       uploadZone.style.display = 'none';
       document.getElementById('m-receipt-url').value = '';
+      
       document.getElementById('m-receipt-remove').onclick = () => {
         receiptFile.value = '';
-        URL.revokeObjectURL(objectUrl);
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
         clearReceiptPreview();
       };
     });
@@ -575,8 +602,16 @@ async function openTransactionDetailsModal(t, userId) {
       ${t.receiptUrl ? `
         <div class="modal-detail-row detail-block">
           <span class="detail-label">Receipt</span>
-          <div style="cursor:pointer;margin-top:4px" onclick="event.stopPropagation();window.openReceiptLightbox('${esc(t.receiptUrl)}')">
-            <img src="${esc(t.receiptUrl)}" style="max-width:100%;max-height:180px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block">
+          <div style="margin-top:4px">
+            ${t.receiptUrl.toLowerCase().endsWith('.pdf') 
+              ? `<div style="cursor:pointer;padding:16px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);display:flex;align-items:center;gap:12px;" onclick="event.stopPropagation();window.openReceiptLightbox('${esc(t.receiptUrl)}')">
+                  ${icon('document', 'lg')}
+                  <span style="font-size:0.9rem;color:var(--text);">Click to view PDF receipt</span>
+                </div>`
+              : `<div style="cursor:pointer;" onclick="event.stopPropagation();window.openReceiptLightbox('${esc(t.receiptUrl)}')">
+                  <img src="${esc(t.receiptUrl)}" style="max-width:100%;max-height:180px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block">
+                </div>`
+            }
           </div>
         </div>` : ''}
     </div>

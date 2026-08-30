@@ -16,6 +16,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -128,8 +129,46 @@ public class GoalBudgetService {
 
     @Transactional(readOnly = true)
     public List<BudgetUtilizationResponse> getBudgets(UUID userId) {
-        return budgetRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(userId)
-                .stream().map(this::computeUtilization).collect(Collectors.toList());
+        List<CategoryBudget> budgets = budgetRepository.findByUserIdAndActiveTrueOrderByCreatedAtDesc(userId);
+        if (budgets.isEmpty()) return List.of();
+
+        // Group budgets by their [start, end] window so we issue one DB query per distinct
+        // date range rather than one per budget (eliminates N+1).
+        Map<String, List<CategoryBudget>> byRange = new java.util.LinkedHashMap<>();
+        for (CategoryBudget b : budgets) {
+            LocalDateTime[] range = getPeriodRange(b);
+            String rangeKey = range[0] + "~" + range[1];
+            byRange.computeIfAbsent(rangeKey, k -> new java.util.ArrayList<>()).add(b);
+        }
+
+        // Pre-fetch sums per range group, then build responses in order.
+        // Preserve original ordering by iterating in insertion order.
+        Map<Long, BigDecimal> spentById = new java.util.HashMap<>();
+        for (Map.Entry<String, List<CategoryBudget>> entry : byRange.entrySet()) {
+            List<CategoryBudget> group = entry.getValue();
+            LocalDateTime[] range = getPeriodRange(group.get(0));
+            List<Category> categories = group.stream()
+                    .map(CategoryBudget::getExpenseCategory)
+                    .collect(Collectors.toList());
+
+            List<Object[]> rows = transactionRepository.sumExpensesByCategoryBatch(
+                    userId, categories, range[0], range[1]);
+
+            // Map category → sum from the batch result
+            Map<Category, BigDecimal> sumByCategory = new java.util.HashMap<>();
+            for (Object[] row : rows) {
+                sumByCategory.put((Category) row[0], (BigDecimal) row[1]);
+            }
+
+            for (CategoryBudget b : group) {
+                spentById.put(b.getId(),
+                        sumByCategory.getOrDefault(b.getExpenseCategory(), BigDecimal.ZERO));
+            }
+        }
+
+        return budgets.stream()
+                .map(b -> computeUtilizationFromSpent(b, spentById.getOrDefault(b.getId(), BigDecimal.ZERO)))
+                .collect(Collectors.toList());
     }
 
     @Transactional
@@ -143,12 +182,19 @@ public class GoalBudgetService {
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
+    /** Single-budget variant — still used by createBudget() to return the initial utilization. */
     BudgetUtilizationResponse computeUtilization(CategoryBudget budget) {
         LocalDateTime[] range = getPeriodRange(budget);
         BigDecimal spent = transactionRepository.sumExpensesByCategory(
                 budget.getUserId(), budget.getExpenseCategory(), range[0], range[1]);
-        if (spent == null) spent = BigDecimal.ZERO;
+        return computeUtilizationFromSpent(budget, spent != null ? spent : BigDecimal.ZERO);
+    }
 
+    /**
+     * Builds a {@link BudgetUtilizationResponse} from a pre-fetched spent amount.
+     * Used by {@link #getBudgets(UUID)} after the batch query so no extra DB hit is needed.
+     */
+    private BudgetUtilizationResponse computeUtilizationFromSpent(CategoryBudget budget, BigDecimal spent) {
         double pct = 0;
         if (budget.getBudgetAmount().compareTo(BigDecimal.ZERO) > 0) {
             pct = spent.divide(budget.getBudgetAmount(), 4, RoundingMode.HALF_UP)

@@ -393,6 +393,15 @@ export function setupCategorySearch(inputId, selectId) {
 }
 
 export function openReceiptLightbox(url) {
-  openModal('Receipt', `<div style="text-align:center; padding: 10px;"><img src="${url}" style="max-width:100%; max-height: 80vh; object-fit: contain; border-radius: 8px;"></div>`, { size: 'lg' });
+  const isPdf = url.toLowerCase().endsWith('.pdf');
+  
+  if (isPdf) {
+    // Open PDFs in a new tab to avoid iframe security restrictions
+    window.open(url, '_blank');
+  } else {
+    // Show images in the lightbox modal
+    const content = `<div style="text-align:center; padding: 10px;"><img src="${url}" style="max-width:100%; max-height: 80vh; object-fit: contain; border-radius: 8px;"></div>`;
+    openModal('Receipt', content, { size: 'lg' });
+  }
 }
 window.openReceiptLightbox = openReceiptLightbox;

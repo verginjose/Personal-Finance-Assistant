@@ -1,23 +1,20 @@
+import asyncio
 import hashlib
+import json
 import logging
 import os
 import time
-import asyncio
-import json
-import io
 from contextlib import asynccontextmanager
-from functools import lru_cache
 from typing import Optional
 
+import aio_pika
 import cv2
 import httpx
 import numpy as np
 from cachetools import TTLCache
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
-from paddleocr import PaddleOCR
+from fastapi import FastAPI
 from minio import Minio
-import aio_pika
+from paddleocr import PaddleOCR
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

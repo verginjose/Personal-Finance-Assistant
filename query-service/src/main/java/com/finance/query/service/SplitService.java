@@ -15,7 +15,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.security.auth.callback.LanguageCallback;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
@@ -190,6 +189,9 @@ public class SplitService {
         return new GroupBalanceResponse(groupId, group.getName(), memberBalances, suggestions);
     }
 
+    // SYNC-WITH-COMMAND-SERVICE: minimizeDebts and computeNetBalancesForUser are duplicated
+    // in command-service/SplitService.java. Any algorithmic change MUST be applied to both.
+    // Future improvement: extract to a shared Maven module (finance-common).
     private List<GroupBalanceResponse.SettlementSuggestion> minimizeDebts(
             List<GroupBalanceResponse.MemberBalance> balances,
             Map<UUID, String> nameMap,

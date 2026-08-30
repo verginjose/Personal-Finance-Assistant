@@ -15,6 +15,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -22,11 +23,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.springframework.web.client.RestClient;
 
 @Slf4j
 @Service
@@ -35,6 +32,20 @@ import org.springframework.http.MediaType;
 public class AnalyticsService {
 
     private final TransactionEntryRepository repository;
+
+    /**
+     * Shared RestClient pointed at the OCR service.
+     * Port 8100 is correct per docker-compose.yml (was previously wrong: 8000).
+     */
+    @Value("${ocr.service.url:http://ocr-service:8100}")
+    private String ocrServiceUrl;
+
+    private RestClient ocrRestClient;
+
+    @jakarta.annotation.PostConstruct
+    void initOcrClient() {
+        this.ocrRestClient = RestClient.builder().baseUrl(ocrServiceUrl).build();
+    }
 
     // ── Comprehensive ─────────────────────────────────────────────────────────
 
@@ -259,7 +270,7 @@ public class AnalyticsService {
     public Object getAIAdvisorInsights(UUID userId) {
         LocalDateTime thirtyDaysAgo = LocalDateTime.now().minusDays(30);
         List<TransactionEntry> txns = repository.findByUserIdAndCreatedAtBetween(userId, thirtyDaysAgo, LocalDateTime.now());
-        
+
         List<Map<String, Object>> mappedTxns = txns.stream().map(t -> {
             Map<String, Object> map = new HashMap<>();
             map.put("d", t.getCreatedAt() != null ? t.getCreatedAt().toLocalDate().toString() : "");
@@ -269,20 +280,22 @@ public class AnalyticsService {
             map.put("c", t.getCategory() != null ? t.getCategory().name() : "");
             return map;
         }).collect(Collectors.toList());
-        
+
         Map<String, Object> payload = new HashMap<>();
         payload.put("transactions", mappedTxns);
-        
-        RestTemplate restTemplate = new RestTemplate();
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
-        
+
+        // Use a shared RestClient (connection-pooled) instead of new RestTemplate() per call.
+        // Port corrected: OCR service listens on 8100 (not 8000) per docker-compose.yml.
         try {
-            ResponseEntity<Map> response = restTemplate.postForEntity("http://ocr-service:8000/analyze", request, Map.class);
-            return response.getBody();
+            Map<?, ?> body = ocrRestClient.post()
+                    .uri("/analyze")
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .body(Map.class);
+            return body;
         } catch (Exception e) {
-            log.error("Failed to get AI advisor insights", e);
+            log.error("Failed to get AI advisor insights from OCR service", e);
             return Map.of("error", e.getMessage());
         }
     }

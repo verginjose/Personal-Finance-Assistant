@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/Assitant.iml" filepath="$PROJECT_DIR$/Assitant.iml" />
+      <module fileurl="file://$PROJECT_DIR$/ocr-service/ocr-service.iml" filepath="$PROJECT_DIR$/ocr-service/ocr-service.iml" />
     </modules>
   </component>
 </project>

@@ -184,6 +184,15 @@ Argo CD syncs `k8s/apps` on `master`.
 
 ## Part 2 — Cleanup (least → most destructive)
 
+### 0. Day-to-day: start and stop
+
+```bash
+./k8s/start.sh                 # k3s up, pods ready, URLs + passwords printed
+./k8s/start.sh --no-secrets    # same, passwords hidden
+./k8s/stop.sh                  # stop k3s cleanly, delete nothing
+./k8s/stop.sh --gc             # prune old registry tags first
+```
+
 ### A. Remove the app, keep the cluster
 
 ```bash

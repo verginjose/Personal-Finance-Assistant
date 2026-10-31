@@ -88,6 +88,8 @@ Artifacts from every `pipeline.sh` run land in `.pipeline/<run-id>/`
 ## Health
 
 ```bash
+./k8s/start.sh             # start everything, wait for readiness, print URLs + passwords
+./k8s/stop.sh              # stop k3s cleanly (deletes nothing)
 # one-shot report: cluster, workloads, registry, buildkit, runner, Argo, CI runs
 ./k8s/ci/debug.sh          # non-zero exit if anything is unhealthy
 

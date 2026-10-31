@@ -119,19 +119,31 @@ operations are in [`ci/README.md`](ci/README.md).
 
 ## Start and access the cluster
 
-k3s is enabled at boot, so it is already running after a normal reboot. Start
-it explicitly after a stop:
+k3s is enabled at boot, so it is already running after a normal reboot. The two
+scripts wrap the day-to-day operations:
 
 ```bash
-sudo systemctl start k3s        # or: systemctl status k3s
+./k8s/start.sh                 # start k3s, wait for the pods, print URLs + passwords
+./k8s/start.sh --no-secrets    # same, with passwords hidden
+./k8s/start.sh --full          # also re-render/re-apply from .env
+
+./k8s/stop.sh                  # stop k3s cleanly, delete nothing
+./k8s/stop.sh --cancel-runs    # also cancel in-flight GitHub Actions builds
+./k8s/stop.sh --gc             # also prune old registry tags first
+```
+
+Underneath it is just:
+
+```bash
+sudo systemctl start k3s
 export KUBECONFIG="$HOME/.kube/k3s.yaml"   # kubeconfig lives here, not ~/.kube/config
 kubectl get nodes               # jose-fedora Ready after ~30 s
 kubectl -n pfa get pods         # 19 workloads
 ./k8s/ci/debug.sh               # full health report (cluster, CI, Argo)
 ```
 
-Stop it with `sudo systemctl stop k3s`; pods come back in place on the next
-start because all state is on PVCs under `/var/lib/rancher/k3s/storage`.
+Pods come back in place on the next start because all state is on PVCs under
+`/var/lib/rancher/k3s/storage`.
 
 | What | How | URL |
 |---|---|---|

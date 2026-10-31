@@ -1,0 +1,121 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-replica
+  namespace: pfa
+  labels:
+    app: postgres-replica
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    app: postgres-replica
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-replica
+  namespace: pfa
+  labels:
+    app: postgres-replica
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  serviceName: postgres-replica
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-replica
+  template:
+    metadata:
+      labels:
+        app: postgres-replica
+        app.kubernetes.io/part-of: personal-finance-assistant
+    spec:
+      # pg_basebackup only runs on first boot: the PVC is seeded once, then the
+      # main container starts streaming replication using the -R recovery config.
+      initContainers:
+        - name: basebackup
+          image: ankane/pgvector:v0.5.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: DB_USER }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: DB_PASSWORD }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              if [ -s "$PGDATA/PG_VERSION" ]; then
+                echo "Replica data directory already initialized, skipping base backup."
+                exit 0
+              fi
+              until pg_isready -h postgres-primary -p 5432 -U "$POSTGRES_USER" >/dev/null 2>&1; do
+                echo "Waiting for postgres-primary..."
+                sleep 2
+              done
+              pg_basebackup \
+                -d "host=postgres-primary port=5432 user=${POSTGRES_USER} password=${POSTGRES_PASSWORD}" \
+                -D "$PGDATA" -Fp -Xs -P -R
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: ankane/pgvector:v0.5.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: DB_NAME }
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: DB_USER }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: DB_PASSWORD }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 40
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

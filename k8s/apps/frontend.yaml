@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: pfa
+  labels:
+    app: frontend
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: pfa
+  labels:
+    app: frontend
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        app.kubernetes.io/part-of: personal-finance-assistant
+    spec:
+      initContainers:
+        # nginx resolves proxy_pass upstreams once at startup; wait until the
+        # gateway Service exists so the first boot does not crash-loop.
+        - name: wait-for-gateway
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          # Use the FQDN: busybox nslookup otherwise also queries the search
+          # domains and exits non-zero even when the short name resolved.
+          command: ["sh", "-c", "until nslookup api-gateway.pfa.svc.cluster.local >/dev/null 2>&1; do echo waiting for api-gateway; sleep 2; done"]
+      containers:
+        - name: frontend
+          image: finance/frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20

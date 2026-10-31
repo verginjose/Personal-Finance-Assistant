@@ -1,0 +1,9 @@
+-- Rendered by k8s/apply.sh with values from .env (envsubst).
+-- The compose version of this file points at `postgres-db`, which does not exist;
+-- in Kubernetes the primary service is called `postgres-primary`.
+
+CREATE DATABASE IF NOT EXISTS pg_auth
+ENGINE = PostgreSQL('postgres-primary:5432', '${DB_NAME}', '${DB_USER}', '${DB_PASSWORD}', '${AUTH_DB_SCHEMA}');
+
+CREATE DATABASE IF NOT EXISTS pg_finance
+ENGINE = PostgreSQL('postgres-primary:5432', '${DB_NAME}', '${DB_USER}', '${DB_PASSWORD}', '${FINANCE_DB_SCHEMA}');

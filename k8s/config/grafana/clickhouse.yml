@@ -1,0 +1,18 @@
+apiVersion: 1
+
+datasources:
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    uid: clickhouse-ds
+    access: proxy
+    editable: true
+    jsonData:
+      host: clickhouse
+      port: 8123
+      protocol: http
+      defaultDatabase: default
+      username: default
+      tlsSkipVerify: true
+    secureJsonData:
+      # Rendered from .env by k8s/apply.sh
+      password: ${CLICKHOUSE_PASSWORD}

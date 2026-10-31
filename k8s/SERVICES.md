@@ -134,9 +134,16 @@ the service crash-loops after a deploy, check `logs --previous`.
 Read model: analytics, aggregations, insights. Reads the Postgres **replica**,
 caches in Redis, calls the Groq LLM.
 
+Because the gateway sends every `GET /api/upsert/**` and `/api/analytics/**`
+here, this service — not command-service — answers
+`GET /api/upsert/health` and `GET /api/analytics/health`. That is also why
+subscription *detection* cannot run on a read: it happens when a recurring
+expense is written (and nightly at 02:00 UTC).
+
 ```bash
 kubectl -n pfa logs deploy/query-service --tail=100
 kubectl -n pfa exec deploy/query-service -- wget -qO- localhost:8084/actuator/health
+kubectl -n pfa exec deploy/query-service -- wget -qO- localhost:8084/upsert/health
 # stale numbers after a write?
 kubectl -n pfa exec redis-0 -- redis-cli -a "$REDIS_PW" --no-auth-warning dbsize
 ```

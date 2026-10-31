@@ -8,9 +8,13 @@ git push
   └─ GitHub Actions (ci-runner pod)
        ├─ detect which service directories changed
        ├─ buildctl → buildkitd pod → push 192.168.0.7:30500/finance/<svc>:<sha>
-       ├─ commit the new tag into k8s/apps/<svc>.yaml   [skip ci]
-       └─ kubectl apply + rollout status                (interim; Argo CD later)
+       └─ commit the new tag into k8s/apps/<svc>.yaml   [skip ci]
+            └─ Argo CD (argocd namespace)
+                 └─ polls master, syncs k8s/apps → Deployment rolls out
 ```
+
+The runner holds **no cluster permissions**: it builds, pushes and commits.
+Argo CD is the only thing that mutates the cluster.
 
 The build itself is unchanged: the same Dockerfiles run, so the Spring services
 still compile with Maven inside the image.
@@ -84,6 +88,41 @@ git push            # done
 ```
 
 Deploys can also be triggered from the Actions tab (`workflow_dispatch`).
+
+## Deployment: Argo CD
+
+Argo CD watches `k8s/apps` on `master` and syncs automatically (no prune,
+`selfHeal: true`). Set it up with:
+
+```bash
+./k8s/ci/argocd/apply.sh     # installs Argo CD if absent, registers the repo
+```
+
+It reuses `GITHUB_PAT` as the HTTPS credential for the private repo, stored in
+the `argocd/pfa-repo` Secret.
+
+```bash
+# UI
+kubectl -n argocd port-forward svc/argocd-server 8080:443   # https://localhost:8080
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+
+# state
+kubectl -n argocd get applications
+```
+
+Sync latency is the poll interval (3 min by default). To make it instant, add
+a GitHub webhook pointing at the Argo CD API server — that requires exposing
+it publicly, which this setup does not do.
+
+**Which branch deploys.** `targetRevision: master`. CI commits the tag bump to
+the branch that triggered the build, so a push to `k8s/local-deployment` builds
+an image but does not deploy it until merged into `master`. Change the field in
+`argocd/application.yaml` if you want feature-branch deploys.
+
+**Infrastructure is not managed by Argo** (yet). Postgres, RabbitMQ,
+ClickHouse, Grafana and the observability stack still come from `k8s/apply.sh`,
+because their Secrets and rendered ConfigMaps are generated from `.env` and are
+not in git. Moving them in means committing SealedSecrets (or similar) first.
 
 ## Design notes
 

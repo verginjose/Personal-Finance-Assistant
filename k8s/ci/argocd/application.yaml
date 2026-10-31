@@ -1,0 +1,41 @@
+# Argo CD Application: the five app Deployments/Services in k8s/apps.
+#
+# Scope is deliberately limited to k8s/apps. Infrastructure (Postgres,
+# RabbitMQ, ClickHouse, observability) stays under k8s/apply.sh because its
+# Secrets and rendered ConfigMaps come from .env and are not in git yet.
+#
+# Sync is automatic and self-healing but never prunes: removing a file from
+# k8s/apps will not delete a live resource. Turn prune on only after you have
+# moved the rest of the stack into Argo.
+#
+# targetRevision is the default branch. CI commits the image-tag bump to
+# whichever branch triggered the build, so a build on a feature branch is
+# deployed once it is merged into master (or after changing this field).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pfa-apps
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/verginjose/Personal-Finance-Assistant.git
+    targetRevision: master
+    path: k8s/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pfa
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

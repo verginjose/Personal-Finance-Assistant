@@ -157,6 +157,38 @@ python3 requests/run_e2e_tests.py
 The testing script will perform a full system validation. Expected outcome: `71 passed, 0 failed`.
 
 ---
+## Kubernetes Deployment (local k3s)
+
+The stack also runs on a single-node [k3s](https://k3s.io) cluster. Delivery is
+automated end to end:
+
+```
+git push → GitHub Actions (self-hosted runner in the cluster)
+         → BuildKit builds only the changed services
+         → pushes 192.168.0.7:30500/finance/<svc>:<sha>
+         → commits the new tag into k8s/apps/<svc>.yaml
+         → Argo CD syncs master → Deployment rolls out
+```
+
+Starting and reaching it:
+
+```bash
+sudo systemctl start k3s                       # enabled at boot; no-op if already running
+export KUBECONFIG="$HOME/.kube/k3s.yaml"       # kubeconfig is NOT ~/.kube/config
+kubectl get nodes                              # jose-fedora Ready
+./k8s/ci/debug.sh                              # health of the app, CI and Argo CD
+
+kubectl -n pfa port-forward svc/frontend 3001:80      # http://localhost:3001
+kubectl -n argocd port-forward svc/argocd-server 8080:443  # https://localhost:8080
+```
+
+The public instance is at **https://verginjose.cloud** (Cloudflare tunnel).
+
+Everything else — one-time cluster/GPU setup, the CI components, the manual
+fallback, debugging and teardown — is in [`k8s/README.md`](k8s/README.md),
+[`k8s/RUNBOOK.md`](k8s/RUNBOOK.md) and [`k8s/CHEATSHEET.md`](k8s/CHEATSHEET.md).
+
+---
 ## API Documentation
 The comprehensive list of HTTP endpoints, including request and response schemas, is available in the companion documentation files:
 - Markdown format: [`endpoints.md`](endpoints.md)

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Build every service image and make it visible to the local Kubernetes node.
 #
+# OFFLINE FALLBACK. `git push` normally builds through k8s/ci/ (self-hosted
+# runner → in-cluster registry). Use this when CI is unavailable.
+#
 #   ./k8s/build-images.sh                 # build all, import into k3s
 #   SKIP_OCR=1 ./k8s/build-images.sh      # skip the ~10 GB CUDA OCR image
 #   KIND_CLUSTER=pfa ./k8s/build-images.sh # import into a kind cluster instead

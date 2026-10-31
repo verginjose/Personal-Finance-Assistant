@@ -16,6 +16,9 @@ cd ~/IdeaProjects/Personal-Finance-Assistant
 | Local via port-forward | http://localhost:3001 |
 | Grafana (port-forward) | http://localhost:3000 |
 | Prometheus (port-forward) | http://localhost:9090 |
+| Argo CD UI (port-forward) | https://localhost:8080 |
+| Image registry (in-cluster) | http://192.168.0.7:30500 (`/v2/_catalog`) |
+| CI runs | github.com/verginjose/Personal-Finance-Assistant/actions |
 
 Add the local hostname once:
 
@@ -28,27 +31,37 @@ dashboard, which currently routes `verginjose.cloud → http://frontend:80`.
 
 ## Deploy / update
 
+**Normal path — push code, nothing else:**
+
 ```bash
-# full local pipeline: preflight -> build -> push -> render -> deploy -> verify
-./k8s/pipeline.sh
-
-# reuse existing images (fast path after a config-only change)
-./k8s/pipeline.sh --skip-build
-
-# build + validate manifests, do not touch the cluster
-./k8s/pipeline.sh --skip-deploy
-
-# publish images while deploying (needs `docker login`)
-PUSH_REGISTRY=ghcr.io/you/pfa ./k8s/pipeline.sh
-
-# plain deploy, no build
-./k8s/apply.sh --with-cloudflared
+git push            # CI builds changed services → pushes to registry → commits tag
+                    # → Argo CD (poll ≤3 min) applies k8s/apps on master
 ```
 
-Artifacts from every pipeline run land in `.pipeline/<run-id>/`
-(`preflight.txt`, `rendered/`, `verify.txt`, `pipeline.log`).
+The runner builds only the service directories whose files changed. The OCR
+image (~10 GB) is only rebuilt when `ocr-service/**` changes.
 
-Redeploy one service after a code change:
+| Piece | Namespace | What it does |
+|---|---|---|
+| `ci-runner` | pfa | Self-hosted GitHub Actions agent |
+| `buildkitd` | pfa | Rootless BuildKit, 40 Gi cache PVC |
+| `registry` | pfa | `registry:2`, NodePort 30500, 50 Gi PVC |
+| `argocd-*` | argocd | Watches `k8s/apps` on `master`, auto-syncs |
+
+Trigger a build for one service (or all) without changing code:
+
+```bash
+TOKEN=$(sed -n 's/^GITHUB_PAT=//p' .env)
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -H 'Accept: application/vnd.github+json' \
+  https://api.github.com/repos/verginjose/Personal-Finance-Assistant/actions/workflows/build.yml/dispatches \
+  -d '{"ref":"master","inputs":{"service":"all"}}'
+```
+
+`service` is one of `api-gateway`, `command-service`, `query-service`,
+`frontend`, `ocr-service`, or `all`.
+
+**Manual fallback (no CI) — offline rebuild of one service:**
 
 ```bash
 docker build -t finance/query-service:latest query-service
@@ -58,9 +71,26 @@ kubectl -n pfa rollout restart deploy/query-service
 kubectl -n pfa rollout status  deploy/query-service
 ```
 
+Note Argo CD's `selfHeal` will revert a manual image change on the next sync;
+commit the tag in `k8s/apps/` if the change should stick.
+
+**Infrastructure** (Postgres, RabbitMQ, ClickHouse, observability) is *not*
+managed by Argo — it still comes from:
+
+```bash
+./k8s/apply.sh --with-cloudflared
+./k8s/pipeline.sh                 # legacy full manual pipeline (offline fallback)
+```
+
+Artifacts from every `pipeline.sh` run land in `.pipeline/<run-id>/`
+(`preflight.txt`, `rendered/`, `verify.txt`, `pipeline.log`).
+
 ## Health
 
 ```bash
+# one-shot report: cluster, workloads, registry, buildkit, runner, Argo, CI runs
+./k8s/ci/debug.sh          # non-zero exit if anything is unhealthy
+
 kubectl -n pfa get pods -o wide
 kubectl -n pfa get pvc
 kubectl get node -o jsonpath='{.items[0].status.allocatable.nvidia\.com/gpu}{"\n"}'
@@ -94,6 +124,47 @@ kubectl top node
 kubectl -n pfa rollout restart deploy/query-service
 kubectl -n pfa rollout undo deploy/query-service
 ```
+
+## Debug: CI and Argo CD
+
+```bash
+# is the runner online?  (want: "Listening for Jobs")
+kubectl -n pfa logs deploy/ci-runner --tail=40
+kubectl -n pfa get pods -l app=ci-runner
+
+# is BuildKit able to build?
+kubectl -n pfa exec deploy/buildkitd -- buildctl --addr tcp://127.0.0.1:1234 debug workers
+
+# registry reachable and populated?
+curl -fsS http://192.168.0.7:30500/v2/ && echo
+curl -fsS http://192.168.0.7:30500/v2/_catalog | jq .
+kubectl -n pfa exec deploy/registry -- du -sh /var/lib/registry
+
+# what does Argo think?
+kubectl -n argocd get applications
+kubectl -n argocd get application pfa-apps -o yaml | \
+  yq '.status.sync, .status.health, .status.operationState.message' 2>/dev/null || \
+  kubectl -n argocd get application pfa-apps -o jsonpath='{.status.sync.status} {.status.health.status}{"\n"}'
+
+# force a sync (after committing a manifest change)
+kubectl -n argocd patch application pfa-apps --type merge \
+  -p '{"operation":{"initiatedBy":{"username":"manual"},"sync":{"revision":"master"}}}'
+
+# why did a build fail?  (Actions → run → job → "Build and push")
+#   or from the CLI:
+TOKEN=$(sed -n 's/^GITHUB_PAT=//p' .env)
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://api.github.com/repos/verginjose/Personal-Finance-Assistant/actions/runs?per_page=5" \
+  | jq -r '.workflow_runs[] | "\(.id) \(.status)/\(.conclusion) \(.head_branch)"'
+
+# image on a pod is not what you expect?
+kubectl -n pfa get deploy -o custom-columns='NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image'
+```
+
+Common CI causes are in the failure table below. If the cluster was just
+restarted and pods are `ImagePullBackOff` on `192.168.0.7:30500/...`, the
+insecure-registry config is missing or k3s has not restarted since it was
+written (`k8s/ci/setup-registry.sh`).
 
 ## Data queries
 
@@ -189,14 +260,34 @@ kubectl -n pfa rollout restart deploy/api-gateway deploy/command-service \
 | k3s won't start after install | SELinux label `user_tmp_t` | `sudo restorecon -v /usr/local/bin/k3s` |
 | `column users.password does not exist` | Hibernate created `auth.users` first | `db-init/007_create_auth_users.sql` |
 | OCR parse fails with an API-key error | `GROQ_URL` / `GROQ_API_KEY` in `.env` | correct the credentials, restart `ocr-service` |
-| image not found / `ErrImagePull` | image not imported into containerd | `docker save … -o /tmp/i.tar && sudo k3s ctr images import /tmp/i.tar` |
+| image not found / `ErrImagePull` (legacy `finance/<svc>:latest`) | image not imported into containerd | `docker save … -o /tmp/i.tar && sudo k3s ctr images import /tmp/i.tar` |
+| `ImagePullBackOff` on `192.168.0.7:30500/...` | containerd does not know the registry is HTTP | `sudo ./k8s/ci/setup-registry.sh`, confirm `curl http://192.168.0.7:30500/v2/` |
+| runner shows Offline in GitHub | PAT expired or lacks Administration write | new PAT → `.env` → `./k8s/ci/apply.sh` |
+| build fails with "Push rejected / non-fast-forward" | branch moved during the build | fixed by rebase-retry; if seen again, check for overlapping runs |
+| build fails with `Resource not accessible by personal access token` | PAT lacks Actions write (only affects dispatching) | add **Actions: Read and write** to the token |
+| Argo application `OutOfSync` / `Unknown` | repo credential or branch wrong | `kubectl -n argocd logs deploy/argocd-repo-server`; check `targetRevision` |
+| Argo reverts a manual image change | `selfHeal: true` | change the image in `k8s/apps/<svc>.yaml` and let CI/Argo apply it |
+| pod stuck `ContainerCreating` after k3s restart | containerd still starting | wait ~30 s; `kubectl -n pfa get events` |
+| buildkitd crash-loops with permission errors | SELinux or PVC ownership | `kubectl -n pfa logs deploy/buildkitd`; the `fix-perms` initContainer should chown 1000 |
 
 ## Reset
 
 ```bash
-# delete the whole app namespace (keeps the cluster)
-kubectl delete namespace pfa
+# CI + Argo only: drops argocd, the runner secret, registries.yaml
+./k8s/cleanup.sh --ci
 
-# delete the cluster (keeps no data)
+# app namespace + all local-path volume data (registry, buildkit cache, DBs)
+./k8s/cleanup.sh --app
+
+# everything, including the k3s install
+./k8s/cleanup.sh --all --yes
+
+# ad hoc, without the script
+kubectl delete namespace pfa
+kubectl delete namespace argocd
+sudo rm -f /etc/rancher/k3s/registries.yaml
 sudo /usr/local/bin/k3s-uninstall.sh
 ```
+
+`--ci` leaves the in-cluster images in the registry volume; `--app` is what
+actually deletes them (the PVC lives in namespace pfa).

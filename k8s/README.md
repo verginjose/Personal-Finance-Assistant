@@ -117,6 +117,129 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Accept: application/vnd.gi
 `service` is `all` or one of the five service names. Setup and deeper
 operations are in [`ci/README.md`](ci/README.md).
 
+### Which pods take part
+
+**Delivery pods** — namespace `pfa`, plus Argo CD in `argocd`:
+
+| Pod | Image | Job in the flow | Talks to |
+|---|---|---|---|
+| `ci-runner` | `myoung34/github-runner` | Runs the workflow steps: detect, `buildctl`, commit the tag bump | GitHub (HTTPS), `buildkitd:1234`, git |
+| `buildkitd` | `moby/buildkit` (rootless) | Executes the Dockerfile layers and pushes OCI blobs | `registry:5000`, cache PVC |
+| `registry` | `registry:2.8.3` | Stores image blobs, serves them to containerd | PVC `registry-data` |
+| `argocd-repo-server` | `argocd` | Clones `master` with the PAT, renders `k8s/apps/` | GitHub |
+| `argocd-application-controller` | `argocd` | Diffs rendered manifests against the live cluster, applies them | k3s API |
+| `argocd-server` | `argocd` | UI / REST API | you |
+| `argocd-redis` | `redis` | Cache for the two above | argocd pods |
+| `argocd-dex-server`, `argocd-applicationset-controller`, `argocd-notifications-controller` | `argocd` | Installed, unused (no SSO, one hand-written app, no notifications) | — |
+
+**Application pods** — namespace `pfa`: the five services (`frontend`,
+`api-gateway`, `command-service`, `query-service`, `ocr-service`) and their
+dependencies (`postgres-primary/replica`, `redis`, `redis-replica`,
+`rabbitmq`, `minio`, `clickhouse`, `vector`, `prometheus`, `grafana`) plus
+`cloudflared` for the public URL. These are *consumers* of the flow, not
+participants: they notice it only when their Deployment's `image:` changes.
+
+**Cluster plumbing** — `kube-system`: `traefik` (ingress, binds :80),
+`coredns` (Service DNS, e.g. `buildkitd.pfa.svc`), `metrics-server`,
+`local-path-provisioner` (creates the PVC directories), `nvidia-device-plugin`
+(advertises the GPU), `svclb-traefik`.
+
+```
+you  git push
+        │
+        ▼
+   GitHub (cloud) ──── job ────▶ ci-runner  ──gRPC :1234──▶ buildkitd
+                                     │                        │
+                                     │           push layers  ▼
+                                     │                    registry (30500)
+                                     │                        │
+                                     └── git push tag bump ───┘
+                                              │
+                                              ▼
+                                          GitHub master
+                                              │ clone / poll
+                                              ▼
+                                   argocd-repo-server
+                                              │
+                                              ▼
+                          argocd-application-controller ──▶ k3s API
+                                                              │
+                                              Deployment changed
+                                                              ▼
+                                            kubelet (host process, not a pod)
+                                                     pulls from registry
+                                                              ▼
+                                                    new app pod starts
+```
+
+Two structural facts: the runner **never touches the k3s API** (its only
+outputs are an image and a commit, so it needs no RBAC), and **kubelet and
+containerd are host processes inside the `k3s` service**, not pods — which is
+why they cannot resolve `*.svc` names and the registry must be a NodePort.
+
+### What actually executes the YAML
+
+The manifests are only desired state; k3s controllers and upstream images do
+the work:
+
+| Declared in | Executed by | Upstream source |
+|---|---|---|
+| any `kubectl apply` | k3s binaries (API server, controllers, scheduler, kubelet, containerd) | Kubernetes / k3s |
+| `Deployment`, `Service`, `PVC` | k3s controllers (continuous reconciliation) | Kubernetes |
+| `registry.yaml` | `registry:2.8.3` image | distribution/distribution |
+| `buildkit.yaml` | `moby/buildkit` image | moby/buildkit |
+| `runner.yaml` | `myoung34/github-runner` image | actions/runner |
+| `argocd/application.yaml` | `argocd` image (controller + repo-server) | argoproj/argo-cd |
+| `build.yml` steps | shell executed inside `ci-runner` | **this repo** |
+
+The only build logic we authored is the shell in `.github/workflows/build.yml`
+and the helper scripts in `k8s/ci/`; the five `Dockerfile`s describe each app
+image.
+
+### Where the images are stored
+
+The registry keeps blobs in the `registry-data` PVC, which on this single node
+is a host directory:
+
+```
+/var/lib/rancher/k3s/storage/pvc-<uuid>_pfa_registry-data/
+  └── docker/registry/v2/
+        ├── blobs/                       content-addressed layers (compressed)
+        └── repositories/                names and tags
+```
+
+Layers are deduplicated by SHA-256, so shared bases are stored once — six
+images fit in ~6.5 GiB even though the OCR image is ~10 GiB unpacked.
+Deleting a tag does **not** free space until `./k8s/ci/registry-gc.sh` runs.
+
+Each deployed image is also copied into containerd's store
+(`/var/lib/rancher/k3s/agent/containerd/`) — compressed content plus unpacked
+snapshots, so an image costs disk twice. Backing up the registry PVC is enough
+to preserve every image.
+
+### How a rollout replaces a pod
+
+| Service | Strategy | Behaviour |
+|---|---|---|
+| `ocr-service` | `Recreate` | old pod terminated **first**, then the new one starts (brief downtime) — the `paddle-model-cache` PVC is ReadWriteOnce and the pod claims the only GPU |
+| everything else | `RollingUpdate` 25%/25% | new pod started, waits until Ready, then the old one is terminated — no downtime |
+
+Old ReplicaSets are kept at 0 replicas for `kubectl rollout undo`; old image
+tags stay in the registry and containerd until pruned. Termination sends
+SIGTERM with the grace period, and the pod leaves the Service endpoints before
+it dies.
+
+### Why builds run one at a time
+
+`concurrency: group: build-and-deploy` allows one workflow run at a time, and
+the matrix uses `max-parallel: 1`. Two Maven builds plus the running stack would
+exceed the node's memory, and parallel jobs would race on the tag-bump commit
+(each job pushes a commit to the same branch). Jobs check out the branch tip,
+not the triggering SHA, so each build includes the previous tag bump; a
+rebase-retry loop covers pushes made by hand during a build. Only services whose
+directories changed are built (`HEAD^ HEAD` diff), so a frontend fix never
+rebuilds the 10 GiB OCR image.
+
 ## Start and access the cluster
 
 k3s is enabled at boot, so it is already running after a normal reboot. The two

@@ -94,7 +94,9 @@ change, profile and user search. Owns the `auth.users` table
 (`db-init/007_create_auth_users.sql`).
 
 Key env: `SPRING_R2DBC_URL` (schema `auth`), `JWT_SECRET` (must equal the
-gateway's), `REDIS_*`. Redis keys: `refresh_token:*`, `user_tokens:*`,
+gateway's), `REDIS_HOST`, `REDIS_PASSWORD`, `REDIS_SERVER_PORT` (named that
+way on purpose — Kubernetes injects a bogus `REDIS_PORT` for the `redis`
+Service). Redis keys: `refresh_token:*`, `user_tokens:*`,
 `token_blacklist:*`.
 
 ```bash

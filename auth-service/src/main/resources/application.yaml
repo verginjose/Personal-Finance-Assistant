@@ -33,7 +33,10 @@ spring:
   data:
     redis:
       host: ${REDIS_HOST:redis}
-      port: ${REDIS_PORT:6379}
+      # NOT REDIS_PORT: Kubernetes injects REDIS_PORT=tcp://<ip>:6379 into every
+      # pod in a namespace that has a single-port Service named "redis", which
+      # breaks binding to an int. Use our own variable name.
+      port: ${REDIS_SERVER_PORT:6379}
       password: ${REDIS_PASSWORD:}
       timeout: 2000ms
       lettuce:

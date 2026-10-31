@@ -14,7 +14,9 @@ k8s/
 ├── pipeline.sh                # offline fallback: full build -> render -> deploy -> verify
 ├── setup-k3s-nvidia.sh        # one-time privileged k3s + GPU + firewalld setup
 ├── cleanup.sh                 # tear down CI / app / images / host config / cluster
-├── RUNBOOK.md                 # deploy/access/debug/query cheat sheet
+├── SERVICES.md                # per-service/pod reference: ports, config, logs, failures
+├── RUNBOOK.md                 # deploy/access/debug/query/Grafana cheat sheet
+├── START-STOP.md              # stop, start, prove no data was lost
 ├── CHEATSHEET.md              # learn the commands, then clean up step by step
 ├── ci/                        # CI/CD: in-cluster registry, BuildKit, runner, Argo CD
 │   ├── README.md              # setup and operations
@@ -194,7 +196,7 @@ the work:
 | `build.yml` steps | shell executed inside `ci-runner` | **this repo** |
 
 The only build logic we authored is the shell in `.github/workflows/build.yml`
-and the helper scripts in `k8s/ci/`; the five `Dockerfile`s describe each app
+and the helper scripts in `k8s/ci/`; the six `Dockerfile`s describe each app
 image.
 
 ### Where the images are stored
@@ -262,7 +264,7 @@ Underneath it is just:
 sudo systemctl start k3s
 export KUBECONFIG="$HOME/.kube/k3s.yaml"   # kubeconfig lives here, not ~/.kube/config
 kubectl get nodes               # jose-fedora Ready after ~30 s
-kubectl -n pfa get pods         # 19 workloads
+kubectl -n pfa get pods         # 22 workloads
 ./k8s/ci/debug.sh               # full health report (cluster, CI, Argo)
 ```
 

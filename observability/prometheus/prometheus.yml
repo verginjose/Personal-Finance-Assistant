@@ -1,3 +1,12 @@
+# Single source of truth for Prometheus.
+#
+#   docker compose: mounted at /etc/prometheus/prometheus.yml
+#   k3s:            k8s/apply.sh renders it into the prometheus-config ConfigMap
+#
+# Editing this file + `./k8s/apply.sh` (or `kubectl -n pfa rollout restart
+# deploy/prometheus`) is the only way to change scraping. Prometheus does not
+# watch its config file.
+
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -13,21 +22,33 @@ scrape_configs:
     static_configs:
       - targets: ['auth-service:8082']
 
-  - job_name: upsert-service
+  - job_name: command-service
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['upsert-service:8081']
+      - targets: ['command-service:8081']
 
-  - job_name: analytics-service
+  - job_name: query-service
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['analytics-service:8084']
-
-  - job_name: bill-parser-service
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ['bill-parser-service:8083']
+      - targets: ['query-service:8084']
 
   - job_name: vector
     static_configs:
       - targets: ['vector:9090']
+
+  # Per-pod CPU / memory / network. This is the kubelet's cAdvisor endpoint and
+  # the only source of container_* metrics (the "Pods" Grafana dashboard).
+  # In k3s it needs the pfa-prometheus ClusterRole (nodes/metrics) to answer.
+  - job_name: kubelet-cadvisor
+    scheme: https
+    metrics_path: /metrics/cadvisor
+    tls_config:
+      insecure_skip_verify: true
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_node_name]
+        target_label: node
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)

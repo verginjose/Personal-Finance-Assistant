@@ -1,0 +1,504 @@
+{
+  "uid": "pfa-pods",
+  "title": "Pods \u2014 CPU, memory, network",
+  "tags": [
+    "pfa",
+    "kubernetes",
+    "pods"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus-ds"
+        },
+        "query": {
+          "query": "label_values(container_memory_working_set_bytes, namespace)",
+          "refId": "ns"
+        },
+        "definition": "label_values(container_memory_working_set_bytes, namespace)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "current": {
+          "text": "pfa",
+          "value": [
+            "pfa"
+          ]
+        }
+      },
+      {
+        "name": "pod",
+        "label": "Pod",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus-ds"
+        },
+        "query": {
+          "query": "label_values(container_memory_working_set_bytes{namespace=~\"$namespace\"}, pod)",
+          "refId": "pod"
+        },
+        "definition": "label_values(container_memory_working_set_bytes{namespace=~\"$namespace\"}, pod)",
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "refresh": 2,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Containers",
+      "description": "Containers reporting cAdvisor metrics in the selected namespace.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 0,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "expr": "count(count by (pod) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "CPU used (cores)",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 6,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Memory working set",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 12,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "expr": "sum(container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Restarts (1h)",
+      "description": "Container start-time changes in the last hour. kubectl is still the source of truth for restart counts.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 18,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "expr": "sum(changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU by pod",
+      "description": "Cores per pod. Compare with the pod's cpu limit/request.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 40,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory by pod",
+      "description": "Working set is what the kernel counts against the container memory limit.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 52,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Network by pod",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "id": 130,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "expr": "sum by (pod) (rate(container_network_receive_bytes_total{namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
+          "legendFormat": "{{pod}} rx/tx",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "expr": "sum by (pod) (rate(container_network_transmit_bytes_total{namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
+          "legendFormat": "{{pod}} rx/tx",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container restarts by pod",
+      "description": "Non-zero means the container was restarted or recreated in the last hour (deploys count too).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "id": 142,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "expr": "sum by (pod) (changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

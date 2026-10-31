@@ -26,8 +26,9 @@ flowchart LR
     subgraph Client
         UI[Web UI / Mobile]
     end
-    subgraph Gateway
+    subgraph Edge
         GW[API Gateway]
+        Auth[Auth Service]
     end
     subgraph Services
         Command[Command Service]
@@ -48,12 +49,15 @@ flowchart LR
         Prometheus[Prometheus Metrics]
     end
     UI --> GW
+    GW --> Auth
     GW --> Command
     GW --> Query
     GW --> OCR
     GW --> MinIO
+    Auth --> PG
     Command --> PG
     Query --> PG
+    Auth --> Redis
     Command --> Redis
     Query --> Redis
     Command -.-> RMQ
@@ -92,13 +96,23 @@ The user interface is engineered as a lightning-fast Single Page Application (SP
 - **Zero-Dependency Core**: Built purely with Vanilla JavaScript (ES6 Modules) and native HTML5/CSS3 to guarantee near-instant load times.
 - **Server-Sent Events (SSE)**: Establishes a real-time, persistent connection with the backend to receive instant UI updates (e.g., when a background AI batch job finishes).
 
-### 2. API Gateway & Storage Layer
-All incoming client traffic is routed through the **Spring Cloud Gateway**. 
-- **Centralized Routing & CORS**: Dynamically routes requests downstream (`/api/upsert/**` to Command, `/api/analytics/**` to Query).
-- **Security Validation**: Validates JWT signatures and securely forwards the extracted `X-User-Id` to backend services. 
-- **MinIO Integration**: Intercepts direct file uploads (like Bank Statements and Receipts) and securely saves them to **MinIO** object storage before dispatching async jobs.
+### 2. Edge: API Gateway + Auth Service
+All incoming client traffic passes through the **Spring Cloud Gateway**, which
+does *only* proxy work; credentials are handled by a separate service.
+- **Centralized Routing & CORS**: Routes `/api/auth/**` to Auth, `/api/upsert/**`
+  to Command, `/api/analytics/**` to Query, `/api/storage/**` to MinIO.
+- **Security Validation**: Validates JWT signatures (including the Redis
+  blacklist), then strips any client-supplied `X-User-Id` and injects the value
+  from the signed token.
+- **MinIO Integration**: Streams uploads (bank statements, receipts, avatars) to
+  **MinIO**, off the Netty event loop, then dispatches the async OCR job.
+- **Auth Service**: Owns the `auth.users` schema — registration, login,
+  refresh-token rotation, logout/blacklisting and profile updates. It runs
+  BCrypt on a worker pool, never on an event loop.
 
 ### 3. Core Business Services (CQRS Pattern)
+- **Auth Service**: See §2 — a reactive service of its own (`auth-service:8082`)
+  with its own database schema and the same JWT secret as the gateway.
 - **Command Service**: The primary operational engine. It executes all core mutations (CRUD operations) for transactions, budgets, goals, and shared group bills. It persists canonical state directly to its isolated schema in **PostgreSQL**.
 - **Query Service**: Optimized for ultra-fast reads, aggregations, and dashboard analytics. It maintains a highly optimized cache layer in **Redis** and provides AI-powered financial insights using the **Groq LLM**.
 - **OCR Service**: A Python/FastAPI ML worker. It leverages **PaddleOCR** and **Groq** to perform Optical Character Recognition and semantic parsing on receipt images and batch bank statements. 
@@ -111,8 +125,20 @@ To ensure high performance and loose coupling, the system leverages **RabbitMQ**
 ### 5. Telemetry & Observability Pipeline
 A robust, enterprise-grade observability stack monitors the entire cluster.
 - **Log Aggregation (Vector & ClickHouse)**: Every microservice outputs structured JSON logs. **Vector** acts as an ultra-fast, lightweight log aggregator that scrapes the Docker socket, sanitizes the payloads (redacting PII like emails and passwords), and ships the logs in bulk to **ClickHouse**—a columnar database optimized for massive analytical queries.
-- **Metrics Scraping (Prometheus)**: Each Spring Boot microservice exposes a `/actuator/prometheus` endpoint. **Prometheus** periodically scrapes these endpoints to collect JVM metrics, HTTP latencies, and connection pool statuses. Additionally, Vector computes real-time error rates from the log streams and exposes them as native Prometheus metrics.
-- **Visualization (Grafana)**: **Grafana** serves as the single pane of glass. It is pre-configured with ClickHouse and Prometheus data sources, offering rich dashboards that visualize system health, error traces, and infrastructure bottlenecks.
+- **Metrics Scraping (Prometheus)**: Each Spring Boot microservice exposes a `/actuator/prometheus` endpoint. **Prometheus** periodically scrapes these endpoints to collect JVM metrics, HTTP latencies, and connection pool statuses. It also scrapes kubelet's **cAdvisor** endpoint (`/metrics/cadvisor`), which is where per-pod CPU, memory, network and restart metrics come from. Additionally, Vector computes real-time error rates from the log streams and exposes them as native Prometheus metrics.
+- **Visualization (Grafana)**: **Grafana** serves as the single pane of glass. It is pre-configured with ClickHouse and Prometheus data sources and five dashboards: *Service Metrics*, *Pods — CPU, memory, network*, *Database*, *API Latency*, *Finance Assistant*.
+
+---
+
+## Learn this system
+
+| If you want to… | Read |
+|---|---|
+| Understand the concepts (gateway, JWT, CQRS, SSE, event flow) | this file, §Architecture |
+| Look up **one service or pod**: what it does, its port, config, health check, logs, debug commands, common failures | [`k8s/SERVICES.md`](k8s/SERVICES.md) |
+| Operate it day to day: deploy, access, debug, Grafana, data queries | [`k8s/RUNBOOK.md`](k8s/RUNBOOK.md) |
+| Start/stop safely and prove no data was lost | [`k8s/START-STOP.md`](k8s/START-STOP.md) |
+| Understand CI/CD and how a push becomes a running pod | [`k8s/README.md`](k8s/README.md) and [`k8s/ci/README.md`](k8s/ci/README.md) |
 
 ---
 ## Quick Start
@@ -132,22 +158,29 @@ cd Personal-Finance-Assistant
 ```bash
 docker compose up -d
 ```
-This command initializes PostgreSQL, Redis, Kafka, the complete suite of microservices, and the observability stack.
+This command initializes PostgreSQL, Redis, RabbitMQ, MinIO, the six
+microservices and the observability stack.
 
-Services expose the following ports locally (refer to `docker-compose.yml` for details):
-- API Gateway: `8080`
-- Auth Service: `8082`
-- Upsert Service: `8081`
-- Bill-Parser Service: `8083`
-- Analytics Service: `8084`
-- Grafana: `3000`
-- Prometheus: `9090`
-- ClickHouse: `8123`
+Services and their in-network ports (see `docker-compose.yml` and
+[`k8s/SERVICES.md`](k8s/SERVICES.md#application-services)):
+
+| Service | Port | Exposed locally |
+|---|---|---|
+| `frontend` (nginx) | 80 | http://localhost:3001 |
+| `api-gateway` | 8080 | http://localhost:8080 |
+| `auth-service` | 8082 | internal only (reached through the gateway) |
+| `command-service` | 8081 | internal only |
+| `query-service` | 8084 | internal only |
+| `ocr-service` | 8100 | internal only |
+| `grafana` | 3000 | http://localhost:3000 |
+| `prometheus` | 9090 | http://localhost:9090 |
+| `clickhouse` | 8123 | internal only |
 
 ### 3. Verify System Health
 ```bash
-curl http://localhost:8080/health        # API Gateway health check
-curl http://localhost:8082/auth/health   # Auth Service health check
+curl http://localhost:8080/actuator/health          # API Gateway
+curl http://localhost:8080/api/auth/health          # Auth Service (through the gateway)
+kubectl -n pfa get pods                             # k3s: all workloads
 ```
 
 ### 4. Execute the End-to-End Test Suite

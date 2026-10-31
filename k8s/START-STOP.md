@@ -31,7 +31,7 @@ kubectl -n pfa exec postgres-primary-0 -- \
   psql -U "$DB_USER" -d "$DB_NAME" -c 'select count(*) as transactions from finance.transactions;'
 
 kubectl -n pfa get pvc --no-headers | wc -l     # expect 11
-kubectl -n pfa get pods --no-headers | wc -l    # expect 19
+kubectl -n pfa get pods --no-headers | wc -l    # expect 22
 ```
 
 Write the count down. Optional but recommended — a real dump you can keep:
@@ -81,7 +81,7 @@ Expected output, in order:
 
 1. `ok k3s is already running` (or it starts it)
 2. `ok node Ready (jose-fedora)`
-3. `ok 19 pods Running/Completed` — a cold start takes 1–3 minutes
+3. `ok 22 pods Running/Completed` — a cold start takes 1–3 minutes
 4. `ok pfa-apps: Synced Healthy`
 5. the access table and the credentials table
 

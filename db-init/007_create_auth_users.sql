@@ -1,5 +1,4 @@
--- auth-service owns auth.users (see auth-service/src/main/resources/schema.sql history
--- and the User entity),
+-- auth-service owns auth.users (see its User entity and AuthService),
 -- but command-service and query-service map a RegisteredUser entity to the same
 -- table with Hibernate ddl-auto=update. On a fresh database those services can
 -- create auth.users first with only identity columns, which then makes the

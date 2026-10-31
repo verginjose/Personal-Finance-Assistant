@@ -91,9 +91,17 @@ kubectl create configmap grafana-dashboards -n "${NS}" \
   --from-file="${ROOT_DIR}/observability/grafana/dashboards" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+# ── Prometheus scrape config ────────────────────────────────────────────────
+echo "==> Rendering Prometheus ConfigMap"
+kubectl create configmap prometheus-config -n "${NS}" \
+  --from-file=prometheus.yml="${ROOT_DIR}/observability/prometheus/prometheus.yml" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
 # ── Infrastructure first, then apps ──────────────────────────────────────────
 echo "==> Applying infrastructure"
 kubectl apply -f "${K8S_DIR}/infrastructure/"
+# Prometheus does not watch its config file; restart it so a scrape change applies.
+kubectl -n "${NS}" rollout restart deploy/prometheus >/dev/null 2>&1 || true
 
 echo "==> Waiting for stateful infrastructure"
 kubectl -n "${NS}" rollout status statefulset/postgres-primary --timeout=300s

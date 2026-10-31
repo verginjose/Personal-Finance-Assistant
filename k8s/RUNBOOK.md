@@ -7,6 +7,9 @@ export KUBECONFIG="$HOME/.kube/k3s.yaml"
 cd ~/IdeaProjects/Personal-Finance-Assistant
 ```
 
+Per-service reference (what a pod does, its port, config, logs, failure
+modes): [`SERVICES.md`](SERVICES.md).
+
 ## URLs
 
 | What | URL |
@@ -132,6 +135,10 @@ kubectl -n pfa rollout undo deploy/query-service
 ## Debug: CI and Argo CD
 
 ```bash
+# app health, one line each
+kubectl -n pfa exec deploy/api-gateway -- wget -qO- localhost:8080/actuator/health
+kubectl -n pfa exec deploy/auth-service -- wget -qO- localhost:8082/actuator/health
+
 # is the runner online?  (want: "Listening for Jobs")
 kubectl -n pfa logs deploy/ci-runner --tail=40
 kubectl -n pfa get pods -l app=ci-runner
@@ -214,6 +221,84 @@ curl -s localhost:9090/api/v1/targets | python3 -m json.tool | grep -E 'job|heal
 kubectl -n pfa port-forward svc/grafana 3000:3000 &
 # user: admin / password: GRAFANA_ADMIN_PASSWORD in .env
 ```
+
+## Grafana — dashboards and pod metrics
+
+```bash
+kubectl -n pfa port-forward svc/grafana 3000:3000 &
+# http://localhost:3000 — user admin, password GRAFANA_ADMIN_PASSWORD in .env
+```
+
+| Dashboard | What it answers |
+|---|---|
+| **Pods — CPU, memory, network** | which pod is eating memory/CPU right now, network per pod, containers restarted in the last hour |
+| **Service Metrics** | requests, 2xx/4xx/5xx, JVM heap and threads per service |
+| **Database** | Postgres connections, size, replication |
+| **API Latency** | p50/p95/p99 per route |
+| **Finance Assistant** | business-level counters |
+
+Dashboards are files in `observability/grafana/dashboards/`, mounted from the
+`grafana-dashboards` ConfigMap. Edit the JSON, then re-render and restart:
+
+```bash
+kubectl create configmap grafana-dashboards -n pfa \
+  --from-file=observability/grafana/dashboards --dry-run=client -o yaml \
+  | kubectl apply -f -
+kubectl -n pfa rollout restart deploy/grafana
+```
+
+> Note: anything you change *inside* the Grafana UI is lost on the next
+> rollout for provisioned dashboards. Change the JSON file instead.
+
+### Where pod metrics come from
+
+Prometheus scrapes two things: each app's `/actuator/prometheus`, and the
+kubelet's cAdvisor endpoint (`/metrics/cadvisor`). The second is the source of
+every `container_*` metric. The scrape config is
+`observability/prometheus/prometheus.yml` (rendered into the
+`prometheus-config` ConfigMap by `./k8s/apply.sh`). If the *Pods* dashboard is
+empty:
+
+```bash
+# 1. is the kubelet scrape target up?
+kubectl -n pfa port-forward svc/prometheus 9090:9090 &
+curl -s localhost:9090/api/v1/targets \
+  | jq -r '.data.activeTargets[] | "\(.labels.job) \(.health) \(.lastError)"'
+#    expect: kubelet-cadvisor up
+# 2. do any container series exist?
+curl -s 'localhost:9090/api/v1/query?query=count(container_memory_working_set_bytes)' | jq '.data.result'
+# 3. did Prometheus pick up the config? (config maps are not auto-reloaded)
+kubectl -n pfa rollout restart deploy/prometheus
+```
+
+The scrape needs RBAC (`ClusterRole pfa-prometheus`: `nodes/metrics`,
+`nodes/proxy`) and the `prometheus` ServiceAccount — both live in
+`k8s/infrastructure/prometheus.yaml`. Without them the target shows
+`403 Forbidden` and there are no pod metrics at all.
+
+### Useful queries (Prometheus or any dashboard panel)
+
+```promql
+# memory per pod in pfa
+sum by (pod) (container_memory_working_set_bytes{namespace="pfa",container!="",container!="POD"})
+
+# CPU cores per pod (compare with the pod's limit)
+sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="pfa",container!="",container!="POD"}[5m]))
+
+# containers restarted in the last hour
+sum by (pod) (changes(container_start_time_seconds{namespace="pfa",container!=""}[1h]))
+
+# network per pod
+sum by (pod) (rate(container_network_receive_bytes_total{namespace="pfa"}[5m]))
+
+# request rate and error ratio for the gateway
+sum(rate(http_server_requests_seconds_count{job="api-gateway"}[5m]))
+sum(rate(http_server_requests_seconds_count{job="api-gateway",status=~"5.."}[5m]))
+```
+
+Rule of thumb: `container_memory_working_set_bytes` vs the pod's `limits.memory`
+in `k8s/apps/*.yaml` is what decides an `OOMKilled`. `kubectl -n pfa top pod`
+gives the same numbers as a point-in-time snapshot.
 
 ## OCR / GPU
 

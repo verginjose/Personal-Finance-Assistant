@@ -39,7 +39,7 @@ public class AuthController {
 
     @GetMapping("/health")
     public Mono<ResponseEntity<Map<String, String>>> health() {
-        return Mono.just(ResponseEntity.ok(Map.of("status", "UP", "service", "api-gateway-auth")));
+        return Mono.just(ResponseEntity.ok(Map.of("status", "UP", "service", "auth-service")));
     }
 
     // ── Authenticated endpoints ───────────────────────────────────────────────

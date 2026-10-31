@@ -1,7 +1,7 @@
-package com.apigateway.auth.service;
+package com.authservice.service;
 
-import com.apigateway.auth.dto.AuthDtos.UserSearchResult;
-import com.apigateway.auth.repository.UserRepository;
+import com.authservice.dto.AuthDtos.UserSearchResult;
+import com.authservice.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

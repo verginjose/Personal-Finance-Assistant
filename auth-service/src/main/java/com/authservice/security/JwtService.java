@@ -1,6 +1,6 @@
-package com.apigateway.security;
+package com.authservice.security;
 
-import com.apigateway.auth.model.User;
+import com.authservice.model.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;

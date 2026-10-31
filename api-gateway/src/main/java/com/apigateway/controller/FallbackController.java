@@ -30,6 +30,16 @@ public class FallbackController {
                 )));
     }
 
+    @org.springframework.web.bind.annotation.RequestMapping("/fallback/auth")
+    public Mono<ResponseEntity<Map<String, String>>> authFallback() {
+        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of(
+                        "error", "Service Unavailable",
+                        "message", "Authentication service is temporarily unavailable. Try again shortly.",
+                        "service", "auth-service"
+                )));
+    }
+
     @org.springframework.web.bind.annotation.RequestMapping("/fallback/bill")
     public Mono<ResponseEntity<Map<String, String>>> billFallback() {
         return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)

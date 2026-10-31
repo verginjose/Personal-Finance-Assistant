@@ -41,14 +41,12 @@ public class JwtReactiveAuthenticationManager
     public Mono<Authentication> authenticate(
             Authentication authentication) {
 
-        log.info("Authenticating token: {}", authentication);
-
         String token = authentication.getCredentials().toString();
 
         return redisTemplate.hasKey("token_blacklist:" + token)
                 .flatMap(isBlacklisted -> {
                     if (isBlacklisted) {
-                        log.warn("Rejected blacklisted token: {}", token);
+                        log.warn("Rejected a blacklisted access token");
                         return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Token is blacklisted"));
                     }
                     try {

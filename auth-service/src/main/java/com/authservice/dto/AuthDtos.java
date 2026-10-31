@@ -1,6 +1,6 @@
-package com.apigateway.auth.dto;
+package com.authservice.dto;
 
-import com.apigateway.auth.model.Role;
+import com.authservice.model.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

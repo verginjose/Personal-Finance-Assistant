@@ -262,6 +262,8 @@ services:
         condition: service_healthy
       query-service:
         condition: service_started
+      auth-service:
+        condition: service_started
     restart: on-failure
     deploy:
       resources:
@@ -276,11 +278,6 @@ services:
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
 
-      # Auth Database
-      SPRING_R2DBC_URL: r2dbc:postgresql://postgres-primary:5432/${DB_NAME}?schema=${AUTH_DB_SCHEMA}
-      SPRING_R2DBC_USERNAME: ${DB_USER}
-      SPRING_R2DBC_PASSWORD: ${DB_PASSWORD}
-
       # MinIO Configuration
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: admin
@@ -289,6 +286,35 @@ services:
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
     ports:
       - "127.0.0.1:${API_GATEWAY_PORT}:8080"
+    networks:
+      - finance-network
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres-primary:
+        condition: service_healthy
+    restart: on-failure
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SPRING_R2DBC_URL: r2dbc:postgresql://postgres-primary:5432/${DB_NAME}?schema=${AUTH_DB_SCHEMA}
+      SPRING_R2DBC_USERNAME: ${DB_USER}
+      SPRING_R2DBC_PASSWORD: ${DB_PASSWORD}
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
     networks:
       - finance-network
 

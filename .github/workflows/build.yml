@@ -18,7 +18,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, api-gateway, command-service, query-service, frontend, ocr-service]
+        options: [all, auth-service, api-gateway, command-service, query-service, frontend, ocr-service]
 
 # The job pushes the tag bump back to the same repo.
 permissions:
@@ -34,7 +34,7 @@ env:
   REGISTRY: 192.168.0.7:30500
   BUILDKIT_HOST: tcp://buildkitd.pfa.svc.cluster.local:1234
   BUILDKIT_VERSION: v0.15.2
-  ALL_SERVICES: api-gateway command-service query-service frontend ocr-service
+  ALL_SERVICES: auth-service api-gateway command-service query-service frontend ocr-service
 
 jobs:
   detect:

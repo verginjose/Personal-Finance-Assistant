@@ -1,50 +1,64 @@
-package com.apigateway.auth.service;
+package com.authservice.service;
 
-import com.apigateway.auth.dto.AuthDtos.*;
-import com.apigateway.auth.model.User;
-import com.apigateway.auth.repository.UserRepository;
+import com.authservice.dto.AuthDtos.*;
+import com.authservice.model.User;
+import com.authservice.repository.UserRepository;
+import com.authservice.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-
-import com.apigateway.security.JwtService;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.UUID;
+import java.util.concurrent.Callable;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final UserRepository        userRepository;
-    private final PasswordEncoder       passwordEncoder;
-    private final JwtService            jwtService;
-    private final TokenRedisService     tokenRedisService;
-
+    private final UserRepository    userRepository;
+    private final PasswordEncoder   passwordEncoder;
+    private final JwtService        jwtService;
+    private final TokenRedisService tokenRedisService;
 
     @Value("${jwt.refresh-expiration-ms:604800000}")
     private long refreshExpirationMs;
 
+    /**
+     * BCrypt costs ~50-150 ms of CPU. Running it on the Netty event loop would
+     * block every other request assigned to that loop, so every hashing call
+     * goes through here instead.
+     */
+    private static <T> Mono<T> offload(Callable<T> work) {
+        return Mono.fromCallable(work).subscribeOn(Schedulers.boundedElastic());
+    }
+
     @Transactional(readOnly = true)
     public Mono<LoginResponse> login(LoginRequest request) {
         return userRepository.findByEmail(request.email())
-                .switchIfEmpty(Mono.error(new org.springframework.security.authentication.BadCredentialsException("Bad credentials")))
-                .flatMap(user -> {
-                    if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-                        return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Bad credentials"));
-                    }
-                    String token = jwtService.generateToken(user);
-                    String refreshToken = UUID.randomUUID().toString();
-                    return tokenRedisService.saveRefreshTokenReactive(refreshToken, user.getEmail(), user.getId().toString(), user.getRole().name(), refreshExpirationMs)
-                            .then(Mono.fromCallable(() -> {
-                                log.info("User logged in: {} [{}]", user.getEmail(), user.getRole());
-                                return new LoginResponse(token, refreshToken, user.getId().toString(), user.getEmail(), user.getActualUsername(), user.getRole().name());
-                            }));
-                });
+                .switchIfEmpty(Mono.error(new BadCredentialsException("Bad credentials")))
+                .flatMap(user -> offload(() -> passwordEncoder.matches(request.password(), user.getPassword()))
+                        .flatMap(matches -> {
+                            if (!matches) {
+                                return Mono.error(new BadCredentialsException("Bad credentials"));
+                            }
+                            String token = jwtService.generateToken(user);
+                            String refreshToken = UUID.randomUUID().toString();
+                            return tokenRedisService.saveRefreshTokenReactive(
+                                            refreshToken, user.getEmail(), user.getId().toString(),
+                                            user.getRole().name(), refreshExpirationMs)
+                                    .then(Mono.fromCallable(() -> {
+                                        log.info("User logged in: {} [{}]", user.getEmail(), user.getRole());
+                                        return new LoginResponse(token, refreshToken, user.getId().toString(),
+                                                user.getEmail(), user.getActualUsername(), user.getRole().name());
+                                    }).subscribeOn(Schedulers.boundedElastic()));
+                        }));
     }
 
     @Transactional
@@ -55,17 +69,17 @@ public class AuthService {
                     return userRepository.existsByUsername(request.username())
                             .flatMap(existsUser -> {
                                 if (existsUser) return Mono.error(new UsernameAlreadyExistsException(request.username()));
-                                
-                                User user = User.builder()
-                                        .email(request.email())
-                                        .username(request.username())
-                                        .password(passwordEncoder.encode(request.password()))
-                                        .role(request.role())
-                                        .build();
-                                return userRepository.save(user)
+                                return offload(() -> passwordEncoder.encode(request.password()))
+                                        .flatMap(hash -> userRepository.save(User.builder()
+                                                .email(request.email())
+                                                .username(request.username())
+                                                .password(hash)
+                                                .role(request.role())
+                                                .build()))
                                         .map(saved -> {
                                             log.info("Registered: {} (@{})", saved.getEmail(), saved.getActualUsername());
-                                            return new RegisterResponse(saved.getId().toString(), saved.getEmail(), saved.getActualUsername(), saved.getRole().name());
+                                            return new RegisterResponse(saved.getId().toString(), saved.getEmail(),
+                                                    saved.getActualUsername(), saved.getRole().name());
                                         });
                             });
                 });
@@ -78,7 +92,7 @@ public class AuthService {
                     String[] parts = value.split("\\|");
                     if (parts.length < 3) return Mono.error(new InvalidRefreshTokenException("Malformed refresh token session"));
                     String userId = parts[0], email = parts[1], role = parts[2];
-                    
+
                     return tokenRedisService.deleteRefreshTokenReactive(request.refreshToken(), email)
                             .then(Mono.defer(() -> {
                                 String newAccessToken = jwtService.generateToken(email, userId, role);
@@ -118,13 +132,17 @@ public class AuthService {
     public Mono<Void> changePassword(String email, ChangePasswordRequest request) {
         return userRepository.findByEmail(email)
                 .switchIfEmpty(Mono.error(new RuntimeException("User not found")))
-                .flatMap(user -> {
-                    if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
-                        return Mono.error(new InvalidCurrentPasswordException("Current password does not match"));
-                    }
-                    user.setPassword(passwordEncoder.encode(request.newPassword()));
-                    return userRepository.save(user);
-                })
+                .flatMap(user -> offload(() -> passwordEncoder.matches(request.currentPassword(), user.getPassword()))
+                        .flatMap(matches -> {
+                            if (!matches) {
+                                return Mono.error(new InvalidCurrentPasswordException("Current password does not match"));
+                            }
+                            return offload(() -> passwordEncoder.encode(request.newPassword()))
+                                    .flatMap(hash -> {
+                                        user.setPassword(hash);
+                                        return userRepository.save(user);
+                                    });
+                        }))
                 .flatMap(user -> tokenRedisService.revokeAllUserTokensReactive(email))
                 .doOnSuccess(v -> log.info("Password changed for user: {}", email));
     }

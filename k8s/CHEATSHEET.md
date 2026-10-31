@@ -56,7 +56,7 @@ kubectl -n pfa run curl --rm -it --image=curlimages/curl --restart=Never -- \
 
 The names match docker-compose on purpose: `postgres-primary`, `postgres-replica`,
 `redis`, `rabbitmq`, `minio`, `clickhouse`, `prometheus`, `grafana`, `vector`,
-`api-gateway`, `command-service`, `query-service`, `ocr-service`, `frontend`.
+`auth-service`, `api-gateway`, `command-service`, `query-service`, `ocr-service`, `frontend`.
 
 ### 4. Ingress and the public tunnel
 

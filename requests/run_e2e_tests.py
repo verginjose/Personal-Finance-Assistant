@@ -8,7 +8,9 @@ import time
 import os
 import sys
 
-GATEWAY_URL = "http://localhost:8080"
+# Override with GATEWAY_URL, e.g. GATEWAY_URL=https://verginjose.cloud
+# Do NOT point this at a port that another port-forward already owns.
+GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:8080").rstrip("/")
 
 # Colors for terminal formatting
 GREEN = "\033[92m"
@@ -78,25 +80,31 @@ def make_request(url_path, method="GET", headers=None, body=None, files=None):
 
     req = urllib.request.Request(url, data=data, headers=req_headers, method=method)
     
+    def normalize(parsed):
+        # Callers chain body.get(...): never hand them a bare str.
+        return parsed if isinstance(parsed, (dict, list)) else {"raw": parsed}
+
     try:
         with urllib.request.urlopen(req) as resp:
             resp_body = resp.read().decode("utf-8")
             resp_headers = dict(resp.headers)
             try:
-                parsed_body = json.loads(resp_body)
+                parsed_body = normalize(json.loads(resp_body))
             except Exception:
-                parsed_body = resp_body
+                parsed_body = {"raw": resp_body}
             return resp.status, parsed_body, resp_headers
     except urllib.error.HTTPError as e:
         err_body = e.read().decode("utf-8")
         try:
-            parsed_err = json.loads(err_body)
+            parsed_err = normalize(json.loads(err_body))
         except Exception:
-            parsed_err = err_body
+            parsed_err = {"raw": err_body}
         return e.code, parsed_err, dict(e.headers)
     except Exception as e:
         print(f"    Connection failed: {e}")
-        return 500, str(e), {}
+        # Return an empty dict, not the error string: callers chain
+        # body.get(...) and a str would crash the whole suite.
+        return 500, {"error": str(e)}, {}
 
 def run_all_tests():
     global tests_passed, tests_failed
@@ -118,15 +126,18 @@ def run_all_tests():
     assert_status(200, status, "GET /auth/health status")
     assert_true("auth-service" in str(body), "Health check service confirmation")
 
-    # 2. Register
-    reg_payload = {"email": email, "password": password, "role": "USER"}
+    # 2. Register (username is required by RegisterRequest and must match
+    #    ^[a-zA-Z0-9_@.-]+$ and be 3-50 chars)
+    username = email.split("@")[0]
+    reg_payload = {"email": email, "username": username, "password": password, "role": "USER"}
     status, body, _ = make_request("/auth/register", "POST", body=reg_payload)
     assert_status(201, status, "POST /auth/register status")
     assert_status(email, body.get("email"), "Registration email check")
     # IMPORTANT: Extract the real user ID assigned by the DB.
     # The gateway overwrites X-User-Id from the JWT's "userId" claim,
-    # so all request bodies must use this real ID.
-    user_uuid = body.get("id", user_uuid)
+    # so all request bodies must use this real ID. RegisterResponse calls it
+    # userId; login returns it as userId too.
+    user_uuid = body.get("userId", user_uuid)
 
     # 3. Login (Success)
     login_payload = {"email": email, "password": password}
@@ -277,7 +288,7 @@ def run_all_tests():
         "amount": 10000.00,
         "type": "EXPENSE",
         "currency": "INR",
-        "expenseCategory": "FOOD_AND_DINING",
+        "expenseCategory": "RESTAURANTS",
         "description": "Dinner at restaurant",
         "date": "2026-06-02"
     }
@@ -324,10 +335,12 @@ def run_all_tests():
     status, body, _ = make_request(f"/upsert/goals?userId={user_uuid}", "GET", headers=auth_headers)
     assert_status(200, status, "GET /goals status")
 
-    # 3. Contribute to goal
+    # 3. Contribute to goal — the amount travels in a JSON body
+    #    (GoalContributionRequest), not as a query parameter.
     status, body, _ = make_request(
-        f"/upsert/goals/{goal_id}/contribute?userId={user_uuid}&amount=5000.00",
-        "PATCH", headers=auth_headers
+        f"/upsert/goals/{goal_id}/contribute?userId={user_uuid}",
+        "PATCH", headers=auth_headers,
+        body={"amount": 5000.00, "description": "Monthly top-up"}
     )
     assert_status(200, status, "PATCH /goals/{id}/contribute status")
     # SavingsGoalResponse uses 'savedAmount' (not 'currentAmount')
@@ -337,7 +350,7 @@ def run_all_tests():
     # CategoryBudgetRequest DTO fields: userId, expenseCategory, budgetAmount, period, currency
     budget_payload = {
         "userId": user_uuid,
-        "expenseCategory": "FOOD_AND_DINING",
+        "expenseCategory": "RESTAURANTS",
         "budgetAmount": 15000.00,
         "period": "MONTHLY",
         "currency": "INR"
@@ -384,9 +397,18 @@ def run_all_tests():
     status, body, _ = make_request(f"/upsert/groups?userId={user_uuid}", "GET", headers=auth_headers)
     assert_status(200, status, "GET /upsert/groups status")
 
-    # 3. Add members
-    alice_id = str(uuid.uuid4())
-    member2_payload = {"userId": alice_id, "name": "Alice"}
+    # 3. Add members — the service rejects unknown users, so register Alice
+    #    for real instead of inventing a UUID.
+    alice_email = f"e2e_alice_{uuid.uuid4().hex[:8]}@example.com"
+    status, alice_body, _ = make_request("/auth/register", "POST", body={
+        "email": alice_email,
+        "username": alice_email.split("@")[0],
+        "password": password,
+        "role": "USER",
+    })
+    assert_status(201, status, "Register member 2 (Alice)")
+    alice_id = alice_body.get("userId")
+    member2_payload = {"userId": alice_id, "name": alice_email.split("@")[0]}
     status, m2_body, _ = make_request(f"/upsert/groups/{group_id}/members", "POST", headers=auth_headers, body=member2_payload)
     assert_status(201, status, "Add member 2 (Alice)")
 
@@ -425,7 +447,7 @@ def run_all_tests():
         "type": "EXPENSE",
         "currency": "INR",
         "name": "Amazon Prime",
-        "expenseCategory": "BILLS_AND_UTILITIES",
+        "expenseCategory": "OTT_SUBSCRIPTIONS",
         "description": "Amazon Prime monthly fee",
         "recurring": True,
         "recurringPeriod": "MONTHLY"
@@ -530,23 +552,15 @@ def run_all_tests():
             headers={"Authorization": f"Bearer {token}"},
             files={"file": sample_img}
         )
-        assert_status(200, status, "POST /bill/process/{userId} status")
-        assert_true(ocr_body.get("amount") is not None, "OCR response contains parsed amount")
-        print(f"    Extracted: Vendor='{ocr_body.get('vendorName')}', Amount={ocr_body.get('amount')}, Category='{ocr_body.get('category')}'")
-
-        # The OCR parser does NOT auto-save. The frontend shows it to the user who then saves it.
-        # Simulate the frontend saving the parsed transaction to the database
-        ocr_save_payload = {
-            "userId": user_uuid,
-            "amount": ocr_body.get("amount"),
-            "type": str(ocr_body.get("type", "EXPENSE")).upper(),
-            "currency": ocr_body.get("currency", "USD"),
-            "name": ocr_body.get("name", "Extracted Bill"),
-            "expenseCategory": ocr_body.get("expenseCategory", "BILLS_AND_UTILITIES"),
-            "description": "Auto-saved from OCR"
-        }
-        status, db_body, _ = make_request("/upsert/create", "POST", headers=auth_headers, body=ocr_save_payload)
-        assert_status(201, status, "Simulate frontend saving OCR transaction to database")
+        # The gateway now streams the file up and publishes an "ocr-jobs"
+        # message: it answers 202 Accepted with the receipt id + object URL.
+        # The parsed result arrives later over SSE
+        # (/api/upsert/notifications/{userId}), so there is nothing to parse
+        # out of this response.
+        assert_status(202, status, "POST /bill/process/{userId} accepted (async OCR)")
+        assert_true(ocr_body.get("receiptId") is not None, "OCR job returns a receipt id")
+        assert_true(ocr_body.get("url") is not None, "OCR job returns the stored object URL")
+        print(f"    Receipt id={ocr_body.get('receiptId')} url={str(ocr_body.get('url'))[:60]}")
 
     # =========================================================================
     # FINAL CLEANUP & SUMMARY

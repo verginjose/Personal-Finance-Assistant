@@ -128,6 +128,12 @@ then runs on CPU, significantly slower.
 
 ## 3. Build and import images
 
+> **Automated path (recommended):** `k8s/ci/` runs a self-hosted GitHub Actions
+> runner inside the cluster that builds changed services, pushes them to an
+> in-cluster registry, and updates the Deployment tag. See
+> [`ci/README.md`](ci/README.md). The manual flow below remains the offline
+> fallback.
+
 k3s does not use Docker's image store, so `build-images.sh` builds with Docker
 and imports the tarballs into containerd.
 

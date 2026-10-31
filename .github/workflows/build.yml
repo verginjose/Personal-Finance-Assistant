@@ -1,0 +1,152 @@
+# Build changed services on the in-cluster self-hosted runner, push them to the
+# in-cluster registry, and point the Deployment at the new immutable tag.
+#
+# Replaces the manual `./k8s/build-images.sh` + `docker save | k3s ctr images
+# import` flow. See k8s/ci/README.md for the one-time setup.
+name: build-and-deploy
+
+on:
+  push:
+    branches: ["master", "k8s/local-deployment"]
+    paths-ignore:
+      - "**.md"
+      - "k8s/ci/**"
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service to build, or 'all' to backfill every image"
+        required: true
+        default: all
+        type: choice
+        options: [all, api-gateway, command-service, query-service, frontend, ocr-service]
+
+# The job pushes the tag bump back to the same repo.
+permissions:
+  contents: write
+
+# Never run two builds at once: a Maven build and an OCR build together will
+# exceed the node's memory, and the tag-bump commits would race.
+concurrency:
+  group: build-and-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: 192.168.0.7:30500
+  BUILDKIT_HOST: tcp://buildkitd.pfa.svc.cluster.local:1234
+  BUILDKIT_VERSION: v0.15.2
+  ALL_SERVICES: api-gateway command-service query-service frontend ocr-service
+
+jobs:
+  detect:
+    runs-on: [self-hosted, linux, x64, pfa]
+    outputs:
+      services: ${{ steps.changed.outputs.services }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Determine services to build
+        id: changed
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_SERVICE: ${{ inputs.service }}
+        run: |
+          set -euo pipefail
+          selected=""
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then
+            if [[ "$INPUT_SERVICE" == "all" ]]; then
+              selected="$ALL_SERVICES"
+            else
+              selected="$INPUT_SERVICE"
+            fi
+          else
+            changed_files="$(git diff --name-only HEAD^ HEAD)"
+            for svc in $ALL_SERVICES; do
+              if printf '%s\n' "$changed_files" | grep -q "^${svc}/"; then
+                selected="$selected $svc"
+              fi
+            done
+          fi
+          selected="$(echo $selected)"   # trim leading space
+          json="[]"
+          if [[ -n "$selected" ]]; then
+            json="[$(printf '%s\n' $selected | sed 's/.*/"&"/' | paste -sd, -)]"
+          fi
+          echo "services=$json" >> "$GITHUB_OUTPUT"
+          echo "Selected: $json"
+
+  build:
+    needs: detect
+    if: needs.detect.outputs.services != '[]'
+    runs-on: [self-hosted, linux, x64, pfa]
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        service: ${{ fromJSON(needs.detect.outputs.services) }}
+    env:
+      SERVICE: ${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the tag-bump commit is pushed from this checkout
+
+      - name: Install buildctl and kubectl if missing
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          if ! command -v buildctl >/dev/null 2>&1; then
+            curl -fsSL "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz" \
+              | tar -xz -C "$HOME/.local/bin" --strip-components=1 bin/buildctl
+          fi
+          if ! command -v kubectl >/dev/null 2>&1; then
+            curl -fsSL "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+              -o "$HOME/.local/bin/kubectl"
+            chmod +x "$HOME/.local/bin/kubectl"
+          fi
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build and push
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_SHA::12}"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "Building ${REGISTRY}/finance/${SERVICE}:${TAG} from ./${SERVICE}"
+          buildctl build \
+            --progress plain \
+            --frontend dockerfile.v0 \
+            --local context="./${SERVICE}" \
+            --local dockerfile="./${SERVICE}" \
+            --opt filename=Dockerfile \
+            --output "type=image,name=${REGISTRY}/finance/${SERVICE}:${TAG},push=true"
+
+      - name: Bump image tag in the manifest
+        run: |
+          set -euo pipefail
+          file="k8s/apps/${SERVICE}.yaml"
+          sed -i -E "s#(image: ).*finance/${SERVICE}:.*#\1${REGISTRY}/finance/${SERVICE}:${TAG}#" "$file"
+          if git diff --quiet -- "$file"; then
+            echo "Manifest already points at ${TAG}; nothing to commit."
+            exit 0
+          fi
+          git config user.name "pfa-ci"
+          git config user.email "ci@verginjose.local"
+          git add "$file"
+          git commit -m "ci: ${SERVICE} -> ${TAG} [skip ci]"
+          git push
+
+      # Interim: replaced by Argo CD in phase 3. Delete this step (and the
+      # ci-deployer Role/RoleBinding in k8s/ci/runner.yaml) once Argo syncs.
+      - name: Deploy to the cluster
+        run: |
+          set -euo pipefail
+          SA=/var/run/secrets/kubernetes.io/serviceaccount
+          kubectl config set-cluster in-cluster \
+            --server=https://kubernetes.default.svc \
+            --certificate-authority="$SA/ca.crt" --embed-certs=true
+          kubectl config set-credentials ci --token="$(cat "$SA/token")"
+          kubectl config set-context ci --cluster=in-cluster --user=ci
+          kubectl config use-context ci
+          kubectl apply -f "k8s/apps/${SERVICE}.yaml"
+          kubectl -n pfa rollout status "deploy/${SERVICE}" --timeout=900s

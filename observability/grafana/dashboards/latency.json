@@ -1,75 +1,292 @@
 {
-  "uid": "api-latency-dashboard",
-  "title": "API Latency",
-  "tags": ["latency", "performance"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 1,
   "refresh": "15s",
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "15s",
+      "30s",
+      "1m",
+      "5m"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "3h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d"
+    ]
+  },
+  "uid": "api-latency-dashboard",
+  "title": "API Latency",
+  "tags": [
+    "finance-assistant"
+  ],
   "templating": {
     "list": [
       {
-        "name": "application",
+        "name": "service",
+        "label": "Service",
         "type": "query",
-        "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
-        "query": "label_values(http_server_requests_seconds_count, application)",
-        "refresh": 1,
-        "multi": true,
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus-ds"
+        },
+        "query": {
+          "query": "label_values(http_server_requests_seconds_count, job)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 2,
         "includeAll": true,
+        "multi": true,
         "allValue": ".*",
-        "current": { "text": "All", "value": ["$__all"] }
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
       }
     ]
   },
   "panels": [
     {
       "id": 1,
-      "title": "API Latency — $application",
+      "title": "p95 latency by service",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "prometheus-ds" },
-      "repeat": "application",
-      "repeatDirection": "h",
-      "maxPerRow": 2,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application=~\"^$application$\"}[5m])) by (le))",
-          "legendFormat": "Max (p99)",
-          "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application=~\"^$application$\"}[5m])) by (le))",
-          "legendFormat": "p95 Latency",
-          "refId": "B"
-        },
-        {
-          "expr": "sum(rate(http_server_requests_seconds_sum{application=~\"^$application$\"}[5m])) / sum(rate(http_server_requests_seconds_count{application=~\"^$application$\"}[5m]))",
-          "legendFormat": "Average Latency",
-          "refId": "C"
-        },
-        {
-          "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{application=~\"^$application$\"}[5m])) by (le))",
-          "legendFormat": "Min (p50)",
-          "refId": "D"
+          "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"$service\"}[5m]))) * 1000",
+          "refId": "A",
+          "legendFormat": "{{job}}",
+          "instant": false,
+          "range": true
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "lineWidth": 2, "fillOpacity": 10 },
-          "unit": "s",
-          "min": 0
+          "unit": "ms",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          }
         }
       },
       "options": {
-        "tooltip": { "mode": "multi" },
-        "legend": { 
-          "displayMode": "table", 
-          "placement": "bottom", 
-          "calcs": ["min", "max", "mean"] 
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
       },
-      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 0 }
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "description": "95th percentile response time."
+    },
+    {
+      "id": 2,
+      "title": "p99 latency by service",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"$service\"}[5m]))) * 1000",
+          "refId": "A",
+          "legendFormat": "{{job}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "description": "99th percentile response time \u2014 the worst 1% of requests."
+    },
+    {
+      "id": 3,
+      "title": "Average latency by service",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "targets": [
+        {
+          "expr": "sum by (job) (rate(http_server_requests_seconds_sum{job=~\"$service\"}[5m])) / sum by (job) (rate(http_server_requests_seconds_count{job=~\"$service\"}[5m])) * 1000",
+          "refId": "A",
+          "legendFormat": "{{job}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      }
+    },
+    {
+      "id": 4,
+      "title": "Requests per second by service",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "targets": [
+        {
+          "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"$service\"}[5m]))",
+          "refId": "A",
+          "legendFormat": "{{job}}",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      }
     }
   ]
 }

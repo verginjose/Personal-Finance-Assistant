@@ -21,8 +21,8 @@ log = logging.getLogger(__name__)
 
 # ── Config from env ──────────────────────────────────────────────────────────
 GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL     = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-GROQ_URL       = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL     = os.getenv("GROQ_MODEL", "llama3-8b-8192")
+GROQ_URL       = os.getenv("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
 UPSERT_URL     = os.getenv("UPSERT_SERVICE_URL", "http://command-service:8081")
 CURRENCY_URL   = "https://api.frankfurter.dev/v1/latest?from=USD"
 

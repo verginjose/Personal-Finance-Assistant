@@ -17,6 +17,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -26,14 +27,16 @@ import java.util.*;
 @RequiredArgsConstructor
 public class AiInsightsService {
 
-    private static final String GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Value("${groq.api.key:}")
     private String groqApiKey;
 
-    @Value("${groq.model:llama-3.1-8b-instant}")
+    @Value("${groq.model:llama3-8b-8192}")
     private String groqModel;
+
+    @Value("${groq.url:https://api.groq.com/openai/v1/chat/completions}")
+    private String groqUrl;
 
     private final TransactionEntryRepository repository;
     private final GoalForecastingService goalForecastingService;
@@ -134,7 +137,7 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
 
         String bodyJson = MAPPER.writeValueAsString(body);
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(GROQ_URL))
+                .uri(URI.create(groqUrl))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + groqApiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(bodyJson))

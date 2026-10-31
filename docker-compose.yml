@@ -200,6 +200,8 @@ services:
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL}
+      GROQ_URL: ${GROQ_URL}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
     ports:
       - "127.0.0.1:${ANALYTICS_SERVICE_PORT}:8084"
@@ -227,6 +229,8 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL}
+      GROQ_URL: ${GROQ_URL}
       UPSERT_SERVICE_URL: http://command-service:8081
       OCR_USE_ANGLE_CLS: "false"
       OCR_DET_LIMIT_SIDE_LEN: "736"

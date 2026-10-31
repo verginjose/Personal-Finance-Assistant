@@ -1,0 +1,139 @@
+# Rootless BuildKit daemon used by GitHub Actions to build images.
+#
+# Kept as its own Deployment (not a sidecar) so that:
+#   * the Maven/apt layer cache survives in a PVC between builds, and
+#   * the runner pod needs no privileged container and no docker socket.
+#
+# The daemon listens on plain TCP inside the cluster. That is unauthenticated:
+# anything in pfa can submit builds as this pod. Acceptable for a single-node
+# homelab; if you ever add untrusted workloads, put mTLS or a NetworkPolicy
+# allowing only the runner SA in front of it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildkitd-config
+  namespace: pfa
+data:
+  buildkitd.toml: |
+    # The in-cluster registry speaks HTTP, and its name (node IP:nodePort) is
+    # not one containerd/BuildKit treats as localhost.
+    [registry."192.168.0.7:30500"]
+      http = true
+      insecure = true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buildkit-cache
+  namespace: pfa
+  labels:
+    app: buildkitd
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 40Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildkitd
+  namespace: pfa
+  labels:
+    app: buildkitd
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: buildkitd
+  template:
+    metadata:
+      labels:
+        app: buildkitd
+        app.kubernetes.io/part-of: personal-finance-assistant
+    spec:
+      # local-path volumes are created root:root; the rootless daemon runs as
+      # uid 1000, so hand the cache directory over first.
+      initContainers:
+        - name: fix-perms
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - mkdir -p /home/user/.local/share/buildkit && chown -R 1000:1000 /home/user/.local/share/buildkit
+          volumeMounts:
+            - name: cache
+              mountPath: /home/user/.local/share/buildkit
+      containers:
+        - name: buildkitd
+          image: moby/buildkit:v0.15.2-rootless
+          imagePullPolicy: IfNotPresent
+          args:
+            - --addr=tcp://0.0.0.0:1234
+            - --config=/etc/buildkit/buildkitd.toml
+            - --oci-worker-no-process-sandbox
+            - --oci-worker-snapshotter=native
+          env:
+            - name: HOME
+              value: /home/user
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            # Required for rootless BuildKit on a SELinux (Enforcing) host,
+            # which is the default on Fedora.
+            seLinuxOptions:
+              type: spc_t
+            seccompProfile:
+              type: Unconfined
+          ports:
+            - name: tcp
+              containerPort: 1234
+          volumeMounts:
+            - name: config
+              mountPath: /etc/buildkit
+              readOnly: true
+            - name: cache
+              mountPath: /home/user/.local/share/buildkit
+          readinessProbe:
+            exec:
+              command: ["buildctl", "--addr", "tcp://127.0.0.1:1234", "debug", "workers"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 30
+          resources:
+            # A Maven build of one Spring service sits around 1.5-2.5 GiB.
+            # Capped so a build cannot take the whole node down with it.
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "6"
+              memory: 4Gi
+      volumes:
+        - name: config
+          configMap:
+            name: buildkitd-config
+        - name: cache
+          persistentVolumeClaim:
+            claimName: buildkit-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildkitd
+  namespace: pfa
+  labels:
+    app: buildkitd
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    app: buildkitd
+  ports:
+    - name: tcp
+      port: 1234
+      targetPort: 1234

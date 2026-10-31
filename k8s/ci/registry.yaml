@@ -1,0 +1,100 @@
+# In-cluster OCI registry.
+#
+# k3s containerd does not share the host Docker image store, so CI needs a
+# registry both the builder and the kubelet can reach. The Service is a
+# NodePort on purpose: containerd runs on the host, outside the pod network,
+# and cannot resolve ClusterIP/DNS names. The node IP + nodePort is what
+# /etc/rancher/k3s/registries.yaml points at (see k8s/ci/README.md).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: registry-data
+  namespace: pfa
+  labels:
+    app: registry
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  namespace: pfa
+  labels:
+    app: registry
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # RWO volume: never two pods at once
+  selector:
+    matchLabels:
+      app: registry
+  template:
+    metadata:
+      labels:
+        app: registry
+        app.kubernetes.io/part-of: personal-finance-assistant
+    spec:
+      containers:
+        - name: registry
+          image: registry:2.8.3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5000
+          env:
+            - name: REGISTRY_HTTP_ADDR
+              value: ":5000"
+            - name: REGISTRY_STORAGE_DELETE_ENABLED
+              value: "true"      # required by registry-gc.sh
+            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
+              value: /var/lib/registry
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/registry
+          readinessProbe:
+            httpGet:
+              path: /v2/
+              port: 5000
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v2/
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: registry-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  namespace: pfa
+  labels:
+    app: registry
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  type: NodePort
+  selector:
+    app: registry
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+      nodePort: 30500

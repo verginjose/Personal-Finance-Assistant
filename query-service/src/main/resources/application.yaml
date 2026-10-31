@@ -38,7 +38,8 @@ spring:
 groq:
   api:
     key: ${GROQ_API_KEY:}
-  model: llama-3.1-8b-instant
+  model: ${GROQ_MODEL:llama3-8b-8192}
+  url: ${GROQ_URL:https://api.groq.com/openai/v1/chat/completions}
 
 # ── Actuator & Metrics ────────────────────────────────────────────────────────
 management:

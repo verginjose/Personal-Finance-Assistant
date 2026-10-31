@@ -266,7 +266,9 @@ kubectl -n pfa get pods         # 19 workloads
 ```
 
 Pods come back in place on the next start because all state is on PVCs under
-`/var/lib/rancher/k3s/storage`.
+`/var/lib/rancher/k3s/storage`. To verify that before shutting the laptop down
+(baseline → stop → start → compare), follow
+[`START-STOP.md`](START-STOP.md).
 
 | What | How | URL |
 |---|---|---|

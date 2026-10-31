@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: command-service
+  namespace: pfa
+  labels:
+    app: command-service
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    app: command-service
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: command-service
+  namespace: pfa
+  labels:
+    app: command-service
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: command-service
+  template:
+    metadata:
+      labels:
+        app: command-service
+        app.kubernetes.io/part-of: personal-finance-assistant
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: command-service
+          image: finance/command-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8081
+          env:
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: DB_NAME }
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: DB_USER }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: DB_PASSWORD }
+            - name: FINANCE_DB_SCHEMA
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: FINANCE_DB_SCHEMA }
+
+            # Write side of CQRS: always hits the primary.
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres-primary:5432/$(DB_NAME)
+            - name: SPRING_DATASOURCE_USERNAME
+              value: $(DB_USER)
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: $(DB_PASSWORD)
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: update
+            - name: SPRING_JPA_DATABASE_PLATFORM
+              value: org.hibernate.dialect.PostgreSQLDialect
+            - name: SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA
+              value: $(FINANCE_DB_SCHEMA)
+            - name: SPRING_DATASOURCE_HIKARI_SCHEMA
+              value: $(FINANCE_DB_SCHEMA)
+
+            - name: REDIS_HOST
+              value: redis
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: REDIS_PASSWORD }
+
+            - name: RABBITMQ_HOST
+              value: rabbitmq
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: RABBITMQ_USER
+              value: guest
+            - name: RABBITMQ_PASSWORD
+              value: guest
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbitmq
+            - name: SPRING_RABBITMQ_USERNAME
+              value: guest
+            - name: SPRING_RABBITMQ_PASSWORD
+              value: guest
+
+            - name: ANALYTICS_SERVICE_URL
+              value: http://query-service:8084
+
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8081
+            periodSeconds: 5
+            failureThreshold: 40
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8081
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8081
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4

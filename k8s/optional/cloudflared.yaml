@@ -1,0 +1,43 @@
+# Optional: replaces the `cloudflared` service from docker-compose.
+#
+# Only apply this after you have created a Cloudflare Tunnel whose public
+# hostname routes to http://frontend.pfa.svc.cluster.local:80 (or to the
+# Traefik ingress). The token comes from the CLOUDFLARE_TUNNEL_TOKEN key in the
+# pfa-secrets Secret.
+#
+#   kubectl apply -f k8s/optional/cloudflared.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: pfa
+  labels:
+    app: cloudflared
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+        app.kubernetes.io/part-of: personal-finance-assistant
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          imagePullPolicy: IfNotPresent
+          args: ["tunnel", "--no-autoupdate", "run"]
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: CLOUDFLARE_TUNNEL_TOKEN }
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

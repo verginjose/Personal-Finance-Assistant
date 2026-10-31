@@ -1,0 +1,245 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vector
+  namespace: pfa
+  labels:
+    app: vector
+    app.kubernetes.io/part-of: personal-finance-assistant
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pfa-vector-read-pods
+  labels:
+    app: vector
+    app.kubernetes.io/part-of: personal-finance-assistant
+rules:
+  - apiGroups: [""]
+    # nodes is needed for Vector's node metadata annotation; without it the
+    # kubernetes_logs source logs "Failed to annotate event with node metadata".
+    resources: ["pods", "namespaces", "nodes"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pfa-vector-read-pods
+  labels:
+    app: vector
+    app.kubernetes.io/part-of: personal-finance-assistant
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pfa-vector-read-pods
+subjects:
+  - kind: ServiceAccount
+    name: vector
+    namespace: pfa
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-config
+  namespace: pfa
+  labels:
+    app: vector
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  vector.yaml: |
+    api:
+      enabled: true
+      address: 0.0.0.0:8686
+
+    sources:
+      k8s_logs:
+        type: kubernetes_logs
+        # Only ingest pods carrying the project label (every pod in this overlay does).
+        # Vector's own pod is filtered out in the transform below.
+        extra_label_selector: "app.kubernetes.io/part-of=personal-finance-assistant"
+
+    transforms:
+      exclude_self:
+        type: filter
+        inputs: ["k8s_logs"]
+        condition: '.kubernetes.pod_labels.app != "vector"'
+
+      parse_logs:
+        type: remap
+        inputs: ["exclude_self"]
+        source: |
+          .service         = string(.kubernetes.pod_labels.app) ?? "unknown"
+          .compose_project = string(.kubernetes.pod_namespace) ?? "unknown"
+          .container       = string(.kubernetes.container_name) ?? "unknown"
+
+          parsed, err = parse_json(.message)
+          if err == null {
+             . = merge!(., parsed)
+             .level = string(.level) ?? "INFO"
+             .trace_id = string(.traceId) ?? ""
+             .span_id = string(.spanId) ?? ""
+             if exists(.stack_trace) {
+                .stack_trace = string(.stack_trace) ?? ""
+             }
+          } else {
+             parsed_lvl, err_lvl = parse_regex(.message, r'(?P<level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)')
+             .level = if err_lvl == null { parsed_lvl.level } else { "INFO" }
+             .trace_id = ""
+             .span_id = ""
+          }
+
+          .timestamp = format_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S%.3f")
+
+          del(.kubernetes)
+          del(.file)
+          del(.source_type)
+          del(.stream)
+
+      filter_noise:
+        type: filter
+        inputs: ["parse_logs"]
+        condition: |
+          !contains(string(.message) ?? "", "PathMatcherServerWebExchangeMatcher") &&
+          !contains(string(.message) ?? "", "actuator/prometheus") &&
+          !contains(string(.message) ?? "", "Checking match of request") &&
+          !contains(string(.message) ?? "", "Trying to match using") &&
+          !contains(string(.message) ?? "", "No matches found") &&
+          !contains(string(.message) ?? "", "Authorization successful")
+
+      mask_pii:
+        type: remap
+        inputs: ["filter_noise"]
+        source: |
+          msg = string(.message) ?? ""
+          msg = replace(msg, r'(?i)Bearer\s+[a-zA-Z0-9\-\._~+/]+=*', "Bearer [REDACTED]")
+          msg = replace(msg, r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', "[EMAIL_REDACTED]")
+          msg = replace(msg, r'(?i)"password"\s*:\s*"[^"]+"', "\"password\":\"[REDACTED]\"")
+          .message = msg
+
+      filter_errors:
+        type: filter
+        inputs: ["filter_noise"]
+        condition: '.level == "ERROR"'
+
+      error_metrics:
+        type: log_to_metric
+        inputs: ["filter_errors"]
+        metrics:
+          - type: counter
+            field: level
+            name: log_errors_total
+            namespace: pfa
+            tags:
+              service: "{{service}}"
+
+    sinks:
+      clickhouse_logs:
+        type: clickhouse
+        inputs: ["mask_pii"]
+        endpoint: "http://clickhouse:8123"
+        database: "default"
+        table: "logs"
+        skip_unknown_fields: true
+        auth:
+          strategy: basic
+          user: default
+          password: "${CLICKHOUSE_PASSWORD}"
+        batch:
+          max_bytes: 1048576
+          timeout_secs: 5
+        compression: gzip
+
+      prometheus_exporter:
+        type: prometheus_exporter
+        inputs: ["error_metrics"]
+        address: "0.0.0.0:9090"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector
+  namespace: pfa
+  labels:
+    app: vector
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    app: vector
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+    - name: api
+      port: 8686
+      targetPort: 8686
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vector
+  namespace: pfa
+  labels:
+    app: vector
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    matchLabels:
+      app: vector
+  template:
+    metadata:
+      labels:
+        app: vector
+        app.kubernetes.io/part-of: personal-finance-assistant
+    spec:
+      serviceAccountName: vector
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: vector
+          image: timberio/vector:0.41.1-debian
+          imagePullPolicy: IfNotPresent
+          args: ["--config", "/etc/vector/vector.yaml"]
+          env:
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: CLICKHOUSE_PASSWORD }
+            # Vector runs as root so it can read the kubelet log files.
+            - name: VECTOR_SELF_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vector/vector.yaml
+              subPath: vector.yaml
+            - name: var-log-pods
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: var-log-containers
+              mountPath: /var/log/containers
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/vector
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: vector-config
+        - name: var-log-pods
+          hostPath:
+            path: /var/log/pods
+            type: Directory
+        - name: var-log-containers
+          hostPath:
+            path: /var/log/containers
+            type: Directory
+        - name: data
+          emptyDir: {}

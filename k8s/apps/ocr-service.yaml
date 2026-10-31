@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ocr-service
+  namespace: pfa
+  labels:
+    app: ocr-service
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    app: ocr-service
+  ports:
+    - name: http
+      port: 8100
+      targetPort: 8100
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: paddle-model-cache
+  namespace: pfa
+  labels:
+    app: ocr-service
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ocr-service
+  namespace: pfa
+  labels:
+    app: ocr-service
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  replicas: 1
+  # ReadWriteOnce volume + a heavyweight GPU process: never run two at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ocr-service
+  template:
+    metadata:
+      labels:
+        app: ocr-service
+        app.kubernetes.io/part-of: personal-finance-assistant
+    spec:
+      terminationGracePeriodSeconds: 60
+      # Remove the GPU request below (and set FLAGS_fraction_of_gpu_memory_to_use=0)
+      # if you run this on a cluster/node without an NVIDIA GPU.
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: ocr-service
+          image: finance/ocr-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8100
+          env:
+            - name: FLAGS_fraction_of_gpu_memory_to_use
+              value: "0.65"
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: compute,utility
+
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: GROQ_API_KEY }
+            - name: GROQ_MODEL
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: GROQ_MODEL }
+            - name: GROQ_URL
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: GROQ_URL }
+
+            - name: UPSERT_SERVICE_URL
+              value: http://command-service:8081
+            - name: RABBITMQ_URL
+              value: amqp://guest:guest@rabbitmq:5672/
+            - name: OCR_USE_ANGLE_CLS
+              value: "false"
+            - name: OCR_DET_LIMIT_SIDE_LEN
+              value: "736"
+
+            - name: MINIO_ENDPOINT
+              value: minio:9000
+            - name: MINIO_ACCESS_KEY
+              value: admin
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: pfa-secrets, key: MINIO_ROOT_PASSWORD }
+            - name: MINIO_SECURE
+              value: "false"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "4"
+              memory: 6Gi
+              nvidia.com/gpu: 1
+          # PaddleOCR loads models on first start; give it plenty of runway.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8100
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8100
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8100
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          volumeMounts:
+            - name: paddle-cache
+              mountPath: /root/.paddleocr
+      volumes:
+        - name: paddle-cache
+          persistentVolumeClaim:
+            claimName: paddle-model-cache

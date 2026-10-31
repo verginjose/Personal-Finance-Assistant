@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: finance-app
+  namespace: pfa
+  labels:
+    app: frontend
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  # Uses the cluster's default IngressClass: Traefik on k3s, nginx if you
+  # installed an ingress controller on kind. kind ships with no controller, so
+  # this object is inert there until one is installed.
+  rules:
+    - host: finance.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

@@ -10,12 +10,22 @@ k8s/
 ├── secrets.example.yaml       # template; apply.sh builds the real Secret from .env
 ├── ingress.yaml               # finance.local -> frontend
 ├── apply.sh                   # renders configmaps/secrets and deploys in order
-├── build-images.sh            # builds images and imports them into k3s/kind
-├── pipeline.sh                # local CI/CD: build -> push -> render -> deploy -> verify
+├── build-images.sh            # offline fallback: build images, import into k3s/kind
+├── pipeline.sh                # offline fallback: full build -> render -> deploy -> verify
 ├── setup-k3s-nvidia.sh        # one-time privileged k3s + GPU + firewalld setup
-├── cleanup.sh                 # tear down app / images / host config / cluster
+├── cleanup.sh                 # tear down CI / app / images / host config / cluster
 ├── RUNBOOK.md                 # deploy/access/debug/query cheat sheet
 ├── CHEATSHEET.md              # learn the commands, then clean up step by step
+├── ci/                        # CI/CD: in-cluster registry, BuildKit, runner, Argo CD
+│   ├── README.md              # setup and operations
+│   ├── registry.yaml          # registry:2 + NodePort 30500 + 50 Gi PVC
+│   ├── buildkit.yaml          # rootless BuildKit + 40 Gi cache PVC
+│   ├── runner.yaml            # self-hosted GitHub Actions runner
+│   ├── apply.sh               # deploy the CI stack
+│   ├── setup-registry.sh      # (root) containerd insecure-registry config
+│   ├── registry-gc.sh         # tag retention + garbage collection
+│   ├── debug.sh               # one-shot health report
+│   └── argocd/                # install Argo CD + the pfa-apps Application
 ├── infrastructure/            # stateful deps + observability
 │   ├── postgres-primary.yaml
 │   ├── postgres-replica.yaml
@@ -37,6 +47,107 @@ k8s/
     └── cloudflared.yaml
 ```
 
+## How delivery works (CI/CD architecture)
+
+Nothing on the laptop builds images for the cluster any more. A push to GitHub
+is the only input:
+
+```
+ your laptop                GitHub                    k3s node (this machine)
+ ───────────                ──────                    ───────────────────────
+ git push  ──────────────▶  build.yml  ──job──▶  ci-runner pod  (namespace pfa)
+ (master or branch)             │                   │ buildctl over TCP
+                                │                   ▼
+                                │            buildkitd pod ──build+push──▶ registry pod
+                                │                                         :30500
+                                │                   │                        │
+                                ▼                   │                        │
+                            git history  ◀── tag-bump commit ───────────────┘
+                                │                (image: ...:<sha>)
+                                ▼
+                        Argo CD (namespace argocd)
+                        polls k8s/apps on master ≤3 min
+                                │  applies the manifests
+                                ▼
+                        Deployments roll out the new pods
+```
+
+One push, step by step:
+
+1. **GitHub queues `build.yml`.** It triggers on pushes to `master` or
+   `k8s/local-deployment`, ignoring changes that only touch `**.md` or
+   `k8s/ci/**`.
+2. **`detect`** diffs the last commit and keeps only services whose directory
+   changed (`query-service/**` → `query-service`). No matches → no build.
+3. **`build`** runs one service at a time (`max-parallel: 1`; OCR is ~10 GB and
+   the node cannot host two builds at once). It calls BuildKit directly:
+
+   ```bash
+   buildctl build --local context="./query-service" \
+     --output type=image,name=192.168.0.7:30500/finance/query-service:<sha>,push=true
+   ```
+
+4. **Tag bump.** The job rewrites the one `image:` line in
+   `k8s/apps/query-service.yaml` to the new immutable SHA tag, commits it as
+   `ci: query-service -> <sha> [skip ci]`, and pushes to the branch it built
+   (rebasing and retrying if the branch moved).
+5. **Argo CD** watches `k8s/apps` on **`master`**, polls every ≤3 min, and applies
+   the change. Kubernetes rolls only that Deployment.
+
+The runner has **no cluster permissions** — it only builds, pushes and commits.
+Argo CD is the only component that mutates the cluster. Infrastructure
+(Postgres, RabbitMQ, ClickHouse, observability) is *not* managed by Argo; it
+still comes from `./k8s/apply.sh`.
+
+**Branch vs merge.** A push to `k8s/local-deployment` builds a real image and
+commits the tag bump on that branch, but Argo ignores it — so nothing deploys
+until the branch is merged into `master`. Merging carries the manifest change
+over, and Argo syncs it.
+
+**Escape hatch.** `detect` only looks at the last commit, so a multi-commit push
+can miss a service. Build any selection explicitly:
+
+```bash
+TOKEN=$(sed -n 's/^GITHUB_PAT=//p' .env)
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Accept: application/vnd.github+json' \
+  https://api.github.com/repos/verginjose/Personal-Finance-Assistant/actions/workflows/build.yml/dispatches \
+  -d '{"ref":"master","inputs":{"service":"all"}}'
+```
+
+`service` is `all` or one of the five service names. Setup and deeper
+operations are in [`ci/README.md`](ci/README.md).
+
+## Start and access the cluster
+
+k3s is enabled at boot, so it is already running after a normal reboot. Start
+it explicitly after a stop:
+
+```bash
+sudo systemctl start k3s        # or: systemctl status k3s
+export KUBECONFIG="$HOME/.kube/k3s.yaml"   # kubeconfig lives here, not ~/.kube/config
+kubectl get nodes               # jose-fedora Ready after ~30 s
+kubectl -n pfa get pods         # 19 workloads
+./k8s/ci/debug.sh               # full health report (cluster, CI, Argo)
+```
+
+Stop it with `sudo systemctl stop k3s`; pods come back in place on the next
+start because all state is on PVCs under `/var/lib/rancher/k3s/storage`.
+
+| What | How | URL |
+|---|---|---|
+| App (public, Cloudflare tunnel) | `kubectl -n pfa get pods -l app=cloudflared` must be Running | **https://verginjose.cloud** |
+| App (Traefik ingress) | `echo "127.0.0.1 finance.local" \| sudo tee -a /etc/hosts` | http://finance.local |
+| Frontend (port-forward) | `kubectl -n pfa port-forward svc/frontend 3001:80` | http://localhost:3001 |
+| Grafana | `kubectl -n pfa port-forward svc/grafana 3000:3000` | http://localhost:3000 |
+| Prometheus | `kubectl -n pfa port-forward svc/prometheus 9090:9090` | http://localhost:9090 |
+| Argo CD UI | `kubectl -n argocd port-forward svc/argocd-server 8080:443` | https://localhost:8080 |
+| Argo CD password | `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` | user `admin` |
+| Image registry | `curl http://192.168.0.7:30500/v2/_catalog` | http://192.168.0.7:30500 |
+| CI runs | — | github.com/verginjose/Personal-Finance-Assistant/actions |
+
+Every `port-forward` blocks its terminal; add `&` to run others alongside it.
+The Grafana admin password is `GRAFANA_ADMIN_PASSWORD` in `.env`.
+
 ## Why this maps cleanly
 
 The services already resolve each other by Compose service name, so plain
@@ -54,6 +165,10 @@ Kubernetes `Service` objects with the same names keep the configuration intact:
 No application code or `application.yaml` needed changing.
 
 ## 1. Install a local cluster (k3s)
+
+Sections 1–4 are one-time setup (and re-run after major changes). Day-to-day
+operation is just `git push`; starting and reaching the cluster is covered
+above.
 
 [k3s](https://k3s.io) is the recommended single-node option here: it ships
 Traefik (used by `ingress.yaml`), a default `local-path` StorageClass, and

@@ -2,10 +2,11 @@
 # Tear down the local Personal Finance Assistant deployment.
 #
 #   ./k8s/cleanup.sh --app            # delete namespace pfa + local-path data
+#   ./k8s/cleanup.sh --ci             # delete Argo CD, runner secret, registry config
 #   ./k8s/cleanup.sh --images         # remove finance images + pipeline artifacts
 #   ./k8s/cleanup.sh --host           # undo firewall, sysctl, /etc/hosts changes
 #   ./k8s/cleanup.sh --cluster        # uninstall k3s completely
-#   ./k8s/cleanup.sh --all            # app + images + host + cluster
+#   ./k8s/cleanup.sh --all            # ci + app + images + host + cluster
 #
 # Add --yes to skip the confirmation prompt.
 set -euo pipefail
@@ -14,27 +15,29 @@ K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${K8S_DIR}/.." && pwd)"
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/k3s.yaml}"
 
-DO_APP=false DO_IMAGES=false DO_HOST=false DO_CLUSTER=false ASSUME_YES=false
+DO_APP=false DO_CI=false DO_IMAGES=false DO_HOST=false DO_CLUSTER=false ASSUME_YES=false
 
 for arg in "$@"; do
   case "${arg}" in
     --app)     DO_APP=true ;;
+    --ci)      DO_CI=true ;;
     --images)  DO_IMAGES=true ;;
     --host)    DO_HOST=true ;;
     --cluster) DO_CLUSTER=true ;;
-    --all)     DO_APP=true; DO_IMAGES=true; DO_HOST=true; DO_CLUSTER=true ;;
+    --all)     DO_CI=true; DO_APP=true; DO_IMAGES=true; DO_HOST=true; DO_CLUSTER=true ;;
     --yes|-y)  ASSUME_YES=true ;;
-    -h|--help) sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,11p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: ${arg}" >&2; exit 2 ;;
   esac
 done
 
-if ! ${DO_APP} && ! ${DO_IMAGES} && ! ${DO_HOST} && ! ${DO_CLUSTER}; then
-  echo "Nothing selected. Use --app, --images, --host, --cluster or --all." >&2
+if ! ${DO_APP} && ! ${DO_CI} && ! ${DO_IMAGES} && ! ${DO_HOST} && ! ${DO_CLUSTER}; then
+  echo "Nothing selected. Use --app, --ci, --images, --host, --cluster or --all." >&2
   exit 2
 fi
 
 echo "This will:"
+${DO_CI}      && echo "  - delete namespace argocd, the runner secret, and /etc/rancher/k3s/registries.yaml"
 ${DO_APP}     && echo "  - delete namespace pfa and all local-path volume data"
 ${DO_IMAGES}  && echo "  - remove the finance images from containerd/Docker and .pipeline artifacts"
 ${DO_HOST}    && echo "  - remove firewalld trusted sources, the inotify sysctl, and the finance.local hosts entry"
@@ -44,6 +47,21 @@ echo
 if ! ${ASSUME_YES}; then
   read -r -p "Continue? [y/N] " answer
   [[ "${answer}" == "y" || "${answer}" == "Y" ]] || { echo "Aborted."; exit 1; }
+fi
+
+if ${DO_CI}; then
+  # Stop reconciliation first, so Argo does not recreate what we delete next.
+  echo "==> Deleting Argo CD"
+  kubectl delete namespace argocd --ignore-not-found --wait=true
+
+  echo "==> Removing CI credentials"
+  kubectl -n pfa delete secret pfa-ci-secrets --ignore-not-found
+
+  echo "==> Removing the insecure registry config"
+  sudo rm -f /etc/rancher/k3s/registries.yaml
+  echo "    k3s reads this file at startup; restart it to apply"
+
+  echo "==> Note: registry/builder volume data lives in namespace pfa (removed by --app)"
 fi
 
 if ${DO_APP}; then

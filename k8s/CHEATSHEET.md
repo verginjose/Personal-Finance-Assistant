@@ -146,6 +146,42 @@ kubectl diff -f k8s/apps/query-service.yaml
 kubectl apply --dry-run=server -f k8s/apps/
 ```
 
+### 11. CI and delivery (registry → runner → Argo CD)
+
+```bash
+# everything at once: cluster, pods, registry, buildkit, runner, Argo, CI runs
+./k8s/ci/debug.sh
+
+# the build path
+kubectl -n pfa get pods -l app=ci-runner
+kubectl -n pfa logs deploy/ci-runner --tail=40              # want "Listening for Jobs"
+kubectl -n pfa exec deploy/buildkitd -- buildctl --addr tcp://127.0.0.1:1234 debug workers
+curl -fsS http://192.168.0.7:30500/v2/_catalog | jq .       # images in the registry
+
+# what is deployed vs what git says
+kubectl -n pfa get deploy -o custom-columns='NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image'
+kubectl -n argocd get applications
+kubectl -n argocd get application pfa-apps -o jsonpath='{.status.sync.status} {.status.health.status}{"\n"}'
+
+# Argo CD UI
+kubectl -n argocd port-forward svc/argocd-server 8080:443   # https://localhost:8080
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+
+# trigger a build for one service (ref must contain the workflow)
+TOKEN=$(sed -n 's/^GITHUB_PAT=//p' .env)
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Accept: application/vnd.github+json' \
+  https://api.github.com/repos/verginjose/Personal-Finance-Assistant/actions/workflows/build.yml/dispatches \
+  -d '{"ref":"master","inputs":{"service":"frontend"}}'
+
+# registry housekeeping (tag retention + offline GC)
+./k8s/ci/registry-gc.sh --dry-run
+./k8s/ci/registry-gc.sh
+```
+
+Delivery chain: `git push` → runner builds changed services with BuildKit →
+pushes `192.168.0.7:30500/finance/<svc>:<sha>` → commits the tag bump →
+Argo CD syncs `k8s/apps` on `master`.
+
 ## Part 2 — Cleanup (least → most destructive)
 
 ### A. Remove the app, keep the cluster
@@ -159,11 +195,22 @@ sudo rm -rf /var/lib/rancher/k3s/storage/*           # local-path PVC data
 ### B. Remove the local images (OCR is ~17 GB)
 
 ```bash
+# images built by CI live in the registry PVC, not containerd — they go with
+# `kubectl delete namespace pfa` (§A). These are the pre-CI imported ones:
 sudo k3s ctr images ls | grep finance
 sudo k3s ctr images rm docker.io/finance/ocr-service:latest
 docker rmi finance/api-gateway finance/command-service finance/query-service \
            finance/frontend finance/ocr-service
 rm -rf .pipeline                                     # pipeline artifacts
+```
+
+### B2. Remove the CI stack
+
+```bash
+kubectl delete namespace argocd                       # Argo CD (stops auto-sync)
+kubectl -n pfa delete secret pfa-ci-secrets           # runner credentials
+sudo rm -f /etc/rancher/k3s/registries.yaml           # insecure-registry config
+# registry/buildkit/runner pods and their PVC data go with `namespace pfa`
 ```
 
 ### C. Undo host-level setup
@@ -192,7 +239,8 @@ kubectl config unset contexts.default 2>/dev/null || true
 `k8s/cleanup.sh` wraps the above with flags and confirmation:
 
 ```bash
-./k8s/cleanup.sh --app            # namespace + PVC data
+./k8s/cleanup.sh --ci             # Argo CD, runner secret, registries.yaml
+./k8s/cleanup.sh --app            # namespace pfa (registry, buildkit, runner) + PVC data
 ./k8s/cleanup.sh --images         # containerd + Docker images, pipeline artifacts
 ./k8s/cleanup.sh --host           # firewall, sysctl, /etc/hosts
 ./k8s/cleanup.sh --cluster        # uninstall k3s entirely

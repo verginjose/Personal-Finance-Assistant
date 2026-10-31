@@ -160,10 +160,20 @@ the `fix-perms` initContainer handles the latter.
 **Runner is offline in GitHub's UI.** The PAT probably expired or lacks
 Administration permission; check `kubectl -n pfa logs deploy/ci-runner`.
 
-**Removing the interim deploy step.** Once Argo CD syncs `k8s/apps/`, delete
-the `Deploy to the cluster` step from `.github/workflows/build.yml` and remove
-the `ci-deployer` Role/RoleBinding from `runner.yaml`. The runner no longer
-needs cluster permissions at all.
+**Runner has no cluster permissions.** The interim `Deploy to the cluster` step
+and its `ci-deployer` Role/RoleBinding were removed once Argo CD took over
+reconciliation. `runner.yaml` is only a ServiceAccount plus the runner
+Deployment — if the runner ever needs `kubectl`, something is wrong with Argo.
+
+## Health and teardown
+
+```bash
+./k8s/ci/debug.sh          # cluster, workloads, registry, BuildKit, runner, Argo, CI runs
+./k8s/cleanup.sh --ci      # remove Argo CD, pfa-ci-secrets, registries.yaml
+./k8s/cleanup.sh --app     # remove namespace pfa (including registry + cache PVCs)
+```
+
+`--ci` leaves the registry volume data (it lives in the `pfa` namespace).
 
 ## Files
 
@@ -171,7 +181,10 @@ needs cluster permissions at all.
 |---|---|
 | `registry.yaml` | 50 Gi PVC + `registry:2` Deployment + NodePort 30500 |
 | `buildkit.yaml` | rootless BuildKit Deployment, 40 Gi cache PVC, ClusterIP 1234 |
-| `runner.yaml` | ServiceAccount, interim RBAC, `myoung34/github-runner` Deployment |
+| `runner.yaml` | ServiceAccount + `myoung34/github-runner` Deployment |
 | `apply.sh` | Deploys all three and syncs `pfa-ci-secrets` from `.env` |
-| `registry-gc.sh` | Garbage-collects untagged manifests from the registry |
+| `setup-registry.sh` | (root) writes `/etc/rancher/k3s/registries.yaml`, restarts k3s |
+| `registry-gc.sh` | Tag retention + garbage-collects untagged manifests |
+| `debug.sh` | Read-only health report for the whole chain |
+| `argocd/` | Argo CD install + the `pfa-apps` Application |
 | `.github/workflows/build.yml` | The pipeline |

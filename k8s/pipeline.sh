@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Local CI/CD pipeline for the Personal Finance Assistant (Buildkite-style, but
-# self-hosted, no agents or server required).
+# Local CI/CD pipeline for the Personal Finance Assistant.
+#
+# OFFLINE FALLBACK. The normal path is `git push` → k8s/ci/ (self-hosted runner
+# → in-cluster registry → Argo CD); this script predates it and still builds on
+# the host and imports into containerd. Use it when CI is unavailable or when
+# you need the render/validate artifacts in .pipeline/.
 #
 #   preflight -> build -> push -> render -> deploy -> verify
 #
@@ -29,7 +33,7 @@ WITH_OCR=false
 WITH_CLOUDFLARED=false
 
 usage() {
-  sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit 0
 }
 

@@ -7,9 +7,8 @@
 # Registration uses a PAT (secret pfa-ci-secrets/GITHUB_PAT) so the runner can
 # re-register itself; the token is never written to disk by the workflow.
 #
-# The ServiceAccount may patch Deployments and read Pods — that is for the
-# interim `kubectl` deploy step in .github/workflows/build.yml. Remove the
-# RoleBinding once Argo CD owns the sync (phase 3).
+# The runner has no cluster permissions: it builds and pushes, then commits
+# the new tag. Argo CD (k8s/ci/argocd/) applies that change to the cluster.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -18,33 +17,6 @@ metadata:
   labels:
     app: ci-runner
     app.kubernetes.io/part-of: personal-finance-assistant
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: ci-deployer
-  namespace: pfa
-rules:
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "watch", "patch", "update"]
-  - apiGroups: [""]
-    resources: ["pods", "pods/log"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: ci-runner-deployer
-  namespace: pfa
-subjects:
-  - kind: ServiceAccount
-    name: ci-runner
-    namespace: pfa
-roleRef:
-  kind: Role
-  name: ci-deployer
-  apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: apps/v1
 kind: Deployment

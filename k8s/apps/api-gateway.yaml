@@ -23,7 +23,12 @@ metadata:
     app: api-gateway
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
-  replicas: 1
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: api-gateway
@@ -42,19 +47,6 @@ spec:
             - name: http
               containerPort: 8080
           env:
-            - name: DB_NAME
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_NAME }
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_USER }
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_PASSWORD }
-            - name: AUTH_DB_SCHEMA
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: AUTH_DB_SCHEMA }
-
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef: { name: pfa-secrets, key: JWT_SECRET }
@@ -76,13 +68,6 @@ spec:
               value: guest
             - name: RABBITMQ_PASSWORD
               value: guest
-
-            - name: SPRING_R2DBC_URL
-              value: r2dbc:postgresql://postgres-primary:5432/$(DB_NAME)?schema=$(AUTH_DB_SCHEMA)
-            - name: SPRING_R2DBC_USERNAME
-              value: $(DB_USER)
-            - name: SPRING_R2DBC_PASSWORD
-              value: $(DB_PASSWORD)
 
             - name: MINIO_ENDPOINT
               value: http://minio:9000

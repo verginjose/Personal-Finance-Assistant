@@ -1,9 +1,9 @@
-package com.apigateway.auth.controller;
+package com.authservice.controller;
 
-import com.apigateway.auth.dto.AuthDtos.*;
-import com.apigateway.auth.model.User;
-import com.apigateway.auth.repository.UserRepository;
-import com.apigateway.auth.service.AuthService;
+import com.authservice.dto.AuthDtos.*;
+import com.authservice.model.User;
+import com.authservice.repository.UserRepository;
+import com.authservice.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

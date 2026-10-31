@@ -1,7 +1,7 @@
-package com.apigateway.auth.controller;
+package com.authservice.controller;
 
-import com.apigateway.auth.dto.AuthDtos.UserSearchResult;
-import com.apigateway.auth.service.UserService;
+import com.authservice.dto.AuthDtos.UserSearchResult;
+import com.authservice.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;

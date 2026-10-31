@@ -1,8 +1,9 @@
--- The API gateway owns auth.users (see api-gateway/src/main/resources/schema.sql),
+-- auth-service owns auth.users (see auth-service/src/main/resources/schema.sql history
+-- and the User entity),
 -- but command-service and query-service map a RegisteredUser entity to the same
 -- table with Hibernate ddl-auto=update. On a fresh database those services can
 -- create auth.users first with only identity columns, which then makes the
--- gateway fail at login ("column users.password does not exist").
+-- auth service fail at login ("column users.password does not exist").
 --
 -- Creating the full table during database initialization removes the race.
 

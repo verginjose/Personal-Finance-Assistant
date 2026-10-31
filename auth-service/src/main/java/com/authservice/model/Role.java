@@ -1,4 +1,4 @@
-package com.apigateway.auth.model;
+package com.authservice.model;
 
 /**
  * System roles. Spring Security requires the "ROLE_" prefix when using

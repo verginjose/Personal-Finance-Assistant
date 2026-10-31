@@ -1,4 +1,4 @@
-package com.apigateway.auth.service;
+package com.authservice.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.ReactiveStringRedisTemplate;

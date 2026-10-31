@@ -1,6 +1,6 @@
-package com.apigateway.auth.repository;
+package com.authservice.repository;
 
-import com.apigateway.auth.model.User;
+import com.authservice.model.User;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.r2dbc.repository.R2dbcRepository;

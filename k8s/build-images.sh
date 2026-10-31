@@ -13,7 +13,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TAG="${TAG:-latest}"
 PREFIX="${REGISTRY_PREFIX:-finance}"
 
-SERVICES=(api-gateway command-service query-service frontend)
+SERVICES=(auth-service api-gateway command-service query-service frontend)
 if [[ "${SKIP_OCR:-0}" != "1" ]]; then
   SERVICES+=(ocr-service)
 fi

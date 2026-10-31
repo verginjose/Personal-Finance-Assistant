@@ -37,6 +37,7 @@ k8s/
 │   ├── grafana.yaml
 │   └── vector.yaml            # DaemonSet (kubelet log files, not the docker socket)
 ├── apps/
+│   ├── auth-service.yaml
 │   ├── api-gateway.yaml
 │   ├── command-service.yaml
 │   ├── query-service.yaml
@@ -132,8 +133,8 @@ operations are in [`ci/README.md`](ci/README.md).
 | `argocd-redis` | `redis` | Cache for the two above | argocd pods |
 | `argocd-dex-server`, `argocd-applicationset-controller`, `argocd-notifications-controller` | `argocd` | Installed, unused (no SSO, one hand-written app, no notifications) | — |
 
-**Application pods** — namespace `pfa`: the five services (`frontend`,
-`api-gateway`, `command-service`, `query-service`, `ocr-service`) and their
+**Application pods** — namespace `pfa`: the six services (`frontend`,
+`api-gateway`, `auth-service`, `command-service`, `query-service`, `ocr-service`) and their
 dependencies (`postgres-primary/replica`, `redis`, `redis-replica`,
 `rabbitmq`, `minio`, `clickhouse`, `vector`, `prometheus`, `grafana`) plus
 `cloudflared` for the public URL. These are *consumers* of the flow, not
@@ -292,7 +293,7 @@ Kubernetes `Service` objects with the same names keep the configuration intact:
 
 | Config entry | Compose DNS | Kubernetes Service |
 |---|---|---|
-| `spring.cloud.gateway.routes[].uri` | `command-service:8081`, `query-service:8084` | same |
+| `spring.cloud.gateway.routes[].uri` | `auth-service:8082`, `command-service:8081`, `query-service:8084` | same |
 | gateway `minio.endpoint` | `minio:9000` | same |
 | `frontend/nginx.conf` `proxy_pass` | `api-gateway:8080` | same |
 | `REDIS_HOST` / `SPRING_DATA_REDIS_HOST` | `redis` | same |
@@ -390,7 +391,7 @@ k3s does not use Docker's image store, so `build-images.sh` builds with Docker
 and imports the tarballs into containerd.
 
 ```bash
-./k8s/build-images.sh              # all five services
+./k8s/build-images.sh              # all six services
 SKIP_OCR=1 ./k8s/build-images.sh   # skip the multi-GB CUDA image
 ```
 

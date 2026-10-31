@@ -59,7 +59,7 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" \
 ```
 
 `service` is one of `api-gateway`, `command-service`, `query-service`,
-`frontend`, `ocr-service`, or `all`.
+`auth-service`, `frontend`, `ocr-service`, or `all`.
 
 **Manual fallback (no CI) — offline rebuild of one service:**
 

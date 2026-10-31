@@ -43,19 +43,12 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
             return exchange.getResponse().writeWith(Mono.just(buffer));
         }
 
-        if (ex instanceof com.apigateway.auth.service.AuthService.EmailAlreadyExistsException ||
-            ex instanceof com.apigateway.auth.service.AuthService.UsernameAlreadyExistsException ||
-            ex instanceof com.apigateway.auth.service.AuthService.InvalidCurrentPasswordException ||
-            ex instanceof IllegalArgumentException) {
+        if (ex instanceof IllegalArgumentException) {
             exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
             exchange.getResponse().getHeaders().add("Content-Type", MediaType.APPLICATION_JSON_VALUE);
             String body = String.format("{\"error\":\"Bad Request\",\"message\":\"%s\"}", ex.getMessage().replace("\"", "'"));
             DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(body.getBytes());
             return exchange.getResponse().writeWith(Mono.just(buffer));
-        }
-
-        if (ex instanceof com.apigateway.auth.service.AuthService.InvalidRefreshTokenException) {
-            return handleUnauthorized(exchange);
         }
 
         // Handle other exceptions as needed

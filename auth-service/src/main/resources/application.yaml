@@ -1,0 +1,65 @@
+server:
+  port: 8082
+
+jwt:
+  secret: ${JWT_SECRET}
+  # access-token lifetime; JwtService reads access-expiration-ms
+  expiration: ${JWT_EXPIRATION:900000}
+  access-expiration-ms: ${JWT_EXPIRATION:900000}
+  refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION:604800000}
+
+spring:
+  application:
+    name: auth-service
+
+  codec:
+    max-in-memory-size: 1MB
+
+  # auth.users is created by the db-init Job (db-init/007_create_auth_users.sql),
+  # not at boot: with >1 replica, concurrent DDL would race.
+  sql:
+    init:
+      mode: never
+
+  r2dbc:
+    url: ${SPRING_R2DBC_URL:r2dbc:postgresql://postgres-primary:5432/pfa?schema=auth}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    pool:
+      initial-size: 2
+      max-size: 10
+      max-idle-time: 30m
+
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 20
+          max-idle: 10
+          min-idle: 2
+          max-wait: 200ms
+
+logging:
+  level:
+    root: INFO
+    com.authservice: INFO
+    org.springframework.security: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  metrics:
+    tags:
+      application: auth-service

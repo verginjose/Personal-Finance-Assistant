@@ -1,4 +1,4 @@
-package com.apigateway.auth.model;
+package com.authservice.model;
 
 import lombok.*;
 import org.springframework.data.annotation.Id;

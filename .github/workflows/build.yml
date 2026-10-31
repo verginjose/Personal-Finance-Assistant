@@ -90,6 +90,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # Check out the branch tip, not github.sha. Every matrix job would
+          # otherwise branch from the same triggering commit and their
+          # tag-bump pushes would conflict with each other.
+          ref: ${{ github.ref_name }}
           fetch-depth: 0   # the tag-bump commit is pushed from this checkout
 
       - name: Install buildctl and kubectl if missing
@@ -134,7 +138,20 @@ jobs:
           git config user.email "ci@verginjose.local"
           git add "$file"
           git commit -m "ci: ${SERVICE} -> ${TAG} [skip ci]"
-          git push
+
+          # Serialised by max-parallel, but a second workflow run or a manual
+          # push can still move the branch. Rebase and retry instead of
+          # failing a build whose image was already pushed successfully.
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              exit 0
+            fi
+            echo "Push rejected (attempt ${attempt}); rebasing onto origin/${GITHUB_REF_NAME}"
+            git pull --rebase origin "${GITHUB_REF_NAME}" || true
+            sleep $((attempt * 2))
+          done
+          echo "Could not push the tag bump after 5 attempts" >&2
+          exit 1
 
       # Interim: replaced by Argo CD in phase 3. Delete this step (and the
       # ci-deployer Role/RoleBinding in k8s/ci/runner.yaml) once Argo syncs.

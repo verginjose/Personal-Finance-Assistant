@@ -44,13 +44,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Determine services to build
         id: changed
         env:
           EVENT: ${{ github.event_name }}
           INPUT_SERVICE: ${{ inputs.service }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
         run: |
           set -euo pipefail
           selected=""
@@ -61,7 +63,14 @@ jobs:
               selected="$INPUT_SERVICE"
             fi
           else
-            changed_files="$(git diff --name-only HEAD^ HEAD)"
+            # Diff the whole push, not just its tip: a push of several commits
+            # would otherwise only build services touched by the last one.
+            # New branches report an all-zero BEFORE, so fall back to HEAD^.
+            base="$BEFORE"
+            if [[ -z "$base" || "$base" =~ ^0+$ ]] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+              base="HEAD^"
+            fi
+            changed_files="$(git diff --name-only "$base" "$AFTER")"
             for svc in $ALL_SERVICES; do
               if printf '%s\n' "$changed_files" | grep -q "^${svc}/"; then
                 selected="$selected $svc"

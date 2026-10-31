@@ -224,7 +224,7 @@ def run_all_tests():
         "amount": 25000.00,
         "type": "INCOME",
         "currency": "INR",
-        "incomeCategory": "SALARY",
+        "category": "SALARY",
         "description": "Idempotent monthly salary",
         "date": "2026-06-01"
     }
@@ -263,7 +263,7 @@ def run_all_tests():
         "amount": 30000.00,
         "type": "INCOME",
         "currency": "INR",
-        "incomeCategory": "SALARY",
+        "category": "SALARY",
         "description": "Updated salary with bonus",
         "date": "2026-06-01"
     }
@@ -288,7 +288,7 @@ def run_all_tests():
         "amount": 10000.00,
         "type": "EXPENSE",
         "currency": "INR",
-        "expenseCategory": "RESTAURANTS",
+        "category": "RESTAURANTS",
         "description": "Dinner at restaurant",
         "date": "2026-06-02"
     }
@@ -412,6 +412,18 @@ def run_all_tests():
     status, m2_body, _ = make_request(f"/upsert/groups/{group_id}/members", "POST", headers=auth_headers, body=member2_payload)
     assert_status(201, status, "Add member 2 (Alice)")
 
+    # Alice starts as PENDING — only ACCEPTED members take part in splits, so
+    # she has to accept her own invitation (the endpoint refuses to let another
+    # user accept it for her).
+    status, alice_login, _ = make_request("/auth/login", "POST",
+                                          body={"email": alice_email, "password": password})
+    assert_status(200, status, "Login as Alice")
+    alice_headers = {"Authorization": f"Bearer {alice_login.get('token')}",
+                     "X-User-Id": alice_login.get("userId")}
+    status, _, _ = make_request(f"/upsert/groups/{group_id}/members/{alice_id}/accept",
+                                "POST", headers=alice_headers)
+    assert_status(200, status, "Alice accepts the group invitation")
+
     # 4. Add shared expense
     shared_exp_payload = {
         "amount": 200.00,
@@ -447,7 +459,7 @@ def run_all_tests():
         "type": "EXPENSE",
         "currency": "INR",
         "name": "Amazon Prime",
-        "expenseCategory": "OTT_SUBSCRIPTIONS",
+        "category": "OTT_SUBSCRIPTIONS",
         "description": "Amazon Prime monthly fee",
         "recurring": True,
         "recurringPeriod": "MONTHLY"
@@ -518,7 +530,7 @@ def run_all_tests():
         "amount": 90000.00,
         "type": "INCOME",
         "currency": "INR",
-        "incomeCategory": "SALARY",
+        "category": "SALARY",
         "description": "Salary increase",
         "date": "2026-06-03"
     }

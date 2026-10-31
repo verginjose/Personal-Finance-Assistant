@@ -44,6 +44,7 @@ public class TransactionEntryService {
     private final com.finance.command.repository.TransactionGoalAllocationRepository allocationRepository;
     private final com.finance.command.cache.QueryCacheEvictor queryCacheEvictor;
     private final com.finance.command.repository.ExpenseTransactionLinkRepository transactionLinkRepo;
+    private final SubscriptionDetectorService subscriptionDetectorService;
 
     public TransactionEntryService(
             TransactionEntryRepository repository,
@@ -52,7 +53,8 @@ public class TransactionEntryService {
             GoalBudgetService goalBudgetService,
             com.finance.command.repository.TransactionGoalAllocationRepository allocationRepository,
             com.finance.command.cache.QueryCacheEvictor queryCacheEvictor,
-            com.finance.command.repository.ExpenseTransactionLinkRepository transactionLinkRepo
+            com.finance.command.repository.ExpenseTransactionLinkRepository transactionLinkRepo,
+            SubscriptionDetectorService subscriptionDetectorService
     ) {
         this.repository = repository;
         this.redisTemplate = redisTemplate;
@@ -63,6 +65,7 @@ public class TransactionEntryService {
         this.allocationRepository = allocationRepository;
         this.queryCacheEvictor = queryCacheEvictor;
         this.transactionLinkRepo = transactionLinkRepo;
+        this.subscriptionDetectorService = subscriptionDetectorService;
     }
 
     // ── Create ────────────────────────────────────────────────────────────────
@@ -112,7 +115,20 @@ public class TransactionEntryService {
         TransactionEntry entry = getTransactionEntry(request);
 
         TransactionEntry saved = repository.save(entry);
-        
+
+        // A recurring expense is a subscription. Detect it now instead of
+        // waiting for the 02:00 UTC job: GET /api/upsert/subscriptions is
+        // routed to query-service, so the read side's on-demand detection is
+        // unreachable through the gateway.
+        if (saved.isRecurring() && saved.getType() == TransactionType.EXPENSE) {
+            try {
+                subscriptionDetectorService.processRecurringTransactions(List.of(saved));
+            } catch (RuntimeException e) {
+                log.warn("Subscription detection failed for transaction {}: {}",
+                        saved.getId(), e.getMessage());
+            }
+        }
+
         if (publishCacheEvict) {
             OutboxEvent event = new OutboxEvent();
             event.setUserId(request.getUserId());

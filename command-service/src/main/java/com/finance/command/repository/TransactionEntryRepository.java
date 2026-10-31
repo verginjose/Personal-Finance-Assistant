@@ -94,7 +94,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             FROM TransactionEntry t
             WHERE t.userId = :userId
               AND t.deletedAt IS NULL
-              AND t.type = :type
+              AND t.type = com.finance.command.model.TransactionType.EXPENSE
               AND t.category = :category
               AND t.createdAt BETWEEN :start AND :end
             """)

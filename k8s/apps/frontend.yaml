@@ -44,7 +44,7 @@ spec:
           command: ["sh", "-c", "until nslookup api-gateway.pfa.svc.cluster.local >/dev/null 2>&1; do echo waiting for api-gateway; sleep 2; done"]
       containers:
         - name: frontend
-          image: finance/frontend:latest
+          image: 192.168.0.7:30500/finance/frontend:3809fe8ee7b2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

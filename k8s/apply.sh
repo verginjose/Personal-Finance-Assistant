@@ -49,13 +49,19 @@ kubectl -n reloader rollout status deploy/reloader-reloader --timeout=120s
 echo "==> Applying sealed secrets"
 # Secrets are committed encrypted in k8s/sealed/ and decrypted in-cluster by
 # the sealed-secrets controller. Regenerate them with ./k8s/seal-secrets.sh
-# after changing .env. One Secret per application service plus pfa-secrets
-# (infrastructure) and pfa-ci-secrets (the GitHub runner token).
+# after changing .env. One Secret per workload group: postgres, redis,
+# clickhouse, minio, grafana, cloudflared, pfa-ci-secrets (the GitHub runner
+# token) and one <service>-secrets per application service.
 kubectl apply -f "${K8S_DIR}/sealed/"
 
 echo "==> Waiting for sealed secrets to be decrypted"
-SEALED_NAMES=(pfa-secrets pfa-ci-secrets auth-service-secrets api-gateway-secrets \
-              command-service-secrets query-service-secrets ocr-service-secrets)
+# Derived from k8s/sealed/ so optional secrets (cloudflared) do not block a
+# deployment that never sealed them.
+SEALED_NAMES=()
+for f in "${K8S_DIR}"/sealed/*.yaml; do
+  [[ -e "${f}" ]] || continue
+  SEALED_NAMES+=("$(basename "${f}" .yaml)")
+done
 for name in "${SEALED_NAMES[@]}"; do
   for _ in $(seq 1 30); do
     kubectl -n "${NS}" get secret "${name}" >/dev/null 2>&1 && break

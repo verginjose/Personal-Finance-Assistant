@@ -578,16 +578,29 @@ reachable with `port-forward` (they are `ClusterIP` services, matching the
   reads it directly. Secrets are committed **encrypted** in `k8s/sealed/` and
   decrypted in-cluster by the Sealed Secrets controller running in
   `kube-system`. `apply.sh` applies `k8s/sealed/` and waits for the Secrets to
-  appear. There is one Secret per application service
-  (`auth-service-secrets`, `api-gateway-secrets`, …) plus `pfa-secrets` for
-  infrastructure and `pfa-ci-secrets` for the GitHub runner. See
-  `env/README.md`.
+  appear. Every Secret is scoped to the workload that reads it: one per
+  application service (`auth-service-secrets`, `api-gateway-secrets`, …), one
+  per infrastructure group (`postgres-secrets`, `redis-secrets`,
+  `clickhouse-secrets`, `minio-secrets`, `grafana-secrets`,
+  `cloudflared-secrets`) and `pfa-ci-secrets` for the GitHub runner. There is
+  no catch-all Secret. See `env/README.md`.
 - **Changing secrets:** edit `.env`, run `./k8s/seal-secrets.sh --apply`, commit
-  the regenerated `k8s/sealed/*.yaml`, push. Reloader restarts pods annotated
-  with `reloader.stakater.com/auto: "true"`. Workloads without that annotation
-  still need a manual `kubectl -n pfa rollout restart` (or use `sync-env.sh`).
+  the regenerated `k8s/sealed/*.yaml`, push. Reloader restarts the workloads
+  that reference the changed Secret: pods annotated
+  `reloader.stakater.com/auto: "true"` restart on any referenced Secret or
+  ConfigMap, and infrastructure pods use
+  `secret.reloader.stakater.com/reload: "<name>"` /
+  `configmap.reloader.stakater.com/reload: "<name>"` to watch only what they
+  read. Annotation mismatches are the main reason a rotated value does not take
+  effect — `sync-env.sh` restarts by discovering references at runtime instead.
   Sealing is randomized: re-running the script always produces a diff, even
-  when no value changed.
+  when no value changed, so use `./k8s/seal-secrets.sh redis-secrets` to re-seal
+  a single one.
+- **Rotating a database or cache password** is two steps. The Secret delivers
+  the new value to the clients; the server keeps the old one until you run
+  `ALTER USER <DB_USER> WITH PASSWORD '…'` (Postgres) or
+  `CONFIG SET requirepass …` (Redis). Do the server last, after clients have the
+  new value in hand, or you lock yourself out.
 - **Per-service config:** non-secret settings (hostnames, ports, JVM flags,
   feature toggles) live in a `<service>-config` ConfigMap inside each
   `k8s/apps/<service>.yaml`, so changing them goes through git + Argo like any

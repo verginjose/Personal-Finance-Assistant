@@ -33,6 +33,11 @@ spec:
       labels:
         app: postgres-primary
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        # Restart only for the credentials this workload reads, not for every
+        # Secret in the namespace.
+        secret.reloader.stakater.com/reload: "postgres-secrets"
+        configmap.reloader.stakater.com/reload: "postgres-init"
     spec:
       containers:
         - name: postgres
@@ -54,13 +59,13 @@ spec:
           env:
             - name: POSTGRES_DB
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_NAME }
+                secretKeyRef: { name: postgres-secrets, key: DB_NAME }
             - name: POSTGRES_USER
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_USER }
+                secretKeyRef: { name: postgres-secrets, key: DB_USER }
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_PASSWORD }
+                secretKeyRef: { name: postgres-secrets, key: DB_PASSWORD }
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:

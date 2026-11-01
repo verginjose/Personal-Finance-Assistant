@@ -3,7 +3,7 @@
 # Only apply this after you have created a Cloudflare Tunnel whose public
 # hostname routes to http://frontend.pfa.svc.cluster.local:80 (or to the
 # Traefik ingress). The token comes from the CLOUDFLARE_TUNNEL_TOKEN key in the
-# pfa-secrets Secret.
+# cloudflared-secrets Secret.
 #
 #   kubectl apply -f k8s/optional/cloudflared.yaml
 apiVersion: apps/v1
@@ -24,6 +24,8 @@ spec:
       labels:
         app: cloudflared
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        secret.reloader.stakater.com/reload: "cloudflared-secrets"
     spec:
       containers:
         - name: cloudflared
@@ -33,7 +35,7 @@ spec:
           env:
             - name: TUNNEL_TOKEN
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: CLOUDFLARE_TUNNEL_TOKEN }
+                secretKeyRef: { name: cloudflared-secrets, key: CLOUDFLARE_TUNNEL_TOKEN }
           resources:
             requests:
               cpu: 10m

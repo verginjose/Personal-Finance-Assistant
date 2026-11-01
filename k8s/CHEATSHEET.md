@@ -76,7 +76,7 @@ kubectl -n pfa get secret
 # secrets are committed encrypted in k8s/sealed/ and decrypted by the controller
 kubectl -n pfa get sealedsecrets
 kubectl -n pfa describe sealedsecret auth-service-secrets | sed -n '/Status:/,$p'
-# app services have their own secret; infrastructure uses pfa-secrets
+# one secret per workload group: postgres-secrets, redis-secrets, minio-secrets, ...
 kubectl -n pfa get secret auth-service-secrets -o jsonpath='{.data}' | python3 -m json.tool | head
 # decode one key (example: DB_USER)
 kubectl -n pfa get secret auth-service-secrets -o jsonpath='{.data.DB_USER}' | base64 -d; echo

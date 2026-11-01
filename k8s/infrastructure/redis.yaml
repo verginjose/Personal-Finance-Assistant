@@ -33,6 +33,8 @@ spec:
       labels:
         app: redis
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        secret.reloader.stakater.com/reload: "redis-secrets"
     spec:
       containers:
         - name: redis
@@ -44,7 +46,7 @@ spec:
           env:
             - name: REDIS_PASSWORD
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: REDIS_PASSWORD }
+                secretKeyRef: { name: redis-secrets, key: REDIS_PASSWORD }
           ports:
             - name: redis
               containerPort: 6379
@@ -113,6 +115,8 @@ spec:
       labels:
         app: redis-replica
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        secret.reloader.stakater.com/reload: "redis-secrets"
     spec:
       containers:
         - name: redis-replica
@@ -124,7 +128,7 @@ spec:
           env:
             - name: REDIS_PASSWORD
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: REDIS_PASSWORD }
+                secretKeyRef: { name: redis-secrets, key: REDIS_PASSWORD }
           ports:
             - name: redis
               containerPort: 6379

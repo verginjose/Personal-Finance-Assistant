@@ -371,11 +371,15 @@ kubectl -n pfa rollout restart deploy/cloudflared
 Changing a secret (`CLOUDFLARE_TUNNEL_TOKEN`, DB password, …): edit `.env`, then
 
 ```bash
-kubectl create secret generic pfa-secrets -n pfa --from-env-file=.env \
-  --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n pfa rollout restart deploy/api-gateway deploy/command-service \
-  deploy/query-service deploy/ocr-service deploy/cloudflared
+./k8s/seal-secrets.sh cloudflared-secrets --apply   # or '--apply' for all
+kubectl -n pfa rollout restart deploy/cloudflared    # Reloader also does this
 ```
+
+Each workload reads its own Secret (`cloudflared-secrets`, `postgres-secrets`,
+`redis-secrets`, `clickhouse-secrets`, `minio-secrets`, `grafana-secrets`,
+`pfa-ci-secrets`, and `<service>-secrets` per app), so restart only the pods
+whose credentials actually changed — or run `k8s/sync-env.sh`, which discovers
+consumers at runtime.
 
 ## Common failures
 

@@ -2,13 +2,15 @@
 # (Re-)seal every application Secret into k8s/sealed/.
 #
 #   ./k8s/seal-secrets.sh                  # all secrets
-#   ./k8s/seal-secrets.sh pfa-secrets      # one, by name
+#   ./k8s/seal-secrets.sh redis-secrets    # one, by name
 #   ./k8s/seal-secrets.sh --apply          # also kubectl apply the sealed files
 #
-# Source of truth is unchanged: the repo-root .env for shared values, and
-# env/<service>.env for which keys each service gets. Nothing plaintext is
-# written to disk — each Secret is generated in memory and piped straight into
-# kubeseal. Commit the resulting k8s/sealed/*.yaml.
+# Every Secret is scoped to the workload that consumes it: postgres-secrets,
+# redis-secrets, clickhouse-secrets, minio-secrets, grafana-secrets,
+# cloudflared-secrets, pfa-ci-secrets and one <service>-secrets per app.
+# Source of truth is the repo-root .env (plus env/<service>.env for the app
+# layer). Nothing plaintext is written to disk — each Secret is generated in
+# memory and piped straight into kubeseal. Commit k8s/sealed/*.yaml.
 #
 # Run this after any password/token change in .env, then commit and push.
 # Reloader restarts the affected pods once Argo applies the new Secret.
@@ -103,9 +105,46 @@ merged_envfile() {  # service -> path on stdout
 
 echo "==> Sealing into ${OUT_DIR}"
 
-# 1. Shared infrastructure secret: every key in .env.
-if wanted pfa-secrets; then
-  seal_envfile pfa-secrets "${ENV_FILE}"
+# Seal a subset of .env: only the named keys, so a workload never holds a
+# credential it does not use. Missing keys are a hard error; a key present but
+# empty (REDIS_PASSWORD for an unauthenticated Redis) is allowed.
+seal_envkeys() {  # name key...
+  local name="$1"; shift
+  local tmp; tmp="$(mktemp)"
+  local k val
+  for k in "$@"; do
+    grep -qE "^${k}=" "${ENV_FILE}" || { echo "${name}: ${k} is not set in .env" >&2; exit 1; }
+    val="$(sed -n "s/^${k}=//p" "${ENV_FILE}" | tail -n 1)"
+    printf '%s=%s\n' "${k}" "${val}" >> "${tmp}"
+  done
+  seal_envfile "${name}" "${tmp}"
+  rm -f "${tmp}"
+}
+
+# 1. One Secret per infrastructure workload group, containing only the keys
+#    that group consumes. Replaces the old catch-all pfa-secrets.
+if wanted postgres-secrets; then
+  seal_envkeys postgres-secrets DB_NAME DB_USER DB_PASSWORD FINANCE_DB_SCHEMA AUTH_DB_SCHEMA
+fi
+if wanted redis-secrets; then
+  seal_envkeys redis-secrets REDIS_PASSWORD
+fi
+if wanted clickhouse-secrets; then
+  seal_envkeys clickhouse-secrets CLICKHOUSE_PASSWORD
+fi
+if wanted minio-secrets; then
+  seal_envkeys minio-secrets MINIO_ROOT_PASSWORD
+fi
+if wanted grafana-secrets; then
+  seal_envkeys grafana-secrets GRAFANA_ADMIN_PASSWORD
+fi
+# Optional: only exists when a Cloudflare tunnel is in use.
+if wanted cloudflared-secrets; then
+  if grep -qE '^CLOUDFLARE_TUNNEL_TOKEN=.+' "${ENV_FILE}"; then
+    seal_envkeys cloudflared-secrets CLOUDFLARE_TUNNEL_TOKEN
+  else
+    echo "  skipping cloudflared-secrets (CLOUDFLARE_TUNNEL_TOKEN not set in .env)"
+  fi
 fi
 
 # 2. CI secret: just the GitHub token the runner needs.

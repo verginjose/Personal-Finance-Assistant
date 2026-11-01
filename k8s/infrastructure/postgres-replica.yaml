@@ -33,6 +33,8 @@ spec:
       labels:
         app: postgres-replica
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        secret.reloader.stakater.com/reload: "postgres-secrets"
     spec:
       # pg_basebackup only runs on first boot: the PVC is seeded once, then the
       # main container starts streaming replication using the -R recovery config.
@@ -43,10 +45,10 @@ spec:
           env:
             - name: POSTGRES_USER
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_USER }
+                secretKeyRef: { name: postgres-secrets, key: DB_USER }
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_PASSWORD }
+                secretKeyRef: { name: postgres-secrets, key: DB_PASSWORD }
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           command:
@@ -78,13 +80,13 @@ spec:
           env:
             - name: POSTGRES_DB
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_NAME }
+                secretKeyRef: { name: postgres-secrets, key: DB_NAME }
             - name: POSTGRES_USER
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_USER }
+                secretKeyRef: { name: postgres-secrets, key: DB_USER }
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_PASSWORD }
+                secretKeyRef: { name: postgres-secrets, key: DB_PASSWORD }
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:

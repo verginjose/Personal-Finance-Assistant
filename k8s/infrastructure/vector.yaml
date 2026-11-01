@@ -204,7 +204,7 @@ spec:
           env:
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: CLICKHOUSE_PASSWORD }
+                secretKeyRef: { name: clickhouse-secrets, key: CLICKHOUSE_PASSWORD }
             # Vector runs as root so it can read the kubelet log files.
             - name: VECTOR_SELF_NODE_NAME
               valueFrom:

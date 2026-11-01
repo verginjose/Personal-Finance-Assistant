@@ -36,6 +36,9 @@ spec:
       labels:
         app: clickhouse
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        secret.reloader.stakater.com/reload: "clickhouse-secrets"
+        configmap.reloader.stakater.com/reload: "clickhouse-init"
     spec:
       containers:
         - name: clickhouse
@@ -46,7 +49,7 @@ spec:
               value: default
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: CLICKHOUSE_PASSWORD }
+                secretKeyRef: { name: clickhouse-secrets, key: CLICKHOUSE_PASSWORD }
             - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
               value: "1"
           ports:

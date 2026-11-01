@@ -7,9 +7,11 @@ gets**. `k8s/apply.sh` renders one Kubernetes Secret per file:
 env/<service>.env  ->  Secret <service>-secrets  (namespace pfa)
 ```
 
-This replaces the single shared `pfa-secrets` for the application layer. The
-`pfa-secrets` Secret still exists because Postgres, Redis, MinIO, ClickHouse,
-Grafana, Vector and the Cloudflare tunnel read it — do not remove it.
+The infrastructure layer uses the same idea: `k8s/seal-secrets.sh` seals a
+separate Secret per workload group (`postgres-secrets`, `redis-secrets`,
+`clickhouse-secrets`, `minio-secrets`, `grafana-secrets`,
+`cloudflared-secrets`), each holding only the keys those pods read. There is no
+catch-all Secret, so rotating one credential never restarts the whole stack.
 
 ## Format
 

@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
-# Push the repo-level .env into the pfa-secrets Secret and into each
-# <service>-secrets Secret declared by env/<service>.env, then roll every
-# workload that consumes any of them so running pods pick up the new values.
+# Push the repo-level .env into the per-workload Secrets (postgres-secrets,
+# redis-secrets, clickhouse-secrets, minio-secrets, grafana-secrets,
+# cloudflared-secrets, pfa-ci-secrets) and into each <service>-secrets Secret
+# declared by env/<service>.env, then roll every workload that consumes any of
+# them so running pods pick up the new values.
 #
-#   sudo ./k8s/sync-env.sh                  # sync secret + restart all consumers
+#   sudo ./k8s/sync-env.sh                  # sync secrets + restart all consumers
 #   sudo ./k8s/sync-env.sh --apps-only      # skip postgres/redis/clickhouse/...
 #   ./k8s/sync-env.sh --dry-run             # show what would happen, change nothing
-#   sudo ./k8s/sync-env.sh --no-restart     # only update the Secret
+#   sudo ./k8s/sync-env.sh --no-restart     # only update the Secrets
 #   sudo ./k8s/sync-env.sh --check GROQ_MODEL   # print that var from each restarted pod
 #   sudo ./k8s/sync-env.sh -n pfa -f .env
 #
 # Restarting infrastructure is included by default because a changed
 # DB_PASSWORD / REDIS_PASSWORD only takes effect once those pods restart too.
 # Use --apps-only when you are only touching application-level variables.
+#
+# Note: rotating DB_PASSWORD / REDIS_PASSWORD is a two-step change. The Secret
+# carries the new value to the clients; the server keeps enforcing the old one
+# until you run ALTER USER (Postgres) or CONFIG SET requirepass (Redis).
 #
 # Requires: kubectl (or k3s) able to reach the cluster. That usually means
 # running the script with sudo on this box, where /etc/rancher/k3s/k3s.yaml is
@@ -25,7 +31,6 @@ ORIG_ARGS=("$@")
 
 NS="${PFA_NAMESPACE:-pfa}"
 ENV_FILE="${ROOT_DIR}/.env"
-SECRET_NAME="${PFA_SECRET_NAME:-pfa-secrets}"
 DO_RESTART=true
 DRY_RUN=false
 APPS_ONLY=false
@@ -40,7 +45,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -n|--namespace)   NS="${2:?--namespace needs a value}"; shift 2 ;;
     -f|--env-file)    ENV_FILE="${2:?--env-file needs a value}"; shift 2 ;;
-    --secret-name)    SECRET_NAME="${2:?--secret-name needs a value}"; shift 2 ;;
     --apps-only)      APPS_ONLY=true; shift ;;
     --no-restart)     DO_RESTART=false; shift ;;
     --dry-run)        DRY_RUN=true; shift ;;
@@ -82,15 +86,19 @@ KEY_COUNT="$(grep -cE '^[A-Za-z_][A-Za-z0-9_]*=' "${ENV_FILE}" || true)"
 
 echo "==> context=${CTX} namespace=${NS}"
 echo "    env file: ${ENV_FILE} (${KEY_COUNT} variables)"
-echo "    secret:   ${SECRET_NAME}"
 [[ "${DRY_RUN}" == true ]] && echo "    mode:     DRY RUN (nothing will change)"
 
 # ── Re-seal and apply ───────────────────────────────────────────────────────
 # Secrets are committed encrypted in k8s/sealed/. Re-seal from .env +
 # env/<service>.env, then apply the SealedSecrets; the controller recreates the
 # real Secrets. Regenerate the committed files too, so the change is not lost.
-SECRET_NAMES=(pfa-secrets pfa-ci-secrets auth-service-secrets api-gateway-secrets \
-              command-service-secrets query-service-secrets ocr-service-secrets)
+# Derived from k8s/sealed/ so a secret added or removed later is picked up
+# without editing this script.
+SECRET_NAMES=()
+for f in "${SCRIPT_DIR}"/sealed/*.yaml; do
+  [[ -e "${f}" ]] || continue
+  SECRET_NAMES+=("$(basename "${f}" .yaml)")
+done
 if [[ "${DRY_RUN}" == true ]]; then
   echo "==> would re-seal ${#SECRET_NAMES[@]} secrets from ${ENV_FILE}"
 else

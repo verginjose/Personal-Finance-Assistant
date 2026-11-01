@@ -36,6 +36,8 @@ spec:
       labels:
         app: minio
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        secret.reloader.stakater.com/reload: "minio-secrets"
     spec:
       containers:
         - name: minio
@@ -50,7 +52,7 @@ spec:
               value: admin
             - name: MINIO_ROOT_PASSWORD
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: MINIO_ROOT_PASSWORD }
+                secretKeyRef: { name: minio-secrets, key: MINIO_ROOT_PASSWORD }
           ports:
             - name: api
               containerPort: 9000

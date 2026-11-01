@@ -1244,192 +1244,6 @@ data:
       "panels": [
         {
           "id": 1,
-          "title": "Pod restarts (1h)",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Container restarts for the primary and replica in the last hour.",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "sum(changes(container_start_time_seconds{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"}[1h]))",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0,
-              "color": {
-                "mode": "background"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
-                ]
-              },
-              "mappings": []
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "background",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "x": 0,
-            "y": 0,
-            "w": 8,
-            "h": 4
-          }
-        },
-        {
-          "id": 2,
-          "title": "Memory used",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Working set held by the Postgres containers (primary + replica).",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "sum(container_memory_working_set_bytes{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"})",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0,
-              "color": {
-                "mode": "none"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": [],
-              "unit": "bytes"
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "x": 8,
-            "y": 0,
-            "w": 8,
-            "h": 4
-          }
-        },
-        {
-          "id": 3,
-          "title": "CPU used (cores)",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Cores actually used by Postgres right now (primary + replica).",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"}[5m]))",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0,
-              "color": {
-                "mode": "none"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": [],
-              "unit": "none"
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "x": 16,
-            "y": 0,
-            "w": 8,
-            "h": 4
-          }
-        },
-        {
-          "id": 4,
           "title": "Postgres logs \u2014 $service | $search",
           "type": "logs",
           "datasource": {
@@ -1461,13 +1275,13 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 4,
+            "y": 0,
             "w": 24,
             "h": 12
           }
         },
         {
-          "id": 5,
+          "id": 2,
           "title": "CPU usage % by pod",
           "type": "timeseries",
           "datasource": {
@@ -1521,13 +1335,13 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 16,
+            "y": 12,
             "w": 12,
             "h": 8
           }
         },
         {
-          "id": 6,
+          "id": 3,
           "title": "Memory usage % by pod",
           "type": "timeseries",
           "datasource": {
@@ -1581,13 +1395,13 @@ data:
           },
           "gridPos": {
             "x": 12,
-            "y": 16,
+            "y": 12,
             "w": 12,
             "h": 8
           }
         },
         {
-          "id": 7,
+          "id": 4,
           "title": "Runbook \u2014 psql commands",
           "type": "text",
           "options": {
@@ -1600,7 +1414,7 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 24,
+            "y": 20,
             "w": 24,
             "h": 22
           },
@@ -1694,192 +1508,6 @@ data:
       "panels": [
         {
           "id": 1,
-          "title": "Pod restarts (1h)",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Container restarts for the master and replica in the last hour.",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "sum(changes(container_start_time_seconds{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}[1h]))",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0,
-              "color": {
-                "mode": "background"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
-                ]
-              },
-              "mappings": []
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "background",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "x": 0,
-            "y": 0,
-            "w": 8,
-            "h": 4
-          }
-        },
-        {
-          "id": 2,
-          "title": "Memory used",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Working set held by the Redis containers (master + replica).",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "sum(container_memory_working_set_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"})",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0,
-              "color": {
-                "mode": "none"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": [],
-              "unit": "bytes"
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "x": 8,
-            "y": 0,
-            "w": 8,
-            "h": 4
-          }
-        },
-        {
-          "id": 3,
-          "title": "CPU used (cores)",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Cores actually used by Redis right now (master + replica).",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}[5m]))",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0,
-              "color": {
-                "mode": "none"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": [],
-              "unit": "none"
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "x": 16,
-            "y": 0,
-            "w": 8,
-            "h": 4
-          }
-        },
-        {
-          "id": 4,
           "title": "Redis logs \u2014 $service | $search",
           "type": "logs",
           "datasource": {
@@ -1911,13 +1539,13 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 4,
+            "y": 0,
             "w": 24,
             "h": 12
           }
         },
         {
-          "id": 5,
+          "id": 2,
           "title": "CPU usage % by pod",
           "type": "timeseries",
           "datasource": {
@@ -1971,13 +1599,13 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 16,
+            "y": 12,
             "w": 12,
             "h": 8
           }
         },
         {
-          "id": 6,
+          "id": 3,
           "title": "Memory usage % by pod",
           "type": "timeseries",
           "datasource": {
@@ -2031,13 +1659,13 @@ data:
           },
           "gridPos": {
             "x": 12,
-            "y": 16,
+            "y": 12,
             "w": 12,
             "h": 8
           }
         },
         {
-          "id": 7,
+          "id": 4,
           "title": "Runbook \u2014 redis-cli commands",
           "type": "text",
           "options": {
@@ -2050,7 +1678,7 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 24,
+            "y": 20,
             "w": 24,
             "h": 22
           },

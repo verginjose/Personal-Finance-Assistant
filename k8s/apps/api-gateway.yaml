@@ -83,7 +83,9 @@ spec:
               cpu: 250m
               memory: 512Mi
             limits:
-              cpu: "1"
+              # Reactive gateway: one core was saturating while it proxied
+              # 50 concurrent clients; two keeps the event loop ahead.
+              cpu: "2"
               memory: 2Gi
           startupProbe:
             httpGet:

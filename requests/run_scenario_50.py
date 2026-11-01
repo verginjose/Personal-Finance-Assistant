@@ -49,7 +49,7 @@ from run_load_test import (  # noqa: E402
 
 EXPENSE_CATEGORIES = [
     "GROCERIES", "RESTAURANTS", "FOOD_DELIVERY", "FUEL", "PUBLIC_TRANSPORT",
-    "CAB_AND_AUTO", "ELECTRICITY", "INTERNET", "MEDICAL", "MEDICINES",
+    "CAB_AND_AUTO", "ELECTRICITY", "INTERNET", "DOCTOR_AND_CLINIC", "MEDICINES",
     "CLOTHING", "MOVIES_AND_EVENTS", "PETS", "COFFEE_AND_SNACKS",
 ]
 GROUP_EXPENSE_LABELS = [
@@ -139,8 +139,12 @@ def stage_personal(client, member, checks, args, rng):
             "description": f"scenario seed {i}",
             "createdAt": iso(stamped),
         }
+        # A real client sends a key per click so its own retry cannot duplicate
+        # the row; the shared retry layer benefits from the same protection.
+        headers = member.headers()
+        headers["X-Idempotency-Key"] = str(uuid.uuid4())
         status, resp, _ = client.request("personal", "/upsert/create", "POST",
-                                         headers=member.headers(), body=body)
+                                         headers=headers, body=body)
         if status == 201:
             member.created.append((resp.get("id"), body["type"], amount))
             if is_income:
@@ -155,8 +159,10 @@ def stage_personal(client, member, checks, args, rng):
 
     # Recurring transactions (the subscription detector's raw material).
     for vendor in rng.sample(RECURRING_VENDORS, 2):
+        headers = member.headers()
+        headers["X-Idempotency-Key"] = str(uuid.uuid4())
         status, resp, _ = client.request(
-            "personal", "/upsert/create", "POST", headers=member.headers(),
+            "personal", "/upsert/create", "POST", headers=headers,
             body={"userId": str(member.user_id), "name": vendor, "amount": 499.0,
                   "type": "EXPENSE", "category": "OTT_SUBSCRIPTIONS", "currency": "INR",
                   "description": "recurring seed", "recurring": True,
@@ -195,6 +201,87 @@ def stage_personal(client, member, checks, args, rng):
                 member.expected_income -= amount
             else:
                 member.expected_expense -= amount
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Stage 1b — security and concurrency races
+# ────────────────────────────────────────────────────────────────────────────
+def stage_refresh_race(client, member, checks):
+    """Four clients replay the same refresh token at the same instant. Token
+    rotation must let exactly one through; every loser gets a 4xx, never a
+    second live session."""
+    replay = member.refresh
+    if not replay:
+        return
+
+    def hit(_):
+        return client.request("auth", "/auth/refresh", "POST",
+                              body={"refreshToken": replay})[0]
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        codes = list(pool.map(hit, range(4)))
+    checks.ok(sum(1 for c in codes if c == 200) == 1,
+              "concurrent refresh rotates exactly once", f"statuses={codes}")
+
+    # The winner consumed the token; restore a session for the rest of the run.
+    status, body, _ = client.request(
+        "auth", "/auth/login", "POST",
+        body={"email": member.email, "password": member.password})
+    checks.status(200, status, "re-login after refresh race")
+    if status == 200 and body.get("token"):
+        member.token = body["token"]
+        member.refresh = body.get("refreshToken") or member.refresh
+
+
+def stage_idempotency(client, member, checks):
+    """Two eager clicks on save with the same key must yield one row. This is
+    also the check that the retry layer cannot duplicate a write."""
+    key = str(uuid.uuid4())
+    payload = {"userId": str(member.user_id), "name": "idempotent double submit",
+               "amount": 777.0, "type": "EXPENSE", "category": "OTHERS",
+               "currency": "INR", "description": "double submit",
+               "createdAt": iso(datetime.now())}
+    headers = member.headers()
+    headers["X-Idempotency-Key"] = key
+
+    def hit(_):
+        return client.request("personal", "/upsert/create", "POST",
+                              headers=dict(headers), body=payload)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(hit, range(2)))
+    statuses = [s for s, _, _ in results]
+    ids = {b.get("id") for s, b, _ in results if s == 201 and isinstance(b, dict)}
+    checks.ok(all(s == 201 for s in statuses),
+              "both idempotent submits accepted", f"statuses={statuses}")
+    checks.ok(len(ids) == 1, "idempotent submits share one row", f"ids={ids}")
+    if len(ids) == 1:
+        member.created.append((next(iter(ids)), "EXPENSE", 777.0))
+        member.expected_expense += 777.0
+
+
+def stage_authz(client, member, checks, group):
+    """Read-only cross-user probes: another member's token must never open this
+    member's data. Describes stay untouched so the run stays repeatable."""
+    if group is None or len(group.members) < 2:
+        return
+    victim = group.members[(group.members.index(member) + 1) % len(group.members)]
+    if not victim.created:
+        return
+    victim_txn, _, _ = victim.created[0]
+    uid = member.user_id
+
+    status, _, _ = client.request(
+        "personal", f"/upsert/entries/{victim_txn}?userId={uid}", "GET",
+        headers=member.headers())
+    checks.ok(status in (403, 404), "foreign entry id not readable",
+              f"got {status}")
+
+    status, _, _ = client.request(
+        "personal", f"/upsert/summary?userId={victim.user_id}", "GET",
+        headers=member.headers())
+    checks.ok(status in (403, 404), "foreign summary not readable",
+              f"got {status}")
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -267,6 +354,19 @@ def stage_group_expenses(client, group, member, checks, args, rng):
         if status == 201 and body.get("id") is not None:
             with group.lock:
                 group.expense_ids.append(body["id"])
+
+        # Read the analytics endpoints while the cohort is still writing, so
+        # stale-read handling is exercised under contention rather than after.
+        if n == 0:
+            uid = member.user_id
+            status, _, _ = client.request(
+                "analytics", f"/analytics/timeline-chart?userId={uid}", "GET",
+                headers=member.headers())
+            checks.status(200, status, "analytics during writes")
+            status, _, _ = client.request(
+                "analytics", f"/analytics/comprehensive?userId={uid}", "GET",
+                headers=member.headers())
+            checks.status(200, status, "comprehensive analytics during writes")
 
 
 def _balances(client, group, member_id):
@@ -506,6 +606,15 @@ def run(args):
     run_stage(ready, metrics, "personal",
               lambda m: stage_personal(client, m, Checks(metrics, "personal", f"user{m.idx}"),
                                        args, random.Random(args.seed + m.idx)))
+
+    print("\n\033[1mStage 2b — security and concurrency races\033[0m")
+    run_stage(ready, metrics, "security",
+              lambda m: (
+                  stage_refresh_race(client, m, Checks(metrics, "security", f"user{m.idx}")),
+                  stage_idempotency(client, m, Checks(metrics, "security", f"user{m.idx}")),
+                  stage_authz(client, m, Checks(metrics, "security", f"user{m.idx}"),
+                              group_of(m)),
+              ))
 
     print("\n\033[1mStage 3 — receipt uploads (OCR)\033[0m")
     run_stage(ready, metrics, "ocr",

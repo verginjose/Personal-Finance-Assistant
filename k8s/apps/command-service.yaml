@@ -88,8 +88,10 @@ spec:
               cpu: 250m
               memory: 512Mi
             limits:
-              cpu: "2"
-              memory: 2Gi
+              # Host has 16 vCPU; 3 keeps the write path responsive under the
+              # 50-user scenario while leaving cores for the desktop.
+              cpu: "3"
+              memory: 3Gi
           startupProbe:
             httpGet:
               path: /actuator/health/liveness

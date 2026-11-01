@@ -13,8 +13,9 @@ spring:
         default_schema: finance
   datasource:
     hikari:
-      maximum-pool-size: 25
-      minimum-idle: 2
+      maximum-pool-size: 30
+      minimum-idle: 5
+      connection-timeout: 5000
 
   # ── Redis & Caching ─────────────────────────────────────────────────────────
   cache:

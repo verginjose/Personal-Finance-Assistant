@@ -169,6 +169,20 @@ Totals at defaults (20 users, 100 txns, 2 bills):
 - 20 groups × 3 members, 60 acceptance calls, 120 shared expenses
 - ~6 000 HTTP requests in total
 
+`run_scenario_50.py` adds a stage between the personal writes and OCR:
+
+- **refresh race** — four concurrent replays of the same refresh token; exactly
+  one rotation may succeed and the losers must get a 4xx.
+- **idempotent double-submit** — two concurrent creates with one
+  `X-Idempotency-Key`; both must be accepted with the same entry id, so the
+  retry layer cannot duplicate the row. The personal creates also send a key
+  per click, the way a real client should.
+- **cross-user probes** — another member's token must not read this member's
+  entry or summary (403/404), and the run never issues a destructive
+  cross-user call.
+- **analytics under writes** — `timeline-chart` and `comprehensive` are read
+  while the cohort is still posting shared expenses, not after it settles.
+
 ---
 
 ## 4. Constraints that shape the assertions

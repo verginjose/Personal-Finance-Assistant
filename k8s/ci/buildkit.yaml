@@ -112,8 +112,11 @@ spec:
               cpu: 500m
               memory: 1Gi
             limits:
-              cpu: "6"
-              memory: 4Gi
+              # 6 cores made image builds pin every core and heat the laptop;
+              # 4 still outruns the test suite and leaves headroom for builds
+              # that overlap with a live deployment.
+              cpu: "4"
+              memory: 3Gi
       volumes:
         - name: config
           configMap:

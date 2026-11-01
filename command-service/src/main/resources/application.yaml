@@ -40,9 +40,9 @@ app:
       username: ${SPRING_DATASOURCE_USERNAME:finance_user}
       password: ${SPRING_DATASOURCE_PASSWORD:finance_pass}
       pool-name: HikariPool-write
-      maximum-pool-size: 25
-      minimum-idle: 2
-      connection-timeout: 3000
+      maximum-pool-size: 40
+      minimum-idle: 10
+      connection-timeout: 5000
       max-lifetime: 1800000
     read:
       jdbc-url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/finance_assistant}
@@ -51,7 +51,7 @@ app:
       pool-name: HikariPool-read
       maximum-pool-size: 25
       minimum-idle: 5
-      connection-timeout: 3000
+      connection-timeout: 5000
       max-lifetime: 1800000
       connection-init-sql: SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY
 

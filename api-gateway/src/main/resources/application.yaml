@@ -137,9 +137,10 @@ resilience4j:
     instances:
       # Sized for ~50 concurrent writers. A 10-sample window plus a 3s slow
       # threshold opened the breaker as soon as Postgres queued; the window is
-      # now wide enough that a brief burst cannot trip it by itself.
+      # now wide enough that a brief burst cannot trip it by itself, and 150
+      # samples ride out the slow tail the group-expense path produces.
       upsert-cb:
-        sliding-window-size: 100
+        sliding-window-size: 150
         failure-rate-threshold: 60
         wait-duration-in-open-state: 15s
         permitted-number-of-calls-in-half-open-state: 10

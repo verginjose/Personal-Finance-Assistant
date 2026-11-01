@@ -52,7 +52,26 @@ spec:
           # ms of *committed* transactions. It cannot corrupt anything, and it
           # does not apply to process crashes, OOM kills or pod restarts -- the
           # page cache survives those. Revert to "on" if that window matters.
-          args: ["-c", "synchronous_commit=off"]
+          #
+          # Sized for this host (16 vCPU / 23 GiB shared with the desktop):
+          #   200 connections covers the service pools (40+25+30 Hikari plus
+          #   auth-service's R2DBC pool) with room to spike, while a 4 GiB
+          #   container keeps shared_buffers at 1 GiB and leaves the OS page
+          #   cache for the rest. max_connections must match on the replica or
+          #   it refuses hot standby.
+          args:
+            - "-c"
+            - "synchronous_commit=off"
+            - "-c"
+            - "max_connections=200"
+            - "-c"
+            - "shared_buffers=1GB"
+            - "-c"
+            - "effective_cache_size=3GB"
+            - "-c"
+            - "work_mem=8MB"
+            - "-c"
+            - "maintenance_work_mem=256MB"
           ports:
             - name: postgres
               containerPort: 5432
@@ -81,10 +100,10 @@ spec:
             # One core was the bottleneck behind the gateway's 3s slow-call
             # tail and the upsert-cb trips at ~10 concurrent writers. The host
             # has 16 vCPU; give the write path room to queue in Postgres rather
-            # than in the gateway.
+            # than in the gateway, but stop at 6 so the desktop keeps cores.
             limits:
-              cpu: "4"
-              memory: 2Gi
+              cpu: "6"
+              memory: 4Gi
           readinessProbe:
             exec:
               command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]

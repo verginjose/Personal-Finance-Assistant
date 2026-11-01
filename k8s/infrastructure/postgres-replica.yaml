@@ -74,6 +74,15 @@ spec:
         - name: postgres
           image: ankane/pgvector:v0.5.1
           imagePullPolicy: IfNotPresent
+          # max_connections must be >= the primary's or the standby refuses to
+          # accept connections; shared_buffers stays at 1 GiB to match.
+          args:
+            - "-c"
+            - "max_connections=200"
+            - "-c"
+            - "shared_buffers=1GB"
+            - "-c"
+            - "effective_cache_size=2GB"
           ports:
             - name: postgres
               containerPort: 5432
@@ -97,8 +106,8 @@ spec:
               cpu: 250m
               memory: 512Mi
             limits:
-              cpu: "2"
-              memory: 2Gi
+              cpu: "3"
+              memory: 3Gi
           readinessProbe:
             exec:
               command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]

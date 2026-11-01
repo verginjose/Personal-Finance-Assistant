@@ -23,7 +23,7 @@ metadata:
     app: auth-service
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
-  replicas: 2
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:

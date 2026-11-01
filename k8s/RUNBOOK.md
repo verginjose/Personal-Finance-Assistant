@@ -42,13 +42,13 @@ otherwise and breaks its gRPC streams behind a path prefix):
 
 | Host | Backend | Defined in |
 |---|---|---|
-| `grafana.verginjose.cloud` | `pfa/grafana:3000` | `k8s/ui-access.yaml` (applied by `apply.sh`) |
-| `argocd.verginjose.cloud` | `argocd/argocd-server:80` | `k8s/ci/argocd/ingress.yaml` (applied by `expose.sh`) |
+| `grafana.verginjose.cloud` | `pfa/grafana:3000` | `k8s/edge/ui-access.yaml` (applied by `apply.sh`) |
+| `argocd.verginjose.cloud` | `argocd/argocd-server:80` | `argocd/ingress.yaml` (applied by `expose.sh`) |
 
 Expose Argo CD:
 
 ```bash
-./k8s/ci/argocd/expose.sh
+./argocd/expose.sh
 ```
 
 Then, **in this order**, in the Cloudflare dashboard:

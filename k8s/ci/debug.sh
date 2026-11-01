@@ -97,7 +97,7 @@ if kubectl get ns argocd >/dev/null 2>&1; then
     *) bad "pfa-apps health=${health}" ;;
   esac
 else
-  warn "argocd namespace absent (./k8s/ci/argocd/apply.sh)"
+  warn "argocd namespace absent (./argocd/apply.sh)"
 fi
 
 # ── recent workflow runs ────────────────────────────────────────────────────

@@ -1,0 +1,33 @@
+# Ingress for the app and the public Grafana hostname. The Cloudflare Tunnel
+# (k8s/optional/cloudflared.yaml) is intentionally NOT included: it is optional
+# and only applied when you opt in.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pfa-edge
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: personal-finance-assistant
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/verginjose/Personal-Finance-Assistant.git
+    targetRevision: master
+    path: k8s/edge
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pfa
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

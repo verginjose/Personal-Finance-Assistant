@@ -1,5 +1,5 @@
 # Public hostname for Grafana, routed through the same Cloudflare Tunnel as
-# verginjose.cloud. Argo CD's hostname lives in k8s/ci/argocd/ingress.yaml so it
+# verginjose.cloud. Argo CD's hostname lives in argocd/ingress.yaml so it
 # is only created once the argocd namespace exists.
 #
 # This host MUST be covered by a Cloudflare Access policy before the tunnel

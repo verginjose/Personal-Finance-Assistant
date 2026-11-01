@@ -65,6 +65,8 @@ spec:
       labels:
         app: prometheus
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        reloader.stakater.com/auto: "true"
     spec:
       serviceAccountName: prometheus
       securityContext:

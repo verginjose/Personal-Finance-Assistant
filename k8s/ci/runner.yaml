@@ -8,7 +8,7 @@
 # re-register itself; the token is never written to disk by the workflow.
 #
 # The runner has no cluster permissions: it builds and pushes, then commits
-# the new tag. Argo CD (k8s/ci/argocd/) applies that change to the cluster.
+# the new tag. Argo CD (argocd/) applies that change to the cluster.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

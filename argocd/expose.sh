@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Make the Argo CD UI reachable at https://argocd.verginjose.cloud via the
-# Cloudflare Tunnel (ingress object lives in k8s/ui-access.yaml).
+# Cloudflare Tunnel (ingress object lives in k8s/edge/ui-access.yaml).
 #
-#   ./k8s/ci/argocd/expose.sh
+#   ./argocd/expose.sh
 #
 # Two ConfigMap patches, both idempotent:
 #   argocd-cm            url  — external URL used for redirects/OAuth callbacks
@@ -23,7 +23,7 @@ kubectl config current-context >/dev/null 2>&1 || {
   exit 1
 }
 kubectl get ns "${ARGOCD_NS}" >/dev/null 2>&1 || {
-  echo "Argo CD is not installed. Run ./k8s/ci/argocd/apply.sh first." >&2
+  echo "Argo CD is not installed. Run ./argocd/apply.sh first." >&2
   exit 1
 }
 

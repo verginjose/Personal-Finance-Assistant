@@ -1,5 +1,5 @@
 # Public hostname for the Argo CD UI, routed through the same Cloudflare Tunnel
-# as verginjose.cloud. Applied by k8s/ci/argocd/expose.sh, which also patches
+# as verginjose.cloud. Applied by argocd/expose.sh, which also patches
 # argocd-cm so the URL matches and sets server.insecure=true (Cloudflare
 # terminates TLS; the ingress controller cannot verify Argo CD's self-signed
 # certificate, so the pod speaks plain HTTP behind the tunnel).

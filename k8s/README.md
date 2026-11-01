@@ -28,7 +28,7 @@ k8s/
 │   ├── setup-registry.sh      # (root) containerd insecure-registry config
 │   ├── registry-gc.sh         # tag retention + garbage collection
 │   ├── debug.sh               # one-shot health report
-│   └── argocd/                # install Argo CD + the pfa-apps Application
+│   └── argocd/                # install Argo CD + register the repo (see argocd/)
 ├── infrastructure/            # stateful deps + observability
 │   ├── postgres-primary.yaml
 │   ├── postgres-replica.yaml
@@ -100,9 +100,32 @@ One push, step by step:
    the change. Kubernetes rolls only that Deployment.
 
 The runner has **no cluster permissions** — it only builds, pushes and commits.
-Argo CD is the only component that mutates the cluster. Infrastructure
-(Postgres, RabbitMQ, ClickHouse, observability) is *not* managed by Argo; it
-still comes from `./k8s/apply.sh`.
+Argo CD is the only component that mutates workload manifests.
+
+### What Argo manages
+
+Argo uses an **app-of-apps** tree under `argocd/`:
+
+```
+argocd/root.yaml              → points at argocd/apps
+argocd/apps/05-secrets.yaml   → k8s/sealed            (SealedSecrets)
+argocd/apps/10-infra.yaml     → k8s/infrastructure + k8s/config/infra
+argocd/apps/20-apps.yaml      → k8s/apps              (the six services)
+argocd/apps/30-ci.yaml        → k8s/ci                (registry, BuildKit, runner)
+argocd/apps/40-edge.yaml      → k8s/edge              (ingress)
+```
+
+The `sync-wave` annotation on each child only orders their creation; after that
+each reconciles independently. All children use `prune: false` and
+`selfHeal: true`.
+
+**Still outside Argo**, and applied by `./k8s/apply.sh`:
+
+- the Sealed Secrets controller and Reloader (Argo depends on the former);
+- `clickhouse-init` and `grafana-datasources` — ConfigMaps that embed a password
+  from `.env`;
+- `optional/cloudflared.yaml` (opt-in);
+- `/etc/rancher/k3s/registries.yaml`, which is a host file, not a Kubernetes object.
 
 **Branch vs merge.** A push to `k8s/local-deployment` builds a real image and
 commits the tag bump on that branch, but Argo ignores it — so nothing deploys
@@ -245,7 +268,7 @@ the work:
 | `registry.yaml` | `registry:2.8.3` image | distribution/distribution |
 | `buildkit.yaml` | `moby/buildkit` image | moby/buildkit |
 | `runner.yaml` | `myoung34/github-runner` image | actions/runner |
-| `argocd/application.yaml` | `argocd` image (controller + repo-server) | argoproj/argo-cd |
+| `argocd/apply.sh` | installs the `argocd` image (controller + repo-server) | argoproj/argo-cd |
 | `build.yml` steps | shell executed inside `ci-runner` | **this repo** |
 
 The only build logic we authored is the shell in `.github/workflows/build.yml`

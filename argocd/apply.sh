@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install Argo CD (if needed), register the repo, and create the Application.
 #
-#   ./k8s/ci/argocd/apply.sh
+#   ./argocd/apply.sh
 #
 # Requires GITHUB_PAT in .env — it is reused as the HTTPS credential for the
 # private repo and stored in the argocd/pfa-repo Secret. If Argo CD is already
@@ -9,7 +9,7 @@
 set -euo pipefail
 
 ARGOCD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${ARGOCD_DIR}/../../.." && pwd)"
+ROOT_DIR="$(cd "${ARGOCD_DIR}/.." && pwd)"
 ARGOCD_VERSION="${ARGOCD_VERSION:-v3.5.6}"
 REPO_URL="https://github.com/verginjose/Personal-Finance-Assistant.git"
 REPO_USER="verginjose"
@@ -61,7 +61,7 @@ EOF
 echo "    secret/pfa-repo applied"
 
 echo "==> Creating the Application"
-kubectl apply -f "${ARGOCD_DIR}/application.yaml"
+kubectl apply -f "${ARGOCD_DIR}/root.yaml"
 
 echo
 echo "Argo CD is configured. It polls the repo every 3 minutes and syncs k8s/apps."

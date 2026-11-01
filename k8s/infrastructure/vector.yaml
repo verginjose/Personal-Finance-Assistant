@@ -190,6 +190,8 @@ spec:
       labels:
         app: vector
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        reloader.stakater.com/auto: "true"
     spec:
       serviceAccountName: vector
       tolerations:

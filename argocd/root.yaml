@@ -1,0 +1,43 @@
+# Root Application (app-of-apps).
+#
+# Points at argocd/apps, which contains one Application per layer:
+#   05-secrets   SealedSecrets
+#   10-infra     data layer + observability
+#   20-apps      the six services
+#   30-ci        registry, BuildKit, GitHub runner
+#   40-edge      ingress
+#
+# The sync-wave annotations on those Applications only order their *creation*.
+# Afterwards each child reconciles on its own, which is fine: services retry
+# until their dependencies are ready.
+#
+# prune stays false. Deleting an Application with cascade deletes the
+# resources it owns, and this tree now contains the stateful data layer.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pfa-root
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/verginjose/Personal-Finance-Assistant.git
+    targetRevision: master
+    path: argocd/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

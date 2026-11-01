@@ -1,0 +1,34 @@
+# In-cluster CI: the registry, rootless BuildKit and the self-hosted GitHub
+# Actions runner. The one-time host setup (containerd's plain-HTTP registry
+# mirror in /etc/rancher/k3s/registries.yaml) is not a Kubernetes object and
+# stays manual.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pfa-ci
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: personal-finance-assistant
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/verginjose/Personal-Finance-Assistant.git
+    targetRevision: master
+    path: k8s/ci
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pfa
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

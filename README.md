@@ -203,6 +203,11 @@ git push → GitHub Actions (self-hosted runner in the cluster)
          → Argo CD syncs master → Deployment rolls out
 ```
 
+Only the six service directories trigger a build. Infrastructure and
+observability manifests are synced by Argo too (`argocd/apps/10-infra.yaml`),
+but they do not rebuild any image. Secrets are committed encrypted in
+`k8s/sealed/`; see [*What Argo manages*](k8s/README.md#what-argo-manages).
+
 Starting and reaching it:
 
 ```bash

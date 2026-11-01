@@ -34,6 +34,8 @@ spec:
       labels:
         app: grafana
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        reloader.stakater.com/auto: "true"
     spec:
       securityContext:
         fsGroup: 472

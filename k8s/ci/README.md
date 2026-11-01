@@ -95,7 +95,7 @@ Argo CD watches `k8s/apps` on `master` and syncs automatically (no prune,
 `selfHeal: true`). Set it up with:
 
 ```bash
-./k8s/ci/argocd/apply.sh     # installs Argo CD if absent, registers the repo
+./argocd/apply.sh     # installs Argo CD if absent, registers the repo
 ```
 
 It reuses `GITHUB_PAT` as the HTTPS credential for the private repo, stored in
@@ -117,12 +117,12 @@ it publicly, which this setup does not do.
 **Which branch deploys.** `targetRevision: master`. CI commits the tag bump to
 the branch that triggered the build, so a push to `k8s/local-deployment` builds
 an image but does not deploy it until merged into `master`. Change the field in
-`argocd/application.yaml` if you want feature-branch deploys.
+`argocd/apps/*.yaml` if you want feature-branch deploys.
 
-**Infrastructure is not managed by Argo** (yet). Postgres, RabbitMQ,
-ClickHouse, Grafana and the observability stack still come from `k8s/apply.sh`,
-because their Secrets and rendered ConfigMaps are generated from `.env` and are
-not in git. Moving them in means committing SealedSecrets (or similar) first.
+**Infrastructure is now managed by Argo** through `argocd/apps/10-infra.yaml`
+(`k8s/infrastructure` + `k8s/config/infra`). Secrets come from the committed
+SealedSecrets in `k8s/sealed/`. The two ConfigMaps that embed a password
+(`clickhouse-init`, `grafana-datasources`) are still rendered by `k8s/apply.sh`.
 
 ## Design notes
 

@@ -1,0 +1,92 @@
+apiVersion: v1
+data:
+  001_create_schemas.sql: |
+    CREATE SCHEMA IF NOT EXISTS auth;
+    CREATE SCHEMA IF NOT EXISTS finance;
+    CREATE SCHEMA IF NOT EXISTS groups;
+    CREATE SCHEMA IF NOT EXISTS activity;
+
+    GRANT USAGE ON SCHEMA auth TO PUBLIC;
+    GRANT USAGE ON SCHEMA finance TO PUBLIC;
+    GRANT USAGE ON SCHEMA groups TO PUBLIC;
+    GRANT USAGE ON SCHEMA activity TO PUBLIC;
+  002_create_groups_schema.sql: |
+    CREATE SCHEMA IF NOT EXISTS groups;
+
+    GRANT USAGE ON SCHEMA groups TO PUBLIC;
+  003_create_activity_schema.sql: |
+    CREATE SCHEMA IF NOT EXISTS activity;
+
+    GRANT USAGE ON SCHEMA activity TO PUBLIC;
+  004_create_indexes.sql: |
+    -- Create a partial index for active transactions to speed up querying
+    -- We wait for Hibernate to create the tables first.
+    -- Wait, the db-init scripts run BEFORE Hibernate.
+    -- We can't create an index on a table that doesn't exist yet!
+  005_add_vector_rules.sql: |+
+    -- Enable pgvector extension
+    CREATE EXTENSION IF NOT EXISTS vector;
+
+    -- Create table for financial AI rules
+    CREATE TABLE IF NOT EXISTS finance.financial_rules (
+        id SERIAL PRIMARY KEY,
+        rule_text TEXT NOT NULL,
+        category VARCHAR(255),
+        embedding vector(384), -- Using 384 dimensions (e.g. all-MiniLM-L6-v2 size)
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Create an index for vector similarity search (IVFFlat or HNSW)
+    -- Assuming we use pgvector's HNSW index for performance
+    CREATE INDEX ON finance.financial_rules USING hnsw (embedding vector_l2_ops);
+
+
+  006_replication_hba.sh: |
+    #!/bin/bash
+    set -e
+
+    # Add replication rule to pg_hba.conf to allow the replica to stream WAL
+    echo "host replication all all md5" >> "$PGDATA/pg_hba.conf"
+    echo "host replication all all scram-sha-256" >> "$PGDATA/pg_hba.conf"
+
+    echo "Replication rules added to pg_hba.conf"
+  007_create_auth_users.sql: |
+    -- auth-service owns auth.users (see its User entity and AuthService),
+    -- but command-service and query-service map a RegisteredUser entity to the same
+    -- table with Hibernate ddl-auto=update. On a fresh database those services can
+    -- create auth.users first with only identity columns, which then makes the
+    -- auth service fail at login ("column users.password does not exist").
+    --
+    -- Creating the full table during database initialization removes the race.
+
+    CREATE SCHEMA IF NOT EXISTS auth;
+
+    CREATE TABLE IF NOT EXISTS auth.users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email VARCHAR(255) NOT NULL UNIQUE,
+        username VARCHAR(30) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        account_non_locked BOOLEAN NOT NULL DEFAULT TRUE,
+        profile_picture TEXT
+    );
+
+    -- Repair an auth.users table that Hibernate already created with only
+    -- id/email/username. No-op when the CREATE above produced the full table.
+    -- The gateway does not generate the id itself, so it must have a DB default.
+    ALTER TABLE auth.users ALTER COLUMN id SET DEFAULT gen_random_uuid();
+    ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS password VARCHAR(255) NOT NULL DEFAULT '';
+    ALTER TABLE auth.users ALTER COLUMN password DROP DEFAULT;
+    ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'USER';
+    ALTER TABLE auth.users ALTER COLUMN role DROP DEFAULT;
+    ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS account_non_locked BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS profile_picture TEXT;
+
+    CREATE INDEX IF NOT EXISTS idx_users_username ON auth.users(username);
+    CREATE INDEX IF NOT EXISTS idx_users_email ON auth.users(email);
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: pfa

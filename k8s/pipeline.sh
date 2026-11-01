@@ -164,7 +164,7 @@ fi
 # the cluster. Secrets are never written to disk.
 kubectl apply --dry-run=server -f "${K8S_DIR}/00-namespace.yaml" >/dev/null
 kubectl apply --dry-run=server -f "${K8S_DIR}/infrastructure/" >/dev/null
-kubectl apply --dry-run=server -f "${K8S_DIR}/ingress.yaml" >/dev/null
+kubectl apply --dry-run=server -f "${K8S_DIR}/edge/ingress.yaml" >/dev/null
 kubectl apply --dry-run=server -f "${K8S_DIR}/optional/cloudflared.yaml" >/dev/null
 app_args=()
 for f in "${K8S_DIR}"/apps/*.yaml; do

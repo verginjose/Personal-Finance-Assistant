@@ -318,7 +318,7 @@ if kubectl get namespace argocd >/dev/null 2>&1; then
     warn "Argo CD is running but pfa-apps is not readable"
   fi
 else
-  warn "Argo CD is not installed (./k8s/ci/argocd/apply.sh)"
+  warn "Argo CD is not installed (./argocd/apply.sh)"
 fi
 
 # ── 3b. port-forwards (on by default; --no-port-forward opts out) ────────────

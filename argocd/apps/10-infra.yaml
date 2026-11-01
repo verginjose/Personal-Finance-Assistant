@@ -1,0 +1,45 @@
+# Stateful data layer plus observability: Postgres primary/replica, Redis,
+# RabbitMQ, MinIO, ClickHouse, Prometheus, Grafana, Vector.
+#
+# Two sources:
+#   k8s/infrastructure     the workloads, Services, PVCs and inline ConfigMaps
+#   k8s/config/infra       the static ConfigMaps rendered from db-init/ and
+#                          observability/ (postgres-init, prometheus-config,
+#                          Grafana dashboards)
+#
+# Not in git, and therefore still rendered by k8s/apply.sh before the first
+# Argo sync: clickhouse-init and grafana-datasources, because both embed a
+# password from .env.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pfa-infra
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: personal-finance-assistant
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/verginjose/Personal-Finance-Assistant.git
+      targetRevision: master
+      path: k8s/infrastructure
+    - repoURL: https://github.com/verginjose/Personal-Finance-Assistant.git
+      targetRevision: master
+      path: k8s/config/infra
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pfa
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

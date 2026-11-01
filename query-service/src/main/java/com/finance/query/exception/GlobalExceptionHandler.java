@@ -8,7 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.ErrorResponse;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -66,5 +68,29 @@ public class GlobalExceptionHandler {
                         "message",msg,
                         "timestamp",LocalDateTime.now()
                 ));
+    }
+
+    /**
+     * A missing query/path parameter is a client error. Without this handler
+     * it falls through to handleGenericException and is reported as a 500,
+     * which makes caller mistakes look like service outages.
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<Map<String, Object>> handleMissingParameter(MissingServletRequestParameterException ex) {
+        log.warn("Missing request parameter: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(Map.of(
+                "error", "Bad Request",
+                "message", "Required request parameter '" + ex.getParameterName() + "' is missing",
+                "timestamp", LocalDateTime.now()));
+    }
+
+    /** A body that cannot be parsed (unknown enum value, malformed JSON) is a 400. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        log.warn("Unreadable request body: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(Map.of(
+                "error", "Bad Request",
+                "message", "Malformed request body",
+                "timestamp", LocalDateTime.now()));
     }
 }

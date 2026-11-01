@@ -23,3 +23,11 @@ node_modules/
 # Sealed Secrets private key backups — never commit, never move into the repo
 # (the real backup lives outside the working tree, e.g. ~/)
 *sealed-secrets-key*
+
+# Load-test artifacts
+requests/loadtest-report*.json
+requests/__pycache__/
+
+# Generated test credentials (passwords)
+requests/loadtest-users*.csv
+requests/scenario50-report*.json

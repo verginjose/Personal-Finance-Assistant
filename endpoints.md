@@ -41,8 +41,8 @@
 | **Analytics** | GET | /analytics/comprehensive | `Authorization: Bearer <jwt>`, `userId` query, optional timeline/filter params | – | Full analytics payload |
 | **Analytics** | POST | /analytics/custom-analytics | `Authorization: Bearer <jwt>` | `AnalyticsRequest` | Same as comprehensive |
 | **Analytics** | GET | /analytics/transaction-entries | `Authorization: Bearer <jwt>`, `userId` query, pagination | – | `TransactionEntryPage` |
-| **Analytics** | GET | /analytics/transactions/income-by-category | `Authorization: Bearer <jwt>`, `userId` query, `incomeCategory` query, optional dates, pagination | – | `TransactionEntryPage` |
-| **Analytics** | GET | /analytics/transactions/by-type | `Authorization: Bearer <jwt>`, `userId` query, `type` query, optional dates, pagination | – | `TransactionEntryPage` |
+| **Analytics** | GET | /analytics/transactions/income-by-category | `Authorization: Bearer <jwt>`, `userId` query, `categoryName` query (Category), required `startDate`/`endDate` (ISO date), pagination | – | `TransactionEntryPage` |
+| **Analytics** | GET | /analytics/transactions/by-type | `Authorization: Bearer <jwt>`, `userId` query, `transactionType` query (INCOME\|EXPENSE), required `startDate`/`endDate` (ISO date), pagination | – | `TransactionEntryPage` |
 | **Analytics** | GET | /analytics/health-score | `Authorization: Bearer <jwt>`, `userId` query | – | `HealthScoreResponse` |
 | **Analytics** | GET | /analytics/ai-insights | `Authorization: Bearer <jwt>`, `userId` query | – | `AiInsightResponse` |
 | **Analytics** | GET | /analytics/health | – | – | `{ status:"UP", service:"analytics-service" }` |

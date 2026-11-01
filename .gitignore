@@ -19,3 +19,7 @@ frontend/node_modules/
 node_modules/
 # local pipeline artifacts
 .pipeline/
+
+# Sealed Secrets private key backups — never commit, never move into the repo
+# (the real backup lives outside the working tree, e.g. ~/)
+*sealed-secrets-key*

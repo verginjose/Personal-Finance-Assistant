@@ -208,23 +208,133 @@ observability manifests are synced by Argo too (`argocd/apps/10-infra.yaml`),
 but they do not rebuild any image. Secrets are committed encrypted in
 `k8s/sealed/`; see [*What Argo manages*](k8s/README.md#what-argo-manages).
 
-Starting and reaching it:
+### Start and stop
 
 ```bash
-sudo systemctl start k3s                       # enabled at boot; no-op if already running
-export KUBECONFIG="$HOME/.kube/k3s.yaml"       # kubeconfig is NOT ~/.kube/config
-kubectl get nodes                              # jose-fedora Ready
-./k8s/ci/debug.sh                              # health of the app, CI and Argo CD
+export KUBECONFIG="$HOME/.kube/k3s.yaml"       # NOT ~/.kube/config
+cd ~/IdeaProjects/Personal-Finance-Assistant
+./k8s/start.sh
+```
 
-kubectl -n pfa port-forward svc/frontend 3001:80      # http://localhost:3001
-kubectl -n argocd port-forward svc/argocd-server 8080:443  # https://localhost:8080
+`start.sh` starts k3s if needed (it is enabled at boot), waits for every pod in
+`pfa` to be ready, reports Argo CD's Applications, starts the UI port-forwards
+and prints how to reach everything. Passwords stay hidden.
+
+| Command | Effect |
+|---|---|
+| `./k8s/start.sh` | start, wait for readiness, forward UIs |
+| `./k8s/start.sh --secrets` | print the credentials, then exit |
+| `./k8s/start.sh --no-port-forward` | skip the UI forwards |
+| `./k8s/stop.sh` | stop k3s; **no data is deleted** |
+
+Everything lives on PVCs under `/var/lib/rancher/k3s/storage`, so stopping k3s
+or powering off is safe. `./k8s/cleanup.sh` is destructive and is not part of
+this flow.
+
+Reach it:
+
+```bash
+kubectl -n pfa port-forward svc/frontend 3001:80              # http://localhost:3001
+kubectl -n argocd port-forward svc/argocd-server 8080:443     # https://localhost:8080
+./k8s/ci/debug.sh                                             # app + CI + Argo health
 ```
 
 The public instance is at **https://verginjose.cloud** (Cloudflare tunnel).
 
-Everything else — one-time cluster/GPU setup, the CI components, the manual
-fallback, debugging and teardown — is in [`k8s/README.md`](k8s/README.md),
-[`k8s/RUNBOOK.md`](k8s/RUNBOOK.md) and [`k8s/CHEATSHEET.md`](k8s/CHEATSHEET.md).
+### Update a secret (`.env`)
+
+`.env` is gitignored and never reaches the cluster directly. Secrets are
+committed **encrypted** in `k8s/sealed/`; Argo applies them and Reloader
+restarts the pods that use them.
+
+```bash
+# 1. edit .env
+./k8s/seal-secrets.sh          # re-encrypt into k8s/sealed/*.yaml
+git add k8s/sealed && git commit -m 'chore(secrets): rotate X' && git push
+# Argo applies it, the controller decrypts, Reloader restarts the affected pods
+```
+
+Add `--apply` to put it live immediately without waiting for Argo. Sealing is
+randomised, so the script always produces a diff.
+
+**Do not `kubectl edit secret`** — the controller reverts it within about a
+second. Editing `.env` and re-sealing is the only change path.
+
+**Back up the private key once.** Without it, every file in `k8s/sealed/` is
+unreadable on a rebuilt cluster:
+
+```bash
+kubectl -n kube-system get secret \
+  -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml \
+  > ~/sealed-secrets-key.backup.yaml
+```
+
+Keep it out of git.
+
+### New machine from scratch
+
+Prerequisites: Linux with systemd, `git`, `kubectl`, network access. A GPU is
+optional — only OCR needs it.
+
+```bash
+# 1. k3s
+curl -sfL https://get.k3s.io | sh -
+mkdir -p ~/.kube
+sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/k3s.yaml
+sudo chown "$USER" ~/.kube/k3s.yaml
+export KUBECONFIG="$HOME/.kube/k3s.yaml"
+
+# 2. clone and configure
+git clone https://github.com/verginjose/Personal-Finance-Assistant.git
+cd Personal-Finance-Assistant
+cp .env.example .env && chmod 600 .env
+$EDITOR .env                                   # replace every CHANGE-ME
+
+# 3. install kubeseal (single binary; match the vendored controller version)
+curl -sSLo /tmp/kubeseal.tgz \
+  https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.41.2/kubeseal-0.41.2-linux-amd64.tar.gz
+tar -xzf /tmp/kubeseal.tgz -C /tmp kubeseal && sudo install -m 0755 /tmp/kubeseal /usr/local/bin/kubeseal
+
+# 4. install the secret and reload controllers
+kubectl apply -f k8s/sealed-secrets/controller.yaml
+kubectl apply -f k8s/reloader/reloader.yaml
+kubectl -n kube-system rollout status deploy/sealed-secrets-controller
+
+# 5. seal the secrets for THIS cluster (its key is new)
+./k8s/seal-secrets.sh
+git add k8s/sealed      # commit the regenerated files if you keep this cluster
+
+# 6. infrastructure, services and ingress
+./k8s/apply.sh
+
+# 7. install Argo CD and hand over
+./argocd/apply.sh
+
+# 8. first image build (the manifests pin images in the in-cluster registry)
+gh workflow run build-and-deploy -f service=all
+#    no gh? GitHub → Actions → build-and-deploy → Run workflow → service: all
+#    The runner from step 7 registers within a minute. Until the build finishes
+#    the service pods sit in ImagePullBackOff and then start on their own.
+
+# 9. verify
+./k8s/ci/debug.sh
+kubectl -n argocd get applications                  # six, all Synced/Healthy
+```
+
+Two host-level steps are not Kubernetes objects and stay manual:
+
+- **Registry mirror** — containerd must treat `192.168.0.7:30500` as plain HTTP.
+  Write `/etc/rancher/k3s/registries.yaml`, then `sudo systemctl restart k3s`
+  (see [`k8s/ci/README.md`](k8s/ci/README.md), step 1).
+- **Node IP** — `192.168.0.7:30500` is hardcoded in every `image:` field and in
+  `registries.yaml`. If your machine has a different address, reserve it on the
+  router or update those files before the first build.
+- **GPU (optional)** — `./k8s/setup-k3s-nvidia.sh` for OCR.
+
+Details: [`k8s/README.md`](k8s/README.md) (setup, fallbacks),
+[`k8s/RUNBOOK.md`](k8s/RUNBOOK.md) (operations),
+[`k8s/CHEATSHEET.md`](k8s/CHEATSHEET.md) (commands),
+[`env/README.md`](env/README.md) (per-service env files).
 
 ---
 ## API Documentation

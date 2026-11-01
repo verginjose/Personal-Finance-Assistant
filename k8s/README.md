@@ -7,28 +7,27 @@ from the services themselves.
 ```
 k8s/
 ├── 00-namespace.yaml          # namespace: pfa
-├── secrets.example.yaml       # template; apply.sh builds the real Secret from .env
-├── ingress.yaml               # finance.local -> frontend
-├── apply.sh                   # renders configmaps/secrets and deploys in order
+├── apply.sh                   # bootstrap: controllers, sealed secrets, infra, apps, ingress
 ├── apply-observability.sh     # re-render + restart Grafana/Prometheus/Vector only
+├── seal-secrets.sh            # re-encrypt .env + env/<svc>.env into k8s/sealed/
+├── sync-env.sh                # re-seal, apply, and roll consumers (infra workaround)
 ├── build-images.sh            # offline fallback: build images, import into k3s/kind
 ├── pipeline.sh                # offline fallback: full build -> render -> deploy -> verify
 ├── setup-k3s-nvidia.sh        # one-time privileged k3s + GPU + firewalld setup
 ├── cleanup.sh                 # tear down CI / app / images / host config / cluster
-├── SERVICES.md                # per-service/pod reference: ports, config, logs, failures
-├── RUNBOOK.md                 # deploy/access/debug/query/Grafana cheat sheet
-├── START-STOP.md              # stop, start, prove no data was lost
-├── CHEATSHEET.md              # learn the commands, then clean up step by step
-├── ci/                        # CI/CD: in-cluster registry, BuildKit, runner, Argo CD
-│   ├── README.md              # setup and operations
+├── secrets.example.yaml       # template for the infrastructure Secret (reference only)
+├── sealed/                    # committed SealedSecrets (source of truth for the cluster)
+├── sealed-secrets/            # vendored controller manifests (v0.41.2)
+├── reloader/                  # vendored Reloader manifests (v1.4.23)
+├── edge/
+│   ├── ingress.yaml           # finance.local -> frontend
+│   └── ui-access.yaml         # public Grafana hostname
+├── SERVICE(S).md etc.         # SERVICES.md, RUNBOOK.md, START-STOP.md, CHEATSHEET.md
+├── ci/                        # CI/CD: in-cluster registry, BuildKit, runner
 │   ├── registry.yaml          # registry:2 + NodePort 30500 + 50 Gi PVC
 │   ├── buildkit.yaml          # rootless BuildKit + 40 Gi cache PVC
 │   ├── runner.yaml            # self-hosted GitHub Actions runner
-│   ├── apply.sh               # deploy the CI stack
-│   ├── setup-registry.sh      # (root) containerd insecure-registry config
-│   ├── registry-gc.sh         # tag retention + garbage collection
-│   ├── debug.sh               # one-shot health report
-│   └── argocd/                # install Argo CD + register the repo (see argocd/)
+│   └── apply.sh, setup-registry.sh, registry-gc.sh, debug.sh, README.md
 ├── infrastructure/            # stateful deps + observability
 │   ├── postgres-primary.yaml
 │   ├── postgres-replica.yaml
@@ -46,9 +45,16 @@ k8s/
 │   ├── query-service.yaml
 │   ├── ocr-service.yaml       # requires an NVIDIA GPU
 │   └── frontend.yaml
-├── config/                    # templates rendered by apply.sh
+├── config/
+│   ├── infra/                 # committed static ConfigMaps (Argo-managed)
+│   ├── grafana/               # datasource template (password-bearing)
+│   └── clickhouse-postgres.sql.tmpl
 └── optional/
     └── cloudflared.yaml
+
+argocd/                        # app-of-apps (see README.md "What Argo manages")
+├── root.yaml
+└── apps/                      # 05-secrets, 10-infra, 20-apps, 30-ci, 40-edge
 ```
 
 ## How delivery works (CI/CD architecture)
@@ -329,7 +335,7 @@ scripts wrap the day-to-day operations:
 ./k8s/start.sh --secrets            # print only the passwords (incl. Argo CD), then exit
 ./k8s/start.sh --no-port-forward    # do not start the :3000/:8080/... forwards
 ./k8s/start.sh --stop-port-forwards # stop the forwards and exit
-./k8s/start.sh --full               # also re-render/re-apply from .env
+./k8s/start.sh --full               # also run ./k8s/apply.sh
 
 ./k8s/stop.sh                       # stop k3s cleanly, delete nothing
 ./k8s/stop.sh --cancel-runs         # also cancel in-flight GitHub Actions builds
@@ -489,7 +495,8 @@ update the `image:` fields, and create an `imagePullSecret`.
 
 ## 4. Deploy
 
-The script renders the Secret and the generated ConfigMaps from your existing
+The script installs the controllers, applies the committed SealedSecrets (from
+`k8s/sealed/`) and renders the two ConfigMaps that embed a password from your
 repo-level `.env`:
 
 ```bash

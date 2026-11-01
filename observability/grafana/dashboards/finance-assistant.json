@@ -366,7 +366,7 @@
       "description": "CPU in use across the namespace, as a percentage of the sum of all CPU limits.",
       "targets": [
         {
-          "expr": "100 * sum((rate(container_cpu_usage_seconds_total{namespace=\"pfa\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120)) / sum((container_spec_cpu_quota{namespace=\"pfa\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120))",
+          "expr": "100 * sum((rate(container_cpu_usage_seconds_total{namespace=\"pfa\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_cpu_quota{namespace=\"pfa\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
           "refId": "A",
           "instant": true,
           "format": "table"
@@ -429,7 +429,7 @@
       "description": "Memory in use across the namespace, as a percentage of the sum of all memory limits.",
       "targets": [
         {
-          "expr": "100 * sum((container_memory_working_set_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120)) / sum((container_spec_memory_limit_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120))",
+          "expr": "100 * sum((container_memory_working_set_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_memory_limit_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
           "refId": "A",
           "instant": true,
           "format": "table"

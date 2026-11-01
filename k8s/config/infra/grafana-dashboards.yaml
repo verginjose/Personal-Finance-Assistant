@@ -369,7 +369,7 @@ data:
           "description": "CPU in use across the namespace, as a percentage of the sum of all CPU limits.",
           "targets": [
             {
-              "expr": "100 * sum((rate(container_cpu_usage_seconds_total{namespace=\"pfa\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120)) / sum((container_spec_cpu_quota{namespace=\"pfa\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120))",
+              "expr": "100 * sum((rate(container_cpu_usage_seconds_total{namespace=\"pfa\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_cpu_quota{namespace=\"pfa\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -432,7 +432,7 @@ data:
           "description": "Memory in use across the namespace, as a percentage of the sum of all memory limits.",
           "targets": [
             {
-              "expr": "100 * sum((container_memory_working_set_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120)) / sum((container_spec_memory_limit_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120))",
+              "expr": "100 * sum((container_memory_working_set_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_memory_limit_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -865,7 +865,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "sum((rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120))",
+              "expr": "sum((rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120))",
               "legendFormat": "",
               "refId": "A",
               "instant": true,
@@ -913,7 +913,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "sum((container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120))",
+              "expr": "sum((container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120))",
               "legendFormat": "",
               "refId": "A",
               "instant": true,
@@ -974,7 +974,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "sum((changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h])) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120))",
+              "expr": "sum((changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120))",
               "legendFormat": "",
               "refId": "A",
               "instant": true,
@@ -1033,7 +1033,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120)",
+              "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120)",
               "legendFormat": "{{pod}}",
               "refId": "A",
               "instant": false,
@@ -1092,7 +1092,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120)",
+              "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120)",
               "legendFormat": "{{pod}}",
               "refId": "A",
               "instant": false,
@@ -1151,7 +1151,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "(sum by (pod) (changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120)",
+              "expr": "(sum by (pod) (changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120)",
               "legendFormat": "{{pod}}",
               "refId": "A",
               "instant": false,
@@ -1297,7 +1297,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120)",
+              "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)",
               "legendFormat": "{{pod}}",
               "refId": "A",
               "instant": false,
@@ -1357,7 +1357,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120)",
+              "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=\"pfa\",pod=~\"postgres.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)",
               "legendFormat": "{{pod}}",
               "refId": "A",
               "instant": false,
@@ -1561,7 +1561,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120)",
+              "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)",
               "legendFormat": "{{pod}}",
               "refId": "A",
               "instant": false,
@@ -1621,7 +1621,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120)",
+              "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)",
               "legendFormat": "{{pod}}",
               "refId": "A",
               "instant": false,

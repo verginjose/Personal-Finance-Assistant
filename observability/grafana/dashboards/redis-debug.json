@@ -133,7 +133,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120)",
+          "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "instant": false,
@@ -193,7 +193,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=\"pfa\"}) < 120)",
+          "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "instant": false,

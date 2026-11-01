@@ -458,11 +458,19 @@ def verify_member(client, member, checks, args):
               "summary sees the seeded transactions",
               f"read {summary.get('totalCount')} >= written {len(member.created)}")
 
-    # Summary must equal the sum over the listing at the same moment.
+    # Summary must equal the sum over the listing once both have settled.
+    #
+    # Both endpoints are @Cacheable in query-service, so a single pair of reads
+    # can compare two different snapshots: the first summary read may land
+    # before a delete has replicated and then sit in Redis for its TTL. Read
+    # the listing with an unusual page size to miss its cached key (a fresh
+    # replica read), then re-poll the summary until it agrees with the listing
+    # or verify_timeout expires -- a summary that never converges is a real
+    # stale-cache defect, not a harness race.
     listed, income, expense, page = 0, 0.0, 0.0, 0
     while page < 50:
         status, body, _ = client.request(
-            "personal", f"/upsert/entries?userId={uid}&page={page}&size=200",
+            "personal", f"/upsert/entries?userId={uid}&page={page}&size=173",
             "GET", headers=member.headers())
         if status != 200 or not isinstance(body, dict):
             break
@@ -480,6 +488,19 @@ def verify_member(client, member, checks, args):
         if listed >= int(body.get("totalElements", listed) or listed):
             break
     eps = 0.05
+    settle_deadline = time.time() + args.verify_timeout
+    while True:
+        si = float(summary.get("totalIncome", 0) or 0)
+        se = float(summary.get("totalExpense", 0) or 0)
+        if abs(si - income) < eps and abs(se - expense) < eps:
+            break
+        if time.time() >= settle_deadline:
+            break
+        time.sleep(0.5)
+        status, summary, _ = client.request(
+            "personal", f"/upsert/summary?userId={uid}", "GET",
+            headers=member.headers())
+
     checks.ok(abs(float(summary.get("totalIncome", 0) or 0) - income) < eps,
               "summary income equals listing sum",
               f"{summary.get('totalIncome')} vs {income:.2f}")

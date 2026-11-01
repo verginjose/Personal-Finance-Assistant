@@ -82,10 +82,10 @@
         "justifyMode": "auto"
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
         "x": 0,
-        "y": 0
+        "y": 0,
+        "w": 8,
+        "h": 4
       }
     },
     {
@@ -134,275 +134,14 @@
         "justifyMode": "auto"
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 0
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 4
       }
     },
     {
       "id": 3,
-      "title": "Budgets",
-      "type": "stat",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT count() AS value FROM pg_finance.category_budgets",
-          "refId": "A",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "mappings": []
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "graphMode": "none",
-        "textMode": "value",
-        "colorMode": "none",
-        "justifyMode": "auto"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 0
-      }
-    },
-    {
-      "id": 4,
-      "title": "Subscriptions",
-      "type": "stat",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT count() AS value FROM pg_finance.subscriptions",
-          "refId": "A",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "mappings": []
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "graphMode": "none",
-        "textMode": "value",
-        "colorMode": "none",
-        "justifyMode": "auto"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 0
-      }
-    },
-    {
-      "id": 5,
-      "title": "Avg ClickHouse query",
-      "type": "stat",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT round(avg(query_duration_ms), 1) AS value FROM system.query_log WHERE type = 'QueryFinish' AND $__timeFilter(timestamp)",
-          "refId": "A",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "color": {
-            "mode": "fixed"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "mappings": []
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "graphMode": "none",
-        "textMode": "value",
-        "colorMode": "none",
-        "justifyMode": "auto"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 4
-      }
-    },
-    {
-      "id": 6,
-      "title": "ClickHouse queries",
-      "type": "stat",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT count() AS value FROM system.query_log WHERE type = 'QueryFinish' AND $__timeFilter(timestamp)",
-          "refId": "A",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "mappings": []
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "graphMode": "none",
-        "textMode": "value",
-        "colorMode": "none",
-        "justifyMode": "auto"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 4
-      }
-    },
-    {
-      "id": 7,
-      "title": "Idempotency records",
-      "type": "stat",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT count() AS value FROM pg_finance.idempotency_records",
-          "refId": "A",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "mappings": []
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "graphMode": "none",
-        "textMode": "value",
-        "colorMode": "none",
-        "justifyMode": "auto"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 4
-      }
-    },
-    {
-      "id": 8,
       "title": "Outbox events (pending)",
       "type": "stat",
       "datasource": {
@@ -447,96 +186,14 @@
         "justifyMode": "auto"
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 4
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 4
       }
     },
     {
-      "id": 10,
-      "title": "Users",
-      "type": "table",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT id, email, username, role, enabled FROM pg_auth.users ORDER BY email LIMIT 100",
-          "refId": "A",
-          "format": "table",
-          "meta": {
-            "builderOptions": true
-          }
-        }
-      ],
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false,
-          "reducer": [
-            "sum"
-          ],
-          "fields": ""
-        }
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      }
-    },
-    {
-      "id": 11,
-      "title": "Latest transactions",
-      "type": "table",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT id, name, type, amount, currency, category, recurring, recurring_period, created_at FROM pg_finance.transaction_entries WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 100",
-          "refId": "A",
-          "format": "table",
-          "meta": {
-            "builderOptions": true
-          }
-        }
-      ],
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false,
-          "reducer": [
-            "sum"
-          ],
-          "fields": ""
-        }
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 12,
-        "x": 12,
-        "y": 8
-      }
-    },
-    {
-      "id": 20,
+      "id": 4,
       "title": "Postgres logs",
       "type": "table",
       "datasource": {
@@ -570,14 +227,14 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 10,
-        "w": 12,
         "x": 0,
-        "y": 18
+        "y": 4,
+        "w": 12,
+        "h": 14
       }
     },
     {
-      "id": 21,
+      "id": 5,
       "title": "Redis logs",
       "type": "table",
       "datasource": {
@@ -611,11 +268,12 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 10,
-        "w": 12,
         "x": 12,
-        "y": 18
+        "y": 4,
+        "w": 12,
+        "h": 14
       }
     }
-  ]
+  ],
+  "description": "Row counts and Postgres/Redis logs."
 }

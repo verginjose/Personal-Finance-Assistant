@@ -28,7 +28,7 @@
     ]
   },
   "uid": "finance-assistant",
-  "title": "Finance Assistant",
+  "title": "Finance Assistant \u2014 Overview & Debug",
   "tags": [
     "finance-assistant"
   ],
@@ -184,16 +184,16 @@
   "panels": [
     {
       "id": 1,
-      "title": "api-gateway",
+      "title": "Services up",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus-ds"
       },
-      "description": "Prometheus can scrape this service.",
+      "description": "Prometheus scrape targets currently UP (api-gateway, auth-service, command-service, query-service).",
       "targets": [
         {
-          "expr": "up{job=\"api-gateway\"}",
+          "expr": "sum(up{job=~\"api-gateway|auth-service|command-service|query-service\"})",
           "refId": "A",
           "instant": true,
           "format": "table"
@@ -201,8 +201,9 @@
       ],
       "fieldConfig": {
         "defaults": {
+          "decimals": 0,
           "color": {
-            "mode": "thresholds"
+            "mode": "fixed"
           },
           "thresholds": {
             "mode": "absolute",
@@ -213,25 +214,11 @@
               },
               {
                 "color": "green",
-                "value": 1
+                "value": 4
               }
             ]
           },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "DOWN",
-                  "color": "red"
-                },
-                "1": {
-                  "text": "UP",
-                  "color": "green"
-                }
-              }
-            }
-          ]
+          "mappings": []
         }
       },
       "options": {
@@ -243,231 +230,18 @@
         },
         "graphMode": "none",
         "textMode": "value",
-        "colorMode": "background",
+        "colorMode": "value",
         "justifyMode": "auto"
       },
       "gridPos": {
-        "h": 3,
-        "w": 6,
         "x": 0,
-        "y": 0
+        "y": 0,
+        "w": 4,
+        "h": 4
       }
     },
     {
       "id": 2,
-      "title": "auth-service",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus-ds"
-      },
-      "description": "Prometheus can scrape this service.",
-      "targets": [
-        {
-          "expr": "up{job=\"auth-service\"}",
-          "refId": "A",
-          "instant": true,
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "DOWN",
-                  "color": "red"
-                },
-                "1": {
-                  "text": "UP",
-                  "color": "green"
-                }
-              }
-            }
-          ]
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "graphMode": "none",
-        "textMode": "value",
-        "colorMode": "background",
-        "justifyMode": "auto"
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 6,
-        "x": 6,
-        "y": 0
-      }
-    },
-    {
-      "id": 3,
-      "title": "command-service",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus-ds"
-      },
-      "description": "Prometheus can scrape this service.",
-      "targets": [
-        {
-          "expr": "up{job=\"command-service\"}",
-          "refId": "A",
-          "instant": true,
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "DOWN",
-                  "color": "red"
-                },
-                "1": {
-                  "text": "UP",
-                  "color": "green"
-                }
-              }
-            }
-          ]
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "graphMode": "none",
-        "textMode": "value",
-        "colorMode": "background",
-        "justifyMode": "auto"
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 6,
-        "x": 12,
-        "y": 0
-      }
-    },
-    {
-      "id": 4,
-      "title": "query-service",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus-ds"
-      },
-      "description": "Prometheus can scrape this service.",
-      "targets": [
-        {
-          "expr": "up{job=\"query-service\"}",
-          "refId": "A",
-          "instant": true,
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "DOWN",
-                  "color": "red"
-                },
-                "1": {
-                  "text": "UP",
-                  "color": "green"
-                }
-              }
-            }
-          ]
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "graphMode": "none",
-        "textMode": "value",
-        "colorMode": "background",
-        "justifyMode": "auto"
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 6,
-        "x": 18,
-        "y": 0
-      }
-    },
-    {
-      "id": 10,
       "title": "Requests / min",
       "type": "stat",
       "datasource": {
@@ -514,14 +288,14 @@
         "justifyMode": "auto"
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 3
+        "x": 4,
+        "y": 0,
+        "w": 5,
+        "h": 4
       }
     },
     {
-      "id": 11,
+      "id": 3,
       "title": "Errors (5xx) / min",
       "type": "stat",
       "datasource": {
@@ -575,14 +349,14 @@
         "justifyMode": "auto"
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 3
+        "x": 9,
+        "y": 0,
+        "w": 5,
+        "h": 4
       }
     },
     {
-      "id": 12,
+      "id": 4,
       "title": "CPU used",
       "type": "stat",
       "datasource": {
@@ -638,14 +412,14 @@
         "justifyMode": "auto"
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 3
+        "x": 14,
+        "y": 0,
+        "w": 5,
+        "h": 4
       }
     },
     {
-      "id": 13,
+      "id": 5,
       "title": "Memory used",
       "type": "stat",
       "datasource": {
@@ -701,14 +475,14 @@
         "justifyMode": "auto"
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 3
+        "x": 19,
+        "y": 0,
+        "w": 5,
+        "h": 4
       }
     },
     {
-      "id": 20,
+      "id": 6,
       "title": "Requests per second by service",
       "type": "timeseries",
       "datasource": {
@@ -757,14 +531,14 @@
         }
       },
       "gridPos": {
-        "h": 9,
-        "w": 12,
         "x": 0,
-        "y": 7
+        "y": 4,
+        "w": 12,
+        "h": 8
       }
     },
     {
-      "id": 21,
+      "id": 7,
       "title": "Errors (5xx) per second by service",
       "type": "timeseries",
       "datasource": {
@@ -813,14 +587,78 @@
         }
       },
       "gridPos": {
-        "h": 9,
-        "w": 12,
         "x": 12,
-        "y": 7
+        "y": 4,
+        "w": 12,
+        "h": 8
       }
     },
     {
-      "id": 30,
+      "id": 8,
+      "title": "Latency p95 / p99 by service",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
+          "refId": "A",
+          "legendFormat": "{{job}} p95",
+          "instant": false,
+          "range": true
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
+          "refId": "B",
+          "legendFormat": "{{job}} p99",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 8
+      },
+      "description": "Response time percentiles per service (ms)."
+    },
+    {
+      "id": 9,
       "title": "Logs \u2014 $service | $level | $search",
       "type": "logs",
       "datasource": {
@@ -900,11 +738,12 @@
         ]
       },
       "gridPos": {
-        "h": 26,
-        "w": 24,
         "x": 0,
-        "y": 16
+        "y": 20,
+        "w": 24,
+        "h": 16
       }
     }
-  ]
+  ],
+  "description": "Service health, traffic, latency and searchable logs. Start here when something breaks."
 }

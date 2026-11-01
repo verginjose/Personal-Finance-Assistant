@@ -266,21 +266,23 @@ kubectl -n pfa port-forward svc/grafana 3000:3000 &
 
 | Dashboard | What it answers |
 |---|---|
-| **Pods — CPU, memory, network** | which pod is eating memory/CPU right now, network per pod, containers restarted in the last hour |
-| **Service Metrics** | requests, 2xx/4xx/5xx, JVM heap and threads per service |
-| **Database** | Postgres connections, size, replication |
-| **API Latency** | p50/p95/p99 per route |
-| **Finance Assistant** | business-level counters |
+| **Finance Assistant — Overview & Debug** | service health, requests, 5xx, p95/p99 latency, and searchable logs in one place |
+| **Pods — CPU / memory / restarts** | which pod is under CPU/memory pressure or restarting |
+| **Database** | row counts and Postgres/Redis logs |
 
-Dashboards are files in `observability/grafana/dashboards/`, mounted from the
-`grafana-dashboards` ConfigMap. Edit the JSON, then re-render and restart:
+Dashboards are files in `observability/grafana/dashboards/`. The committed
+`k8s/config/infra/grafana-dashboards.yaml` ConfigMap is generated from them and
+is managed by Argo CD (`pfa-infra`), so the normal path is:
 
 ```bash
 kubectl create configmap grafana-dashboards -n pfa \
   --from-file=observability/grafana/dashboards --dry-run=client -o yaml \
-  | kubectl apply -f -
-kubectl -n pfa rollout restart deploy/grafana
+  > k8s/config/infra/grafana-dashboards.yaml
+# commit + push; Argo syncs the ConfigMap, Reloader restarts Grafana
 ```
+
+For a fast local iteration without waiting for Argo, apply the ConfigMap
+directly with `./k8s/apply-observability.sh dashboards`.
 
 > Note: anything you change *inside* the Grafana UI is lost on the next
 > rollout for provisioned dashboards. Change the JSON file instead.

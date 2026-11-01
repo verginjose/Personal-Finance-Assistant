@@ -166,7 +166,7 @@ Everything else lands by one of three routes:
 | `<service>/**` | Automatic: CI builds `${REGISTRY}/finance/<svc>:<sha>`, bumps `k8s/apps/<svc>.yaml`, Argo syncs |
 | `k8s/apps/*.yaml` non-image fields (env, replicas, resources, probes) | Argo applies on push via `selfHeal` — no build needed |
 | `k8s/infrastructure/*.yaml` | **Manual**: `kubectl apply -f k8s/infrastructure/` (or `./k8s/apply.sh`) |
-| `observability/grafana/dashboards/*.json` | **Manual**: recreate the `grafana-dashboards` ConfigMap (see below) |
+| `observability/grafana/dashboards/*.json` | Regenerate `k8s/config/infra/grafana-dashboards.yaml` (see below); Argo syncs it, Reloader restarts Grafana |
 | `observability/grafana/provisioning/**` | **Manual**: re-render `grafana-datasources` + `grafana-dashboard-provider`, then restart Grafana |
 | `observability/prometheus/prometheus.yml` | **Manual**: recreate `prometheus-config`, then restart Prometheus (config is not hot-reloaded) |
 | `observability/vector/vector.yaml` | ⚠️ **Unused by k8s** — the cluster runs the inline copy in `k8s/infrastructure/vector.yaml`; compose uses the file |

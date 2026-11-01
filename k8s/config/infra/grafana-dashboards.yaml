@@ -85,10 +85,10 @@ data:
             "justifyMode": "auto"
           },
           "gridPos": {
-            "h": 4,
-            "w": 6,
             "x": 0,
-            "y": 0
+            "y": 0,
+            "w": 8,
+            "h": 4
           }
         },
         {
@@ -137,275 +137,14 @@ data:
             "justifyMode": "auto"
           },
           "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 6,
-            "y": 0
+            "x": 8,
+            "y": 0,
+            "w": 8,
+            "h": 4
           }
         },
         {
           "id": 3,
-          "title": "Budgets",
-          "type": "stat",
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "clickhouse-ds"
-          },
-          "targets": [
-            {
-              "queryType": "sql",
-              "rawSql": "SELECT count() AS value FROM pg_finance.category_budgets",
-              "refId": "A",
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "fixed"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 12,
-            "y": 0
-          }
-        },
-        {
-          "id": 4,
-          "title": "Subscriptions",
-          "type": "stat",
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "clickhouse-ds"
-          },
-          "targets": [
-            {
-              "queryType": "sql",
-              "rawSql": "SELECT count() AS value FROM pg_finance.subscriptions",
-              "refId": "A",
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "fixed"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 18,
-            "y": 0
-          }
-        },
-        {
-          "id": 5,
-          "title": "Avg ClickHouse query",
-          "type": "stat",
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "clickhouse-ds"
-          },
-          "targets": [
-            {
-              "queryType": "sql",
-              "rawSql": "SELECT round(avg(query_duration_ms), 1) AS value FROM system.query_log WHERE type = 'QueryFinish' AND $__timeFilter(timestamp)",
-              "refId": "A",
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ms",
-              "color": {
-                "mode": "fixed"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 0,
-            "y": 4
-          }
-        },
-        {
-          "id": 6,
-          "title": "ClickHouse queries",
-          "type": "stat",
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "clickhouse-ds"
-          },
-          "targets": [
-            {
-              "queryType": "sql",
-              "rawSql": "SELECT count() AS value FROM system.query_log WHERE type = 'QueryFinish' AND $__timeFilter(timestamp)",
-              "refId": "A",
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "fixed"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 6,
-            "y": 4
-          }
-        },
-        {
-          "id": 7,
-          "title": "Idempotency records",
-          "type": "stat",
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "clickhouse-ds"
-          },
-          "targets": [
-            {
-              "queryType": "sql",
-              "rawSql": "SELECT count() AS value FROM pg_finance.idempotency_records",
-              "refId": "A",
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "fixed"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 12,
-            "y": 4
-          }
-        },
-        {
-          "id": 8,
           "title": "Outbox events (pending)",
           "type": "stat",
           "datasource": {
@@ -450,96 +189,14 @@ data:
             "justifyMode": "auto"
           },
           "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 18,
-            "y": 4
+            "x": 16,
+            "y": 0,
+            "w": 8,
+            "h": 4
           }
         },
         {
-          "id": 10,
-          "title": "Users",
-          "type": "table",
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "clickhouse-ds"
-          },
-          "targets": [
-            {
-              "queryType": "sql",
-              "rawSql": "SELECT id, email, username, role, enabled FROM pg_auth.users ORDER BY email LIMIT 100",
-              "refId": "A",
-              "format": "table",
-              "meta": {
-                "builderOptions": true
-              }
-            }
-          ],
-          "options": {
-            "showHeader": true,
-            "cellHeight": "sm",
-            "footer": {
-              "show": false,
-              "reducer": [
-                "sum"
-              ],
-              "fields": ""
-            }
-          },
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 10,
-            "w": 12,
-            "x": 0,
-            "y": 8
-          }
-        },
-        {
-          "id": 11,
-          "title": "Latest transactions",
-          "type": "table",
-          "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "clickhouse-ds"
-          },
-          "targets": [
-            {
-              "queryType": "sql",
-              "rawSql": "SELECT id, name, type, amount, currency, category, recurring, recurring_period, created_at FROM pg_finance.transaction_entries WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 100",
-              "refId": "A",
-              "format": "table",
-              "meta": {
-                "builderOptions": true
-              }
-            }
-          ],
-          "options": {
-            "showHeader": true,
-            "cellHeight": "sm",
-            "footer": {
-              "show": false,
-              "reducer": [
-                "sum"
-              ],
-              "fields": ""
-            }
-          },
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 10,
-            "w": 12,
-            "x": 12,
-            "y": 8
-          }
-        },
-        {
-          "id": 20,
+          "id": 4,
           "title": "Postgres logs",
           "type": "table",
           "datasource": {
@@ -573,14 +230,14 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 10,
-            "w": 12,
             "x": 0,
-            "y": 18
+            "y": 4,
+            "w": 12,
+            "h": 14
           }
         },
         {
-          "id": 21,
+          "id": 5,
           "title": "Redis logs",
           "type": "table",
           "datasource": {
@@ -614,13 +271,14 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 10,
-            "w": 12,
             "x": 12,
-            "y": 18
+            "y": 4,
+            "w": 12,
+            "h": 14
           }
         }
-      ]
+      ],
+      "description": "Row counts and Postgres/Redis logs."
     }
   finance-assistant.json: |
     {
@@ -653,7 +311,7 @@ data:
         ]
       },
       "uid": "finance-assistant",
-      "title": "Finance Assistant",
+      "title": "Finance Assistant \u2014 Overview & Debug",
       "tags": [
         "finance-assistant"
       ],
@@ -809,16 +467,16 @@ data:
       "panels": [
         {
           "id": 1,
-          "title": "api-gateway",
+          "title": "Services up",
           "type": "stat",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "description": "Prometheus can scrape this service.",
+          "description": "Prometheus scrape targets currently UP (api-gateway, auth-service, command-service, query-service).",
           "targets": [
             {
-              "expr": "up{job=\"api-gateway\"}",
+              "expr": "sum(up{job=~\"api-gateway|auth-service|command-service|query-service\"})",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -826,8 +484,9 @@ data:
           ],
           "fieldConfig": {
             "defaults": {
+              "decimals": 0,
               "color": {
-                "mode": "thresholds"
+                "mode": "fixed"
               },
               "thresholds": {
                 "mode": "absolute",
@@ -838,25 +497,11 @@ data:
                   },
                   {
                     "color": "green",
-                    "value": 1
+                    "value": 4
                   }
                 ]
               },
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "DOWN",
-                      "color": "red"
-                    },
-                    "1": {
-                      "text": "UP",
-                      "color": "green"
-                    }
-                  }
-                }
-              ]
+              "mappings": []
             }
           },
           "options": {
@@ -868,231 +513,18 @@ data:
             },
             "graphMode": "none",
             "textMode": "value",
-            "colorMode": "background",
+            "colorMode": "value",
             "justifyMode": "auto"
           },
           "gridPos": {
-            "h": 3,
-            "w": 6,
             "x": 0,
-            "y": 0
+            "y": 0,
+            "w": 4,
+            "h": 4
           }
         },
         {
           "id": 2,
-          "title": "auth-service",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Prometheus can scrape this service.",
-          "targets": [
-            {
-              "expr": "up{job=\"auth-service\"}",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              },
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "DOWN",
-                      "color": "red"
-                    },
-                    "1": {
-                      "text": "UP",
-                      "color": "green"
-                    }
-                  }
-                }
-              ]
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "background",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 3,
-            "w": 6,
-            "x": 6,
-            "y": 0
-          }
-        },
-        {
-          "id": 3,
-          "title": "command-service",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Prometheus can scrape this service.",
-          "targets": [
-            {
-              "expr": "up{job=\"command-service\"}",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              },
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "DOWN",
-                      "color": "red"
-                    },
-                    "1": {
-                      "text": "UP",
-                      "color": "green"
-                    }
-                  }
-                }
-              ]
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "background",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 3,
-            "w": 6,
-            "x": 12,
-            "y": 0
-          }
-        },
-        {
-          "id": 4,
-          "title": "query-service",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Prometheus can scrape this service.",
-          "targets": [
-            {
-              "expr": "up{job=\"query-service\"}",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              },
-              "mappings": [
-                {
-                  "type": "value",
-                  "options": {
-                    "0": {
-                      "text": "DOWN",
-                      "color": "red"
-                    },
-                    "1": {
-                      "text": "UP",
-                      "color": "green"
-                    }
-                  }
-                }
-              ]
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "background",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 3,
-            "w": 6,
-            "x": 18,
-            "y": 0
-          }
-        },
-        {
-          "id": 10,
           "title": "Requests / min",
           "type": "stat",
           "datasource": {
@@ -1139,14 +571,14 @@ data:
             "justifyMode": "auto"
           },
           "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 0,
-            "y": 3
+            "x": 4,
+            "y": 0,
+            "w": 5,
+            "h": 4
           }
         },
         {
-          "id": 11,
+          "id": 3,
           "title": "Errors (5xx) / min",
           "type": "stat",
           "datasource": {
@@ -1200,14 +632,14 @@ data:
             "justifyMode": "auto"
           },
           "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 6,
-            "y": 3
+            "x": 9,
+            "y": 0,
+            "w": 5,
+            "h": 4
           }
         },
         {
-          "id": 12,
+          "id": 4,
           "title": "CPU used",
           "type": "stat",
           "datasource": {
@@ -1263,14 +695,14 @@ data:
             "justifyMode": "auto"
           },
           "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 12,
-            "y": 3
+            "x": 14,
+            "y": 0,
+            "w": 5,
+            "h": 4
           }
         },
         {
-          "id": 13,
+          "id": 5,
           "title": "Memory used",
           "type": "stat",
           "datasource": {
@@ -1326,14 +758,14 @@ data:
             "justifyMode": "auto"
           },
           "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 18,
-            "y": 3
+            "x": 19,
+            "y": 0,
+            "w": 5,
+            "h": 4
           }
         },
         {
-          "id": 20,
+          "id": 6,
           "title": "Requests per second by service",
           "type": "timeseries",
           "datasource": {
@@ -1382,14 +814,14 @@ data:
             }
           },
           "gridPos": {
-            "h": 9,
-            "w": 12,
             "x": 0,
-            "y": 7
+            "y": 4,
+            "w": 12,
+            "h": 8
           }
         },
         {
-          "id": 21,
+          "id": 7,
           "title": "Errors (5xx) per second by service",
           "type": "timeseries",
           "datasource": {
@@ -1438,14 +870,78 @@ data:
             }
           },
           "gridPos": {
-            "h": 9,
-            "w": 12,
             "x": 12,
-            "y": 7
+            "y": 4,
+            "w": 12,
+            "h": 8
           }
         },
         {
-          "id": 30,
+          "id": 8,
+          "title": "Latency p95 / p99 by service",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
+              "refId": "A",
+              "legendFormat": "{{job}} p95",
+              "instant": false,
+              "range": true
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
+              "refId": "B",
+              "legendFormat": "{{job}} p99",
+              "instant": false,
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "decimals": 2,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "axisSoftMin": 0
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 12,
+            "w": 24,
+            "h": 8
+          },
+          "description": "Response time percentiles per service (ms)."
+        },
+        {
+          "id": 9,
           "title": "Logs \u2014 $service | $level | $search",
           "type": "logs",
           "datasource": {
@@ -1525,311 +1021,19 @@ data:
             ]
           },
           "gridPos": {
-            "h": 26,
+            "x": 0,
+            "y": 20,
             "w": 24,
-            "x": 0,
-            "y": 16
+            "h": 16
           }
         }
-      ]
-    }
-  latency.json: |
-    {
-      "timezone": "browser",
-      "schemaVersion": 39,
-      "version": 1,
-      "refresh": "15s",
-      "time": {
-        "from": "now-1h",
-        "to": "now"
-      },
-      "timepicker": {
-        "refresh_intervals": [
-          "5s",
-          "15s",
-          "30s",
-          "1m",
-          "5m"
-        ],
-        "time_options": [
-          "5m",
-          "15m",
-          "1h",
-          "3h",
-          "6h",
-          "12h",
-          "24h",
-          "2d",
-          "7d"
-        ]
-      },
-      "uid": "api-latency-dashboard",
-      "title": "API Latency",
-      "tags": [
-        "finance-assistant"
       ],
-      "templating": {
-        "list": [
-          {
-            "name": "service",
-            "label": "Service",
-            "type": "query",
-            "datasource": {
-              "type": "prometheus",
-              "uid": "prometheus-ds"
-            },
-            "query": {
-              "query": "label_values(http_server_requests_seconds_count, job)",
-              "refId": "StandardVariableQuery"
-            },
-            "refresh": 2,
-            "includeAll": true,
-            "multi": true,
-            "allValue": ".*",
-            "current": {
-              "text": [
-                "All"
-              ],
-              "value": [
-                "$__all"
-              ]
-            }
-          }
-        ]
-      },
-      "panels": [
-        {
-          "id": 1,
-          "title": "p95 latency by service",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"$service\"}[5m]))) * 1000",
-              "refId": "A",
-              "legendFormat": "{{job}}",
-              "instant": false,
-              "range": true
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ms",
-              "decimals": 2,
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 8,
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "mode": "none",
-                  "group": "A"
-                },
-                "axisSoftMin": 0
-              }
-            }
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 12,
-            "x": 0,
-            "y": 0
-          },
-          "description": "95th percentile response time."
-        },
-        {
-          "id": 2,
-          "title": "p99 latency by service",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.99, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"$service\"}[5m]))) * 1000",
-              "refId": "A",
-              "legendFormat": "{{job}}",
-              "instant": false,
-              "range": true
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ms",
-              "decimals": 2,
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 8,
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "mode": "none",
-                  "group": "A"
-                },
-                "axisSoftMin": 0
-              }
-            }
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 12,
-            "x": 12,
-            "y": 0
-          },
-          "description": "99th percentile response time \u2014 the worst 1% of requests."
-        },
-        {
-          "id": 3,
-          "title": "Average latency by service",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "sum by (job) (rate(http_server_requests_seconds_sum{job=~\"$service\"}[5m])) / sum by (job) (rate(http_server_requests_seconds_count{job=~\"$service\"}[5m])) * 1000",
-              "refId": "A",
-              "legendFormat": "{{job}}",
-              "instant": false,
-              "range": true
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ms",
-              "decimals": 2,
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 8,
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "mode": "none",
-                  "group": "A"
-                },
-                "axisSoftMin": 0
-              }
-            }
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 12,
-            "x": 0,
-            "y": 9
-          }
-        },
-        {
-          "id": 4,
-          "title": "Requests per second by service",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"$service\"}[5m]))",
-              "refId": "A",
-              "legendFormat": "{{job}}",
-              "instant": false,
-              "range": true
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "reqps",
-              "decimals": 2,
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 8,
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "mode": "none",
-                  "group": "A"
-                },
-                "axisSoftMin": 0
-              }
-            }
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 12,
-            "x": 12,
-            "y": 9
-          }
-        }
-      ]
+      "description": "Service health, traffic, latency and searchable logs. Start here when something breaks."
     }
   pods.json: |
     {
       "uid": "pfa-pods",
-      "title": "Pods \u2014 usage vs allocation",
+      "title": "Pods \u2014 CPU / memory / restarts",
       "tags": [
         "pods",
         "cadvisor",
@@ -1908,10 +1112,10 @@ data:
             "uid": "prometheus-ds"
           },
           "gridPos": {
-            "h": 4,
-            "w": 4,
             "x": 0,
-            "y": 0
+            "y": 0,
+            "w": 8,
+            "h": 4
           },
           "id": 1,
           "fieldConfig": {
@@ -1949,119 +1153,6 @@ data:
         },
         {
           "type": "stat",
-          "title": "CPU allocated (cores)",
-          "description": "Cores allowed by the Kubernetes CPU limit of every selected container (quota \u00f7 period, summed). This is the ceiling, not node capacity.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 4,
-            "x": 4,
-            "y": 0
-          },
-          "id": 2,
-          "fieldConfig": {
-            "defaults": {
-              "unit": "none",
-              "decimals": 2
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "colorMode": "value",
-            "graphMode": "area",
-            "textMode": "auto"
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "sum(container_spec_cpu_quota{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})",
-              "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ]
-        },
-        {
-          "type": "stat",
-          "title": "CPU usage %",
-          "description": "Used / allocated. Green < 70%, yellow 70-90%, red > 90%.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 4,
-            "x": 8,
-            "y": 0
-          },
-          "id": 3,
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percent",
-              "decimals": 1,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "yellow",
-                    "value": 70
-                  },
-                  {
-                    "color": "red",
-                    "value": 90
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "colorMode": "value",
-            "graphMode": "area",
-            "textMode": "auto"
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "100 * (sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))) / (sum(container_spec_cpu_quota{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))",
-              "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ]
-        },
-        {
-          "type": "stat",
           "title": "Memory used",
           "description": "Working set \u2014 memory the containers actually hold.",
           "datasource": {
@@ -2069,12 +1160,12 @@ data:
             "uid": "prometheus-ds"
           },
           "gridPos": {
-            "h": 4,
-            "w": 4,
-            "x": 12,
-            "y": 0
+            "x": 8,
+            "y": 0,
+            "w": 8,
+            "h": 4
           },
-          "id": 4,
+          "id": 2,
           "fieldConfig": {
             "defaults": {
               "unit": "bytes",
@@ -2110,215 +1201,6 @@ data:
         },
         {
           "type": "stat",
-          "title": "Memory allocated",
-          "description": "Sum of the Kubernetes memory limits of the selected containers.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 4,
-            "x": 16,
-            "y": 0
-          },
-          "id": 5,
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bytes",
-              "decimals": 1
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "colorMode": "value",
-            "graphMode": "area",
-            "textMode": "auto"
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "sum(container_spec_memory_limit_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})",
-              "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ]
-        },
-        {
-          "type": "stat",
-          "title": "Memory usage %",
-          "description": "Used / allocated. Green < 70%, yellow 70-90%, red > 90%.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 4,
-            "x": 20,
-            "y": 0
-          },
-          "id": 6,
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percent",
-              "decimals": 1,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "yellow",
-                    "value": 70
-                  },
-                  {
-                    "color": "red",
-                    "value": 90
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "colorMode": "value",
-            "graphMode": "area",
-            "textMode": "auto"
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "100 * (sum(container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})) / (sum(container_spec_memory_limit_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))",
-              "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ]
-        },
-        {
-          "type": "stat",
-          "title": "Pods",
-          "description": "Pods reporting metrics for the current filter.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 8,
-            "x": 0,
-            "y": 4
-          },
-          "id": 7,
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "colorMode": "value",
-            "graphMode": "area",
-            "textMode": "auto"
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "count(count by (pod) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))",
-              "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ]
-        },
-        {
-          "type": "stat",
-          "title": "Containers",
-          "description": "Running containers, sidecars included.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 8,
-            "x": 8,
-            "y": 4
-          },
-          "id": 8,
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "decimals": 0
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "colorMode": "value",
-            "graphMode": "area",
-            "textMode": "auto"
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "count(count by (pod, container) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))",
-              "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            }
-          ]
-        },
-        {
-          "type": "stat",
           "title": "Restarts (1h)",
           "description": "Container restarts in the last hour. Above 0 deserves a `kubectl describe`.",
           "datasource": {
@@ -2326,12 +1208,12 @@ data:
             "uid": "prometheus-ds"
           },
           "gridPos": {
-            "h": 4,
-            "w": 8,
             "x": 16,
-            "y": 4
+            "y": 0,
+            "w": 8,
+            "h": 4
           },
-          "id": 9,
+          "id": 3,
           "fieldConfig": {
             "defaults": {
               "unit": "short",
@@ -2387,12 +1269,12 @@ data:
             "uid": "prometheus-ds"
           },
           "gridPos": {
-            "h": 8,
-            "w": 12,
             "x": 0,
-            "y": 8
+            "y": 4,
+            "w": 12,
+            "h": 8
           },
-          "id": 10,
+          "id": 4,
           "fieldConfig": {
             "defaults": {
               "unit": "percent",
@@ -2446,12 +1328,12 @@ data:
             "uid": "prometheus-ds"
           },
           "gridPos": {
-            "h": 8,
-            "w": 12,
             "x": 12,
-            "y": 8
+            "y": 4,
+            "w": 12,
+            "h": 8
           },
-          "id": 11,
+          "id": 5,
           "fieldConfig": {
             "defaults": {
               "unit": "percent",
@@ -2498,76 +1380,6 @@ data:
         },
         {
           "type": "timeseries",
-          "title": "Network by pod",
-          "description": "Bytes per second received (in) and sent (out).",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 16
-          },
-          "id": 12,
-          "fieldConfig": {
-            "defaults": {
-              "unit": "Bps",
-              "decimals": 1,
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 1,
-                "fillOpacity": 8,
-                "showPoints": "never",
-                "stacking": {
-                  "mode": "none"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "right",
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "sum by (pod) (rate(container_network_receive_bytes_total{namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
-              "legendFormat": "{{pod}} in",
-              "refId": "A",
-              "instant": false,
-              "range": true
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "prometheus-ds"
-              },
-              "expr": "sum by (pod) (rate(container_network_transmit_bytes_total{namespace=~\"$namespace\",pod=~\"$pod\"}[5m]))",
-              "legendFormat": "{{pod}} out",
-              "refId": "B",
-              "instant": false,
-              "range": true
-            }
-          ]
-        },
-        {
-          "type": "timeseries",
           "title": "Container restarts by pod (1h)",
           "description": "Restarts in the last hour per pod.",
           "datasource": {
@@ -2575,12 +1387,12 @@ data:
             "uid": "prometheus-ds"
           },
           "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 16
+            "x": 0,
+            "y": 12,
+            "w": 24,
+            "h": 8
           },
-          "id": 13,
+          "id": 6,
           "fieldConfig": {
             "defaults": {
               "unit": "short",
@@ -2624,811 +1436,6 @@ data:
               "range": true
             }
           ]
-        }
-      ]
-    }
-  service-metrics.json: |
-    {
-      "timezone": "browser",
-      "schemaVersion": 39,
-      "version": 1,
-      "refresh": "15s",
-      "time": {
-        "from": "now-1h",
-        "to": "now"
-      },
-      "timepicker": {
-        "refresh_intervals": [
-          "5s",
-          "15s",
-          "30s",
-          "1m",
-          "5m"
-        ],
-        "time_options": [
-          "5m",
-          "15m",
-          "1h",
-          "3h",
-          "6h",
-          "12h",
-          "24h",
-          "2d",
-          "7d"
-        ]
-      },
-      "uid": "service-metrics",
-      "title": "Service Metrics",
-      "tags": [
-        "finance-assistant"
-      ],
-      "templating": {
-        "list": [
-          {
-            "name": "service",
-            "label": "Service",
-            "type": "query",
-            "datasource": {
-              "type": "prometheus",
-              "uid": "prometheus-ds"
-            },
-            "query": {
-              "query": "label_values(http_server_requests_seconds_count, job)",
-              "refId": "StandardVariableQuery"
-            },
-            "refresh": 2,
-            "includeAll": false,
-            "multi": false,
-            "current": {
-              "text": "api-gateway",
-              "value": "api-gateway"
-            }
-          }
-        ]
-      },
-      "panels": [
-        {
-          "id": 1,
-          "title": "Total requests",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "sum(http_server_requests_seconds_count{job=\"$service\"})",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0,
-              "color": {
-                "mode": "fixed"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 0,
-            "y": 0
-          }
-        },
-        {
-          "id": 2,
-          "title": "Requests / min (2xx)",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "round(sum(rate(http_server_requests_seconds_count{job=\"$service\",status=~\"2..\"}[1m])) * 60)",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0,
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "background",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 6,
-            "y": 0
-          }
-        },
-        {
-          "id": 3,
-          "title": "Requests / min (4xx)",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "round(sum(rate(http_server_requests_seconds_count{job=\"$service\",status=~\"4..\"}[1m])) * 60)",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0,
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "background",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 12,
-            "y": 0
-          }
-        },
-        {
-          "id": 4,
-          "title": "Requests / min (5xx)",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "round(sum(rate(http_server_requests_seconds_count{job=\"$service\",status=~\"5..\"}[1m])) * 60)",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0,
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "orange",
-                    "value": 1
-                  },
-                  {
-                    "color": "red",
-                    "value": 10
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "background",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 18,
-            "y": 0
-          }
-        },
-        {
-          "id": 5,
-          "title": "JVM heap used",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "round(sum(jvm_memory_used_bytes{job=\"$service\",area=\"heap\"}) / 1024 / 1024)",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "mbytes",
-              "decimals": 0,
-              "color": {
-                "mode": "fixed"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 0,
-            "y": 4
-          }
-        },
-        {
-          "id": 6,
-          "title": "Threads",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "max(jvm_threads_live_threads{job=\"$service\"})",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "decimals": 0,
-              "color": {
-                "mode": "fixed"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 6,
-            "y": 4
-          }
-        },
-        {
-          "id": 7,
-          "title": "GC pause",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Milliseconds per second spent in garbage collection.",
-          "targets": [
-            {
-              "expr": "sum(rate(jvm_gc_pause_seconds_sum{job=\"$service\"}[1m])) * 1000",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ms",
-              "decimals": 2,
-              "color": {
-                "mode": "fixed"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "text",
-                    "value": null
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "none",
-            "justifyMode": "auto"
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 12,
-            "y": 4
-          }
-        },
-        {
-          "id": 10,
-          "title": "Requests per second by status",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "sum(rate(http_server_requests_seconds_count{job=\"$service\",status=~\"2..\"}[5m]))",
-              "refId": "A",
-              "legendFormat": "2xx",
-              "instant": false,
-              "range": true
-            },
-            {
-              "expr": "sum(rate(http_server_requests_seconds_count{job=\"$service\",status=~\"4..\"}[5m]))",
-              "refId": "B",
-              "legendFormat": "4xx",
-              "instant": false,
-              "range": true
-            },
-            {
-              "expr": "sum(rate(http_server_requests_seconds_count{job=\"$service\",status=~\"5..\"}[5m]))",
-              "refId": "C",
-              "legendFormat": "5xx",
-              "instant": false,
-              "range": true
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "reqps",
-              "decimals": 2,
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 8,
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "mode": "none",
-                  "group": "A"
-                },
-                "axisSoftMin": 0
-              }
-            }
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 12,
-            "x": 0,
-            "y": 8
-          }
-        },
-        {
-          "id": 11,
-          "title": "Latency p50 / p95 / p99",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{job=\"$service\"}[5m])) by (le)) * 1000",
-              "refId": "A",
-              "legendFormat": "p50",
-              "instant": false,
-              "range": true
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job=\"$service\"}[5m])) by (le)) * 1000",
-              "refId": "B",
-              "legendFormat": "p95",
-              "instant": false,
-              "range": true
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=\"$service\"}[5m])) by (le)) * 1000",
-              "refId": "C",
-              "legendFormat": "p99",
-              "instant": false,
-              "range": true
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ms",
-              "decimals": 2,
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 8,
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "mode": "none",
-                  "group": "A"
-                },
-                "axisSoftMin": 0
-              }
-            }
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 12,
-            "x": 12,
-            "y": 8
-          }
-        },
-        {
-          "id": 12,
-          "title": "JVM heap \u2014 used vs max",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "sum(jvm_memory_used_bytes{job=\"$service\",area=\"heap\"}) / 1024 / 1024",
-              "refId": "A",
-              "legendFormat": "used",
-              "instant": false,
-              "range": true
-            },
-            {
-              "expr": "sum(jvm_memory_max_bytes{job=\"$service\",area=\"heap\"}) / 1024 / 1024",
-              "refId": "B",
-              "legendFormat": "max",
-              "instant": false,
-              "range": true
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "mbytes",
-              "decimals": 2,
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 8,
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "mode": "none",
-                  "group": "A"
-                },
-                "axisSoftMin": 0
-              }
-            }
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 12,
-            "x": 0,
-            "y": 17
-          }
-        },
-        {
-          "id": 13,
-          "title": "GC pause per second",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "sum(rate(jvm_gc_pause_seconds_sum{job=\"$service\"}[1m])) * 1000",
-              "refId": "A",
-              "legendFormat": "pause",
-              "instant": false,
-              "range": true
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ms",
-              "decimals": 2,
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 8,
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "mode": "none",
-                  "group": "A"
-                },
-                "axisSoftMin": 0
-              }
-            }
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 12,
-            "x": 12,
-            "y": 17
-          }
-        },
-        {
-          "id": 15,
-          "title": "Slowest endpoints (p95 ms)",
-          "type": "bargauge",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "topk(10, histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{job=\"$service\",uri!~\"UNKNOWN|NOT_FOUND|root\"}[5m]))) * 1000)",
-              "refId": "A",
-              "instant": true,
-              "format": "table",
-              "legendFormat": "{{uri}}"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ms",
-              "decimals": 1,
-              "color": {
-                "mode": "continuous-GrYlRd"
-              }
-            }
-          },
-          "options": {
-            "displayMode": "gradient",
-            "orientation": "horizontal",
-            "valueMode": "text",
-            "namePlacement": "left",
-            "showUnfilled": true,
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ]
-            }
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 12,
-            "x": 0,
-            "y": 26
-          }
-        },
-        {
-          "id": 16,
-          "title": "Redis cache hit ratio by service",
-          "type": "timeseries",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "targets": [
-            {
-              "expr": "sum by (job) (rate(cache_gets_total{result=\"hit\"}[5m])) / clamp_min(sum by (job) (rate(cache_gets_total[5m])), 0.000001)",
-              "refId": "A",
-              "legendFormat": "{{job}}",
-              "instant": false,
-              "range": true
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percentunit",
-              "decimals": 2,
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 8,
-                "showPoints": "never",
-                "spanNulls": true,
-                "stacking": {
-                  "mode": "none",
-                  "group": "A"
-                },
-                "axisSoftMin": 0
-              }
-            }
-          },
-          "options": {
-            "legend": {
-              "displayMode": "table",
-              "placement": "bottom",
-              "calcs": [
-                "lastNotNull",
-                "max"
-              ]
-            },
-            "tooltip": {
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 12,
-            "x": 12,
-            "y": 26
-          },
-          "description": "Only command-service and query-service use the Redis cache."
         }
       ]
     }

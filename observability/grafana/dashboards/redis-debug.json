@@ -82,70 +82,6 @@
   "panels": [
     {
       "id": 1,
-      "title": "Redis errors (window)",
-      "type": "stat",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "description": "Redis log lines that look like errors or failures in the selected time range.",
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT count() AS value FROM default.logs WHERE service LIKE 'redis%' AND $__timeFilter(timestamp) AND (level IN ('ERROR','FATAL') OR message ILIKE '%error%' OR message ILIKE '%fail%' OR message ILIKE '%down%' OR message ILIKE '%lost%')",
-          "refId": "A",
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "color": {
-            "mode": "background"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 5
-              }
-            ]
-          },
-          "mappings": []
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "graphMode": "none",
-        "textMode": "value",
-        "colorMode": "background",
-        "justifyMode": "auto"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 6,
-        "h": 4
-      }
-    },
-    {
-      "id": 2,
       "title": "Pod restarts (1h)",
       "type": "stat",
       "datasource": {
@@ -202,14 +138,14 @@
         "justifyMode": "auto"
       },
       "gridPos": {
-        "x": 6,
+        "x": 0,
         "y": 0,
-        "w": 6,
+        "w": 8,
         "h": 4
       }
     },
     {
-      "id": 3,
+      "id": 2,
       "title": "Memory used",
       "type": "stat",
       "datasource": {
@@ -263,14 +199,14 @@
         "justifyMode": "auto"
       },
       "gridPos": {
-        "x": 12,
+        "x": 8,
         "y": 0,
-        "w": 6,
+        "w": 8,
         "h": 4
       }
     },
     {
-      "id": 4,
+      "id": 3,
       "title": "CPU used (cores)",
       "type": "stat",
       "datasource": {
@@ -324,14 +260,14 @@
         "justifyMode": "auto"
       },
       "gridPos": {
-        "x": 18,
+        "x": 16,
         "y": 0,
-        "w": 6,
+        "w": 8,
         "h": 4
       }
     },
     {
-      "id": 5,
+      "id": 4,
       "title": "Redis logs \u2014 $service | $search",
       "type": "logs",
       "datasource": {
@@ -365,87 +301,11 @@
         "x": 0,
         "y": 4,
         "w": 24,
-        "h": 10
+        "h": 12
       }
     },
     {
-      "id": 6,
-      "title": "Errors, warnings and failures",
-      "type": "logs",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "description": "Anything that should not be happening. Empty is good.",
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT timestamp, message, service, level FROM default.logs WHERE service LIKE '$service' AND (level IN ('ERROR','FATAL','WARN') OR message ILIKE '%error%' OR message ILIKE '%fail%' OR message ILIKE '%down%' OR message ILIKE '%lost%' OR message ILIKE '%denied%') AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
-          "refId": "A",
-          "format": "logs"
-        }
-      ],
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": true,
-        "showTime": true,
-        "showLabels": true,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 14,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
-      "id": 7,
-      "title": "Replication & sync",
-      "type": "logs",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "description": "Master/replica handshake and resync events. Look for repeated 'MASTER <-> REPLICA sync started' lines \u2014 they mean flapping.",
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT timestamp, message, service, level FROM default.logs WHERE service LIKE '$service' AND (message ILIKE '%replic%' OR message ILIKE '%sync%' OR message ILIKE '%master%' OR message ILIKE '%slave%' OR message ILIKE '%ready to accept%' OR message ILIKE '%partial resync%') AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
-          "refId": "A",
-          "format": "logs"
-        }
-      ],
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": true,
-        "showTime": true,
-        "showLabels": true,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 14,
-        "w": 12,
-        "h": 8
-      }
-    },
-    {
-      "id": 8,
+      "id": 5,
       "title": "CPU usage % by pod",
       "type": "timeseries",
       "datasource": {
@@ -499,13 +359,13 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 16,
         "w": 12,
         "h": 8
       }
     },
     {
-      "id": 9,
+      "id": 6,
       "title": "Memory usage % by pod",
       "type": "timeseries",
       "datasource": {
@@ -559,51 +419,13 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 22,
+        "y": 16,
         "w": 12,
         "h": 8
       }
     },
     {
-      "id": 10,
-      "title": "Persistence & background saves",
-      "type": "logs",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "description": "RDB snapshots and AOF rewrites. A save that starts but never terminates points at disk I/O.",
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT timestamp, message, service, level FROM default.logs WHERE service LIKE '$service' AND (message ILIKE '%saving%' OR message ILIKE '%saved%' OR message ILIKE '%RDB%' OR message ILIKE '%fork%' OR message ILIKE '%AOF%' OR message ILIKE '%bgrewrite%') AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
-          "refId": "A",
-          "format": "logs"
-        }
-      ],
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": true,
-        "showTime": true,
-        "showLabels": true,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 30,
-        "w": 24,
-        "h": 8
-      }
-    },
-    {
-      "id": 11,
+      "id": 7,
       "title": "Runbook \u2014 redis-cli commands",
       "type": "text",
       "options": {
@@ -616,7 +438,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 24,
         "w": 24,
         "h": 22
       },

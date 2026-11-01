@@ -268,8 +268,8 @@ kubectl -n pfa port-forward svc/grafana 3000:3000 &
 |---|---|
 | **Finance Assistant — Overview & Debug** | service health, requests, 5xx, p95/p99 latency, and searchable logs in one place |
 | **Pods — CPU / memory / restarts** | which pod is under CPU/memory pressure or restarting |
-| **Database** | row counts and Postgres/Redis logs |
 | **Redis — Debug & Runbook** | Redis master/replica logs, replication health, pod pressure, and copy-paste `redis-cli` commands |
+| **Postgres — Debug & Runbook** | Postgres primary/replica logs, replication and recovery, pod pressure, and copy-paste `psql` commands |
 
 Dashboards are files in `observability/grafana/dashboards/`. The committed
 `k8s/config/infra/grafana-dashboards.yaml` ConfigMap is generated from them and

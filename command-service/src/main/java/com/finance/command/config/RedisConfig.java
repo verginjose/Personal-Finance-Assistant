@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.finance.command.cache.CacheKeyRegistry;
 import com.finance.command.cache.TrackingRedisCache;
-import io.lettuce.core.api.StatefulRedisConnection;
+import io.lettuce.core.api.StatefulConnection;
 import jakarta.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
@@ -55,7 +55,7 @@ public class RedisConfig {
     @Bean
     public RedisConnectionFactory redisConnectionFactory() {
         // Pool config
-        GenericObjectPoolConfig<StatefulRedisConnection<String, String>> poolConfig =
+        GenericObjectPoolConfig<StatefulConnection<?, ?>> poolConfig =
                 new GenericObjectPoolConfig<>();
         poolConfig.setMaxTotal(10);       // matches max-active
         poolConfig.setMaxIdle(5);

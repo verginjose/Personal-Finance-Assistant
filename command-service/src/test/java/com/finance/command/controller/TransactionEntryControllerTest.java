@@ -59,7 +59,7 @@ public class TransactionEntryControllerTest {
                 1L, userId, "Salary", new BigDecimal("5000.00"),
                 TransactionType.INCOME, Category.SALARY, "INR", "Monthly salary",
                 false, null,
-                LocalDateTime.now(), LocalDateTime.now()
+                LocalDateTime.now(), LocalDateTime.now(), null
         );
 
         when(service.createEntry(any(), any())).thenReturn(response);

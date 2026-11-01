@@ -11,6 +11,15 @@ data:
   # network, so the localhost-only restriction must be lifted.
   rabbitmq.conf: |
     loopback_users.guest = false
+    # The container sees the 1Gi cgroup limit, so the default 0.4 watermark
+    # (≈410Mi) is where publishers get flow-controlled. Give the broker more
+    # headroom before it raises the memory alarm.
+    vm_memory_high_watermark.relative = 0.7
+    # Do not let the broker grow to the full limit before reclaiming.
+    vm_memory_high_watermark_paging_ratio = 0.5
+    # Absolute (not relative) so a mis-detected host memory figure cannot turn
+    # this into a permanent disk alarm.
+    disk_free_limit.absolute = 2GB
 ---
 apiVersion: v1
 kind: Service
@@ -74,10 +83,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 128Mi
+              memory: 512Mi
             limits:
               cpu: 500m
-              memory: 256Mi
+              memory: 1Gi
           readinessProbe:
             exec:
               command: ["rabbitmq-diagnostics", "-q", "ping"]

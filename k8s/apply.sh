@@ -39,10 +39,36 @@ kubectl config current-context >/dev/null 2>&1 || {
 echo "==> Creating namespace"
 kubectl apply -f "${K8S_DIR}/00-namespace.yaml"
 
-echo "==> Rendering secrets from .env"
-kubectl create secret generic pfa-secrets -n "${NS}" \
-  --from-env-file="${ROOT_DIR}/.env" \
-  --dry-run=client -o yaml | kubectl apply -f -
+echo "==> Ensuring Sealed Secrets controller and Reloader"
+# Both are vendored and pinned; this is the only place they are installed.
+kubectl apply -f "${K8S_DIR}/sealed-secrets/controller.yaml"
+kubectl apply -f "${K8S_DIR}/reloader/reloader.yaml"
+kubectl -n kube-system rollout status deploy/sealed-secrets-controller --timeout=180s
+kubectl -n reloader rollout status deploy/reloader-reloader --timeout=120s
+
+echo "==> Applying sealed secrets"
+# Secrets are committed encrypted in k8s/sealed/ and decrypted in-cluster by
+# the sealed-secrets controller. Regenerate them with ./k8s/seal-secrets.sh
+# after changing .env. One Secret per application service plus pfa-secrets
+# (infrastructure) and pfa-ci-secrets (the GitHub runner token).
+kubectl apply -f "${K8S_DIR}/sealed/"
+
+echo "==> Waiting for sealed secrets to be decrypted"
+SEALED_NAMES=(pfa-secrets pfa-ci-secrets auth-service-secrets api-gateway-secrets \
+              command-service-secrets query-service-secrets ocr-service-secrets)
+for name in "${SEALED_NAMES[@]}"; do
+  for _ in $(seq 1 30); do
+    kubectl -n "${NS}" get secret "${name}" >/dev/null 2>&1 && break
+    sleep 1
+  done
+  kubectl -n "${NS}" get secret "${name}" >/dev/null 2>&1 || {
+    echo "Secret ${name} was not created. A pre-existing Secret with that name that" >&2
+    echo "the controller does not own blocks adoption: delete it once, then rerun." >&2
+    echo "Logs: kubectl -n kube-system logs deploy/sealed-secrets-controller" >&2
+    exit 1
+  }
+done
+echo "    ${#SEALED_NAMES[@]} secrets ready"
 
 render_dir="$(mktemp -d)"
 trap 'rm -rf "${render_dir}"' EXIT

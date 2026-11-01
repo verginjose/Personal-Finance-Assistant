@@ -48,17 +48,20 @@ if ! curl -fsS "http://${REGISTRY_ADDR}/v2/" >/dev/null 2>&1; then
 fi
 
 # ── Runner credentials ──────────────────────────────────────────────────────
-PAT="$(env_value GITHUB_PAT)"
-if [[ -z "${PAT}" ]]; then
-  echo "WARNING: GITHUB_PAT is not set in .env — the runner will crash-loop." >&2
-  echo "         Create a PAT with repo Administration (read/write) + Contents (read/write)," >&2
-  echo "         add GITHUB_PAT=<token> to .env, then rerun this script." >&2
-else
-  echo "==> Syncing pfa-ci-secrets"
-  kubectl create secret generic pfa-ci-secrets -n "${NS}" \
-    --from-literal=GITHUB_PAT="${PAT}" \
-    --dry-run=client -o yaml | kubectl apply -f -
-fi
+# pfa-ci-secrets is committed encrypted in k8s/sealed/ and decrypted in-cluster
+# by the sealed-secrets controller. Update it with ./k8s/seal-secrets.sh after
+# changing GITHUB_PAT in .env.
+echo "==> Applying sealed runner credential"
+kubectl apply -f "${ROOT_DIR}/k8s/sealed/pfa-ci-secrets.yaml"
+for _ in $(seq 1 30); do
+  kubectl -n "${NS}" get secret pfa-ci-secrets >/dev/null 2>&1 && break
+  sleep 1
+done
+kubectl -n "${NS}" get secret pfa-ci-secrets >/dev/null 2>&1 || {
+  echo "pfa-ci-secrets was not created by the controller; the runner will crash-loop." >&2
+  echo "Check: kubectl -n kube-system logs deploy/sealed-secrets-controller" >&2
+  exit 1
+}
 
 # ── BuildKit ────────────────────────────────────────────────────────────────
 echo "==> Deploying rootless BuildKit"

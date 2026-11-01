@@ -14,6 +14,25 @@ spec:
       port: 8080
       targetPort: 8080
 ---
+# Non-secret configuration for this service only. Credentials live in the
+# api-gateway-secrets Secret, rendered by k8s/apply.sh from env/api-gateway.env.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-gateway-config
+  namespace: pfa
+  labels:
+    app: api-gateway
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  REDIS_HOST: redis
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USER: guest
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_ACCESS_KEY: admin
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -37,6 +56,8 @@ spec:
       labels:
         app: api-gateway
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        reloader.stakater.com/auto: "true"
     spec:
       terminationGracePeriodSeconds: 30
       containers:
@@ -46,39 +67,17 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: api-gateway-config
+            - secretRef:
+                name: api-gateway-secrets
           env:
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: JWT_SECRET }
-            - name: JWT_EXPIRATION
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: JWT_EXPIRATION }
-
-            - name: REDIS_HOST
-              value: redis
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: REDIS_PASSWORD }
-
-            - name: RABBITMQ_HOST
-              value: rabbitmq
-            - name: RABBITMQ_PORT
-              value: "5672"
-            - name: RABBITMQ_USER
-              value: guest
-            - name: RABBITMQ_PASSWORD
-              value: guest
-
-            - name: MINIO_ENDPOINT
-              value: http://minio:9000
-            - name: MINIO_ACCESS_KEY
-              value: admin
+            # The gateway reads MINIO_SECRET_KEY; the Secret stores the
+            # MinIO root password under its infrastructure-wide name.
             - name: MINIO_SECRET_KEY
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: MINIO_ROOT_PASSWORD }
-
-            - name: JAVA_TOOL_OPTIONS
-              value: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
+                secretKeyRef: { name: api-gateway-secrets, key: MINIO_ROOT_PASSWORD }
           resources:
             requests:
               cpu: 250m

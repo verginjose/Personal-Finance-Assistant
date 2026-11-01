@@ -261,6 +261,6 @@ kubectl -n pfa exec -it deploy/api-gateway -- sh
 | `Pending` | `describe pod` → events | not enough memory/CPU, or GPU not allocatable (OCR) |
 | `OOMKilled` (exit 137) | `kubectl describe pod` | JVM heap + pod limit too tight; compare `kubectl top pod` |
 | `502` from the ingress / tunnel | `kubectl -n pfa get endpoints` | Service has no Ready pods |
-| `401` everywhere | compare `JWT_SECRET` in `pfa-secrets` with both pods | gateway and auth-service disagree on the key |
+| `401` everywhere | compare `JWT_SECRET` in `api-gateway-secrets` with the auth-service pod | both are rendered from the same `.env` entry; a drift means one Secret was not re-rendered |
 | `413` on upload | `frontend/nginx.conf` `client_max_body_size` | file bigger than 12 MB |
 | Argo `OutOfSync` but pods are fine | `kubectl -n argocd get app pfa-apps -o yaml` | Argo has not polled yet (≤3 min) or the repo credential expired |

@@ -9,6 +9,9 @@ target/
 
 # Environment
 .env
+# Per-service overrides may hold real credentials; the committed env/<svc>.env
+# files contain only variable names and non-secret defaults.
+env/*.local.env
 
 # Frontend
 frontend/node_modules/

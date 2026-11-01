@@ -14,7 +14,7 @@ cd ~/IdeaProjects/Personal-Finance-Assistant
 ## TL;DR
 
 ```bash
-./k8s/start.sh        # k3s up, pods ready, URLs + passwords printed
+./k8s/start.sh        # k3s up, workloads ready, UI port-forwards started, URLs printed
 ./k8s/stop.sh         # k3s down, nothing deleted
 # just power off — that is also safe
 ```
@@ -67,9 +67,17 @@ Useful variants:
 Confirm it is actually down:
 
 ```bash
-systemctl is-active k3s     # expect: inactive
+systemctl is-active k3s                                # expect: inactive
+pgrep -af 'rancher/k3s.*containerd-shim' | wc -l       # expect: 0
 kubectl get nodes           # expect: connection refused — correct, the cluster is down
 ```
+
+`systemctl is-active` alone is **not** enough: the k3s unit uses
+`KillMode=process`, so its containerd shims can survive as orphans with every
+container still running. `stop.sh` now checks for them and falls back to
+`sudo /usr/local/bin/k3s-killall.sh` (which deletes no data). If you stopped
+k3s by hand and see a non-zero count, run that script before `./k8s/start.sh`,
+or the old containers will still hold their pod IPs and host ports.
 
 ## 4. Start again
 
@@ -81,11 +89,15 @@ Expected output, in order:
 
 1. `ok k3s is already running` (or it starts it)
 2. `ok node Ready (jose-fedora)`
-3. `ok 22 pods Running/Completed` — a cold start takes 1–3 minutes
+3. `ok N workloads Ready` — a cold start takes 1–3 minutes
 4. `ok pfa-apps: Synced Healthy`
-5. the access table and the credentials table
+5. one `ok … port-forward` line per UI (frontend, Grafana, Prometheus, MinIO,
+   RabbitMQ, Argo CD)
+6. the access table and the credentials table (passwords hidden; run
+   `./k8s/start.sh --secrets` for just the credentials)
 
-If it reports unhealthy pods, run `./k8s/ci/debug.sh` for the full picture.
+If it reports workloads that are not ready, run `./k8s/ci/debug.sh` for the full
+picture. Add `--no-port-forward` if you do not want the forwards.
 
 ## 5. Prove the data survived
 

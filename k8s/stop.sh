@@ -44,8 +44,13 @@ warn() { printf '\033[1;33m    warn\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m    FAIL\033[0m %s\n' "$*"; }
 
 if ! systemctl is-active --quiet k3s; then
-  ok "k3s is not running — nothing to stop"
-  exit 0
+  # k3s can be down while its orphaned containers are still alive; only a
+  # clean stop (no shims) means there is truly nothing to do.
+  if ! pgrep -f 'rancher/k3s.*containerd-shim' >/dev/null 2>&1; then
+    ok "k3s is not running — nothing to stop"
+    exit 0
+  fi
+  warn "k3s is not running, but its containers still are (orphaned shims)"
 fi
 
 # ── what it is costing ───────────────────────────────────────────────────────
@@ -112,6 +117,45 @@ if systemctl is-active --quiet k3s; then
   exit 1
 fi
 ok "k3s stopped"
+
+# KillMode=process in the k3s unit signals only the k3s binary. Its containerd
+# shims are reparented to PID 1 and keep every container running (Redis,
+# Postgres, ClickHouse, cloudflared, registry...) with their pod IPs and host
+# ports still bound. k3s-killall.sh is the supported full stop; it deletes no
+# data and is what start.sh expects before bringing k3s back up.
+SHIMS='rancher/k3s.*containerd-shim'
+if pgrep -f "${SHIMS}" >/dev/null 2>&1; then
+  warn "containers still running after systemd stop; killing them"
+  if [[ -x /usr/local/bin/k3s-killall.sh ]]; then
+    sudo /usr/local/bin/k3s-killall.sh >/dev/null 2>&1 || warn "k3s-killall.sh returned non-zero"
+  else
+    fail "/usr/local/bin/k3s-killall.sh not found — stop the shims manually"
+    exit 1
+  fi
+  for i in $(seq 1 30); do
+    pgrep -f "${SHIMS}" >/dev/null 2>&1 || break
+    sleep 1
+  done
+fi
+if pgrep -f "${SHIMS}" >/dev/null 2>&1; then
+  fail "containers are still running; check: pgrep -af '${SHIMS}'"
+  exit 1
+fi
+ok "all containers stopped"
+
+# ── reap port-forwards started by start.sh --port-forward ────────────────────
+# They would die with the API server anyway, but killing them releases :3000
+# and :8080 immediately and clears the pidfiles.
+pf_dir="${XDG_RUNTIME_DIR:-/tmp}"
+for pidfile in "${pf_dir}"/pfa-port-forward-*.pid; do
+  [[ -e "${pidfile}" ]] || continue
+  pid="$(cat "${pidfile}" 2>/dev/null || true)"
+  if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+    kill "${pid}" 2>/dev/null || true
+    ok "stopped port-forward $(basename "${pidfile}" .pid | sed 's/^pfa-port-forward-//')"
+  fi
+  rm -f "${pidfile}"
+done
 
 echo
 echo "Preserved (nothing was deleted):"

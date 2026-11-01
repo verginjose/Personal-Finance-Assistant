@@ -14,6 +14,30 @@ spec:
       port: 8084
       targetPort: 8084
 ---
+# Non-secret configuration for this service only. Credentials live in the
+# query-service-secrets Secret, rendered by k8s/apply.sh from
+# env/query-service.env.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: query-service-config
+  namespace: pfa
+  labels:
+    app: query-service
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  SPRING_JPA_HIBERNATE_DDL_AUTO: update
+  SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+  REDIS_HOST: redis
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_DATA_REDIS_PORT: "6379"
+  RABBITMQ_HOST: rabbitmq
+  SPRING_RABBITMQ_HOST: rabbitmq
+  SPRING_RABBITMQ_USERNAME: guest
+  GROQ_MODEL: openai/gpt-oss-120b
+  GROQ_URL: https://api.groq.com/openai/v1/chat/completions
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,6 +56,8 @@ spec:
       labels:
         app: query-service
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        reloader.stakater.com/auto: "true"
     spec:
       terminationGracePeriodSeconds: 30
       containers:
@@ -41,20 +67,12 @@ spec:
           ports:
             - name: http
               containerPort: 8084
+          envFrom:
+            - configMapRef:
+                name: query-service-config
+            - secretRef:
+                name: query-service-secrets
           env:
-            - name: DB_NAME
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_NAME }
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_USER }
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_PASSWORD }
-            - name: FINANCE_DB_SCHEMA
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: FINANCE_DB_SCHEMA }
-
             # Read side of CQRS: reads from the streaming replica.
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://postgres-replica:5432/$(DB_NAME)
@@ -62,49 +80,15 @@ spec:
               value: $(DB_USER)
             - name: SPRING_DATASOURCE_PASSWORD
               value: $(DB_PASSWORD)
-            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
-              value: update
-            - name: SPRING_JPA_DATABASE_PLATFORM
-              value: org.hibernate.dialect.PostgreSQLDialect
             - name: SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA
               value: $(FINANCE_DB_SCHEMA)
             - name: SPRING_DATASOURCE_HIKARI_SCHEMA
               value: $(FINANCE_DB_SCHEMA)
-
-            - name: REDIS_HOST
-              value: redis
-            - name: SPRING_DATA_REDIS_HOST
-              value: redis
-            - name: SPRING_DATA_REDIS_PORT
-              value: "6379"
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: REDIS_PASSWORD }
+            # Spring's Redis property expects a different name than the
+            # REDIS_PASSWORD the Secret stores.
             - name: SPRING_DATA_REDIS_PASSWORD
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: REDIS_PASSWORD }
-
-            - name: RABBITMQ_HOST
-              value: rabbitmq
-            - name: SPRING_RABBITMQ_HOST
-              value: rabbitmq
-            - name: SPRING_RABBITMQ_USERNAME
-              value: guest
-            - name: SPRING_RABBITMQ_PASSWORD
-              value: guest
-
-            - name: GROQ_API_KEY
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: GROQ_API_KEY }
-            - name: GROQ_MODEL
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: GROQ_MODEL }
-            - name: GROQ_URL
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: GROQ_URL }
-
-            - name: JAVA_TOOL_OPTIONS
-              value: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
+                secretKeyRef: { name: query-service-secrets, key: REDIS_PASSWORD }
           resources:
             requests:
               cpu: 250m

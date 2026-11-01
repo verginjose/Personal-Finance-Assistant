@@ -28,6 +28,30 @@ spec:
     requests:
       storage: 5Gi
 ---
+# Non-secret configuration for this service only. Credentials live in the
+# ocr-service-secrets Secret, rendered by k8s/apply.sh from env/ocr-service.env.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocr-service-config
+  namespace: pfa
+  labels:
+    app: ocr-service
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  FLAGS_fraction_of_gpu_memory_to_use: "0.65"
+  NVIDIA_VISIBLE_DEVICES: all
+  NVIDIA_DRIVER_CAPABILITIES: compute,utility
+  UPSERT_SERVICE_URL: http://command-service:8081
+  RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+  OCR_USE_ANGLE_CLS: "false"
+  OCR_DET_LIMIT_SIDE_LEN: "736"
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: admin
+  MINIO_SECURE: "false"
+  GROQ_MODEL: openai/gpt-oss-120b
+  GROQ_URL: https://api.groq.com/openai/v1/chat/completions
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -49,6 +73,8 @@ spec:
       labels:
         app: ocr-service
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        reloader.stakater.com/auto: "true"
     spec:
       terminationGracePeriodSeconds: 60
       # Remove the GPU request below (and set FLAGS_fraction_of_gpu_memory_to_use=0)
@@ -64,42 +90,17 @@ spec:
           ports:
             - name: http
               containerPort: 8100
+          envFrom:
+            - configMapRef:
+                name: ocr-service-config
+            - secretRef:
+                name: ocr-service-secrets
           env:
-            - name: FLAGS_fraction_of_gpu_memory_to_use
-              value: "0.65"
-            - name: NVIDIA_VISIBLE_DEVICES
-              value: all
-            - name: NVIDIA_DRIVER_CAPABILITIES
-              value: compute,utility
-
-            - name: GROQ_API_KEY
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: GROQ_API_KEY }
-            - name: GROQ_MODEL
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: GROQ_MODEL }
-            - name: GROQ_URL
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: GROQ_URL }
-
-            - name: UPSERT_SERVICE_URL
-              value: http://command-service:8081
-            - name: RABBITMQ_URL
-              value: amqp://guest:guest@rabbitmq:5672/
-            - name: OCR_USE_ANGLE_CLS
-              value: "false"
-            - name: OCR_DET_LIMIT_SIDE_LEN
-              value: "736"
-
-            - name: MINIO_ENDPOINT
-              value: minio:9000
-            - name: MINIO_ACCESS_KEY
-              value: admin
+            # The OCR service reads MINIO_SECRET_KEY; the Secret stores the
+            # MinIO root password under its infrastructure-wide name.
             - name: MINIO_SECRET_KEY
               valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: MINIO_ROOT_PASSWORD }
-            - name: MINIO_SECURE
-              value: "false"
+                secretKeyRef: { name: ocr-service-secrets, key: MINIO_ROOT_PASSWORD }
           resources:
             requests:
               cpu: 500m

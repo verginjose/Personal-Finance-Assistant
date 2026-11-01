@@ -10,6 +10,7 @@ k8s/
 ├── secrets.example.yaml       # template; apply.sh builds the real Secret from .env
 ├── ingress.yaml               # finance.local -> frontend
 ├── apply.sh                   # renders configmaps/secrets and deploys in order
+├── apply-observability.sh     # re-render + restart Grafana/Prometheus/Vector only
 ├── build-images.sh            # offline fallback: build images, import into k3s/kind
 ├── pipeline.sh                # offline fallback: full build -> render -> deploy -> verify
 ├── setup-k3s-nvidia.sh        # one-time privileged k3s + GPU + firewalld setup
@@ -80,8 +81,9 @@ One push, step by step:
 1. **GitHub queues `build.yml`.** It triggers on pushes to `master` or
    `k8s/local-deployment`, ignoring changes that only touch `**.md` or
    `k8s/ci/**`.
-2. **`detect`** diffs the last commit and keeps only services whose directory
-   changed (`query-service/**` → `query-service`). No matches → no build.
+2. **`detect`** diffs the whole push (`BEFORE..AFTER`, falling back to
+   `HEAD^` on a new branch) and keeps only services whose directory changed
+   (`query-service/**` → `query-service`). No matches → no build.
 3. **`build`** runs one service at a time (`max-parallel: 1`; OCR is ~10 GB and
    the node cannot host two builds at once). It calls BuildKit directly:
 
@@ -107,8 +109,9 @@ commits the tag bump on that branch, but Argo ignores it — so nothing deploys
 until the branch is merged into `master`. Merging carries the manifest change
 over, and Argo syncs it.
 
-**Escape hatch.** `detect` only looks at the last commit, so a multi-commit push
-can miss a service. Build any selection explicitly:
+**Escape hatch.** `detect` infers the build set from changed paths, so an image
+that needs rebuilding without a directory change (base-image bump, cache
+eviction) is never picked up. Build any selection explicitly:
 
 ```bash
 TOKEN=$(sed -n 's/^GITHUB_PAT=//p' .env)
@@ -117,8 +120,58 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Accept: application/vnd.gi
   -d '{"ref":"master","inputs":{"service":"all"}}'
 ```
 
-`service` is `all` or one of the five service names. Setup and deeper
+`service` is `all` or one of the six service names. Setup and deeper
 operations are in [`ci/README.md`](ci/README.md).
+
+### What a push updates — and what it does not
+
+Only the six service directories (`auth-service/`, `api-gateway/`,
+`command-service/`, `query-service/`, `frontend/`, `ocr-service/`) go through
+the build → tag-bump → Argo path. A commit that touches none of them still runs
+`detect`, finds `services=[]`, **skips the build, and restarts nothing**.
+
+Everything else lands by one of three routes:
+
+| You changed | How it reaches the cluster |
+|---|---|
+| `<service>/**` | Automatic: CI builds `${REGISTRY}/finance/<svc>:<sha>`, bumps `k8s/apps/<svc>.yaml`, Argo syncs |
+| `k8s/apps/*.yaml` non-image fields (env, replicas, resources, probes) | Argo applies on push via `selfHeal` — no build needed |
+| `k8s/infrastructure/*.yaml` | **Manual**: `kubectl apply -f k8s/infrastructure/` (or `./k8s/apply.sh`) |
+| `observability/grafana/dashboards/*.json` | **Manual**: recreate the `grafana-dashboards` ConfigMap (see below) |
+| `observability/grafana/provisioning/**` | **Manual**: re-render `grafana-datasources` + `grafana-dashboard-provider`, then restart Grafana |
+| `observability/prometheus/prometheus.yml` | **Manual**: recreate `prometheus-config`, then restart Prometheus (config is not hot-reloaded) |
+| `observability/vector/vector.yaml` | ⚠️ **Unused by k8s** — the cluster runs the inline copy in `k8s/infrastructure/vector.yaml`; compose uses the file |
+| `observability/clickhouse/init/*.sql`, `db-init/*` | ConfigMap only — executed **once, on first init of an empty data dir**; existing databases need the DDL applied by hand |
+| `docker-compose.yml` | Local dev only — never touches the cluster |
+
+Use [`apply-observability.sh`](apply-observability.sh) — it recreates the
+ConfigMap *and* restarts the pod that reads it, which is the part that is easy
+to forget:
+
+```bash
+./k8s/apply-observability.sh                  # dashboards, datasources, prometheus, vector
+./k8s/apply-observability.sh dashboards       # one target
+./k8s/apply-observability.sh vector --no-restart
+./k8s/apply-observability.sh infra            # k8s/infrastructure/*.yaml
+```
+
+Grafana's file provider polls every 10 s, so dashboard JSON can appear on its
+own; datasources are read only at startup, and Vector/Prometheus configs are
+subPath mounts, so those always need the restart the script performs.
+`./k8s/apply.sh` is the sledgehammer — full re-render, waits on every
+StatefulSet, and restarts only Prometheus.
+
+Caveats:
+
+- **Argo `selfHeal` reverts manual image edits.** Hot-patching an image without
+  committing the tag in `k8s/apps/` is undone on the next sync.
+- **Argo does not prune** (`prune: false`): deleting a file under `k8s/apps/`
+  leaves the live resource running.
+- **CI ignores `**.md` and `k8s/ci/**`** in `paths-ignore`, so doc-only pushes
+  do not trigger a run.
+- **Init SQL is first-boot only.** `postgres-init` and `clickhouse-init` are
+  read by the entrypoint when the data directory is empty; editing them later
+  changes nothing on a running database.
 
 ### Which pods take part
 
@@ -249,14 +302,21 @@ k3s is enabled at boot, so it is already running after a normal reboot. The two
 scripts wrap the day-to-day operations:
 
 ```bash
-./k8s/start.sh                 # start k3s, wait for the pods, print URLs + passwords
-./k8s/start.sh --no-secrets    # same, with passwords hidden
-./k8s/start.sh --full          # also re-render/re-apply from .env
+./k8s/start.sh                      # start, wait for readiness, forward UIs, hide passwords
+./k8s/start.sh --secrets            # print only the passwords (incl. Argo CD), then exit
+./k8s/start.sh --no-port-forward    # do not start the :3000/:8080/... forwards
+./k8s/start.sh --stop-port-forwards # stop the forwards and exit
+./k8s/start.sh --full               # also re-render/re-apply from .env
 
-./k8s/stop.sh                  # stop k3s cleanly, delete nothing
-./k8s/stop.sh --cancel-runs    # also cancel in-flight GitHub Actions builds
-./k8s/stop.sh --gc             # also prune old registry tags first
+./k8s/stop.sh                       # stop k3s cleanly, delete nothing
+./k8s/stop.sh --cancel-runs         # also cancel in-flight GitHub Actions builds
+./k8s/stop.sh --gc                  # also prune old registry tags first
 ```
+
+`start.sh` forwards frontend `:3001`, Grafana `:3000`, Prometheus `:9090`,
+MinIO `:9001` (console) and `:9000` (API), RabbitMQ `:15672` and Argo CD
+`:8080` in the background and reuses them if they are already up. `stop.sh`
+kills them.
 
 Underneath it is just:
 
@@ -484,13 +544,24 @@ reachable with `port-forward` (they are `ClusterIP` services, matching the
 
 ## Operational notes and caveats
 
-- **Secrets:** `apply.sh` copies every key from `.env` into the `pfa-secrets`
-  Secret. The rendered ClickHouse/Grafana ConfigMaps also contain credentials,
-  so anyone with read access to ConfigMaps in the namespace can see them. Don't
-  use this overlay unchanged on a shared cluster.
-- **Changing secrets:** editing `.env` and rerunning `apply.sh` updates the
-  Secret, but pods only pick up new env on restart:
-  `kubectl -n pfa rollout restart deploy/api-gateway` (etc.).
+- **Secrets:** `.env` stays the local source of truth, but the cluster never
+  reads it directly. Secrets are committed **encrypted** in `k8s/sealed/` and
+  decrypted in-cluster by the Sealed Secrets controller running in
+  `kube-system`. `apply.sh` applies `k8s/sealed/` and waits for the Secrets to
+  appear. There is one Secret per application service
+  (`auth-service-secrets`, `api-gateway-secrets`, …) plus `pfa-secrets` for
+  infrastructure and `pfa-ci-secrets` for the GitHub runner. See
+  `env/README.md`.
+- **Changing secrets:** edit `.env`, run `./k8s/seal-secrets.sh --apply`, commit
+  the regenerated `k8s/sealed/*.yaml`, push. Reloader restarts pods annotated
+  with `reloader.stakater.com/auto: "true"`. Workloads without that annotation
+  still need a manual `kubectl -n pfa rollout restart` (or use `sync-env.sh`).
+  Sealing is randomized: re-running the script always produces a diff, even
+  when no value changed.
+- **Per-service config:** non-secret settings (hostnames, ports, JVM flags,
+  feature toggles) live in a `<service>-config` ConfigMap inside each
+  `k8s/apps/<service>.yaml`, so changing them goes through git + Argo like any
+  other manifest.
 - **Storage:** `local-path` volumes are node-bound. That is fine for a
   single-node cluster; for multi-node you need a networked StorageClass, and
   the Postgres/RabbitMQ/redis StatefulSets are not configured for HA.

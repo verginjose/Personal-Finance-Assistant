@@ -73,9 +73,15 @@ kubectl -n pfa logs deploy/cloudflared --tail=30   # shows the route config
 ```bash
 kubectl -n pfa get configmap
 kubectl -n pfa get secret
-kubectl -n pfa get secret pfa-secrets -o jsonpath='{.data}' | python3 -m json.tool | head
+# secrets are committed encrypted in k8s/sealed/ and decrypted by the controller
+kubectl -n pfa get sealedsecrets
+kubectl -n pfa describe sealedsecret auth-service-secrets | sed -n '/Status:/,$p'
+# app services have their own secret; infrastructure uses pfa-secrets
+kubectl -n pfa get secret auth-service-secrets -o jsonpath='{.data}' | python3 -m json.tool | head
 # decode one key (example: DB_USER)
-kubectl -n pfa get secret pfa-secrets -o jsonpath='{.data.DB_USER}' | base64 -d; echo
+kubectl -n pfa get secret auth-service-secrets -o jsonpath='{.data.DB_USER}' | base64 -d; echo
+# re-seal after changing .env, then commit the regenerated files
+./k8s/seal-secrets.sh --apply
 ```
 
 ### 6. Storage
@@ -187,10 +193,11 @@ Argo CD syncs `k8s/apps` on `master`.
 ### 0. Day-to-day: start and stop
 
 ```bash
-./k8s/start.sh                 # k3s up, pods ready, URLs + passwords printed
-./k8s/start.sh --no-secrets    # same, passwords hidden
-./k8s/stop.sh                  # stop k3s cleanly, delete nothing
-./k8s/stop.sh --gc             # prune old registry tags first
+./k8s/start.sh                  # k3s up, ready, UI port-forwards started, passwords hidden
+./k8s/start.sh --secrets        # print only the passwords (incl. Argo CD), then exit
+./k8s/start.sh --no-port-forward # skip the :3000/:8080/... forwards
+./k8s/stop.sh                   # stop k3s cleanly, delete nothing
+./k8s/stop.sh --gc              # prune old registry tags first
 ```
 
 ### A. Remove the app, keep the cluster

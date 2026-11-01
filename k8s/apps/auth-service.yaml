@@ -14,6 +14,20 @@ spec:
       port: 8082
       targetPort: 8082
 ---
+# Non-secret configuration for this service only. Credentials live in the
+# auth-service-secrets Secret, rendered by k8s/apply.sh from env/auth-service.env.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-service-config
+  namespace: pfa
+  labels:
+    app: auth-service
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  REDIS_HOST: redis
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -37,6 +51,8 @@ spec:
       labels:
         app: auth-service
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        reloader.stakater.com/auto: "true"
     spec:
       terminationGracePeriodSeconds: 20
       containers:
@@ -46,42 +62,21 @@ spec:
           ports:
             - name: http
               containerPort: 8082
+          # Bulk config and credentials; both are injected before `env` below.
+          envFrom:
+            - configMapRef:
+                name: auth-service-config
+            - secretRef:
+                name: auth-service-secrets
           env:
-            - name: DB_NAME
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_NAME }
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_USER }
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: DB_PASSWORD }
-            - name: AUTH_DB_SCHEMA
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: AUTH_DB_SCHEMA }
-
+            # Derived values. $(VAR) resolves against the envFrom variables,
+            # which Kubernetes injects before this list.
             - name: SPRING_R2DBC_URL
               value: r2dbc:postgresql://postgres-primary:5432/$(DB_NAME)?schema=$(AUTH_DB_SCHEMA)
             - name: SPRING_R2DBC_USERNAME
               value: $(DB_USER)
             - name: SPRING_R2DBC_PASSWORD
               value: $(DB_PASSWORD)
-
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: JWT_SECRET }
-            - name: JWT_EXPIRATION
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: JWT_EXPIRATION }
-
-            - name: REDIS_HOST
-              value: redis
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef: { name: pfa-secrets, key: REDIS_PASSWORD }
-
-            - name: JAVA_TOOL_OPTIONS
-              value: "-XX:MaxRAMPercentage=70.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
           resources:
             requests:
               cpu: 150m

@@ -98,7 +98,8 @@ public class RedisConfig {
     @Bean
     public RedisCacheManager cacheManager(
             RedisCacheWriter redisCacheWriter,           // ✅ injected — reused everywhere
-            @Lazy CacheKeyRegistry cacheKeyRegistry) {  // ✅ removed connectionFactory — not needed here
+            @Lazy CacheKeyRegistry cacheKeyRegistry,
+            com.finance.query.cache.CacheConsistencyGuard consistencyGuard) {
 
         GenericJackson2JsonRedisSerializer jsonSerializer =
                 new GenericJackson2JsonRedisSerializer(redisObjectMapper());
@@ -141,7 +142,8 @@ public class RedisConfig {
                         name,
                         redisCacheWriter,   // ✅ same instance
                         resolved,
-                        cacheKeyRegistry
+                        cacheKeyRegistry,
+                        consistencyGuard
                 );
             }
         };

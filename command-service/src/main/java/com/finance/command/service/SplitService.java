@@ -864,5 +864,8 @@ public class SplitService {
         // Directly evict query-service user-groups keys — same Redis, no pub/sub needed
         Set<UUID> memberIds = members.stream().map(GroupMember::getUserId).collect(Collectors.toSet());
         queryCacheEvictor.evictUserGroupsKeys(memberIds);
+        // Publish the write tokens after commit so the read side won't cache a
+        // user-groups fill that raced this change or read a lagging replica.
+        queryCacheEvictor.markUserWrites(memberIds);
     }
 }

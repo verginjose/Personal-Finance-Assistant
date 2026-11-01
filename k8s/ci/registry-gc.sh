@@ -13,7 +13,7 @@
 set -euo pipefail
 
 NS=pfa
-REGISTRY="http://192.168.0.7:30500"
+REGISTRY="http://127.0.0.1:30500"
 KEEP=3
 DRY_RUN=false
 ACCEPT="application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json"

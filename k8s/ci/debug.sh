@@ -10,7 +10,7 @@ set -uo pipefail
 K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${K8S_DIR}/../.." && pwd)"
 NS=pfa
-REGISTRY="http://192.168.0.7:30500"
+REGISTRY="http://127.0.0.1:30500"
 FAILURES=0
 
 if [[ -z "${KUBECONFIG:-}" && -s "${HOME}/.kube/k3s.yaml" ]]; then

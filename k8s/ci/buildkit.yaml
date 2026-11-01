@@ -15,9 +15,9 @@ metadata:
   namespace: pfa
 data:
   buildkitd.toml: |
-    # The in-cluster registry speaks HTTP, and its name (node IP:nodePort) is
-    # not one containerd/BuildKit treats as localhost.
-    [registry."192.168.0.7:30500"]
+    # BuildKit pushes to the registry over its ClusterIP Service, which is
+    # stable regardless of the node's LAN IP. The registry speaks plain HTTP.
+    [registry."registry.pfa.svc.cluster.local:5000"]
       http = true
       insecure = true
 ---

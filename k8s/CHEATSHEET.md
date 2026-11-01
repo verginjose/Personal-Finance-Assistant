@@ -162,7 +162,7 @@ kubectl apply --dry-run=server -f k8s/apps/
 kubectl -n pfa get pods -l app=ci-runner
 kubectl -n pfa logs deploy/ci-runner --tail=40              # want "Listening for Jobs"
 kubectl -n pfa exec deploy/buildkitd -- buildctl --addr tcp://127.0.0.1:1234 debug workers
-curl -fsS http://192.168.0.7:30500/v2/_catalog | jq .       # images in the registry
+curl -fsS http://127.0.0.1:30500/v2/_catalog | jq .       # images in the registry
 
 # what is deployed vs what git says
 kubectl -n pfa get deploy -o custom-columns='NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image'
@@ -185,7 +185,7 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Accept: application/vnd.gi
 ```
 
 Delivery chain: `git push` → runner builds changed services with BuildKit →
-pushes `192.168.0.7:30500/finance/<svc>:<sha>` → commits the tag bump →
+pushes to `registry.pfa.svc:5000/finance/<svc>:<sha>` → commits the tag bump →
 Argo CD syncs `k8s/apps` on `master`.
 
 ## Part 2 — Cleanup (least → most destructive)

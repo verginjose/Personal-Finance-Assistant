@@ -198,7 +198,7 @@ automated end to end:
 ```
 git push → GitHub Actions (self-hosted runner in the cluster)
          → BuildKit builds only the changed services
-         → pushes 192.168.0.7:30500/finance/<svc>:<sha>
+         → pushes to the in-cluster registry (registry.pfa.svc:5000)
          → commits the new tag into k8s/apps/<svc>.yaml
          → Argo CD syncs master → Deployment rolls out
 ```
@@ -323,12 +323,13 @@ kubectl -n argocd get applications                  # six, all Synced/Healthy
 
 Two host-level steps are not Kubernetes objects and stay manual:
 
-- **Registry mirror** — containerd must treat `192.168.0.7:30500` as plain HTTP.
+- **Registry mirror** — containerd must treat `127.0.0.1:30500` as plain HTTP.
   Write `/etc/rancher/k3s/registries.yaml`, then `sudo systemctl restart k3s`
   (see [`k8s/ci/README.md`](k8s/ci/README.md), step 1).
-- **Node IP** — `192.168.0.7:30500` is hardcoded in every `image:` field and in
-  `registries.yaml`. If your machine has a different address, reserve it on the
-  router or update those files before the first build.
+- **Stable addresses** — kubelet pulls from the NodePort on loopback
+  (`127.0.0.1:30500`); BuildKit pushes to the registry Service
+  (`registry.pfa.svc:5000`). No LAN IP is hardcoded, so a DHCP address change
+  does not break builds or image pulls.
 - **GPU (optional)** — `./k8s/setup-k3s-nvidia.sh` for OCR.
 
 Details: [`k8s/README.md`](k8s/README.md) (setup, fallbacks),

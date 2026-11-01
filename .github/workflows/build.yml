@@ -31,7 +31,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  REGISTRY: 192.168.0.7:30500
+  # BuildKit runs inside the cluster, so it pushes through the Service DNS name
+  # (stable, independent of the node's LAN IP). kubelet/containerd run on the
+  # host and pull through the NodePort on loopback, also stable.
+  PUSH_REGISTRY: registry.pfa.svc.cluster.local:5000
+  PULL_REGISTRY: 127.0.0.1:30500
   BUILDKIT_HOST: tcp://buildkitd.pfa.svc.cluster.local:1234
   BUILDKIT_VERSION: v0.15.2
   ALL_SERVICES: auth-service api-gateway command-service query-service frontend ocr-service
@@ -120,20 +124,20 @@ jobs:
           set -euo pipefail
           TAG="${GITHUB_SHA::12}"
           echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "Building ${REGISTRY}/finance/${SERVICE}:${TAG} from ./${SERVICE}"
+          echo "Building ${PUSH_REGISTRY}/finance/${SERVICE}:${TAG} from ./${SERVICE}"
           buildctl build \
             --progress plain \
             --frontend dockerfile.v0 \
             --local context="./${SERVICE}" \
             --local dockerfile="./${SERVICE}" \
             --opt filename=Dockerfile \
-            --output "type=image,name=${REGISTRY}/finance/${SERVICE}:${TAG},push=true"
+            --output "type=image,name=${PUSH_REGISTRY}/finance/${SERVICE}:${TAG},push=true"
 
       - name: Bump image tag in the manifest
         run: |
           set -euo pipefail
           file="k8s/apps/${SERVICE}.yaml"
-          sed -i -E "s#(image: ).*finance/${SERVICE}:.*#\1${REGISTRY}/finance/${SERVICE}:${TAG}#" "$file"
+          sed -i -E "s#(image: ).*finance/${SERVICE}:.*#\1${PULL_REGISTRY}/finance/${SERVICE}:${TAG}#" "$file"
           if git diff --quiet -- "$file"; then
             echo "Manifest already points at ${TAG}; nothing to commit."
             exit 0

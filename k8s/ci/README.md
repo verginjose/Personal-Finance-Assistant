@@ -7,7 +7,7 @@ images import` loop with a self-hosted GitHub Actions runner inside the cluster.
 git push
   └─ GitHub Actions (ci-runner pod)
        ├─ detect which service directories changed
-       ├─ buildctl → buildkitd pod → push 192.168.0.7:30500/finance/<svc>:<sha>
+       ├─ buildctl → buildkitd pod → push registry.pfa.svc:5000/finance/<svc>:<sha>
        └─ commit the new tag into k8s/apps/<svc>.yaml   [skip ci]
             └─ Argo CD (argocd namespace)
                  └─ polls master, syncs k8s/apps → Deployment rolls out
@@ -24,14 +24,15 @@ still compile with Maven inside the image.
 ### 1. Tell containerd the registry is plain HTTP (needs root)
 
 kubelet/containerd run on the host, so they cannot resolve `registry.pfa.svc`.
-The registry is exposed as a NodePort on the node IP instead. Run:
+Use the NodePort on loopback instead — it never changes with DHCP. (BuildKit
+pushes through the Service DNS name and is configured in `buildkit.yaml`.) Run:
 
 ```
 ! sudo tee /etc/rancher/k3s/registries.yaml <<'EOF'
 mirrors:
-  "192.168.0.7:30500":
+  "127.0.0.1:30500":
     endpoint:
-      - "http://192.168.0.7:30500"
+      - "http://127.0.0.1:30500"
 EOF
 ```
 
@@ -40,8 +41,9 @@ EOF
 ```
 
 k3s takes ~30 s to come back; give it a minute, then check
-`kubectl get pods -n pfa`. If the node IP is not static in your router's DHCP,
-reserve it — the image names and this file both hardcode it.
+`kubectl get pods -n pfa`. The manifests pull from `127.0.0.1:30500` and
+BuildKit pushes to `registry.pfa.svc:5000`, so neither depends on the node's
+LAN IP.
 
 ### 2. Create a GitHub PAT
 
@@ -149,7 +151,7 @@ Each image variant keeps every layer until GC; with 50 Gi and a 10 GB OCR image
 you will eventually need it.
 
 **A build fails on push with `unexpected status`.** The registry is not
-reachable over HTTP. Recheck step 1 — `curl http://192.168.0.7:30500/v2/` must
+reachable over HTTP. Recheck step 1 — `curl http://127.0.0.1:30500/v2/` must
 return `{}`.
 
 **BuildKit pod crash-loops.** Check `kubectl -n pfa logs deploy/buildkitd`.

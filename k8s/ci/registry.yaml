@@ -3,8 +3,9 @@
 # k3s containerd does not share the host Docker image store, so CI needs a
 # registry both the builder and the kubelet can reach. The Service is a
 # NodePort on purpose: containerd runs on the host, outside the pod network,
-# and cannot resolve ClusterIP/DNS names. The node IP + nodePort is what
-# /etc/rancher/k3s/registries.yaml points at (see k8s/ci/README.md).
+# and cannot resolve ClusterIP/DNS names. kubelet pulls from the NodePort on
+# loopback (127.0.0.1:30500, see /etc/rancher/k3s/registries.yaml), while
+# BuildKit pushes through the ClusterIP DNS name (registry.pfa.svc:5000).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

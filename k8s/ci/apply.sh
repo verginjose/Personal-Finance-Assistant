@@ -4,7 +4,7 @@
 #   ./k8s/ci/apply.sh
 #
 # Prerequisites (one-time, see README.md):
-#   1. /etc/rancher/k3s/registries.yaml marks 192.168.0.7:30500 as plain HTTP
+#   1. /etc/rancher/k3s/registries.yaml marks 127.0.0.1:30500 as plain HTTP
 #      and k3s was restarted.
 #   2. GITHUB_PAT is present in the repo-level .env.
 set -euo pipefail
@@ -12,7 +12,7 @@ set -euo pipefail
 K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${K8S_DIR}/../.." && pwd)"
 NS=pfa
-REGISTRY_ADDR="192.168.0.7:30500"
+REGISTRY_ADDR="127.0.0.1:30500"
 
 command -v kubectl >/dev/null 2>&1 || { echo "kubectl is required" >&2; exit 1; }
 

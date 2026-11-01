@@ -371,7 +371,7 @@ else
   printf '    rabbitmq       kubectl -n pfa port-forward svc/rabbitmq 15672:15672     → http://localhost:15672\n'
   printf '    argocd         kubectl -n argocd port-forward svc/argocd-server 8080:443 → https://localhost:8080\n'
 fi
-printf '    registry       curl http://192.168.0.7:30500/v2/_catalog\n'
+printf '    registry       curl http://127.0.0.1:30500/v2/_catalog\n'
 printf '    ci runs        https://github.com/verginjose/Personal-Finance-Assistant/actions\n'
 
 # ── 5. credentials ───────────────────────────────────────────────────────────

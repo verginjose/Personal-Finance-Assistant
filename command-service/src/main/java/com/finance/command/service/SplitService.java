@@ -443,6 +443,14 @@ public class SplitService {
         });
 
         evictUserGroupsForMembers(req.getGroupId());
+        // Evict query-service group-scoped caches (group-balances, group-expenses,
+        // group-activity, group-details). The @Caching above only clears this
+        // service's own namespace; without this the query-service balance/detail
+        // caches stay stale until their TTL expires.
+        Set<UUID> affectedMemberIds = allMembers.stream()
+                .map(GroupMember::getUserId)
+                .collect(Collectors.toSet());
+        queryCacheEvictor.evictGroupKeys(req.getGroupId(), affectedMemberIds);
 
         return expense;
     }
@@ -487,6 +495,12 @@ public class SplitService {
                 expenseId);
         log.info("Shared expense deleted: id={}, group={}", expenseId, groupId);
         evictUserGroupsForMembers(groupId);
+        // Same as addSharedExpense: clear query-service group caches (balances,
+        // expenses, activity, details) so the read side reflects the deletion.
+        Set<UUID> affectedMemberIds = memberRepo.findByGroupId(groupId).stream()
+                .map(GroupMember::getUserId)
+                .collect(Collectors.toSet());
+        queryCacheEvictor.evictGroupKeys(groupId, affectedMemberIds);
     }
 
     private void createPersonalTransactions(SharedExpense expense, List<ExpenseSplit> splits, ExpenseGroup group) {

@@ -138,7 +138,9 @@ public class CacheKeyRegistry {
 
     public void evictAllForCache(String cacheName) {
         String cacheSet    = CACHE_USER_PREFIX + cacheName;
-        String cachePrefix = "finance:analytics:v1:" + cacheName + ":";
+        // The shared registry set contains both command (finance:upsert:) and
+        // query (finance:analytics:) keys — match either namespace.
+        String cachePrefix = "*:v1:" + cacheName + ":";
         try {
             Long deleted = redisTemplate.execute(
                     new DefaultRedisScript<>(EVICT_CACHE_LUA, Long.class),
@@ -170,11 +172,21 @@ public class CacheKeyRegistry {
 
     private static final String GROUP_KEY_PREFIX = "finance:query:v1:group-keys:";
 
+    /**
+     * Group sets are written with raw byte commands (same as the per-user sets)
+     * so they can be read/deleted by command-service without JSON deserialization.
+     * SADD + EXPIRE are pipelined into a single round trip; this runs on every
+     * group-cache hit.
+     */
     public void registerGroup(Long groupId, String fullKey) {
         String groupSet = GROUP_KEY_PREFIX + groupId;
         try {
-            redisTemplate.opsForSet().add(groupSet, fullKey);
-            redisTemplate.expire(groupSet, REGISTRY_TTL);
+            redisTemplate.executePipelined((RedisCallback<?>) connection -> {
+                byte[] groupSetBytes = groupSet.getBytes();
+                connection.setCommands().sAdd(groupSetBytes, fullKey.getBytes());
+                connection.keyCommands().expire(groupSetBytes, REGISTRY_TTL.toSeconds());
+                return null;
+            });
             log.debug("Registered group key={} for groupId={}", fullKey, groupId);
         } catch (Exception e) {
             log.warn("registerGroup failed key={} group={}: {}", fullKey, groupId, e.getMessage());
@@ -184,7 +196,8 @@ public class CacheKeyRegistry {
     public void deregisterGroup(Long groupId, String fullKey) {
         String groupSet = GROUP_KEY_PREFIX + groupId;
         try {
-            redisTemplate.opsForSet().remove(groupSet, fullKey);
+            redisTemplate.execute((RedisCallback<Long>) connection ->
+                    connection.setCommands().sRem(groupSet.getBytes(), fullKey.getBytes()));
         } catch (Exception e) {
             log.warn("deregisterGroup failed key={} group={}: {}", fullKey, groupId, e.getMessage());
         }

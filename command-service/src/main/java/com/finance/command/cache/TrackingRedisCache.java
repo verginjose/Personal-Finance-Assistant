@@ -6,11 +6,14 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.lang.Nullable;
 
+import java.util.Set;
 import java.util.UUID;
-import java.util.function.BiConsumer;
+import java.util.concurrent.Callable;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Wraps Spring's RedisCache to intercept put() calls.
+ * Wraps Spring's RedisCache to intercept cache writes.
  * Every time a cache entry is written, the key is registered in CacheKeyRegistry
  * so it can be bulk-deleted at eviction time without SCAN.
  *
@@ -19,7 +22,16 @@ import java.util.function.BiConsumer;
 @Slf4j
 public class TrackingRedisCache extends RedisCache {
 
+    /** Matches the UUID embedded in user-scoped cache keys. Compiled once — this runs on every cache access. */
+    private static final Pattern UUID_PATTERN = Pattern.compile(
+            "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}");
+
+    /** Caches whose keys are {@code <groupId>[-<suffix>]} and need group-level tracking. */
+    private static final Set<String> GROUP_SCOPED_CACHES = Set.of(
+            "group-details", "group-expenses", "group-balances", "group-activity");
+
     private final CacheKeyRegistry registry;
+    private final String keyPrefix;
 
     public TrackingRedisCache(String name,
                               RedisCacheWriter cacheWriter,
@@ -27,6 +39,7 @@ public class TrackingRedisCache extends RedisCache {
                               CacheKeyRegistry registry) {
         super(name, cacheWriter, config);
         this.registry = registry;
+        this.keyPrefix = config.getKeyPrefixFor(name);
     }
 
     // ── WRITES ────────────────────────────────────────────────────────────────
@@ -55,6 +68,22 @@ public class TrackingRedisCache extends RedisCache {
             register(key);
         }
         return existing;                // must return as-is — Spring uses this
+    }
+
+    /**
+     * @Cacheable(sync = true) does NOT go through putIfAbsent(). Spring hands the
+     * whole load to RedisCacheWriter#get(name, key, valueLoader, ...), which writes
+     * the entry itself, so the overrides above never see sync caches. Their keys
+     * therefore never landed in CacheKeyRegistry and eviction could not find them.
+     * Register here too; SADD is idempotent, so hits are cheap.
+     */
+    @Override
+    public <T> T get(Object key, Callable<T> valueLoader) {
+        T value = super.get(key, valueLoader);
+        if (value != null) {            // null was not cached — nothing to track
+            register(key);
+        }
+        return value;
     }
 
     // ── EVICTS ────────────────────────────────────────────────────────────────
@@ -104,43 +133,47 @@ public class TrackingRedisCache extends RedisCache {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-    
+
     private void register(Object key) {
-        resolve(key,
-                (userId, fullKey) -> registry.register(userId, getName(), fullKey),
-                (groupId, fullKey) -> registry.registerGroup(groupId, fullKey));
+        resolve(key, true);
     }
 
     private void deregister(Object key) {
-        resolve(key,
-                (userId, fullKey) -> registry.deregister(userId, getName(), fullKey),
-                (groupId, fullKey) -> registry.deregisterGroup(groupId, fullKey));
+        resolve(key, false);
     }
 
-    private void resolve(Object key, BiConsumer<UUID, String> userAction, BiConsumer<Long, String> groupAction) {
+    /**
+     * Resolve a cache key into its tracking registries. Runs on every cache
+     * put/hit, so keep it allocation-light: precompiled pattern, no split().
+     */
+    private void resolve(Object key, boolean register) {
         try {
             String keyStr  = key.toString();
-            String fullKey = getCacheConfiguration()
-                    .getKeyPrefixFor(getName()) + keyStr;
+            String fullKey = keyPrefix + keyStr;
 
-            String cacheName = getName();
-            if ("group-details".equals(cacheName) || "group-expenses".equals(cacheName) || "group-balances".equals(cacheName) || "group-activity".equals(cacheName)) {
+            if (GROUP_SCOPED_CACHES.contains(getName())) {
+                int dash = keyStr.indexOf('-');
+                String firstPart = dash < 0 ? keyStr : keyStr.substring(0, dash);
                 try {
-                    String firstPart = keyStr.split("-")[0];
                     Long groupId = Long.parseLong(firstPart);
-                    groupAction.accept(groupId, fullKey);
-                } catch (Exception e) {
-                    log.warn("Failed to parse groupId from key={}: {}", keyStr, e.getMessage());
+                    if (register) {
+                        registry.registerGroup(groupId, fullKey);
+                    } else {
+                        registry.deregisterGroup(groupId, fullKey);
+                    }
+                } catch (NumberFormatException e) {
+                    log.warn("Failed to parse groupId from key={}", keyStr);
                 }
             }
 
-            java.util.regex.Pattern uuidPattern = java.util.regex.Pattern.compile(
-                    "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"
-            );
-            java.util.regex.Matcher matcher = uuidPattern.matcher(keyStr);
+            Matcher matcher = UUID_PATTERN.matcher(keyStr);
             if (matcher.find()) {
-                String userIdStr = matcher.group();
-                userAction.accept(UUID.fromString(userIdStr), fullKey);
+                UUID userId = UUID.fromString(matcher.group());
+                if (register) {
+                    registry.register(userId, getName(), fullKey);
+                } else {
+                    registry.deregister(userId, getName(), fullKey);
+                }
             }
         } catch (Exception e) {
             log.warn("Key resolution failed key={}: {}", key, e.getMessage());

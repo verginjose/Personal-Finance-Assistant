@@ -138,7 +138,9 @@ public class CacheKeyRegistry {
 
     public void evictAllForCache(String cacheName) {
         String cacheSet    = CACHE_USER_PREFIX + cacheName;
-        String cachePrefix = "finance:analytics:v1:" + cacheName + ":";
+        // The shared registry set contains both command (finance:upsert:) and
+        // query (finance:analytics:) keys — match either namespace.
+        String cachePrefix = "*:v1:" + cacheName + ":";
         try {
             Long deleted = redisTemplate.execute(
                     new DefaultRedisScript<>(EVICT_CACHE_LUA, Long.class),
@@ -173,11 +175,20 @@ public class CacheKeyRegistry {
     /** Must match QueryCacheEvictor.GROUP_SET_PREFIX in command-service */
     private static final String GROUP_KEY_PREFIX = "finance:query:v1:group-keys:";
 
+    /**
+     * Group sets are written with raw byte commands (same as the per-user sets)
+     * so command-service can read/delete them without JSON deserialization.
+     * SADD + EXPIRE are pipelined into a single round trip.
+     */
     public void registerGroup(Long groupId, String fullKey) {
         String groupSet = GROUP_KEY_PREFIX + groupId;
         try {
-            redisTemplate.opsForSet().add(groupSet, fullKey);
-            redisTemplate.expire(groupSet, REGISTRY_TTL);
+            redisTemplate.executePipelined((RedisCallback<?>) connection -> {
+                byte[] groupSetBytes = groupSet.getBytes();
+                connection.setCommands().sAdd(groupSetBytes, fullKey.getBytes());
+                connection.keyCommands().expire(groupSetBytes, REGISTRY_TTL.toSeconds());
+                return null;
+            });
             log.debug("Registered group key={} for groupId={}", fullKey, groupId);
         } catch (Exception e) {
             log.warn("registerGroup failed key={} group={}: {}", fullKey, groupId, e.getMessage());
@@ -187,7 +198,8 @@ public class CacheKeyRegistry {
     public void deregisterGroup(Long groupId, String fullKey) {
         String groupSet = GROUP_KEY_PREFIX + groupId;
         try {
-            redisTemplate.opsForSet().remove(groupSet, fullKey);
+            redisTemplate.execute((RedisCallback<Long>) connection ->
+                    connection.setCommands().sRem(groupSet.getBytes(), fullKey.getBytes()));
         } catch (Exception e) {
             log.warn("deregisterGroup failed key={} group={}: {}", fullKey, groupId, e.getMessage());
         }
@@ -202,14 +214,14 @@ public class CacheKeyRegistry {
     public void evictForGroup(Long groupId) {
         String groupSet = GROUP_KEY_PREFIX + groupId;
         try {
-            Set<Object> keys = redisTemplate.opsForSet().members(groupSet);
-            if (keys == null || keys.isEmpty()) {
+            Set<String> keys = readSetMembers(groupSet);
+            if (keys.isEmpty()) {
                 log.debug("evictForGroup: nothing tracked for groupId={}", groupId);
                 return;
             }
             redisTemplate.executePipelined((RedisCallback<?>) connection -> {
-                for (Object k : keys) {
-                    connection.keyCommands().del(((String) k).getBytes());
+                for (String k : keys) {
+                    connection.keyCommands().del(k.getBytes());
                 }
                 connection.keyCommands().del(groupSet.getBytes());
                 return null;
@@ -218,5 +230,25 @@ public class CacheKeyRegistry {
         } catch (Exception e) {
             log.error("evictForGroup failed groupId={}: {}", groupId, e.getMessage());
         }
+    }
+
+    /**
+     * Read registry-set members as plain strings (raw bytes). Older deployments
+     * stored group keys through the JSON serializer, so strip one pair of
+     * surrounding quotes to stay compatible during the TTL window.
+     */
+    private Set<String> readSetMembers(String setKey) {
+        Set<byte[]> raw = redisTemplate.execute((RedisCallback<Set<byte[]>>) connection ->
+                connection.setCommands().sMembers(setKey.getBytes()));
+        if (raw == null) return Collections.emptySet();
+        return raw.stream().map(CacheKeyRegistry::decodeMember).collect(Collectors.toSet());
+    }
+
+    private static String decodeMember(byte[] raw) {
+        String s = new String(raw, java.nio.charset.StandardCharsets.UTF_8);
+        if (s.length() >= 2 && s.charAt(0) == '"' && s.charAt(s.length() - 1) == '"') {
+            s = s.substring(1, s.length() - 1);
+        }
+        return s;
     }
 }

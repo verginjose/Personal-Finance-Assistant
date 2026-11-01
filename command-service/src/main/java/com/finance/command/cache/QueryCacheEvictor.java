@@ -135,11 +135,11 @@ public class QueryCacheEvictor {
     private void doEvictGroup(Long groupId, Set<UUID> memberIds) {
         // 1. Group-tracked keys via Set registry
         String groupSet = GROUP_SET_PREFIX + groupId;
-        Set<Object> groupKeys = redisTemplate.opsForSet().members(groupSet);
-        if (groupKeys != null && !groupKeys.isEmpty()) {
+        Set<String> groupKeys = readSetMembers(groupSet);
+        if (!groupKeys.isEmpty()) {
             redisTemplate.executePipelined((RedisCallback<?>) connection -> {
-                for (Object k : groupKeys) {
-                    connection.keyCommands().del(((String) k).getBytes());
+                for (String k : groupKeys) {
+                    connection.keyCommands().del(k.getBytes());
                 }
                 connection.keyCommands().del(groupSet.getBytes());
                 return null;
@@ -159,8 +159,8 @@ public class QueryCacheEvictor {
         for (UUID uid : userIds) {
             String userSet = USER_SET_PREFIX + uid;
             try {
-                Set<Object> allKeys = redisTemplate.opsForSet().members(userSet);
-                if (allKeys == null || allKeys.isEmpty()) {
+                Set<String> allKeys = readSetMembers(userSet);
+                if (allKeys.isEmpty()) {
                     // Fallback: delete the well-known hardcoded key in case the set wasn't populated yet
                     deleteKey(QUERY_PREFIX + "user-groups:" + uid);
                     continue;
@@ -168,20 +168,18 @@ public class QueryCacheEvictor {
 
                 // Filter for user-groups keys only
                 Set<String> userGroupsKeys = allKeys.stream()
-                        .map(Object::toString)
                         .filter(k -> k.contains(":user-groups:"))
                         .collect(Collectors.toSet());
 
                 if (!userGroupsKeys.isEmpty()) {
                     redisTemplate.executePipelined((RedisCallback<?>) connection -> {
+                        byte[] userSetBytes = userSet.getBytes();
                         for (String k : userGroupsKeys) {
                             connection.keyCommands().del(k.getBytes());
+                            connection.setCommands().sRem(userSetBytes, k.getBytes());
                         }
                         return null;
                     });
-                    // Remove evicted keys from the registry set
-                    redisTemplate.opsForSet().remove(userSet,
-                            userGroupsKeys.toArray());
                     log.trace("doEvictUserGroups: deleted {} user-groups keys for user={}", userGroupsKeys.size(), uid);
                 } else {
                     // No user-groups key tracked in set yet — use hardcoded fallback
@@ -193,6 +191,27 @@ public class QueryCacheEvictor {
                 deleteKey(QUERY_PREFIX + "user-groups:" + uid);
             }
         }
+    }
+
+    /**
+     * Registry sets are written with raw byte commands by both services.
+     * Read them raw so {@link RedisTemplate}'s JSON value serializer never
+     * tries to deserialize plain key strings. Also tolerates the legacy
+     * JSON-encoded group entries during their TTL window.
+     */
+    private Set<String> readSetMembers(String setKey) {
+        Set<byte[]> raw = redisTemplate.execute((RedisCallback<Set<byte[]>>) connection ->
+                connection.setCommands().sMembers(setKey.getBytes()));
+        if (raw == null) return Set.of();
+        return raw.stream().map(QueryCacheEvictor::decodeMember).collect(Collectors.toSet());
+    }
+
+    private static String decodeMember(byte[] raw) {
+        String s = new String(raw, java.nio.charset.StandardCharsets.UTF_8);
+        if (s.length() >= 2 && s.charAt(0) == '"' && s.charAt(s.length() - 1) == '"') {
+            s = s.substring(1, s.length() - 1);
+        }
+        return s;
     }
 
     private void deleteKey(String key) {

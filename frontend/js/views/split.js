@@ -554,6 +554,18 @@ async function loadGroupDetail(groupId, userId) {
     // Initial render for expenses
     renderExpenses(expenses);
 
+    // Wire "Record Payment" buttons in the Who Owes Who panel
+    document.querySelectorAll('.settle-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!(await confirmModal('Record Settlement', `Record settlement: did ${btn.dataset.fromName} pay ${btn.dataset.toName}?`, 'Record'))) return;
+        try {
+          await api.post(`/upsert/groups/${groupId}/settle`, null, { params: { fromUserId: btn.dataset.from, toUserId: btn.dataset.to } });
+          toast('Settlement recorded!', 'success');
+          await loadGroupDetail(groupId, userId);
+        } catch (e) { toast(e.message, 'error'); }
+      });
+    });
+
     // Load activity asynchronously
     activityPromise.then(activityResult => {
       activityTotal = activityResult.totalPages || 1;

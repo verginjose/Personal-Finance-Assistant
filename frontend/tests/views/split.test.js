@@ -44,6 +44,57 @@ describe('renderSplit', () => {
     expect(body).not.toHaveProperty('createdByUserId');
   });
 
+  it('records a settlement when clicking Record Payment', async () => {
+    const memberA = 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff';
+    const memberB = 'cccccccc-dddd-eeee-ffff-000000000000';
+
+    global.fetch.mockImplementation(async (url, opts = {}) => {
+      const p = new URL(url).pathname;
+      const method = (opts.method || 'GET').toUpperCase();
+      const json = (data, status = 200) => ({ status, ok: status < 400, text: async () => JSON.stringify(data) });
+
+      if (method === 'POST' && p.endsWith('/settle')) return json({ message: 'Settlement recorded successfully' });
+      if (p.endsWith('/auth/users/bulk')) return json([
+        { userId: memberA, name: 'alice' },
+        { userId: memberB, name: 'bob' },
+      ]);
+      if (p.endsWith('/activity')) return json({ content: [], totalPages: 1 });
+      if (p.endsWith('/members')) return json([
+        { id: 1, name: 'alice', userId: memberA, status: 'ACCEPTED' },
+        { id: 2, name: 'bob', userId: memberB, status: 'ACCEPTED' },
+      ]);
+      if (p.endsWith('/expenses')) return json({ content: [], totalPages: 1 });
+      if (p.endsWith('/balances')) return json({
+        memberBalances: [],
+        simplifiedDebts: [{ fromUserId: memberB, toUserId: memberA, fromUserName: 'bob', toUserName: 'alice', amount: 50 }],
+      });
+      if (p.endsWith('/groups/5')) return json({ id: 5, name: 'Trip' });
+      if (p.endsWith('/groups')) return json([{ id: 5, name: 'Trip', description: '' }]);
+      return json({});
+    });
+
+    await renderSplit(container);
+    await vi.waitFor(() => expect(container.querySelector('.group-card')).toBeTruthy());
+    container.querySelector('.group-card').click();
+
+    await vi.waitFor(() => expect(document.querySelector('.settle-btn')).toBeTruthy());
+    document.querySelector('.settle-btn').click();
+
+    await vi.waitFor(() => expect(document.getElementById('confirm-ok-btn')).toBeTruthy());
+    document.getElementById('confirm-ok-btn').click();
+
+    await vi.waitFor(() => {
+      const call = global.fetch.mock.calls.find(([url, o]) => {
+        const p = new URL(url).pathname;
+        return p.endsWith('/settle') && (o.method || 'GET').toUpperCase() === 'POST';
+      });
+      expect(call).toBeTruthy();
+      const url = new URL(call[0]);
+      expect(url.searchParams.get('fromUserId')).toBe(memberB);
+      expect(url.searchParams.get('toUserId')).toBe(memberA);
+    });
+  });
+
   it('sends paidBy UUID when adding a shared expense', async () => {
     const memberUserId = 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff';
     mockFetchJson([{ id: 5, name: 'Trip', description: '' }]);

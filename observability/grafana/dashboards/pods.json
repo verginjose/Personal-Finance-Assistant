@@ -54,10 +54,10 @@
           "uid": "prometheus-ds"
         },
         "query": {
-          "query": "label_values(container_memory_working_set_bytes{namespace=~\"$namespace\"}, pod)",
+          "query": "query_result(max by (pod) (container_last_seen{namespace=~\"$namespace\"}) > time() - 120)",
           "refId": "pod"
         },
-        "definition": "label_values(container_memory_working_set_bytes{namespace=~\"$namespace\"}, pod)",
+        "definition": "query_result(max by (pod) (container_last_seen{namespace=~\"$namespace\"}) > time() - 120)",
         "includeAll": true,
         "allValue": ".*",
         "multi": true,
@@ -65,7 +65,9 @@
         "current": {
           "text": "All",
           "value": "$__all"
-        }
+        },
+        "regex": "/pod=\"([^\"]+)\"/",
+        "sort": 1
       }
     ]
   },
@@ -110,7 +112,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))",
+          "expr": "sum((rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -158,7 +160,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sum(container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})",
+          "expr": "sum((container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -219,7 +221,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sum(changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))",
+          "expr": "sum((changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h])) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -278,7 +280,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))",
+          "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120)",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "instant": false,
@@ -337,7 +339,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "100 * (sum by (pod) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))",
+          "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120)",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "instant": false,
@@ -396,7 +398,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sum by (pod) (changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))",
+          "expr": "(sum by (pod) (changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))) and on(pod) (time() - max by (pod) (container_last_seen{namespace=~\"$namespace\"}) < 120)",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "instant": false,

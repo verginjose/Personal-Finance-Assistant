@@ -147,6 +147,8 @@ kubectl -n "${NS}" rollout status deployment/frontend --timeout=120s
 
 echo "==> Applying ingress"
 kubectl apply -f "${K8S_DIR}/ingress.yaml"
+# Grafana's public hostname; Argo CD's is applied by k8s/ci/argocd/expose.sh
+kubectl apply -f "${K8S_DIR}/ui-access.yaml"
 
 if [[ "${WITH_CLOUDFLARED}" == "true" ]]; then
   echo "==> Applying Cloudflare tunnel"

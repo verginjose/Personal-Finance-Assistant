@@ -20,6 +20,8 @@ modes): [`SERVICES.md`](SERVICES.md).
 | Grafana (port-forward) | http://localhost:3000 |
 | Prometheus (port-forward) | http://localhost:9090 |
 | Argo CD UI (port-forward) | https://localhost:8080 |
+| Grafana (public, Cloudflare Access) | https://grafana.verginjose.cloud |
+| Argo CD UI (public, Cloudflare Access) | https://argocd.verginjose.cloud |
 | Image registry (in-cluster) | http://192.168.0.7:30500 (`/v2/_catalog`) |
 | CI runs | github.com/verginjose/Personal-Finance-Assistant/actions |
 
@@ -31,6 +33,39 @@ echo "127.0.0.1 finance.local" | sudo tee -a /etc/hosts
 
 The tunnel deployment (`cloudflared`) uses the remote config from the Cloudflare
 dashboard, which currently routes `verginjose.cloud → http://frontend:80`.
+
+## Operator UIs
+
+Grafana and Argo CD are also published under the same domain, each on its own
+hostname because both assume they own the root path (Argo CD needs `--rootpath`
+otherwise and breaks its gRPC streams behind a path prefix):
+
+| Host | Backend | Defined in |
+|---|---|---|
+| `grafana.verginjose.cloud` | `pfa/grafana:3000` | `k8s/ui-access.yaml` (applied by `apply.sh`) |
+| `argocd.verginjose.cloud` | `argocd/argocd-server:80` | `k8s/ci/argocd/ingress.yaml` (applied by `expose.sh`) |
+
+Expose Argo CD:
+
+```bash
+./k8s/ci/argocd/expose.sh
+```
+
+Then, **in this order**, in the Cloudflare dashboard:
+
+1. **Zero Trust → Access → Applications** — add both hostnames to one
+   self-hosted app with an email/SSO policy. Nothing else authenticates these
+   UIs; the policy *is* the login.
+2. **Networks → Tunnels → your tunnel → Public hostnames** — point both
+   hostnames at `http://traefik.kube-system.svc.cluster.local:80`.
+
+Reversing it: delete the two Ingress objects and the tunnel hostnames, and
+`kubectl -n argocd patch cm argocd-cmd-params-cm --type merge -p '{"data":{"server.insecure":null}}'`.
+
+Argo CD itself keeps its own login (the `admin` password from
+`argocd-initial-admin-secret`) behind the Access policy — that is intentional
+belt-and-braces, not a misconfiguration. The `argocd` CLI still needs the
+port-forward, since Access blocks non-browser clients.
 
 ## Deploy / update
 
@@ -91,7 +126,7 @@ Artifacts from every `pipeline.sh` run land in `.pipeline/<run-id>/`
 ## Health
 
 ```bash
-./k8s/start.sh             # start everything, wait for readiness, print URLs + passwords
+./k8s/start.sh             # start, wait, forward the UIs, print URLs (passwords: ./k8s/start.sh --secrets)
 ./k8s/stop.sh              # stop k3s cleanly (deletes nothing)
 # full shutdown/restart verification (baseline → stop → start → compare data):
 #   see START-STOP.md

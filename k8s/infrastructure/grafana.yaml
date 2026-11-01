@@ -57,8 +57,10 @@ spec:
               value: "false"
             - name: GF_AUTH_DISABLE_LOGIN_FORM
               value: "false"
+            # Public origin. Needed so redirects/links work behind the tunnel;
+            # port-forward access still works for API calls but redirects here.
             - name: GF_SERVER_ROOT_URL
-              value: "http://localhost:3000/"
+              value: "https://grafana.verginjose.cloud/"
             - name: GF_SERVER_SERVE_FROM_SUB_PATH
               value: "false"
           ports:

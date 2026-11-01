@@ -1,0 +1,29 @@
+# Public hostname for Grafana, routed through the same Cloudflare Tunnel as
+# verginjose.cloud. Argo CD's hostname lives in k8s/ci/argocd/ingress.yaml so it
+# is only created once the argocd namespace exists.
+#
+# This host MUST be covered by a Cloudflare Access policy before the tunnel
+# public hostname is added — the pod itself is unauthenticated. See
+# k8s/RUNBOOK.md "Operator UIs".
+#
+# The ingress controller is the cluster default (Traefik on k3s).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: pfa
+  labels:
+    app: grafana
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  rules:
+    - host: grafana.verginjose.cloud
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000

@@ -1,0 +1,31 @@
+# Public hostname for the Argo CD UI, routed through the same Cloudflare Tunnel
+# as verginjose.cloud. Applied by k8s/ci/argocd/expose.sh, which also patches
+# argocd-cm so the URL matches and sets server.insecure=true (Cloudflare
+# terminates TLS; the ingress controller cannot verify Argo CD's self-signed
+# certificate, so the pod speaks plain HTTP behind the tunnel).
+#
+# Backend port 80 with plain HTTP is what server.insecure=true gives you: the
+# service maps 80 -> container 8080.
+#
+# NEVER add the Cloudflare tunnel public hostname for this one without an Access
+# policy first — the Argo CD admin account is cluster-admin.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-server
+    app.kubernetes.io/part-of: argocd
+spec:
+  rules:
+    - host: argocd.verginjose.cloud
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80

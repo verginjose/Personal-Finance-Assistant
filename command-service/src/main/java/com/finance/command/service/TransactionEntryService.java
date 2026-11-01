@@ -17,6 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.cache.annotation.Cacheable;
 import com.finance.command.cache.QueryCacheEvictor;
+import com.finance.command.model.IdempotencyRecord;
+import com.finance.command.repository.IdempotencyRecordRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -25,18 +28,37 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
-
-import org.springframework.data.redis.core.StringRedisTemplate;
-import java.time.Duration;
 
 @Slf4j
 @Service
 @Transactional
 public class TransactionEntryService {
 
+    /**
+     * Reserve an idempotency key atomically. The unique constraint on
+     * (user_id, idempotency_key) is what arbitrates a concurrent double
+     * submit: the second INSERT blocks until the first transaction commits
+     * (→ 0 rows, replay the winner's row) or rolls back (→ 1 row, we own it).
+     * ON CONFLICT DO NOTHING keeps the aborted transaction usable, unlike
+     * catching a constraint violation.
+     */
+    private static final String RESERVE_IDEMPOTENCY_KEY = """
+            INSERT INTO finance.idempotency_records (user_id, idempotency_key, created_at)
+            VALUES (?, ?, now())
+            ON CONFLICT (user_id, idempotency_key) DO NOTHING
+            """;
+
+    private static final String ATTACH_IDEMPOTENCY_TRANSACTION = """
+            UPDATE finance.idempotency_records
+               SET transaction_id = ?
+             WHERE user_id = ? AND idempotency_key = ?
+            """;
+
     private final TransactionEntryRepository repository;
-    private final StringRedisTemplate redisTemplate;
+    private final IdempotencyRecordRepository idempotencyRecordRepository;
+    private final JdbcTemplate jdbcTemplate;
     private final Counter createCounter;
     private final Counter deleteCounter;
     private final OutboxEventRepository outboxEventRepository;
@@ -48,7 +70,8 @@ public class TransactionEntryService {
 
     public TransactionEntryService(
             TransactionEntryRepository repository,
-            StringRedisTemplate redisTemplate,
+            IdempotencyRecordRepository idempotencyRecordRepository,
+            JdbcTemplate jdbcTemplate,
             MeterRegistry meterRegistry, OutboxEventRepository outboxEventRepository,
             GoalBudgetService goalBudgetService,
             com.finance.command.repository.TransactionGoalAllocationRepository allocationRepository,
@@ -57,7 +80,8 @@ public class TransactionEntryService {
             SubscriptionDetectorService subscriptionDetectorService
     ) {
         this.repository = repository;
-        this.redisTemplate = redisTemplate;
+        this.idempotencyRecordRepository = idempotencyRecordRepository;
+        this.jdbcTemplate = jdbcTemplate;
         this.createCounter = meterRegistry.counter("transactions.create.success");
         this.deleteCounter = meterRegistry.counter("transactions.delete.success");
         this.outboxEventRepository = outboxEventRepository;
@@ -93,28 +117,23 @@ public class TransactionEntryService {
     }
 
     public CreateEntryResponse createEntry(CreateEntryRequest request, String idempotencyKey, boolean publishCacheEvict) {
-        String redisKey = null;
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            redisKey = "idem:txn:" + request.getUserId() + ":" + idempotencyKey.trim();
-            String existingTxnIdStr = redisTemplate.opsForValue().get(redisKey);
-            log.info("Trying to find the IdempotencyRecord for this key {}",idempotencyKey);
-            if (existingTxnIdStr != null) {
-                log.info("Found existing IdempotencyRecord for this key {}", idempotencyKey);
-                try {
-                    Long existingTxnId = Long.parseLong(existingTxnIdStr);
-                    TransactionEntry existingEntry = repository.findByIdAndDeletedAtIsNull(existingTxnId)
-                            .orElseThrow(() -> new IllegalStateException("Idempotency key points to a missing transaction"));
-                    return convertToResponse(existingEntry);
-                } catch (NumberFormatException e) {
-                    log.error("Invalid transaction ID in redis cache", e);
-                }
-            }
-            log.info("Creating the IdempotencyRecord for this key {}",request.getUserId());
+        String key = idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey.trim();
+        if (key != null && key.length() > 120) {
+            throw new IllegalArgumentException("X-Idempotency-Key must be at most 120 characters");
+        }
+        boolean ownsKey = key != null && reserveIdempotencyKey(request.getUserId(), key);
+        if (key != null && !ownsKey) {
+            return replayIdempotentEntry(request.getUserId(), key);
         }
 
         TransactionEntry entry = getTransactionEntry(request);
 
         TransactionEntry saved = repository.save(entry);
+
+        if (ownsKey) {
+            jdbcTemplate.update(ATTACH_IDEMPOTENCY_TRANSACTION,
+                    saved.getId(), request.getUserId(), key);
+        }
 
         // A recurring expense is a subscription. Detect it now instead of
         // waiting for the 02:00 UTC job: GET /api/upsert/subscriptions is
@@ -138,15 +157,41 @@ public class TransactionEntryService {
         }
         createCounter.increment();
         queryCacheEvictor.evictUserKeysWithReplicationGuard(request.getUserId());
-        
-        log.info("Idempotency key {}",idempotencyKey);
-        if (redisKey != null) {
-            redisTemplate.opsForValue().set(redisKey, String.valueOf(saved.getId()), Duration.ofHours(24));
-            log.info("Created IdempotencyRecord for this key {} in Redis", idempotencyKey);
-        }
 
         log.info("Transaction created: id={}, user={}, recurring={}", saved.getId(), saved.getUserId(), saved.isRecurring());
         return convertToResponse(saved);
+    }
+
+    /**
+     * @return true if this request inserted the reservation row and therefore
+     *         owns the right to create the transaction. False means a
+     *         concurrent request already holds the key: the INSERT waited for
+     *         that transaction to finish, so its row (and transaction id) is
+     *         now committed and visible.
+     */
+    private boolean reserveIdempotencyKey(UUID userId, String key) {
+        int inserted = jdbcTemplate.update(RESERVE_IDEMPOTENCY_KEY, userId, key);
+        if (inserted == 1) {
+            log.debug("Reserved idempotency key {} for user {}", key, userId);
+        } else {
+            log.info("Idempotency key {} for user {} is already reserved; replaying", key, userId);
+        }
+        return inserted == 1;
+    }
+
+    private CreateEntryResponse replayIdempotentEntry(UUID userId, String key) {
+        IdempotencyRecord record = idempotencyRecordRepository
+                .findByUserIdAndIdempotencyKey(userId, key)
+                .orElseThrow(() -> new IllegalStateException("Idempotency key vanished: " + key));
+        Long transactionId = record.getTransactionId();
+        if (transactionId == null) {
+            throw new IllegalStateException(
+                    "Idempotency key '" + key + "' is reserved but has no transaction attached");
+        }
+        TransactionEntry existing = repository.findByIdAndDeletedAtIsNull(transactionId)
+                .orElseThrow(() -> new IllegalStateException("Idempotency key points to a missing transaction"));
+        log.info("Replayed idempotent create for key {} -> transaction {}", key, transactionId);
+        return convertToResponse(existing);
     }
     // TransactionEntryService
     public List<CreateEntryResponse> createEntries(List<CreateEntryRequest> requests, boolean publishCacheEvict) {

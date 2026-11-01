@@ -6,6 +6,7 @@ import com.finance.command.dto.CreateEntryResponse;
 import com.finance.command.model.Category;
 import com.finance.command.model.TransactionType;
 import com.finance.command.repository.TransactionEntryRepository;
+import com.finance.command.service.TransactionEntryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -76,9 +77,51 @@ public class TransactionIntegrationTest {
     @Autowired
     private TransactionEntryRepository repository;
 
+    @Autowired
+    private TransactionEntryService transactionEntryService;
+
     @BeforeEach
     void setupMock() {
         repository.deleteAll();
+    }
+
+    @Test
+    @DisplayName("Two concurrent creates with one idempotency key persist exactly one row")
+    void concurrentIdempotentCreates_persistOneRow() throws Exception {
+        UUID userId = UUID.randomUUID();
+        String key = UUID.randomUUID().toString();
+
+        CreateEntryRequest request = new CreateEntryRequest();
+        request.setUserId(userId);
+        request.setName("Idempotent double submit");
+        request.setAmount(new BigDecimal("777.00"));
+        request.setType(TransactionType.EXPENSE);
+        request.setCategory(Category.OTHERS);
+        request.setCurrency("INR");
+
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        try {
+            java.util.List<java.util.concurrent.Future<CreateEntryResponse>> futures = new java.util.ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    return transactionEntryService.createEntry(request, key);
+                }));
+            }
+            start.countDown();
+
+            java.util.List<Long> ids = new java.util.ArrayList<>();
+            for (var future : futures) {
+                ids.add(future.get(30, java.util.concurrent.TimeUnit.SECONDS).getId());
+            }
+
+            assertThat(ids).hasSize(2);
+            assertThat(ids.get(0)).isEqualTo(ids.get(1));
+            assertThat(repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId)).hasSize(1);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test

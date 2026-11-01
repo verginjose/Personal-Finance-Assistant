@@ -32,9 +32,18 @@ public class CacheEvictPublisher {
 
     private final RestClient restClient = RestClient.create();
 
+    /**
+     * Self-proxy so {@link #publish}'s {@code @Async} actually applies. A
+     * direct {@code this.publish(...)} call bypasses the proxy and turns this
+     * fan-out into N serial HTTP round-trips on the caller's thread — which,
+     * for SplitService, sits inside the writer's DB transaction.
+     */
+    private final org.springframework.beans.factory.ObjectProvider<CacheEvictPublisher> self;
+
     public void publishForUsers(Collection<UUID> userIds, String operation, Long referenceId) {
         if (userIds == null || userIds.isEmpty()) return;
-        userIds.stream().distinct().forEach(userId -> publish(userId, operation, referenceId));
+        CacheEvictPublisher proxy = self.getObject();
+        userIds.stream().distinct().forEach(userId -> proxy.publish(userId, operation, referenceId));
     }
 
     /**

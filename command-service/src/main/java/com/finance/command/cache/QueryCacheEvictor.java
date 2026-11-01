@@ -55,7 +55,11 @@ public class QueryCacheEvictor {
      */
     public void evictUserKeysWithReplicationGuard(UUID userId) {
         cacheKeyRegistry.evictForUser(userId);
-        evictUserKeysDelayed(userId);
+        // Go through the proxy: a direct call would bypass @Async and sleep
+        // REPLICATION_DELAY_MS on the caller's thread — i.e. inside the
+        // writer's DB transaction, holding a pool connection for 800 ms per
+        // write.
+        self.getObject().evictUserKeysDelayed(userId);
     }
 
     @Async

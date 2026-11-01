@@ -33,10 +33,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
-        log.warn("Bad request: {}", ex.getMessage());
-        return ResponseEntity.badRequest().body(Map.of(
-                "error", "Bad request",
-                "message", ex.getMessage(),
+        // A missing/foreign resource is a 404, not a 400. Reads are scoped by
+        // user id, so a cross-user probe lands here; reporting 400 for it both
+        // misdescribes the error and diverges from command-service. Malformed
+        // input stays a 400.
+        String message = ex.getMessage() != null ? ex.getMessage() : "";
+        boolean notFound = message.toLowerCase().contains("not found");
+        HttpStatus status = notFound ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST;
+        log.warn("{}: {}", status.getReasonPhrase(), message);
+        return ResponseEntity.status(status).body(Map.of(
+                "error", notFound ? "Not Found" : "Bad request",
+                "message", message,
                 "timestamp", LocalDateTime.now()));
     }
 

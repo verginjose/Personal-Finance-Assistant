@@ -86,14 +86,16 @@ public class AuthService {
     }
 
     public Mono<LoginResponse> refresh(RefreshTokenRequest request) {
-        return tokenRedisService.getRefreshTokenValueReactive(request.refreshToken())
+        // GETDEL: exactly one concurrent replay of a token wins the rotation;
+        // the others see an empty value and get 401.
+        return tokenRedisService.consumeRefreshTokenReactive(request.refreshToken())
                 .switchIfEmpty(Mono.error(new InvalidRefreshTokenException("Invalid or expired refresh token")))
                 .flatMap(value -> {
                     String[] parts = value.split("\\|");
                     if (parts.length < 3) return Mono.error(new InvalidRefreshTokenException("Malformed refresh token session"));
                     String userId = parts[0], email = parts[1], role = parts[2];
 
-                    return tokenRedisService.deleteRefreshTokenReactive(request.refreshToken(), email)
+                    return tokenRedisService.removeUserTokenReactive(request.refreshToken(), email)
                             .then(Mono.defer(() -> {
                                 String newAccessToken = jwtService.generateToken(email, userId, role);
                                 String newRefreshToken = UUID.randomUUID().toString();

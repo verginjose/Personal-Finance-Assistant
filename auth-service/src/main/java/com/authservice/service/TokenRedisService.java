@@ -32,6 +32,20 @@ public class TokenRedisService {
         return redisTemplate.opsForValue().get(REFRESH_TOKEN_PREFIX + token);
     }
 
+    /**
+     * Atomically reads and deletes the refresh token (Redis GETDEL). Rotation
+     * must be consume-and-issue: a plain GET followed by a later DELETE lets
+     * two concurrent replays of the same token both rotate it and leave two
+     * live sessions. Only the caller that gets a non-empty value may rotate.
+     */
+    public Mono<String> consumeRefreshTokenReactive(String token) {
+        return redisTemplate.opsForValue().getAndDelete(REFRESH_TOKEN_PREFIX + token);
+    }
+
+    public Mono<Void> removeUserTokenReactive(String token, String email) {
+        return redisTemplate.opsForSet().remove(USER_TOKENS_PREFIX + email, token).then();
+    }
+
     public Mono<Void> deleteRefreshTokenReactive(String token, String email) {
         return redisTemplate.delete(REFRESH_TOKEN_PREFIX + token)
                 .then(redisTemplate.opsForSet().remove(USER_TOKENS_PREFIX + email, token))

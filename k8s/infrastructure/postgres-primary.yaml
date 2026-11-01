@@ -38,6 +38,16 @@ spec:
         - name: postgres
           image: ankane/pgvector:v0.5.1
           imagePullPolicy: IfNotPresent
+          # Each WAL flush on this host costs ~4.6 ms (LUKS + consumer NVMe),
+          # so the default commit path measured 9 ms / 110 tps. Turning
+          # synchronous_commit off lets COMMIT return once the WAL record is in
+          # the page cache; the WAL writer flushes within ~200-600 ms.
+          #
+          # Tradeoff: a power cut or kernel panic can lose the last few hundred
+          # ms of *committed* transactions. It cannot corrupt anything, and it
+          # does not apply to process crashes, OOM kills or pod restarts -- the
+          # page cache survives those. Revert to "on" if that window matters.
+          args: ["-c", "synchronous_commit=off"]
           ports:
             - name: postgres
               containerPort: 5432

@@ -125,8 +125,8 @@ To ensure high performance and loose coupling, the system leverages **RabbitMQ**
 ### 5. Telemetry & Observability Pipeline
 A robust, enterprise-grade observability stack monitors the entire cluster.
 - **Log Aggregation (Vector & ClickHouse)**: Every microservice outputs structured JSON logs. **Vector** acts as an ultra-fast, lightweight log aggregator that scrapes the Docker socket, sanitizes the payloads (redacting PII like emails and passwords), and ships the logs in bulk to **ClickHouse**—a columnar database optimized for massive analytical queries.
-- **Metrics Scraping (Prometheus)**: Each Spring Boot microservice exposes a `/actuator/prometheus` endpoint. **Prometheus** periodically scrapes these endpoints to collect JVM metrics, HTTP latencies, and connection pool statuses. It also scrapes kubelet's **cAdvisor** endpoint (`/metrics/cadvisor`), which is where per-pod CPU, memory, network and restart metrics come from. Additionally, Vector computes real-time error rates from the log streams and exposes them as native Prometheus metrics.
-- **Visualization (Grafana)**: **Grafana** serves as the single pane of glass. It is pre-configured with ClickHouse and Prometheus data sources and five dashboards: *Service Metrics*, *Pods — CPU, memory, network*, *Database*, *API Latency*, *Finance Assistant*.
+- **Metrics Scraping (Prometheus)**: Each Spring Boot microservice exposes a `/actuator/prometheus` endpoint. **Prometheus** periodically scrapes these endpoints to collect JVM metrics, HTTP latencies, and connection pool statuses. It also scrapes kubelet's **cAdvisor** endpoint (`/metrics/cadvisor`), which is where per-pod CPU, memory and restart metrics come from. Additionally, Vector computes real-time error rates from the log streams and exposes them as native Prometheus metrics.
+- **Visualization (Grafana)**: **Grafana** serves as the single pane of glass. It is pre-configured with ClickHouse and Prometheus data sources and four dashboards: *Finance Assistant — Overview & Debug*, *Pods — CPU / memory / restarts*, *Database*, and *Redis — Debug & Runbook*.
 
 ---
 

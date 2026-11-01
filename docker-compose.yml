@@ -426,7 +426,6 @@ volumes:
   clickhouse_data:
   grafana_data:
   redis-data:
-  loki_data:
   paddle-model-cache:
   minio_data:
 

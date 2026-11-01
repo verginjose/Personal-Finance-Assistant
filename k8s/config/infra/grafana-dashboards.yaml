@@ -1439,6 +1439,634 @@ data:
         }
       ]
     }
+  redis-debug.json: |
+    {
+      "uid": "redis-debug",
+      "title": "Redis \u2014 Debug & Runbook",
+      "tags": [
+        "finance-assistant",
+        "redis"
+      ],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "15s",
+      "editable": true,
+      "graphTooltip": 0,
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "timepicker": {
+        "refresh_intervals": [
+          "5s",
+          "15s",
+          "30s",
+          "1m",
+          "5m"
+        ],
+        "time_options": [
+          "5m",
+          "15m",
+          "1h",
+          "3h",
+          "6h",
+          "12h",
+          "24h",
+          "2d",
+          "7d"
+        ]
+      },
+      "templating": {
+        "list": [
+          {
+            "name": "service",
+            "label": "Service",
+            "type": "custom",
+            "query": "redis,redis-replica",
+            "current": {
+              "text": "All",
+              "value": "$__all"
+            },
+            "options": [
+              {
+                "text": "All",
+                "value": "$__all",
+                "selected": true
+              },
+              {
+                "text": "redis",
+                "value": "redis",
+                "selected": false
+              },
+              {
+                "text": "redis-replica",
+                "value": "redis-replica",
+                "selected": false
+              }
+            ],
+            "includeAll": true,
+            "allValue": "%",
+            "multi": false
+          },
+          {
+            "name": "search",
+            "label": "Search",
+            "type": "textbox",
+            "current": {
+              "text": "",
+              "value": ""
+            },
+            "query": ""
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Redis errors (window)",
+          "type": "stat",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse-ds"
+          },
+          "description": "Redis log lines that look like errors or failures in the selected time range.",
+          "targets": [
+            {
+              "queryType": "sql",
+              "rawSql": "SELECT count() AS value FROM default.logs WHERE service LIKE 'redis%' AND $__timeFilter(timestamp) AND (level IN ('ERROR','FATAL') OR message ILIKE '%error%' OR message ILIKE '%fail%' OR message ILIKE '%down%' OR message ILIKE '%lost%')",
+              "refId": "A",
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 0,
+              "color": {
+                "mode": "background"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 5
+                  }
+                ]
+              },
+              "mappings": []
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "background",
+            "justifyMode": "auto"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "id": 2,
+          "title": "Pod restarts (1h)",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "description": "Container restarts for the master and replica in the last hour.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus-ds"
+              },
+              "expr": "sum(changes(container_start_time_seconds{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}[1h]))",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 0,
+              "color": {
+                "mode": "background"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "mappings": []
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "background",
+            "justifyMode": "auto"
+          },
+          "gridPos": {
+            "x": 6,
+            "y": 0,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "id": 3,
+          "title": "Memory used",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "description": "Working set held by the Redis containers (master + replica).",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus-ds"
+              },
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"})",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 0,
+              "color": {
+                "mode": "none"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": [],
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "none",
+            "justifyMode": "auto"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 0,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "id": 4,
+          "title": "CPU used (cores)",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "description": "Cores actually used by Redis right now (master + replica).",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus-ds"
+              },
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}[5m]))",
+              "refId": "A",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 0,
+              "color": {
+                "mode": "none"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": [],
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "none",
+            "justifyMode": "auto"
+          },
+          "gridPos": {
+            "x": 18,
+            "y": 0,
+            "w": 6,
+            "h": 4
+          }
+        },
+        {
+          "id": 5,
+          "title": "Redis logs \u2014 $service | $search",
+          "type": "logs",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse-ds"
+          },
+          "description": "All Redis master/replica log lines. Narrow with the Service and Search variables at the top.",
+          "targets": [
+            {
+              "queryType": "sql",
+              "rawSql": "SELECT timestamp, message, service, level FROM default.logs WHERE service LIKE '$service' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
+              "refId": "A",
+              "format": "logs"
+            }
+          ],
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": true,
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 4,
+            "w": 24,
+            "h": 10
+          }
+        },
+        {
+          "id": 6,
+          "title": "Errors, warnings and failures",
+          "type": "logs",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse-ds"
+          },
+          "description": "Anything that should not be happening. Empty is good.",
+          "targets": [
+            {
+              "queryType": "sql",
+              "rawSql": "SELECT timestamp, message, service, level FROM default.logs WHERE service LIKE '$service' AND (level IN ('ERROR','FATAL','WARN') OR message ILIKE '%error%' OR message ILIKE '%fail%' OR message ILIKE '%down%' OR message ILIKE '%lost%' OR message ILIKE '%denied%') AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
+              "refId": "A",
+              "format": "logs"
+            }
+          ],
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": true,
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 14,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "id": 7,
+          "title": "Replication & sync",
+          "type": "logs",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse-ds"
+          },
+          "description": "Master/replica handshake and resync events. Look for repeated 'MASTER <-> REPLICA sync started' lines \u2014 they mean flapping.",
+          "targets": [
+            {
+              "queryType": "sql",
+              "rawSql": "SELECT timestamp, message, service, level FROM default.logs WHERE service LIKE '$service' AND (message ILIKE '%replic%' OR message ILIKE '%sync%' OR message ILIKE '%master%' OR message ILIKE '%slave%' OR message ILIKE '%ready to accept%' OR message ILIKE '%partial resync%') AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
+              "refId": "A",
+              "format": "logs"
+            }
+          ],
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": true,
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 14,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "id": 8,
+          "title": "CPU usage % by pod",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "description": "Percentage of each Redis pod's CPU limit in use. Redis is single-threaded: sustained 100% throttles every command.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus-ds"
+              },
+              "expr": "100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}))",
+              "legendFormat": "{{pod}}",
+              "refId": "A",
+              "instant": false,
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 1,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "none"
+                },
+                "axisSoftMin": 0
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 22,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "id": 9,
+          "title": "Memory usage % by pod",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "description": "Percentage of each Redis pod's memory limit held. Nearing 100% means evictions or an OOM kill is next.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus-ds"
+              },
+              "expr": "100 * (sum by (pod) (container_memory_working_set_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=\"pfa\",pod=~\"redis.*\",container!=\"\",container!=\"POD\"}))",
+              "legendFormat": "{{pod}}",
+              "refId": "A",
+              "instant": false,
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 1,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "none"
+                },
+                "axisSoftMin": 0
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 22,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "id": 10,
+          "title": "Persistence & background saves",
+          "type": "logs",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse-ds"
+          },
+          "description": "RDB snapshots and AOF rewrites. A save that starts but never terminates points at disk I/O.",
+          "targets": [
+            {
+              "queryType": "sql",
+              "rawSql": "SELECT timestamp, message, service, level FROM default.logs WHERE service LIKE '$service' AND (message ILIKE '%saving%' OR message ILIKE '%saved%' OR message ILIKE '%RDB%' OR message ILIKE '%fork%' OR message ILIKE '%AOF%' OR message ILIKE '%bgrewrite%') AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
+              "refId": "A",
+              "format": "logs"
+            }
+          ],
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": true,
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "sortOrder": "Descending"
+          },
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 30,
+            "w": 24,
+            "h": 8
+          }
+        },
+        {
+          "id": 11,
+          "title": "Runbook \u2014 redis-cli commands",
+          "type": "text",
+          "options": {
+            "mode": "markdown",
+            "code": {
+              "language": "bash",
+              "showLineNumbers": true
+            },
+            "content": "## Copy/paste runbook\n\nRun these from the repo root. `REDIS_PW` comes from `.env`; never paste the\npassword into a ticket or a Grafana panel.\n\n```bash\nexport REDIS_PW=$(sed -n 's/^REDIS_PASSWORD=//p' .env)\nMASTER=$(kubectl -n pfa get pod -l app=redis -o jsonpath='{.items[0].metadata.name}')\nREPLICA=$(kubectl -n pfa get pod -l app=redis-replica -o jsonpath='{.items[0].metadata.name}')\nCLI=\"redis-cli -a $REDIS_PW --no-auth-warning\"\n```\n\n### 1. Is it alive?\n\n```bash\nkubectl -n pfa exec $MASTER  -- $CLI ping                 # PONG\nkubectl -n pfa exec $REPLICA -- $CLI ping\nkubectl -n pfa exec $MASTER  -- $CLI info server | grep -E 'redis_version|uptime_in_seconds|process_id'\nkubectl -n pfa exec $MASTER  -- $CLI info keyspace        # db0:keys=\u2026,expires=\u2026,avg_ttl=\u2026\nkubectl -n pfa exec $MASTER  -- $CLI dbsize\n```\n\n### 2. Replication (why reads are stale)\n\n```bash\nkubectl -n pfa exec $MASTER  -- $CLI info replication     # role:master, connected_slaves\nkubectl -n pfa exec $REPLICA -- $CLI info replication     # role:slave, master_link_status:up\n```\n\nWatch `master_link_status` (must be `up`), `master_last_io_seconds_ago`\n(should be < 10) and compare `slave_repl_offset` to the master's\n`master_repl_offset`.\n\n### 3. Memory, eviction and hit rate\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI info memory \\\n  | grep -E 'used_memory_human|maxmemory_human|maxmemory_policy|mem_fragmentation_ratio'\nkubectl -n pfa exec $MASTER -- $CLI info stats \\\n  | grep -E 'keyspace_hits|keyspace_misses|evicted_keys|rejected_connections|expired_keys'\nkubectl -n pfa exec $MASTER -- $CLI config get maxmemory-policy\n```\n\n`evicted_keys` climbing = the cache is under pressure: raise the limit or\nreduce TTLs. A falling hit ratio with a growing `dbsize` usually means stale\ncache keys, not a Redis fault.\n\n### 4. Auth caches (auth-service / query-service)\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'refresh_token:*' | head\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'user_tokens:*'    | head\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'token_blacklist:*'| head\nkubectl -n pfa exec $MASTER -- $CLI ttl  'refresh_token:<id>'\nkubectl -n pfa exec $MASTER -- $CLI memory usage 'refresh_token:<id>'\n```\n\nPrefer `--scan` over `keys '*'`; `keys` blocks the single-threaded server.\n\n### 5. Slow operations and clients\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI slowlog len\nkubectl -n pfa exec $MASTER -- $CLI slowlog get 20\nkubectl -n pfa exec $MASTER -- $CLI info clients | grep -E 'connected_clients|blocked_clients'\nkubectl -n pfa exec $MASTER -- $CLI client list\nkubectl -n pfa exec $MASTER -- $CLI latency latest\n```\n\n### 6. Live traffic (short burst only)\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI monitor      # Ctrl-C after a few seconds\n```\n\n`monitor` adds load and can print secrets \u2014 use it for seconds, not minutes.\n\n### 7. Persistence checks\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI info persistence | grep -E 'rdb_last_bgsave_status|aof_last_bgrewrite_status|rdb_changes_since_last_save'\nkubectl -n pfa exec $MASTER -- $CLI bgsave      # async; never `save` in prod\n```\n\n### Last resort\n\n`FLUSHDB` / `FLUSHALL` delete the auth token caches and every cached\naggregate. Only run after a verified backup, and expect all users to be\nlogged out.\n"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 38,
+            "w": 24,
+            "h": 22
+          },
+          "transparent": false
+        }
+      ],
+      "description": "Redis master/replica logs, pod pressure, replication health and copy-paste redis-cli commands. Start here when caching, login tokens or read freshness look wrong."
+    }
 kind: ConfigMap
 metadata:
   name: grafana-dashboards

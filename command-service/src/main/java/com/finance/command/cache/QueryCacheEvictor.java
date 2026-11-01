@@ -42,6 +42,8 @@ public class QueryCacheEvictor {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheKeyRegistry cacheKeyRegistry;
+    /** Self-proxy so the delayed second wave really runs through @Async. */
+    private final org.springframework.beans.factory.ObjectProvider<QueryCacheEvictor> self;
 
     // ── User-level eviction (transactions, summary, search, …) ───────────────
 
@@ -81,22 +83,28 @@ public class QueryCacheEvictor {
      *   Sleep:  allow replica to catch up
      *   Wave 2: delete again (catches anything refilled from stale replica)
      */
-    @Async
     public void evictGroupKeys(Long groupId, Set<UUID> memberIds) {
         try {
-            // Wave 1 — delete current state
+            // Wave 1 — synchronous: the client reloads immediately after the
+            // mutating request returns, so cached balances must be gone by then.
             doEvictGroup(groupId, memberIds);
+        } catch (Exception e) {
+            log.warn("QueryCacheEvictor: group eviction failed for groupId={}: {}", groupId, e.getMessage());
+        }
+        // Wave 2 — delete anything refilled from a lagging read replica.
+        self.getObject().evictGroupKeysDelayed(groupId, memberIds);
+    }
 
+    @Async
+    public void evictGroupKeysDelayed(Long groupId, Set<UUID> memberIds) {
+        try {
             Thread.sleep(REPLICATION_DELAY_MS);
-
-            // Wave 2 — delete anything refilled from stale replica during the gap
             doEvictGroup(groupId, memberIds);
-
-            log.debug("QueryCacheEvictor: double-evicted groupId={}, {} members", groupId, memberIds.size());
+            log.debug("QueryCacheEvictor: delayed second evict for groupId={}, {} members", groupId, memberIds.size());
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
-            log.warn("QueryCacheEvictor: group eviction failed for groupId={}: {}", groupId, e.getMessage());
+            log.warn("QueryCacheEvictor: delayed group eviction failed for groupId={}: {}", groupId, e.getMessage());
         }
     }
 

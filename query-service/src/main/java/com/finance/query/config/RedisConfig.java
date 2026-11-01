@@ -1,9 +1,16 @@
 package com.finance.query.config;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import com.finance.query.cache.CacheKeyRegistry;
 import com.finance.query.cache.TrackingRedisCache;
 import io.lettuce.core.api.StatefulRedisConnection;
@@ -194,8 +201,17 @@ public class RedisConfig {
     }
 
     public ObjectMapper redisObjectMapper() {
+        // Spring Data's PageImpl has no default constructor or @JsonCreator, so the
+        // generic serializer can write Page<> values but cannot read them back —
+        // every cached list cache (transactions, group-expenses) then throws
+        // "Cannot construct instance of PageImpl" on GET and falls back to the DB.
+        // Register a deserializer that rebuilds the page from its JSON fields.
+        SimpleModule pageModule = new SimpleModule("redis-page-module");
+        pageModule.addDeserializer(PageImpl.class, new PageImplDeserializer());
+
         return new ObjectMapper()
                 .registerModule(new JavaTimeModule())
+                .registerModule(pageModule)
                 .activateDefaultTyping(
                         BasicPolymorphicTypeValidator.builder()
                                 .allowIfSubType("com.finance.query")
@@ -207,5 +223,44 @@ public class RedisConfig {
                         ObjectMapper.DefaultTyping.NON_FINAL,
                         JsonTypeInfo.As.PROPERTY
                 );
+    }
+
+    /**
+     * Rebuilds a {@link PageImpl} from the JSON produced by Jackson. Only the
+     * fields needed to reconstruct an equivalent page are read: content,
+     * totalElements and the page number/size from the nested pageable.
+     */
+    static class PageImplDeserializer extends JsonDeserializer<PageImpl<?>> {
+        @Override
+        public PageImpl<?> deserialize(JsonParser p, DeserializationContext ctxt) throws java.io.IOException {
+            JsonNode node = p.getCodec().readTree(p);
+
+            java.util.List<Object> content = new java.util.ArrayList<>();
+            JsonNode contentNode = node.get("content");
+            if (contentNode != null && contentNode.isArray()) {
+                // Default typing wraps collections as ["<impl-class>", [items]].
+                if (contentNode.size() == 2 && contentNode.get(0).isTextual()
+                        && contentNode.get(1).isArray()) {
+                    contentNode = contentNode.get(1);
+                }
+                for (JsonNode item : contentNode) {
+                    content.add(p.getCodec().treeToValue(item, Object.class));
+                }
+            }
+
+            int pageNumber = 0;
+            int pageSize = Math.max(content.size(), 1);
+            JsonNode pageable = node.get("pageable");
+            if (pageable != null && pageable.isObject()) {
+                if (pageable.has("pageNumber")) pageNumber = pageable.get("pageNumber").asInt(0);
+                if (pageable.has("pageSize")) pageSize = pageable.get("pageSize").asInt(pageSize);
+            } else if (node.has("number")) {
+                pageNumber = node.get("number").asInt(0);
+            }
+            if (pageSize <= 0) pageSize = Math.max(content.size(), 1);
+
+            long total = node.has("totalElements") ? node.get("totalElements").asLong() : content.size();
+            return new PageImpl<>(content, PageRequest.of(Math.max(pageNumber, 0), pageSize), total);
+        }
     }
 }

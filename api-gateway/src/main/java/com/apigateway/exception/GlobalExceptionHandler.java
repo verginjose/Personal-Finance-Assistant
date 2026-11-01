@@ -23,6 +23,14 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
     public Mono<Void> handle(@NonNull ServerWebExchange exchange, @NonNull Throwable ex) {
         log.error("Gateway error: {} {}", exchange.getRequest().getMethod(), exchange.getRequest().getURI(), ex);
 
+        // Once the response is committed (e.g. an SSE stream that already sent
+        // headers/data and then failed or the client disconnected) its headers
+        // are read-only. Trying to add a Content-Type below throws
+        // UnsupportedOperationException and masks the original error.
+        if (exchange.getResponse().isCommitted()) {
+            return Mono.empty();
+        }
+
         if (ex instanceof WebClientResponseException.Unauthorized) {
             return handleUnauthorized(exchange);
         }

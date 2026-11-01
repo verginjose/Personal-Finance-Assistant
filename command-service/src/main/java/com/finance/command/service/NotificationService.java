@@ -20,17 +20,22 @@ public class NotificationService {
     public SseEmitter subscribe(UUID userId) {
         // Timeout 30 minutes
         SseEmitter emitter = new SseEmitter(30 * 60 * 1000L);
-        emitters.put(userId, emitter);
+        // Replacing an existing emitter for the same user (reconnect, second tab)
+        // must not let the old emitter's callbacks remove its replacement.
+        SseEmitter previous = emitters.put(userId, emitter);
+        if (previous != null) {
+            previous.complete();
+        }
 
-        emitter.onCompletion(() -> emitters.remove(userId));
-        emitter.onTimeout(() -> emitters.remove(userId));
-        emitter.onError((e) -> emitters.remove(userId));
+        emitter.onCompletion(() -> emitters.remove(userId, emitter));
+        emitter.onTimeout(() -> emitters.remove(userId, emitter));
+        emitter.onError((e) -> emitters.remove(userId, emitter));
 
         try {
             // Send initial ping to keep connection alive
             emitter.send(SseEmitter.event().name("ping").data("connected"));
-        } catch (IOException e) {
-            emitters.remove(userId);
+        } catch (IOException | IllegalStateException e) {
+            emitters.remove(userId, emitter);
         }
 
         return emitter;
@@ -43,9 +48,9 @@ public class NotificationService {
             try {
                 emitter.send(SseEmitter.event().name("notification").data(payload));
                 log.info("Sent SSE notification to user {}", userId);
-            } catch (IOException e) {
-                log.error("Failed to send SSE notification to user {}", userId, e);
-                emitters.remove(userId);
+            } catch (IOException | IllegalStateException e) {
+                log.warn("Failed to send SSE notification to user {}: {}", userId, e.getMessage());
+                emitters.remove(userId, emitter);
             }
         } else {
             log.warn("No active SSE connection for user {}", userId);
@@ -57,8 +62,9 @@ public class NotificationService {
         for (Map.Entry<UUID, SseEmitter> entry : emitters.entrySet()) {
             try {
                 entry.getValue().send(SseEmitter.event().name("ping").data("heartbeat"));
-            } catch (IOException e) {
-                emitters.remove(entry.getKey());
+            } catch (IOException | IllegalStateException e) {
+                // Remove only this emitter — a newer connection may have replaced it.
+                emitters.remove(entry.getKey(), entry.getValue());
             }
         }
     }

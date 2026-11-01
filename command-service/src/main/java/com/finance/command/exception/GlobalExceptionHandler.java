@@ -91,6 +91,17 @@ public class GlobalExceptionHandler {
                         ex.getStatusCode().value()));
     }
 
+    /**
+     * SSE streams end by timing out. The response is usually already committed
+     * as text/event-stream, so writing an ErrorResponse body throws
+     * HttpMessageNotWritableException and turns a normal disconnect into a
+     * noisy ERROR. Swallow it (void = no body written).
+     */
+    @ExceptionHandler(org.springframework.web.context.request.async.AsyncRequestTimeoutException.class)
+    public void handleAsyncTimeout(org.springframework.web.context.request.async.AsyncRequestTimeoutException ex) {
+        log.debug("Async request timed out (SSE stream closed)");
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
         log.error("Unexpected error", ex);

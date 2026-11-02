@@ -87,8 +87,7 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 6
       volumes:
-        # Created by k8s/apply.sh from observability/clickhouse/init plus the
-        # rendered PostgreSQL-engine databases.
+        # Created by k8s/apply.sh from observability/clickhouse/init.
         - name: init
           configMap:
             name: clickhouse-init

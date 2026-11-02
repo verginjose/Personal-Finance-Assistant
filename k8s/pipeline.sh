@@ -137,16 +137,11 @@ step "render and validate manifests"
 RENDER="${RUN_DIR}/rendered"
 
 # Templates that apply.sh normally renders in-memory, written out for review.
-DB_NAME="$(env_value DB_NAME)"; DB_USER="$(env_value DB_USER)"
-DB_PASSWORD="$(env_value DB_PASSWORD)"; AUTH_DB_SCHEMA="$(env_value AUTH_DB_SCHEMA)"
-FINANCE_DB_SCHEMA="$(env_value FINANCE_DB_SCHEMA)"; CLICKHOUSE_PASSWORD="$(env_value CLICKHOUSE_PASSWORD)"
-export DB_NAME DB_USER DB_PASSWORD AUTH_DB_SCHEMA FINANCE_DB_SCHEMA CLICKHOUSE_PASSWORD
+CLICKHOUSE_PASSWORD="$(env_value CLICKHOUSE_PASSWORD)"
+export CLICKHOUSE_PASSWORD
 
 mkdir -p "${RENDER}/clickhouse-init" "${RENDER}/grafana-datasources"
 cp "${ROOT_DIR}/observability/clickhouse/init/02_logs.sql" "${RENDER}/clickhouse-init/"
-envsubst '${DB_NAME} ${DB_USER} ${DB_PASSWORD} ${AUTH_DB_SCHEMA} ${FINANCE_DB_SCHEMA}' \
-  < "${K8S_DIR}/config/clickhouse-postgres.sql.tmpl" \
-  > "${RENDER}/clickhouse-init/003_postgres.sql"
 cp "${ROOT_DIR}/observability/grafana/provisioning/datasources/prometheus.yml" "${RENDER}/grafana-datasources/"
 envsubst '${CLICKHOUSE_PASSWORD}' < "${K8S_DIR}/config/grafana/clickhouse.yml" \
   > "${RENDER}/grafana-datasources/clickhouse.yml"

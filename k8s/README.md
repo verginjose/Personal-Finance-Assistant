@@ -47,8 +47,7 @@ k8s/
 │   └── frontend.yaml
 ├── config/
 │   ├── infra/                 # committed static ConfigMaps (Argo-managed)
-│   ├── grafana/               # datasource template (password-bearing)
-│   └── clickhouse-postgres.sql.tmpl
+│   └── grafana/               # datasource template (password-bearing)
 └── optional/
     └── cloudflared.yaml
 
@@ -625,10 +624,10 @@ reachable with `port-forward` (they are `ClusterIP` services, matching the
   the Postgres/RabbitMQ/redis StatefulSets are not configured for HA.
 - **`imagePullPolicy: IfNotPresent`** is intentional: it lets k3s use the
   imported images. With a registry and a mutable tag, change it to `Always`.
-- **ClickHouse → Postgres engine:** the compose init file referenced a
-  non-existent `postgres-db` host and hardcoded credentials. The overlay renders
-  `config/clickhouse-postgres.sql.tmpl` with `postgres-primary` and `.env`
-  values instead.
+- **ClickHouse schema:** `observability/clickhouse/init/02_logs.sql` creates a
+  partitioned `logs` table (per-day) with a 4-day TTL; the compose-era
+  PostgreSQL-engine bridge databases were removed because no dashboard used
+  them (Grafana queries Postgres natively).
 - **Observability profile:** compose gates these behind `--profile observability`;
   the overlay always deploys them. Delete `infrastructure/prometheus.yaml`,
   `grafana.yaml`, `clickhouse.yaml` and `vector.yaml` (and the `vector` scrape

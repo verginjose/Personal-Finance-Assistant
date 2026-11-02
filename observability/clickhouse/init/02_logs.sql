@@ -16,4 +16,6 @@ CREATE TABLE IF NOT EXISTS logs (
     INDEX idx_trace trace_id TYPE minmax GRANULARITY 1
     )
     ENGINE = MergeTree()
+    PARTITION BY toDate(timestamp)
     ORDER BY (service, level, timestamp)
+    TTL toDateTime(timestamp) + INTERVAL 4 DAY

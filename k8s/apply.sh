@@ -91,16 +91,12 @@ echo "==> Rendering clickhouse init ConfigMap"
 env_value() {
   sed -n "s/^$1=//p" "${ROOT_DIR}/.env" | tail -n 1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
-DB_NAME="$(env_value DB_NAME)";                     export DB_NAME
 DB_USER="$(env_value DB_USER)";                     export DB_USER
 DB_PASSWORD="$(env_value DB_PASSWORD)";             export DB_PASSWORD
 AUTH_DB_SCHEMA="$(env_value AUTH_DB_SCHEMA)";       export AUTH_DB_SCHEMA
 FINANCE_DB_SCHEMA="$(env_value FINANCE_DB_SCHEMA)"; export FINANCE_DB_SCHEMA
 CLICKHOUSE_PASSWORD="$(env_value CLICKHOUSE_PASSWORD)"; export CLICKHOUSE_PASSWORD
 cp "${ROOT_DIR}/observability/clickhouse/init/02_logs.sql" "${render_dir}/"
-envsubst '${DB_NAME} ${DB_USER} ${DB_PASSWORD} ${AUTH_DB_SCHEMA} ${FINANCE_DB_SCHEMA}' \
-  < "${K8S_DIR}/config/clickhouse-postgres.sql.tmpl" \
-  > "${render_dir}/003_postgres.sql"
 kubectl create configmap clickhouse-init -n "${NS}" \
   --from-file="${render_dir}" \
   --dry-run=client -o yaml | kubectl apply -f -

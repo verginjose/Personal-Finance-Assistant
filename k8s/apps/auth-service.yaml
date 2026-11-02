@@ -57,7 +57,7 @@ spec:
       terminationGracePeriodSeconds: 20
       containers:
         - name: auth-service
-          image: 127.0.0.1:30500/finance/auth-service:14803175709d
+          image: 127.0.0.1:30500/finance/auth-service:71d8f601850c
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

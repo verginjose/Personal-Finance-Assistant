@@ -33,6 +33,7 @@ import random
 import sys
 import threading
 import time
+import urllib.parse
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -153,6 +154,9 @@ def stage_personal(client, member, checks, args, rng):
                 member.expected_expense += amount
         else:
             checks.ok(False, "create transaction", f"status {status}")
+        # A user browses between entries instead of machine-gunning the API.
+        if i % 5 == 4:
+            _think(args, rng)
 
     checks.ok(len(member.created) == args.txns, "all transactions created",
               f"{len(member.created)}/{args.txns}")
@@ -282,6 +286,149 @@ def stage_authz(client, member, checks, group):
         headers=member.headers())
     checks.ok(status in (403, 404), "foreign summary not readable",
               f"got {status}")
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Stage 1c — richer personal flows: budgets, subscriptions, bulk, search,
+#            filtered listings and the analytics read model
+# ────────────────────────────────────────────────────────────────────────────
+def stage_complex(client, member, checks, args, rng):
+    """Exercise the features a real user touches besides plain CRUD.
+
+    Every row this stage creates is appended to ``member.created`` (and removed
+    again when deleted) so the verification stage's listing/summary equality
+    still holds.
+    """
+    now = datetime.now()
+    uid = member.user_id
+    phase = "personal"
+
+    # ── Budget: create, appear in listing, drive budget analytics ──────────
+    status, _, _ = client.request(
+        phase, "/upsert/budgets", "POST", headers=member.headers(),
+        body={"userId": str(uid), "expenseCategory": "RESTAURANTS",
+              "budgetAmount": 50000.0, "period": "MONTHLY", "currency": "INR"})
+    checks.status(201, status, "create budget")
+    _think(args, rng)
+
+    (status, body), seen = poll(
+        lambda: client.request(phase, f"/upsert/budgets?userId={uid}", "GET",
+                               headers=member.headers())[:2],
+        lambda r: isinstance(r[1], list) and len(r[1]) > 0,
+        timeout=max(10.0, args.verify_timeout))
+    checks.status(200, status, "list budgets")
+    checks.ok(seen, "budget appears in listing")
+    _think(args, rng)
+
+    status, status_body, _ = client.request(
+        "analytics", f"/analytics/budgets/trends?userId={uid}", "GET",
+        headers=member.headers())
+    checks.status(200, status, "budget trends")
+    _think(args, rng)
+
+    # ── Subscriptions: the recurring vendors seeded in stage 1 must surface ─
+    status, subs, _ = client.request(
+        phase, f"/upsert/subscriptions?userId={uid}", "GET",
+        headers=member.headers())
+    checks.status(200, status, "list subscriptions")
+    names = {s.get("name") for s in subs} if isinstance(subs, list) else set()
+    checks.ok(any(v in names for v in member.recurring_names),
+              "recurring subscription detected", f"names={sorted(names)}")
+    _think(args, rng)
+
+    # ── Bulk create, then bulk-delete half of it ───────────────────────────
+    bulk = [{"userId": str(uid), "name": f"complex bulk {k}",
+             "amount": money(12.5 + k), "type": "EXPENSE", "category": "OTHERS",
+             "currency": "INR", "description": "complex bulk",
+             "createdAt": iso(now)} for k in range(4)]
+    status, created, _ = client.request(
+        phase, "/upsert/create/bulk", "POST", headers=member.headers(), body=bulk)
+    checks.ok(status in (200, 201), "bulk create", f"got {status}")
+    bulk_ids = []
+    if isinstance(created, list):
+        for row in created:
+            amount = float(row.get("amount", 0) or 0)
+            bulk_ids.append(row.get("id"))
+            member.created.append((row.get("id"), "EXPENSE", amount))
+            member.expected_expense += amount
+    _think(args, rng)
+
+    if bulk_ids:
+        victims = bulk_ids[:2]
+        status, _, _ = client.request(
+            phase, f"/upsert/delete/bulk?userId={uid}", "POST",
+            headers=member.headers(), body=victims)
+        checks.status(200, status, "bulk delete")
+        if status == 200:
+            for vid in victims:
+                for rec in list(member.created):
+                    if rec[0] == vid:
+                        member.created.remove(rec)
+                        member.expected_expense -= rec[2]
+                        break
+    _think(args, rng)
+
+    # ── Search probes the read model, so poll for eventual visibility ──────
+    probe = f"complexprobe-{uuid.uuid4().hex[:8]}"
+    status, resp, _ = client.request(
+        phase, "/upsert/create", "POST", headers=member.headers(),
+        body={"userId": str(uid), "name": probe, "amount": 3.0, "type": "EXPENSE",
+              "category": "OTHERS", "currency": "INR", "createdAt": iso(now)})
+    checks.status(201, status, "search probe created")
+    if status == 201:
+        member.created.append((resp.get("id"), "EXPENSE", 3.0))
+        member.expected_expense += 3.0
+    q = urllib.parse.quote(probe)
+    (status, body), found = poll(
+        lambda: client.request(phase, f"/upsert/search?userId={uid}&q={q}", "GET",
+                               headers=member.headers())[:2],
+        lambda r: isinstance(r[1], dict) and any(
+            row.get("name") == probe for row in r[1].get("content", [])),
+        timeout=max(10.0, args.verify_timeout))
+    checks.status(200, status, "search")
+    checks.ok(found, "search returns the matching row")
+    _think(args, rng)
+
+    # ── Filtered listing: every returned row must fall inside the window ───
+    start_d = (now - timedelta(days=45)).strftime("%Y-%m-%d")
+    end_d = now.strftime("%Y-%m-%d")
+    status, body, _ = client.request(
+        phase,
+        f"/upsert/entries?userId={uid}&startDate={start_d}&endDate={end_d}&size=200",
+        "GET", headers=member.headers())
+    checks.status(200, status, "date-filtered listing")
+    rows = body.get("content", []) if isinstance(body, dict) else []
+    outside = [e for e in rows
+               if str(e.get("createdAt", ""))[:10] < start_d
+               or str(e.get("createdAt", ""))[:10] > end_d]
+    checks.ok(not outside, "date filter excludes out-of-range rows",
+              f"{len(outside)} outside")
+    _think(args, rng)
+
+    # ── Analytics read model (AI insights is opt-in: it calls Groq) ────────
+    analytics = [
+        ("category pie chart", f"/analytics/category-pie-chart?userId={uid}"),
+        ("timeline chart", f"/analytics/timeline-chart?userId={uid}"),
+        ("comprehensive analytics", f"/analytics/comprehensive?userId={uid}"),
+        ("analytics entries page",
+         f"/analytics/transaction-entries?userId={uid}&page=0&size=20"),
+        ("health score", f"/analytics/health-score?userId={uid}"),
+        ("income by category",
+         f"/analytics/transactions/income-by-category?userId={uid}"
+         f"&categoryName=SALARY&startDate={start_d}&endDate={end_d}"),
+        ("transactions by type",
+         f"/analytics/transactions/by-type?userId={uid}"
+         f"&transactionType=EXPENSE&startDate={start_d}&endDate={end_d}"),
+    ]
+    if member.goal_id:
+        analytics.append(
+            ("goal forecast",
+             f"/analytics/goals/{member.goal_id}/forecast?userId={uid}"))
+    for label, path in analytics:
+        status, _, _ = client.request("analytics", path, "GET",
+                                      headers=member.headers())
+        checks.status(200, status, label)
+        _think(args, rng)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -577,12 +724,25 @@ def verify_group(client, group, checks, args):
 # ────────────────────────────────────────────────────────────────────────────
 # Orchestration
 # ────────────────────────────────────────────────────────────────────────────
-def run_stage(members, metrics, name, fn):
+def _think(args, rng):
+    """Human think time before a step, jittered so users desynchronise.
+
+    A uniform 0..2x draw means no two simulated users fire a step at the same
+    instant: the result is a steady stream of requests instead of one burst per
+    stage. Zero (the default) preserves the old back-to-back behaviour.
+    """
+    if getattr(args, "think_time", 0) > 0:
+        time.sleep(rng.uniform(0, 2 * args.think_time))
+
+
+def run_stage(members, metrics, name, fn, args=None):
     if not members:
         return
 
     def wrapped(member):
         try:
+            if args is not None:
+                _think(args, random.Random(args.seed + 10000 + member.idx))
             fn(member)
         except Exception as exc:
             metrics.check(name, f"user{member.idx}", "stage completed", False, repr(exc))
@@ -606,11 +766,15 @@ def run(args):
     groups = {g: GroupState(g, members[g * members_per_group:(g + 1) * members_per_group])
               for g in range(group_count)}
 
-    print("\033[1m\033[96m50-user group scenario\033[0m")
+    print(f"\033[1m\033[96m{args.users}-user group scenario\033[0m")
     print(f"  gateway : {args.base_url}")
     print(f"  users   : {args.users}  txns/user: {args.txns}  deletes/user: {args.deletes}")
     print(f"  groups  : {group_count} x {members_per_group} members, "
           f"{args.expenses} expenses/member, {args.bills} receipt(s)/user")
+    if args.think_time > 0:
+        print(f"  pacing  : think-time 0..{2 * args.think_time:.1f}s before each step")
+    if not args.no_complex:
+        print("  complex : budgets, subscriptions, bulk, search, analytics per user")
     started = time.time()
 
     print("\n\033[1mStage 1 — registering and logging in\033[0m")
@@ -636,7 +800,8 @@ def run(args):
     print("\n\033[1mStage 2 — 20 transactions, recurring, goal, deletes\033[0m")
     run_stage(ready, metrics, "personal",
               lambda m: stage_personal(client, m, Checks(metrics, "personal", f"user{m.idx}"),
-                                       args, random.Random(args.seed + m.idx)))
+                                       args, random.Random(args.seed + m.idx)),
+              args=args)
 
     print("\n\033[1mStage 2b — security and concurrency races\033[0m")
     run_stage(ready, metrics, "security",
@@ -645,45 +810,63 @@ def run(args):
                   stage_idempotency(client, m, Checks(metrics, "security", f"user{m.idx}")),
                   stage_authz(client, m, Checks(metrics, "security", f"user{m.idx}"),
                               group_of(m)),
-              ))
+              ),
+              args=args)
+
+    if not args.no_complex:
+        print("\n\033[1mStage 2c — budgets, subscriptions, bulk, search, analytics\033[0m")
+        run_stage(ready, metrics, "complex",
+                  lambda m: stage_complex(client, m,
+                                          Checks(metrics, "complex", f"user{m.idx}"),
+                                          args, random.Random(args.seed + 500 + m.idx)),
+                  args=args)
 
     print("\n\033[1mStage 3 — receipt uploads (OCR)\033[0m")
     run_stage(ready, metrics, "ocr",
-              lambda m: stage_ocr(client, m, Checks(metrics, "ocr", f"user{m.idx}"), args))
+              lambda m: stage_ocr(client, m, Checks(metrics, "ocr", f"user{m.idx}"), args),
+              args=args)
 
     print(f"\n\033[1mStage 4 — creating {len(groups)} groups\033[0m")
     with ThreadPoolExecutor(max_workers=max(1, len(groups))) as pool:
-        list(pool.map(lambda g: stage_group_create(
-            client, g, Checks(metrics, "groups", f"group{g.index}"), args), groups.values()))
+        list(pool.map(lambda g: (_think(args, random.Random(args.seed + g.index)),
+                                 stage_group_create(
+                                     client, g, Checks(metrics, "groups", f"group{g.index}"),
+                                     args)), groups.values()))
 
     print("\n\033[1mStage 5 — accepting invitations\033[0m")
     with ThreadPoolExecutor(max_workers=max(1, len(active))) as pool:
-        list(pool.map(lambda m: stage_group_accept(
-            client, group_of(m), m,
-            Checks(metrics, "groups", f"user{m.idx}")), active))
+        list(pool.map(lambda m: (_think(args, random.Random(args.seed + 20000 + m.idx)),
+                                 stage_group_accept(
+                                     client, group_of(m), m,
+                                     Checks(metrics, "groups", f"user{m.idx}"))), active))
 
     print("\n\033[1mStage 6 — shared expenses (equal split)\033[0m")
     run_stage(active, metrics, "split",
               lambda m: stage_group_expenses(client, group_of(m), m,
                                              Checks(metrics, "split", f"user{m.idx}"),
-                                             args, random.Random(args.seed + 1000 + m.idx)))
+                                             args, random.Random(args.seed + 1000 + m.idx)),
+              args=args)
 
     print("\n\033[1mStage 7 — half settle, half archive\033[0m")
     run_stage(active, metrics, "settle",
               lambda m: stage_settle_or_archive(
                   client, group_of(m), m,
                   Checks(metrics, "settle", f"user{m.idx}"),
-                  args, random.Random(args.seed + 2000 + m.idx)))
+                  args, random.Random(args.seed + 2000 + m.idx)),
+              args=args)
 
     print("\n\033[1mStage 8 — deleting 5 expenses per group\033[0m")
     with ThreadPoolExecutor(max_workers=max(1, len(groups))) as pool:
-        list(pool.map(lambda g: stage_group_deletes(
-            client, g, Checks(metrics, "split", f"group{g.index}"),
-            args, random.Random(args.seed + 3000 + g.index)), groups.values()))
+        list(pool.map(lambda g: (_think(args, random.Random(args.seed + 30000 + g.index)),
+                                 stage_group_deletes(
+                                     client, g, Checks(metrics, "split", f"group{g.index}"),
+                                     args, random.Random(args.seed + 3000 + g.index))),
+                      groups.values()))
 
     print("\n\033[1mStage 9 — verification\033[0m")
     run_stage(ready, metrics, "verify",
-              lambda m: verify_member(client, m, Checks(metrics, "verify", f"user{m.idx}"), args))
+              lambda m: verify_member(client, m, Checks(metrics, "verify", f"user{m.idx}"), args),
+              args=args)
     with ThreadPoolExecutor(max_workers=max(1, len(groups))) as pool:
         list(pool.map(lambda g: verify_group(
             client, g, Checks(metrics, "verify", f"group{g.index}"), args), groups.values()))
@@ -791,6 +974,11 @@ def parse_args(argv):
     p.add_argument("--seed", type=int, default=11)
     p.add_argument("--pace", type=float, default=0.06,
                    help="seconds between writes per user (gateway allows 20/s per user)")
+    p.add_argument("--think-time", type=float, default=0.0,
+                   help="mean seconds to pause before each step, jittered 0..2x; "
+                        "spreads requests so the run resembles real traffic")
+    p.add_argument("--no-complex", action="store_true",
+                   help="skip the budgets/subscriptions/bulk/search/analytics stage")
     p.add_argument("--timeout", type=float, default=90.0)
     p.add_argument("--verify-timeout", type=float, default=30.0)
     p.add_argument("--auth-concurrency", type=int, default=5)

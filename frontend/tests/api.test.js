@@ -79,6 +79,15 @@ describe('api client', () => {
     await expect(api.post('/upsert/groups', {})).rejects.toThrow('createdBy: must not be null');
   });
 
+  it('treats DELETE 404 as success (already deleted)', async () => {
+    global.fetch.mockResolvedValueOnce({
+      status: 404,
+      ok: false,
+      text: async () => JSON.stringify({ message: 'Transaction entry with ID 99 not found' }),
+    });
+    await expect(api.delete('/upsert/delete/99', { userId: 'user-42' })).resolves.toBeNull();
+  });
+
   it('clears auth and dispatches event on 401', async () => {
     const handler = vi.fn();
     window.addEventListener('auth-expired', handler);

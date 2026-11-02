@@ -199,6 +199,14 @@ async function request(method, path, { body, params, headers = {}, raw = false }
 
   if (raw) return res;
 
+  // DELETE is idempotent: if the row is already gone (e.g. a delayed read
+  // after a write showed it, and the user deleted it a second time), the
+  // user's intent — the row no longer exists — is satisfied. Treat the 404
+  // as success so the UI doesn't surface a spurious "not found" error.
+  if (method === 'DELETE' && res.status === 404) {
+    return null;
+  }
+
   const text = await res.text();
   let data;
   try { data = JSON.parse(text); } catch { data = text; }

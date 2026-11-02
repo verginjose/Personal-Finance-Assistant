@@ -118,9 +118,10 @@ public class TrackingRedisCache extends RedisCache {
             return hit;
         }
 
-        // Only a write that raced this load — or a replica that has not caught
-        // up — can make the loaded value stale. The tokens are read before the
-        // load and checked after it; when either moved, the value is returned
+        // Only a write that raced this load — or a replica that had not yet
+        // applied the last write when the load started — can make the loaded
+        // value stale. The snapshot records both before the load; the tokens
+        // are re-read after it. When either check fails the value is returned
         // but not stored, so it cannot stick in the cache for its TTL.
         CacheConsistencyGuard.Snapshot before = consistencyGuard.snapshot(scope);
         T value = loadValue(key, valueLoader);

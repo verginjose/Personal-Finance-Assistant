@@ -60,11 +60,30 @@ class CacheConsistencyGuardTest {
         when(ops.multiGet(any()))
                 .thenReturn(List.of("7", "0/95BEDD0"))   // before the load
                 .thenReturn(List.of("8", "0/9A00000"));  // after it
+        when(jdbc.queryForObject(anyString(), eq(Boolean.class), any())).thenReturn(true);
 
         CacheConsistencyGuard.Snapshot before = guard.snapshot(SCOPE);
 
         assertThat(guard.canCache(SCOPE, before)).isFalse();
-        verify(jdbc, never()).queryForObject(anyString(), eq(Boolean.class), any());
+    }
+
+    @Test
+    @DisplayName("refuses to cache when the replica catches up during the load")
+    void refusesWhenReplicaCatchesUpDuringLoad() {
+        // The reported bug: at load start the replica had not replayed the
+        // delete; by the time the load finished it had. Checking the replica
+        // after the load certified the pre-delete row as fresh and cached it
+        // for the full TTL. The pre-load answer must be the one that counts.
+        when(redis.opsForValue()).thenReturn(ops);
+        when(ops.multiGet(any())).thenReturn(List.of("7", "0/95BEDD0"));
+        when(jdbc.queryForObject(anyString(), eq(Boolean.class), any()))
+                .thenReturn(false, true);   // behind at snapshot, caught up later
+
+        CacheConsistencyGuard.Snapshot before = guard.snapshot(SCOPE);
+
+        assertThat(guard.canCache(SCOPE, before)).isFalse();
+        // Exactly one replica check — taken before the load, not after it.
+        verify(jdbc, times(1)).queryForObject(anyString(), eq(Boolean.class), any());
     }
 
     @Test

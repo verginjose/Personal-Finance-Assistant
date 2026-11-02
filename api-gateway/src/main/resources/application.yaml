@@ -66,10 +66,10 @@ spring:
             - name: RequestRateLimiter
               args:
                 # Production sizing: many users can share one NAT/proxy IP and
-                # the key is IP+path, so 10/s throttled normal login bursts.
-                # 50/s still bounds credential-stuffing per IP.
-                redis-rate-limiter.replenishRate: 50
-                redis-rate-limiter.burstCapacity: 100
+                # the key is IP+path, so a low rate throttled normal login
+                # bursts. The stack has the headroom; 200/s still bounds abuse.
+                redis-rate-limiter.replenishRate: 200
+                redis-rate-limiter.burstCapacity: 400
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@ipPathKeyResolver}"
             - name: CircuitBreaker
@@ -96,8 +96,8 @@ spring:
             - StripPrefix=1
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 50
-                redis-rate-limiter.burstCapacity: 100
+                redis-rate-limiter.replenishRate: 200
+                redis-rate-limiter.burstCapacity: 400
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@userKeyResolver}"
             - name: CircuitBreaker
@@ -114,8 +114,8 @@ spring:
             - StripPrefix=1
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 50
-                redis-rate-limiter.burstCapacity: 100
+                redis-rate-limiter.replenishRate: 200
+                redis-rate-limiter.burstCapacity: 400
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@userKeyResolver}"
             - name: CircuitBreaker
@@ -131,8 +131,8 @@ spring:
             - StripPrefix=1
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 30
-                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.replenishRate: 200
+                redis-rate-limiter.burstCapacity: 400
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@userKeyResolver}"
             - name: CircuitBreaker

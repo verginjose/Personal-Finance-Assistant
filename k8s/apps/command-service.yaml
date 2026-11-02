@@ -62,7 +62,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: command-service
-          image: 127.0.0.1:30500/finance/command-service:24ed16b47254
+          image: 127.0.0.1:30500/finance/command-service:8c11f9835745
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

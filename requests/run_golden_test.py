@@ -1376,23 +1376,31 @@ def verify_group(client, group, checks, args):
         return
     leader = group.members[0]
 
-    # Exactly the expenses that were posted and not deleted, plus one row per
-    # recorded settlement (the settle endpoint stores a SETTLEMENT expense).
-    # The cache canary was created and deleted again, so it nets out. A count
-    # above the expected value means a deletion was not reflected.
-    expected_expenses = (args.expenses * len(group.members)
-                         - group.deleted + group.settled)
-    (status, body), count_ok = poll(
-        lambda: client.request(
-            "groups", f"/upsert/groups/{group.group_id}/expenses?page=0&size=100",
-            "GET", headers=leader.headers())[:2],
-        lambda r: r[0] == 200 and isinstance(r[1], dict)
-        and int(r[1].get("totalElements", 0) or 0) == expected_expenses,
+    # Exactly the expenses that were posted and not deleted. The cache canary
+    # was created and deleted again, so it nets out. Settlement rows are
+    # excluded: the settle endpoint may legitimately store zero or one row per
+    # caller (a concurrent settle can leave nothing to settle), so their count
+    # is not what this check is about. A larger regular count means a deletion
+    # was not reflected in the read model.
+    expected_expenses = args.expenses * len(group.members) - group.deleted
+
+    def expense_counts():
+        status, body, _ = client.request(
+            "groups", f"/upsert/groups/{group.group_id}/expenses?page=0&size=200",
+            "GET", headers=leader.headers())
+        rows = body.get("content", []) if isinstance(body, dict) else []
+        regular = [r for r in rows if r.get("splitType") != "SETTLEMENT"]
+        settlements = [r for r in rows if r.get("splitType") == "SETTLEMENT"]
+        return status, len(regular), len(settlements)
+
+    (status, regular, settlements), count_ok = poll(
+        expense_counts,
+        lambda r: r[0] == 200 and r[1] == expected_expenses,
         timeout=max(10.0, args.verify_timeout))
     checks.status(200, status, "list group expenses")
-    total = int(body.get("totalElements", 0) or 0) if isinstance(body, dict) else 0
     checks.ok(count_ok, "group expenses reflect the deletions",
-              f"{total} listed, {expected_expenses} expected "
+              f"{regular} regular + {settlements} settlement rows, "
+              f"{expected_expenses} regular expected "
               f"({args.expenses * len(group.members)} posted, {group.deleted} deleted)")
 
     status, members, _ = client.request(

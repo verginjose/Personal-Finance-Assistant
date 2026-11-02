@@ -183,11 +183,16 @@ curl http://localhost:8080/api/auth/health          # Auth Service (through the 
 kubectl -n pfa get pods                             # k3s: all workloads
 ```
 
-### 4. Execute the End-to-End Test Suite
+### 4. Execute the Golden Test
 ```bash
-python3 requests/run_e2e_tests.py
+python3 requests/run_golden_test.py --users 50
 ```
-The testing script will perform a full system validation. Expected outcome: `71 passed, 0 failed`.
+The golden test performs a full system validation and load test: identity,
+realistic transaction history, daily/weekly/monthly subscriptions (outbox and
+recurring scheduler), security races, OCR receipt ingestion, split expenses
+(EQUAL / PERCENTAGE / EXACT), cache eviction and read-model consistency.
+Expected outcome: `PASS` with every check green. See
+`requests/GOLDEN_TEST_PLAN.md` for the full coverage map.
 
 ---
 ## Kubernetes Deployment (local k3s)

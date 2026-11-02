@@ -24,10 +24,10 @@ node_modules/
 # (the real backup lives outside the working tree, e.g. ~/)
 *sealed-secrets-key*
 
-# Load-test artifacts
-requests/loadtest-report*.json
+# Golden-test artifacts
+requests/golden-report*.json
+requests/golden-soak-*.log
 requests/__pycache__/
 
 # Generated test credentials (passwords)
-requests/loadtest-users*.csv
-requests/scenario50-report*.json
+requests/golden-users*.csv

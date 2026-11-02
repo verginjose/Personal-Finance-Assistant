@@ -1041,7 +1041,7 @@ data:
           "gridPos": {
             "x": 0,
             "y": 37,
-            "w": 4,
+            "w": 6,
             "h": 5
           }
         },
@@ -1101,9 +1101,9 @@ data:
             "orientation": "auto"
           },
           "gridPos": {
-            "x": 4,
+            "x": 6,
             "y": 37,
-            "w": 4,
+            "w": 6,
             "h": 5
           },
           "transformations": [
@@ -1176,9 +1176,9 @@ data:
             "orientation": "auto"
           },
           "gridPos": {
-            "x": 8,
+            "x": 12,
             "y": 37,
-            "w": 4,
+            "w": 6,
             "h": 5
           },
           "transformations": [
@@ -1196,6 +1196,76 @@ data:
         },
         {
           "id": 15,
+          "title": "Cache hit ratio",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "keyspace_hits / (keyspace_hits + keyspace_misses) since the last restart. Misses are expected for token and idempotency lookups that are not present.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "cli",
+              "command": "",
+              "query": "eval \"local i = redis.call('info','stats') local h = tonumber(string.match(i,'keyspace_hits:(%d+)')) or 0 local m = tonumber(string.match(i,'keyspace_misses:(%d+)')) or 0 if h + m == 0 then return 0 end return math.floor(h * 100 / (h + m))\" 0"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "percent",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 50
+                  },
+                  {
+                    "color": "green",
+                    "value": 90
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 18,
+            "y": 37,
+            "w": 6,
+            "h": 5
+          }
+        },
+        {
+          "id": 16,
           "title": "Ops / sec",
           "type": "stat",
           "datasource": {
@@ -1259,9 +1329,9 @@ data:
             "orientation": "auto"
           },
           "gridPos": {
-            "x": 12,
-            "y": 37,
-            "w": 4,
+            "x": 0,
+            "y": 42,
+            "w": 6,
             "h": 5
           },
           "transformations": [
@@ -1278,7 +1348,7 @@ data:
           ]
         },
         {
-          "id": 16,
+          "id": 17,
           "title": "Evicted keys",
           "type": "stat",
           "datasource": {
@@ -1338,9 +1408,9 @@ data:
             "orientation": "auto"
           },
           "gridPos": {
-            "x": 16,
-            "y": 37,
-            "w": 4,
+            "x": 6,
+            "y": 42,
+            "w": 6,
             "h": 5
           },
           "transformations": [
@@ -1357,7 +1427,82 @@ data:
           ]
         },
         {
-          "id": 17,
+          "id": 18,
+          "title": "Expired keys",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "expired_keys from INFO stats: keys removed by TTL, not by eviction.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "command",
+              "command": "info",
+              "section": "stats",
+              "query": ""
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 42,
+            "w": 6,
+            "h": 5
+          },
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "expired_keys"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 19,
           "title": "Uptime",
           "type": "stat",
           "datasource": {
@@ -1413,9 +1558,9 @@ data:
             "orientation": "auto"
           },
           "gridPos": {
-            "x": 20,
-            "y": 37,
-            "w": 4,
+            "x": 18,
+            "y": 42,
+            "w": 6,
             "h": 5
           },
           "transformations": [
@@ -1438,14 +1583,14 @@ data:
           "collapsed": false,
           "gridPos": {
             "x": 0,
-            "y": 42,
+            "y": 47,
             "w": 24,
             "h": 1
           },
           "panels": []
         },
         {
-          "id": 18,
+          "id": 20,
           "title": "refresh_token:*",
           "type": "stat",
           "datasource": {
@@ -1501,13 +1646,13 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 43,
+            "y": 48,
             "w": 4,
             "h": 5
           }
         },
         {
-          "id": 19,
+          "id": 21,
           "title": "user_tokens:*",
           "type": "stat",
           "datasource": {
@@ -1563,13 +1708,13 @@ data:
           },
           "gridPos": {
             "x": 4,
-            "y": 43,
+            "y": 48,
             "w": 4,
             "h": 5
           }
         },
         {
-          "id": 20,
+          "id": 22,
           "title": "idem:*",
           "type": "stat",
           "datasource": {
@@ -1625,13 +1770,13 @@ data:
           },
           "gridPos": {
             "x": 8,
-            "y": 43,
+            "y": 48,
             "w": 4,
             "h": 5
           }
         },
         {
-          "id": 21,
+          "id": 23,
           "title": "finance:*",
           "type": "stat",
           "datasource": {
@@ -1687,13 +1832,13 @@ data:
           },
           "gridPos": {
             "x": 12,
-            "y": 43,
+            "y": 48,
             "w": 4,
             "h": 5
           }
         },
         {
-          "id": 22,
+          "id": 24,
           "title": "token_blacklist:*",
           "type": "stat",
           "datasource": {
@@ -1749,18 +1894,18 @@ data:
           },
           "gridPos": {
             "x": 16,
-            "y": 43,
+            "y": 48,
             "w": 4,
             "h": 5
           }
         },
         {
-          "id": 23,
+          "id": 25,
           "type": "text",
           "title": "How these counts are produced",
           "gridPos": {
             "x": 20,
-            "y": 43,
+            "y": 48,
             "w": 4,
             "h": 5
           },
@@ -1781,14 +1926,14 @@ data:
           "collapsed": false,
           "gridPos": {
             "x": 0,
-            "y": 48,
+            "y": 53,
             "w": 24,
             "h": 1
           },
           "panels": []
         },
         {
-          "id": 24,
+          "id": 26,
           "title": "Keyspace",
           "type": "table",
           "datasource": {
@@ -1845,13 +1990,13 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 49,
+            "y": 54,
             "w": 8,
             "h": 9
           }
         },
         {
-          "id": 25,
+          "id": 27,
           "title": "Replication",
           "type": "table",
           "datasource": {
@@ -1908,13 +2053,13 @@ data:
           },
           "gridPos": {
             "x": 8,
-            "y": 49,
+            "y": 54,
             "w": 8,
             "h": 9
           }
         },
         {
-          "id": 26,
+          "id": 28,
           "title": "Server",
           "type": "table",
           "datasource": {
@@ -1971,7 +2116,7 @@ data:
           },
           "gridPos": {
             "x": 16,
-            "y": 49,
+            "y": 54,
             "w": 8,
             "h": 9
           }

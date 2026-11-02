@@ -375,7 +375,15 @@ Pods come back in place on the next start because all state is on PVCs under
 | CI runs | — | github.com/verginjose/Personal-Finance-Assistant/actions |
 
 Every `port-forward` blocks its terminal; add `&` to run others alongside it.
-The Grafana admin password is `GRAFANA_ADMIN_PASSWORD` in `.env`.
+The Grafana admin password is `GRAFANA_ADMIN_PASSWORD` in `.env`. Grafana reads
+that variable **only when it first creates the admin user**, so on an existing
+`grafana.db` a re-sealed secret plus a Reloader restart does *not* change the
+login — reset it in place after rotating:
+
+```bash
+kubectl -n pfa exec deploy/grafana -- \
+  grafana cli admin reset-admin-password '<new-password>'
+```
 
 ## Why this maps cleanly
 
@@ -601,6 +609,13 @@ reachable with `port-forward` (they are `ClusterIP` services, matching the
   `ALTER USER <DB_USER> WITH PASSWORD '…'` (Postgres) or
   `CONFIG SET requirepass …` (Redis). Do the server last, after clients have the
   new value in hand, or you lock yourself out.
+- **Rotating the Grafana admin password** is also two steps, and the sealed
+  Secret alone is not enough: `GF_SECURITY_ADMIN_PASSWORD` is honoured only when
+  Grafana initialises its admin user. After re-sealing and syncing
+  `grafana-secrets`, run
+  `kubectl -n pfa exec deploy/grafana -- grafana cli admin reset-admin-password '<new>'`.
+  Otherwise the old hash in `grafana.db` keeps winning and login returns 401.
+  Deleting the Grafana PVC also re-initialises, but wipes the SQLite DB.
 - **Per-service config:** non-secret settings (hostnames, ports, JVM flags,
   feature toggles) live in a `<service>-config` ConfigMap inside each
   `k8s/apps/<service>.yaml`, so changing them goes through git + Argo like any

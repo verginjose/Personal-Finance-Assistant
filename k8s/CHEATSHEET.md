@@ -114,6 +114,8 @@ Observability stack:
 kubectl -n pfa port-forward svc/prometheus 9090:9090 &
 curl -s localhost:9090/api/v1/targets | python3 -m json.tool | grep -E 'job|health'
 kubectl -n pfa port-forward svc/grafana 3000:3000 &     # admin / GRAFANA_ADMIN_PASSWORD
+# rotated password gives 401? the Secret only applies on first init:
+# kubectl -n pfa exec deploy/grafana -- grafana cli admin reset-admin-password '<new>'
 kubectl -n pfa exec clickhouse-0 -- clickhouse-client --password "$CH_PW" \
   -q 'select service, level, count() from default.logs group by service, level order by 3 desc limit 10'
 ```

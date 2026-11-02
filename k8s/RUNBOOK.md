@@ -264,6 +264,14 @@ kubectl -n pfa port-forward svc/grafana 3000:3000 &
 # http://localhost:3000 — user admin, password GRAFANA_ADMIN_PASSWORD in .env
 ```
 
+If a rotated password is rejected (401), the sealed Secret only applies on
+Grafana's first init. Reset the existing account:
+
+```bash
+kubectl -n pfa exec deploy/grafana -- \
+  grafana cli admin reset-admin-password '<new-password>'
+```
+
 | Dashboard | What it answers |
 |---|---|
 | **Finance Assistant — Overview & Debug** | service health, traffic, 5xx, p95/p99 latency and resource pressure |

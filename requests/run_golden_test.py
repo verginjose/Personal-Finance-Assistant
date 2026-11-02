@@ -1121,9 +1121,26 @@ def stage_group_cache(client, group, checks, args):
     budget = max(10.0, args.cache_timeout)
 
     # The group projection is still catching up with the expenses posted in the
-    # previous stage, so a single 200 is not a baseline — it may be a partial
-    # view that later reads legitimately extend. Warm the cache, then require
-    # two consecutive identical payloads before treating it as settled.
+    # previous stage, so a single 200 is not a baseline. Wait until the read
+    # model lists every expense this group actually posted — a stability window
+    # alone is not enough when a replica can pause for seconds and then deliver
+    # a late row after the baseline was taken.
+    def regular_expense_count():
+        status, body, _ = client.request(
+            "groups", f"/upsert/groups/{group.group_id}/expenses?page=0&size=200",
+            "GET", headers=leader.headers())
+        rows = body.get("content", []) if isinstance(body, dict) else []
+        return status, len([r for r in rows if r.get("splitType") != "SETTLEMENT"])
+
+    (status, listed), settled = poll(
+        regular_expense_count,
+        lambda r: r[0] == 200 and r[1] == len(group.expense_ids),
+        timeout=budget)
+    checks.ok(settled, "group expense projection settled before the canary",
+              f"{listed} listed, {len(group.expense_ids)} posted")
+
+    # Warm the cache, then require two consecutive identical payloads before
+    # treating the balances as settled.
     for _ in range(2):
         _balances(client, group, leader)
 

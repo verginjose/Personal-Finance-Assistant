@@ -9,12 +9,14 @@
 #   ./clean_env.sh --scenario --yes       # delete s50_*/lt* test users + their data
 #   ./clean_env.sh --all --dry-run        # show what a full wipe would remove
 #   ./clean_env.sh --all --yes --i-mean-all   # TRUNCATE every app table (keeps rules)
-#   ./clean_env.sh --redis-only --yes     # FLUSHALL on Redis (caches only)
+#   ./clean_env.sh --redis-only --yes     # FLUSHALL (caches + refresh tokens: logs users out)
 #   ./clean_env.sh --scenario --yes --redis-only
 #
 # Scenario mode removes only users whose email/username starts with "s50_" or
 # "lt" and groups named "Scenario Group *"; real accounts are left alone.
 # All mode removes EVERY user, transaction and group — including real ones.
+# Redis FLUSHALL also drops refresh_token:* keys, so every session is logged
+# out (access tokens stay valid until they expire).
 #
 set -euo pipefail
 
@@ -181,7 +183,7 @@ SQL
 }
 
 flush_redis() {
-    echo "Flushing Redis caches on ${REDIS_POD} ..."
+    echo "Flushing Redis on ${REDIS_POD} (caches + refresh tokens) ..."
     kubectl -n "$NAMESPACE" exec "$REDIS_POD" -- \
         sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning FLUSHALL'
 }
@@ -221,6 +223,7 @@ if [ "$DO_REDIS" -eq 1 ]; then
     if [ "$APPLY" -eq 1 ]; then
         flush_redis
     else
-        echo "Would run: FLUSHALL on Redis ${REDIS_POD} (add --yes to apply)."
+        echo "Would run FLUSHALL on Redis ${REDIS_POD} — this also deletes refresh"
+        echo "tokens, so every user is logged out (add --yes to apply)."
     fi
 fi

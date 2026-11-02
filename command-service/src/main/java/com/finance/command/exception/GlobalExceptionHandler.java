@@ -52,7 +52,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status)
                 .body(new ErrorResponse(
                         status == HttpStatus.NOT_FOUND ? "Not Found" : "Invalid Argument",
-                        List.of(ex.getMessage()),
+                        List.of(SensitiveDataRedactor.redact(ex.getMessage())),
                         status.value()));
     }
 
@@ -61,7 +61,8 @@ public class GlobalExceptionHandler {
         log.warn("Forbidden: {}", ex.getMessage());
         recordError(403);
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(new ErrorResponse("Forbidden", List.of(ex.getMessage()), 403));
+                .body(new ErrorResponse("Forbidden",
+                        List.of(SensitiveDataRedactor.redact(ex.getMessage())), 403));
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -69,7 +70,8 @@ public class GlobalExceptionHandler {
         log.warn("IllegalState: {}", ex.getMessage());
         recordError(400);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ErrorResponse("Invalid State", List.of(ex.getMessage()), 400));
+                .body(new ErrorResponse("Invalid State",
+                        List.of(SensitiveDataRedactor.redact(ex.getMessage())), 400));
     }
 
     @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
@@ -89,7 +91,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(ex.getStatusCode())
                 .body(new ErrorResponse(
                         ex.getReason() != null ? ex.getReason() : "Error",
-                        List.of(ex.getMessage()),
+                        List.of(SensitiveDataRedactor.redact(ex.getMessage())),
                         ex.getStatusCode().value()));
     }
 

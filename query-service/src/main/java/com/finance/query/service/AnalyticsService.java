@@ -296,7 +296,9 @@ public class AnalyticsService {
             return body;
         } catch (Exception e) {
             log.error("Failed to get AI advisor insights from OCR service", e);
-            return Map.of("error", e.getMessage());
+            // Never surface the raw exception: it can contain service URLs,
+            // request ids or other internals. Details stay in the log.
+            return Map.of("error", "AI insights are temporarily unavailable");
         }
     }
 

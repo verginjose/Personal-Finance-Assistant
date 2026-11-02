@@ -43,7 +43,7 @@ public class GlobalExceptionHandler {
         log.warn("{}: {}", status.getReasonPhrase(), message);
         return ResponseEntity.status(status).body(Map.of(
                 "error", notFound ? "Not Found" : "Bad request",
-                "message", message,
+                "message", SensitiveDataRedactor.redact(message),
                 "timestamp", LocalDateTime.now()));
     }
 
@@ -52,7 +52,7 @@ public class GlobalExceptionHandler {
         log.warn("Response status exception: {}", ex.getMessage());
         return ResponseEntity.status(ex.getStatusCode()).body(Map.of(
                 "error", ex.getReason() != null ? ex.getReason() : "Error",
-                "message", ex.getMessage(),
+                "message", SensitiveDataRedactor.redact(ex.getMessage()),
                 "timestamp", LocalDateTime.now()));
     }
 
@@ -67,8 +67,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<Map<String,Object>> handleEnumMismatch(MethodArgumentTypeMismatchException ex) {
-        String msg = String.format("Invalid value '%s' for parameter '%s'",
-                ex.getValue(), ex.getName());
+        // Don't echo the offending value — it can be an id or other user data.
+        String msg = String.format("Invalid value for parameter '%s'", ex.getName());
         return ResponseEntity.status(400)
                 .body(Map.of(
                         "error","Bad Request",

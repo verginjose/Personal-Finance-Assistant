@@ -54,7 +54,8 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
         if (ex instanceof IllegalArgumentException) {
             exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
             exchange.getResponse().getHeaders().add("Content-Type", MediaType.APPLICATION_JSON_VALUE);
-            String body = String.format("{\"error\":\"Bad Request\",\"message\":\"%s\"}", ex.getMessage().replace("\"", "'"));
+            String body = String.format("{\"error\":\"Bad Request\",\"message\":\"%s\"}",
+                    SensitiveDataRedactor.redact(ex.getMessage()).replace("\"", "'"));
             DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(body.getBytes());
             return exchange.getResponse().writeWith(Mono.just(buffer));
         }

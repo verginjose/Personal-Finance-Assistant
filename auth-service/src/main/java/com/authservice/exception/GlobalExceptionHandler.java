@@ -42,7 +42,8 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
                 || ex instanceof AuthService.UsernameAlreadyExistsException
                 || ex instanceof AuthService.InvalidCurrentPasswordException
                 || ex instanceof IllegalArgumentException) {
-            return respond(exchange, HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+            return respond(exchange, HttpStatus.BAD_REQUEST, "Bad Request",
+                    SensitiveDataRedactor.redact(ex.getMessage()));
         }
 
         log.error("auth-service error: {} {}", exchange.getRequest().getMethod(),

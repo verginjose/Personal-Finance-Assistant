@@ -63,7 +63,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: api-gateway
-          image: 127.0.0.1:30500/finance/api-gateway:ccac56dc9c1b
+          image: 127.0.0.1:30500/finance/api-gateway:c8548e3b2cd3
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

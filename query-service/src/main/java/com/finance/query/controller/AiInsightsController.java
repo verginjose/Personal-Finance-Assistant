@@ -17,10 +17,15 @@ public class AiInsightsController {
     private final AiInsightsService aiInsightsService;
 
     @GetMapping("/ai-insights")
-    public AiInsightResponse getAiInsights(@RequestHeader(value = "X-User-Id", required = false) UUID userIdHeader, @RequestParam UUID userId) {
+    public AiInsightResponse getAiInsights(
+            @RequestHeader(value = "X-User-Id", required = false) UUID userIdHeader,
+            @RequestParam UUID userId,
+            @RequestParam(defaultValue = "false") boolean refresh) {
         if (userIdHeader != null && !userIdHeader.equals(userId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User ID mismatch");
         }
-        return aiInsightsService.generateInsights(userId);
+        return refresh
+                ? aiInsightsService.regenerateInsights(userId)
+                : aiInsightsService.generateInsights(userId);
     }
 }

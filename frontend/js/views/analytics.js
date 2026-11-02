@@ -13,7 +13,7 @@ export async function renderAnalytics(container) {
 
   container.innerHTML = `
     ${pageHeader('Analytics', 'Deep insights into your finances', '<button class="btn btn-secondary" id="a-export">Export CSV</button>')}
-    <div class="card-grid card-grid-2 fade-up" style="margin-bottom:24px">
+    <div class="dashboard-top fade-up">
       ${healthPanelHtml('a')}
       ${aiPanelHtml('a')}
     </div>
@@ -114,8 +114,27 @@ async function loadAnalytics(userId) {
     .catch(err => toast('Health Score error: ' + err.message, 'error'));
 
   api.get('/analytics/ai-insights', { userId })
-    .then(ai => renderAiData('a', ai))
-    .catch(err => toast('AI Insights error: ' + err.message, 'error'));
+    .then(ai => renderAiData('a', ai, () => refreshAdvisor(userId)))
+    .catch(err => {
+      renderAiData('a', { error: err.message }, () => refreshAdvisor(userId));
+      toast('AI Insights error: ' + err.message, 'error');
+    });
+}
+
+async function refreshAdvisor(userId) {
+  const btn = document.getElementById('a-ai-refresh');
+  if (btn) btn.disabled = true;
+  try {
+    const ai = await api.get('/analytics/ai-insights', { userId, refresh: true });
+    renderAiData('a', ai, () => refreshAdvisor(userId));
+    toast('Advice refreshed', 'success');
+  } catch (err) {
+    renderAiData('a', { error: err.message }, () => refreshAdvisor(userId));
+    toast('Could not refresh advice: ' + err.message, 'error');
+  } finally {
+    const current = document.getElementById('a-ai-refresh');
+    if (current) current.disabled = false;
+  }
 }
 
 function mountChart(wrapId, canvasId, data, type) {

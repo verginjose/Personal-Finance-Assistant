@@ -4,11 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finance.query.dto.AiInsightResponse;
 import com.finance.query.dto.CategoryRow;
+import com.finance.query.model.Category;
 import com.finance.query.model.TransactionType;
 import com.finance.query.repository.TransactionEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
@@ -32,7 +35,7 @@ public class AiInsightsService {
     @Value("${groq.api.key:}")
     private String groqApiKey;
 
-    @Value("${groq.model:llama3-8b-8192}")
+    @Value("${groq.model:llama-3.1-8b-instant}")
     private String groqModel;
 
     @Value("${groq.url:https://api.groq.com/openai/v1/chat/completions}")
@@ -42,6 +45,7 @@ public class AiInsightsService {
     private final GoalForecastingService goalForecastingService;
     private final BudgetTrendService budgetTrendService;
     private final com.finance.query.repository.SavingsGoalRepository savingsGoalRepository;
+    private final CacheManager cacheManager;
 
     /** Injected from {@link com.finance.query.config.HttpClientConfig}. */
     private final HttpClient httpClient;
@@ -68,15 +72,28 @@ public class AiInsightsService {
 
         if (groqApiKey == null || groqApiKey.isBlank()) {
             log.warn("GROQ_API_KEY not configured — returning rule-based insights");
-            return buildRuleBasedInsights(income, expense);
+            return buildRuleBasedInsights(income, expense, categories, goalForecasts, budgetTrends);
         }
 
         try {
             return callGroq(prompt);
         } catch (Exception e) {
             log.error("Groq call failed, falling back to rule-based: {}", e.getMessage());
-            return buildRuleBasedInsights(income, expense);
+            return buildRuleBasedInsights(income, expense, categories, goalForecasts, budgetTrends);
         }
+    }
+
+    /**
+     * Bypasses the 24-hour cache and regenerates advice on demand (the UI's
+     * "Refresh" button). Self-invocation of {@link #generateInsights(UUID)} is
+     * deliberate: it skips the cache proxy so the user gets fresh advice.
+     */
+    public AiInsightResponse regenerateInsights(UUID userId) {
+        Cache cache = cacheManager.getCache("ai-insights");
+        if (cache != null) {
+            cache.evict(userId);
+        }
+        return generateInsights(userId);
     }
 
     // ── Prompt building ───────────────────────────────────────────────────────
@@ -120,6 +137,8 @@ public class AiInsightsService {
 
         sb.append("""
 
+Priority must be 1 (most urgent) to 5 (nice to have). Return 3-5 insights, ordered by priority.
+Each title must be short (max 6 words); each message 1-2 sentences and reference a concrete number or category.
 Return ONLY valid JSON in this format (no markdown, no explanation):
 {"insights":[{"title":"string","message":"string","type":"WARNING|TIP|ACHIEVEMENT","priority":1}],"summary":"string"}
 """);
@@ -154,13 +173,55 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
         JsonNode parsed = MAPPER.readTree(content);
 
         AiInsightResponse response = MAPPER.treeToValue(parsed, AiInsightResponse.class);
+        if (response == null || response.getInsights() == null || response.getInsights().isEmpty()) {
+            throw new RuntimeException("Groq returned no usable insights");
+        }
+        normalizeInsights(response.getInsights());
+        if (response.getSummary() == null || response.getSummary().isBlank()) {
+            response.setSummary("Here is what your recent activity suggests.");
+        }
         response.setGeneratedAt(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         return response;
+    }
+
+    /** Coerces LLM output into a stable shape and orders it by priority. */
+    static void normalizeInsights(List<AiInsightResponse.Insight> insights) {
+        Set<String> allowed = Set.of("WARNING", "TIP", "ACHIEVEMENT", "INFO");
+        insights.removeIf(Objects::isNull);
+        for (AiInsightResponse.Insight insight : insights) {
+            String type = insight.getType() == null ? "INFO" : insight.getType().trim().toUpperCase();
+            insight.setType(allowed.contains(type) ? type : "INFO");
+
+            if (insight.getTitle() == null || insight.getTitle().isBlank()) {
+                insight.setTitle("Insight");
+            }
+            if (insight.getMessage() == null) {
+                insight.setMessage("");
+            }
+            int priority = insight.getPriority();
+            if (priority < 1) priority = 3;
+            if (priority > 5) priority = 5;
+            insight.setPriority(priority);
+        }
+        insights.sort(Comparator.comparingInt(AiInsightResponse.Insight::getPriority));
     }
 
     // ── Fallback: rule-based insights ─────────────────────────────────────────
 
     AiInsightResponse buildRuleBasedInsights(BigDecimal income, BigDecimal expense) {
+        return buildRuleBasedInsights(income, expense,
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+    }
+
+    /**
+     * Deterministic advisor used when the LLM is unavailable. It mirrors the
+     * categories, budget trends and goals the LLM would see, so the UI always
+     * has specific, varied advice instead of two generic lines.
+     */
+    AiInsightResponse buildRuleBasedInsights(BigDecimal income, BigDecimal expense,
+                                             List<CategoryRow> categories,
+                                             List<GoalForecastingService.GoalForecast> goals,
+                                             List<BudgetTrendService.BudgetTrend> budgetTrends) {
         List<AiInsightResponse.Insight> insights = new ArrayList<>();
         BigDecimal net = income.subtract(expense);
 
@@ -169,7 +230,7 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
                     "Spending Exceeds Income",
                     "You've spent ₹" + expense.subtract(income).toPlainString() + " more than you earned overall. Consider reviewing your biggest expense categories.",
                     "WARNING", 1));
-        } else {
+        } else if (income.compareTo(BigDecimal.ZERO) > 0) {
             double savingsRate = net.doubleValue() / income.doubleValue() * 100;
             if (savingsRate >= 20) {
                 insights.add(new AiInsightResponse.Insight(
@@ -184,10 +245,71 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
             }
         }
 
+        // Where the money actually goes
+        if (expense.compareTo(BigDecimal.ZERO) > 0 && categories != null && !categories.isEmpty()) {
+            CategoryRow top = categories.get(0);
+            if (top.getCategory() != null && top.getTotalAmount() != null) {
+                double share = top.getTotalAmount().doubleValue() / expense.doubleValue() * 100;
+                if (share >= 25) {
+                    String category = prettyCategory(top.getCategory());
+                    insights.add(new AiInsightResponse.Insight(
+                            "Watch " + category,
+                            category + " accounts for " + String.format("%.0f", share)
+                                    + "% of your spending. Trimming it is the fastest way to free up cash.",
+                            "TIP", 2));
+                }
+            }
+        }
+
+        // Month-over-month budget movement
+        if (budgetTrends != null) {
+            int increases = 0, decreases = 0;
+            for (BudgetTrendService.BudgetTrend trend : budgetTrends) {
+                Double change = trend.getPercentageChange();
+                if (change == null) continue;
+                String category = prettyCategory(trend.getCategory());
+
+                if ("INCREASED".equalsIgnoreCase(trend.getTrend()) && change >= 20 && increases < 2) {
+                    insights.add(new AiInsightResponse.Insight(
+                            category + " Spending Jumped",
+                            category + " spending is up " + String.format("%.0f", change)
+                                    + "% versus last month. Check whether this is a one-off or a new habit.",
+                            "WARNING", 2));
+                    increases++;
+                } else if ("DECREASED".equalsIgnoreCase(trend.getTrend()) && change >= 10 && decreases < 2) {
+                    insights.add(new AiInsightResponse.Insight(
+                            category + " Spending Down",
+                            category + " spending fell " + String.format("%.0f", change)
+                                    + "% versus last month. Consider moving the difference into savings.",
+                            "ACHIEVEMENT", 3));
+                    decreases++;
+                }
+            }
+        }
+
+        // Goal momentum
+        if (goals != null && !goals.isEmpty()) {
+            boolean stalled = goals.stream().anyMatch(g -> g.getMonthlyVelocity() == null
+                    || g.getMonthlyVelocity().compareTo(BigDecimal.ZERO) <= 0);
+            if (stalled) {
+                insights.add(new AiInsightResponse.Insight(
+                        "Give Your Goals a Push",
+                        "At least one savings goal has no monthly momentum yet. Automate a small transfer each month to get it moving.",
+                        "TIP", 3));
+            } else {
+                insights.add(new AiInsightResponse.Insight(
+                        "Goals Are Moving",
+                        "Your savings goals all have positive monthly momentum. Keep the transfers consistent to stay on schedule.",
+                        "ACHIEVEMENT", 3));
+            }
+        }
+
         insights.add(new AiInsightResponse.Insight(
                 "Track Every Expense",
                 "Consistent expense tracking is the foundation of financial health. Try to log every transaction the same day.",
                 "TIP", 5));
+
+        normalizeInsights(insights);
 
         String summary = net.compareTo(BigDecimal.ZERO) >= 0
                 ? "Good job staying in the positive overall! Net balance: ₹" + net.toPlainString()
@@ -195,6 +317,21 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
 
         return new AiInsightResponse(insights, summary,
                 LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+    }
+
+    private static String prettyCategory(Category category) {
+        return category == null ? "This category" : prettyCategory(category.name());
+    }
+
+    private static String prettyCategory(String raw) {
+        if (raw == null || raw.isBlank()) return "This category";
+        StringBuilder out = new StringBuilder();
+        for (String word : raw.replace('_', ' ').toLowerCase(Locale.ENGLISH).split(" ")) {
+            if (word.isEmpty()) continue;
+            if (out.length() > 0) out.append(' ');
+            out.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        }
+        return out.length() == 0 ? "This category" : out.toString();
     }
 
     private AiInsightResponse buildDefaultResponse() {

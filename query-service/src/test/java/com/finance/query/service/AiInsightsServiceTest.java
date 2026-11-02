@@ -9,6 +9,8 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -21,6 +23,8 @@ import static org.mockito.Mockito.*;
 class AiInsightsServiceTest {
 
     @Mock TransactionEntryRepository repository;
+    @Mock CacheManager cacheManager;
+    @Mock Cache cache;
 
     @InjectMocks AiInsightsService service;
 
@@ -74,6 +78,46 @@ class AiInsightsServiceTest {
                 new BigDecimal("10000"), new BigDecimal("8000"));
 
         assertThat(res.getInsights().stream().anyMatch(i -> i.getPriority() == 5)).isTrue();
+    }
+
+    @Test
+    @DisplayName("buildRuleBasedInsights: dominant category produces a category-specific tip")
+    void buildRuleBasedInsights_dominantCategory_returnsCategoryTip() {
+        CategoryRow restaurants = mock(CategoryRow.class);
+        when(restaurants.getCategory()).thenReturn(Category.RESTAURANTS);
+        when(restaurants.getTotalAmount()).thenReturn(new BigDecimal("8000"));
+
+        AiInsightResponse res = service.buildRuleBasedInsights(
+                new BigDecimal("50000"), new BigDecimal("10000"),
+                List.of(restaurants), Collections.emptyList(), Collections.emptyList());
+
+        assertThat(res.getInsights()).anyMatch(i ->
+                i.getTitle().contains("Restaurants") && i.getMessage().contains("80%"));
+    }
+
+    @Test
+    @DisplayName("normalizeInsights: sorts by priority and defaults invalid types to INFO")
+    void normalizeInsights_sortsAndDefaults() {
+        List<AiInsightResponse.Insight> insights = new ArrayList<>(List.of(
+                new AiInsightResponse.Insight("Low", "later", "MYSTERY", 4),
+                new AiInsightResponse.Insight("High", "now", "WARNING", 1)));
+
+        AiInsightsService.normalizeInsights(insights);
+
+        assertThat(insights.get(0).getTitle()).isEqualTo("High");
+        assertThat(insights.get(0).getType()).isEqualTo("WARNING");
+        assertThat(insights.get(1).getType()).isEqualTo("INFO");
+    }
+
+    @Test
+    @DisplayName("regenerateInsights: evicts the cached advice before generating")
+    void regenerateInsights_evictsCache() {
+        when(cacheManager.getCache("ai-insights")).thenReturn(cache);
+
+        service.regenerateInsights(userId);
+
+        verify(cache).evict(userId);
+        verify(repository).getTotalAmountByType(userId, TransactionType.INCOME);
     }
 
     // ── buildPrompt ───────────────────────────────────────────────────────────

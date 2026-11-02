@@ -353,6 +353,8 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
 }
 
 .insight-card-header h3 { font-size: 1.05rem; font-weight: 700; }
+.insight-card-heading { min-width: 0; }
+.insight-card-sub { font-size: 0.76rem; color: var(--text-muted); margin: 2px 0 0; }
 .insight-card-icon {
   display: inline-flex;
   align-items: center;
@@ -361,18 +363,29 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
   border-radius: var(--radius-xs);
   background: rgba(255, 255, 255, 0.05);
   color: var(--primary-l);
+  flex-shrink: 0;
 }
 
 .insight-card-icon .icon-svg { width: 18px; height: 18px; opacity: 1; }
-.insight-item-icon { display: inline-flex; flex-shrink: 0; margin-top: 2px; color: var(--insight-color, var(--accent-b)); }
-.insight-item-icon .icon-svg { width: 16px; height: 16px; opacity: 1; }
 
-.health-panel { display: flex; align-items: center; gap: var(--space-6); flex-wrap: wrap; }
+/* Health + advisor share a wide, asymmetric top row on desktop */
+.dashboard-top {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.8fr) minmax(0, 2.2fr);
+  gap: var(--space-6);
+  align-items: stretch;
+  margin-bottom: var(--space-6);
+}
+
+.health-card { display: flex; flex-direction: column; }
+
+.health-panel { display: flex; align-items: flex-start; gap: var(--space-5); flex-wrap: wrap; }
+.health-details { flex: 1 1 200px; min-width: 0; }
 
 .health-ring {
   --ring-pct: 0;
   --ring-color: var(--accent-g);
-  width: 108px; height: 108px;
+  width: 132px; height: 132px;
   border-radius: 50%;
   background: conic-gradient(var(--ring-color) calc(var(--ring-pct) * 1%), rgba(255,255,255,0.06) 0);
   display: flex; align-items: center; justify-content: center;
@@ -381,7 +394,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
 }
 
 .health-ring-inner {
-  width: 86px; height: 86px;
+  width: 104px; height: 104px;
   border-radius: 50%;
   background: var(--bg-elevated);
   display: flex; flex-direction: column;
@@ -389,10 +402,25 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
   text-align: center;
 }
 
-.health-score { font-family: var(--font-display); font-size: 1.75rem; font-weight: 800; line-height: 1; }
-.health-grade { font-size: 0.68rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; margin-top: 2px; }
-.health-summary { font-size: 0.9rem; color: var(--text-dim); line-height: 1.55; }
-.health-breakdown { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--space-3); }
+.health-score { font-family: var(--font-display); font-size: 2rem; font-weight: 800; line-height: 1; }
+.health-score-max { font-size: 0.62rem; font-weight: 600; color: var(--text-muted); margin-top: 2px; }
+.health-grade { font-size: 0.66rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 3px; }
+.health-summary { font-size: 0.86rem; color: var(--text-dim); line-height: 1.55; }
+.health-breakdown { display: flex; flex-direction: column; gap: 10px; margin-top: var(--space-3); }
+
+.health-metric-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 0.74rem;
+  color: var(--text-dim);
+}
+.health-metric-head strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.health-metric-head strong span { color: var(--text-muted); font-weight: 500; }
+.health-metric-track { height: 6px; border-radius: 99px; background: rgba(255,255,255,0.06); overflow: hidden; }
+.health-metric-fill { height: 100%; border-radius: inherit; transition: width 0.6s ease; }
 
 .chip {
   display: inline-flex;
@@ -408,20 +436,143 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
 
 .chip strong { color: var(--text); }
 
-.ai-summary { font-size: 0.9rem; font-weight: 600; color: var(--primary-l); margin-bottom: var(--space-3); }
-.ai-insights-list { display: flex; flex-direction: column; gap: 8px; max-height: 140px; overflow-y: auto; }
-
-.insight-item {
-  display: flex; gap: 10px;
-  font-size: 0.84rem;
-  background: rgba(255, 255, 255, 0.02);
-  padding: 10px 12px;
-  border-radius: var(--radius-xs);
-  border-left: 3px solid var(--insight-color, var(--accent-b));
+/* ── AI Advisor ──────────────────────────────────────────────────────────── */
+.advisor-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5) var(--space-6);
+  background: linear-gradient(135deg, rgba(34,211,238,0.08), rgba(56,189,248,0.04));
+  border-color: rgba(34,211,238,0.18);
 }
 
-.insight-item strong { display: block; color: var(--text); margin-bottom: 2px; }
-.insight-item p { color: var(--text-dim); margin: 0; font-size: 0.82rem; }
+.advisor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: var(--space-3);
+}
+.advisor-header .insight-card-header { margin-bottom: 0; }
+
+.advisor-refresh { flex-shrink: 0; margin-left: auto; color: var(--text-dim); }
+.advisor-refresh .icon-svg { width: 14px; height: 14px; opacity: 1; }
+.advisor-refresh[disabled] { opacity: 0.55; cursor: wait; }
+
+.ai-summary {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: var(--space-4);
+}
+
+.advisor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.advisor-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.advisor-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.advisor-filter i { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.advisor-filter span { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.advisor-filter:hover { border-color: rgba(255,255,255,0.18); color: var(--text); }
+.advisor-filter.is-active {
+  background: rgba(34,211,238,0.12);
+  border-color: rgba(34,211,238,0.4);
+  color: var(--text);
+}
+.advisor-filter.is-active span { color: var(--text); }
+.advisor-count { font-size: 0.74rem; color: var(--text-muted); white-space: nowrap; }
+
+/* Every insight is visible — the grid wraps instead of scrolling */
+.advisor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  flex: 1;
+  align-content: start;
+}
+
+.advisor-insight {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 118px;
+  padding: 14px 16px 16px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, var(--insight-bg, rgba(255,255,255,0.03)), rgba(255,255,255,0.012));
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--insight-color, var(--accent-b));
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.advisor-insight:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px -14px var(--insight-color, var(--accent-b));
+}
+.advisor-insight[hidden] { display: none; }
+
+.advisor-insight-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.advisor-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--insight-color, var(--accent-b));
+}
+.advisor-badge .icon-svg { width: 14px; height: 14px; opacity: 1; }
+.advisor-priority {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: rgba(255,255,255,0.05);
+  white-space: nowrap;
+}
+.advisor-insight-title { font-size: 0.92rem; color: var(--text); line-height: 1.35; }
+.advisor-insight-message { font-size: 0.82rem; line-height: 1.55; color: var(--text-dim); margin: 0; }
+
+.advisor-notice {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.02);
+  border: 1px dashed var(--border);
+}
+.advisor-notice-icon { color: var(--accent-b); display: inline-flex; }
+.advisor-notice strong { display: block; font-size: 0.9rem; margin-bottom: 2px; }
+.advisor-notice p { margin: 0; font-size: 0.82rem; color: var(--text-dim); line-height: 1.5; }
+.advisor-notice--error { border-color: rgba(249,115,22,0.35); background: rgba(249,115,22,0.06); }
+.advisor-notice--error .advisor-notice-icon { color: var(--accent); }
+
+.advisor-skeleton { border-left-color: var(--border); background: rgba(255,255,255,0.015); }
+.advisor-skeleton-line { height: 12px; border-radius: 99px; }
+.advisor-skeleton-line--short { width: 42%; height: 10px; margin-bottom: 6px; }
+.advisor-skeleton-line + .advisor-skeleton-line { margin-top: 8px; width: 88%; }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
 .btn {
@@ -1389,6 +1540,12 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
   .goals-layout { grid-template-columns: 1fr; }
 }
 
+/* Advisor + health stop sharing a row on narrower desktops */
+@media (max-width: 1180px) {
+  .dashboard-top { grid-template-columns: 1fr; }
+  .health-panel { align-items: center; }
+}
+
 /* Tablet breakpoint */
 @media (max-width: 1024px) {
   .main-content {
@@ -1422,7 +1579,17 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
   .form-row { grid-template-columns: 1fr; gap: 16px; }
   .page-header h1 { font-size: 1.6rem; }
   .card-grid-2 { grid-template-columns: 1fr; }
-  
+
+  /* Advisor / health on small screens */
+  .advisor-header { flex-wrap: wrap; }
+  .advisor-grid { grid-template-columns: 1fr; }
+  .advisor-insight { min-height: 0; }
+  .health-panel { gap: var(--space-4); }
+  .health-ring { width: 112px; height: 112px; }
+  .health-ring-inner { width: 88px; height: 88px; }
+  .health-score { font-size: 1.7rem; }
+  .health-details { flex-basis: 100%; }
+
   /* Larger touch targets for buttons */
   .btn {
     min-height: 48px;

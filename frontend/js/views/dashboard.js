@@ -14,7 +14,7 @@ export async function renderDashboard(container) {
   container.innerHTML = `
     ${pageHeader('Dashboard', 'Your financial overview at a glance')}
     <div id="d-alerts" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;"></div>
-    <div class="card-grid card-grid-2 fade-up" style="margin-bottom:24px">
+    <div class="dashboard-top fade-up">
       ${healthPanelHtml('d')}
       ${aiPanelHtml('d')}
     </div>
@@ -122,20 +122,8 @@ export async function renderDashboard(container) {
     }
 
     renderHealthData('d', health);
-    
-    let formattedAi = null;
-    if (ai && !ai.error) {
-      formattedAi = {
-        summary: "Here is your personalized financial advice based on the last 30 days of transactions:",
-        insights: ai.insights || []
-      };
-    } else if (ai && ai.error) {
-      formattedAi = {
-        summary: "Failed to load AI insights.",
-        insights: [{ type: 'WARNING', title: 'Error', message: ai.error }]
-      };
-    }
-    renderAiData('d', formattedAi);
+
+    renderAiData('d', ai && ai.error ? { error: ai.error } : ai, refreshAdvisor);
 
     const pieWrap = document.getElementById('d-pie-wrap');
     if (!pieWrap) return;
@@ -178,5 +166,21 @@ export async function renderDashboard(container) {
     }
   } catch (err) {
     toast('Failed to load dashboard: ' + err.message, 'error');
+  }
+}
+
+async function refreshAdvisor() {
+  const btn = document.getElementById('d-ai-refresh');
+  if (btn) btn.disabled = true;
+  try {
+    const ai = await api.get('/analytics/ai-insights', { userId: Auth.getUserId(), refresh: true });
+    renderAiData('d', ai, refreshAdvisor);
+    toast('Advice refreshed', 'success');
+  } catch (err) {
+    renderAiData('d', { error: err.message }, refreshAdvisor);
+    toast('Could not refresh advice: ' + err.message, 'error');
+  } finally {
+    const current = document.getElementById('d-ai-refresh');
+    if (current) current.disabled = false;
   }
 }

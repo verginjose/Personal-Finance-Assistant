@@ -154,17 +154,37 @@ export function insightColor(type) {
   return 'var(--accent-b)';
 }
 
+/* ── Financial Health panel ──────────────────────────────────────────────── */
+
+const HEALTH_DIMENSION_MAX = {
+  'Savings Rate': 300,
+  'Diversification': 200,
+  'Consistency': 200,
+  'Income vs Expense': 200,
+  'Tracking Habit': 100,
+};
+
+function dimensionColor(pct) {
+  if (pct >= 0.7) return 'var(--accent-g)';
+  if (pct >= 0.4) return 'var(--accent-y)';
+  return 'var(--accent)';
+}
+
 export function healthPanelHtml(prefix) {
   return `
-    <div class="card insight-card insight-card--health fade-up">
+    <div class="card insight-card insight-card--health health-card fade-up">
       <div class="insight-card-header">
         <span class="insight-card-icon">${icon('shield')}</span>
-        <h3>Financial Health Score</h3>
+        <div class="insight-card-heading">
+          <h3>Financial Health</h3>
+          <p class="insight-card-sub">Your score out of 1,000</p>
+        </div>
       </div>
       <div class="health-panel">
         <div class="health-ring" id="${prefix}-health-ring">
           <div class="health-ring-inner">
             <span class="health-score" id="${prefix}-health-score">—</span>
+            <span class="health-score-max">out of 1000</span>
             <span class="health-grade" id="${prefix}-health-grade">Grade —</span>
           </div>
         </div>
@@ -176,25 +196,13 @@ export function healthPanelHtml(prefix) {
     </div>`;
 }
 
-export function aiPanelHtml(prefix) {
-  return `
-    <div class="card insight-card insight-card--ai fade-up">
-      <div class="insight-card-header">
-        <span class="insight-card-icon">${icon('sparkles')}</span>
-        <h3>AI Financial Advisor</h3>
-      </div>
-      <p id="${prefix}-ai-summary" class="ai-summary">Analyzing your transactions…</p>
-      <div id="${prefix}-ai-insights-list" class="ai-insights-list"></div>
-    </div>`;
-}
-
 export function renderHealthData(prefix, health) {
   if (!health) return;
   const elScore = document.getElementById(`${prefix}-health-score`);
   const elRing = document.getElementById(`${prefix}-health-ring`);
-  
+
   const isNew = health.grade === 'N/A';
-  
+
   if (elScore) {
     elScore.textContent = isNew ? '—' : health.totalScore;
     elScore.style.color = isNew ? 'var(--text-muted)' : healthScoreColor(health.totalScore);
@@ -210,26 +218,217 @@ export function renderHealthData(prefix, health) {
   if (elSummary) elSummary.textContent = health.summary;
   const elBreakdown = document.getElementById(`${prefix}-health-breakdown`);
   if (elBreakdown && health.breakdown) {
-    elBreakdown.innerHTML = Object.entries(health.breakdown).map(([k, v]) =>
-      `<span class="chip">${esc(k)}: <strong>${esc(String(v))}</strong></span>`
-    ).join('');
+    elBreakdown.innerHTML = Object.entries(health.breakdown).map(([key, raw]) => {
+      const value = Number(raw) || 0;
+      const max = HEALTH_DIMENSION_MAX[key] || 100;
+      const pct = max > 0 ? Math.min(Math.max(value / max, 0), 1) : 0;
+      const color = dimensionColor(pct);
+      return `
+        <div class="health-metric">
+          <div class="health-metric-head">
+            <span>${esc(key)}</span>
+            <strong>${esc(String(value))}<span> / ${max}</span></strong>
+          </div>
+          <div class="health-metric-track" role="progressbar" aria-valuenow="${value}" aria-valuemin="0" aria-valuemax="${max}" aria-label="${esc(key)}">
+            <div class="health-metric-fill" style="width:${(pct * 100).toFixed(0)}%;background:${color}"></div>
+          </div>
+        </div>`;
+    }).join('');
   }
 }
 
-export function renderAiData(prefix, ai) {
-  if (!ai) return;
-  const elSummary = document.getElementById(`${prefix}-ai-summary`);
-  if (elSummary) elSummary.textContent = ai.summary;
-  const elList = document.getElementById(`${prefix}-ai-insights-list`);
-  if (!elList || !ai.insights) return;
-  elList.innerHTML = ai.insights.map(ins => `
-    <div class="insight-item" style="--insight-color:${insightColor(ins.type)}">
-      <span class="insight-item-icon">${insightIcon(ins.type)}</span>
-      <div>
-        <strong>${esc(ins.title)}</strong>
-        <p>${esc(ins.message)}</p>
+/* ── AI Advisor panel ────────────────────────────────────────────────────── */
+
+const AI_TYPE_CONFIG = {
+  WARNING:     { label: 'Attention',       icon: 'warning',  color: 'var(--accent)',   bg: 'rgba(249, 115, 22, 0.09)' },
+  ACHIEVEMENT: { label: 'Win',             icon: 'award',    color: 'var(--accent-g)', bg: 'rgba(34, 201, 147, 0.09)' },
+  TIP:         { label: 'Suggestion',      icon: 'sparkles', color: 'var(--accent-b)', bg: 'rgba(56, 189, 248, 0.09)' },
+  INFO:        { label: 'Insight',         icon: 'info',     color: 'var(--accent-b)', bg: 'rgba(56, 189, 248, 0.09)' },
+};
+
+function aiTypeConfig(type) {
+  return AI_TYPE_CONFIG[(type || 'INFO').toUpperCase()] || AI_TYPE_CONFIG.INFO;
+}
+
+function normalizeInsight(ins) {
+  if (!ins || (!ins.title && !ins.message)) return null;
+  const type = (ins.type || 'INFO').toUpperCase();
+  let priority = Number(ins.priority);
+  if (!Number.isFinite(priority) || priority < 1) priority = 3;
+  if (priority > 5) priority = 5;
+  return {
+    title: ins.title || 'Insight',
+    message: ins.message || '',
+    type: AI_TYPE_CONFIG[type] ? type : 'INFO',
+    priority,
+  };
+}
+
+function relativeTime(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const minutes = Math.round((Date.now() - date.getTime()) / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1440) return `${Math.round(minutes / 60)} hr ago`;
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+function aiInsightHtml(ins) {
+  const cfg = aiTypeConfig(ins.type);
+  return `
+    <article class="advisor-insight" data-type="${ins.type}" data-priority="${ins.priority}"
+             style="--insight-color:${cfg.color};--insight-bg:${cfg.bg}">
+      <div class="advisor-insight-head">
+        <span class="advisor-badge">${icon(cfg.icon, 'xs')}${cfg.label}</span>
+        ${ins.priority <= 2 ? '<span class="advisor-priority">High priority</span>' : ''}
       </div>
+      <strong class="advisor-insight-title">${esc(ins.title)}</strong>
+      <p class="advisor-insight-message">${esc(ins.message)}</p>
+    </article>`;
+}
+
+function aiNoticeHtml(iconName, title, message, tone = '') {
+  return `
+    <div class="advisor-notice ${tone}">
+      <span class="advisor-notice-icon">${icon(iconName)}</span>
+      <div>
+        <strong>${esc(title)}</strong>
+        <p>${esc(message)}</p>
+      </div>
+    </div>`;
+}
+
+function wireAiFilters({ insights, filtersEl, toolbarEl, countEl, listEl }) {
+  if (!filtersEl || !toolbarEl) return;
+  const counts = {};
+  insights.forEach(i => { counts[i.type] = (counts[i.type] || 0) + 1; });
+  const present = ['WARNING', 'TIP', 'ACHIEVEMENT', 'INFO'].filter(t => counts[t]);
+
+  const setCount = (n) => {
+    if (countEl) countEl.textContent = `${n} insight${n === 1 ? '' : 's'}`;
+  };
+
+  if (present.length < 2) {
+    toolbarEl.hidden = true;
+    setCount(insights.length);
+    return;
+  }
+
+  const labelFor = (t) => t === 'ACHIEVEMENT' ? 'Wins' : t === 'WARNING' ? 'Warnings' : t === 'TIP' ? 'Suggestions' : 'Insights';
+  filtersEl.innerHTML = [
+    `<button type="button" class="advisor-filter is-active" data-type="ALL">All <span>${insights.length}</span></button>`,
+    ...present.map(t => `
+      <button type="button" class="advisor-filter" data-type="${t}">
+        <i style="background:${aiTypeConfig(t).color}"></i>${labelFor(t)} <span>${counts[t]}</span>
+      </button>`),
+  ].join('');
+
+  toolbarEl.hidden = false;
+  setCount(insights.length);
+
+  filtersEl.querySelectorAll('.advisor-filter').forEach(btn => {
+    btn.onclick = () => {
+      filtersEl.querySelectorAll('.advisor-filter').forEach(b => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      const type = btn.dataset.type;
+      let visible = 0;
+      listEl.querySelectorAll('.advisor-insight').forEach(card => {
+        const show = type === 'ALL' || card.dataset.type === type;
+        card.hidden = !show;
+        if (show) visible += 1;
+      });
+      setCount(visible);
+    };
+  });
+}
+
+export function aiPanelHtml(prefix) {
+  const skeleton = Array.from({ length: 4 }, () => `
+    <div class="advisor-insight advisor-skeleton" aria-hidden="true">
+      <div class="skeleton advisor-skeleton-line advisor-skeleton-line--short"></div>
+      <div class="skeleton advisor-skeleton-line"></div>
+      <div class="skeleton advisor-skeleton-line"></div>
     </div>`).join('');
+  return `
+    <div class="card advisor-card fade-up">
+      <div class="advisor-header">
+        <div class="insight-card-header">
+          <span class="insight-card-icon">${icon('sparkles')}</span>
+          <div class="insight-card-heading">
+            <h3>AI Financial Advisor</h3>
+            <p class="insight-card-sub" id="${prefix}-ai-meta">Analyzing your recent activity…</p>
+          </div>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm advisor-refresh" id="${prefix}-ai-refresh">
+          ${icon('refresh', 'xs')}<span>Refresh</span>
+        </button>
+      </div>
+      <p id="${prefix}-ai-summary" class="ai-summary">Analyzing your transactions…</p>
+      <div class="advisor-toolbar" id="${prefix}-ai-toolbar" hidden>
+        <div class="advisor-filters" id="${prefix}-ai-filters" role="group" aria-label="Filter advice"></div>
+        <span class="advisor-count" id="${prefix}-ai-count"></span>
+      </div>
+      <div id="${prefix}-ai-insights-list" class="advisor-grid" aria-live="polite" aria-busy="true">
+        ${skeleton}
+      </div>
+    </div>`;
+}
+
+/**
+ * Renders AI insights into an advisor panel created by {@link aiPanelHtml}.
+ * @param {string} prefix
+ * @param {{summary?:string, insights?:Array, generatedAt?:string, error?:string}|null} ai
+ * @param {Function} [onRefresh] clicked refresh handler
+ */
+export function renderAiData(prefix, ai, onRefresh) {
+  const elSummary = document.getElementById(`${prefix}-ai-summary`);
+  const elMeta = document.getElementById(`${prefix}-ai-meta`);
+  const elList = document.getElementById(`${prefix}-ai-insights-list`);
+  const elToolbar = document.getElementById(`${prefix}-ai-toolbar`);
+  const elFilters = document.getElementById(`${prefix}-ai-filters`);
+  const elCount = document.getElementById(`${prefix}-ai-count`);
+  const elRefresh = document.getElementById(`${prefix}-ai-refresh`);
+
+  if (elRefresh && typeof onRefresh === 'function') elRefresh.onclick = () => onRefresh();
+  if (!elList) return;
+  elList.setAttribute('aria-busy', 'false');
+
+  if (!ai) {
+    if (elSummary) elSummary.textContent = 'Advice is unavailable right now.';
+    if (elToolbar) elToolbar.hidden = true;
+    elList.innerHTML = aiNoticeHtml('info', 'No advice available', 'Try refreshing in a moment.');
+    return;
+  }
+
+  if (ai.error) {
+    if (elSummary) elSummary.textContent = 'The advisor could not load your insights.';
+    if (elMeta) elMeta.textContent = 'Something went wrong';
+    if (elToolbar) elToolbar.hidden = true;
+    elList.innerHTML = aiNoticeHtml('alert-triangle', 'Could not load advice', ai.error, 'advisor-notice--error');
+    return;
+  }
+
+  const insights = (ai.insights || [])
+    .map(normalizeInsight)
+    .filter(Boolean)
+    .sort((a, b) => a.priority - b.priority);
+
+  if (elSummary) elSummary.textContent = ai.summary || 'Here is what your recent activity suggests.';
+  if (elMeta) {
+    const when = ai.generatedAt ? relativeTime(ai.generatedAt) : '';
+    elMeta.textContent = when ? `Updated ${when}` : 'Personalized from your recent activity';
+  }
+
+  if (!insights.length) {
+    if (elToolbar) elToolbar.hidden = true;
+    elList.innerHTML = aiNoticeHtml('check-circle', 'All clear',
+      'No concerns found in your recent activity. Add more transactions for deeper advice.');
+    return;
+  }
+
+  elList.innerHTML = insights.map(aiInsightHtml).join('');
+  wireAiFilters({ insights, filtersEl: elFilters, toolbarEl: elToolbar, countEl: elCount, listEl: elList });
 }
 
 export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', size = '' } = {}) {

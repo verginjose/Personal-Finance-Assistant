@@ -29,8 +29,10 @@ import java.util.stream.Collectors;
  *  - command-service  →  finance:upsert:v1:<cacheName>:<key>
  *  - query-service    →  finance:analytics:v1:<cacheName>:<key>
  *
- * Invalidation is: delete now (wave 1) + bump {@code finance:gen:<scope>} and
- * publish the write's WAL position in {@code finance:wal:<scope>} after commit.
+ * Invalidation is: delete + bump {@code finance:gen:<scope>} and publish the
+ * write's WAL position in {@code finance:wal:<scope>}, both after commit. A
+ * group eviction never trusts the registry Set alone: the deterministic
+ * balance key is always deleted, and an empty Set triggers a SCAN fallback.
  * The old fixed 800 ms "wait for the replica" second delete is gone — the
  * reader checks the token instead of guessing a window.
  */

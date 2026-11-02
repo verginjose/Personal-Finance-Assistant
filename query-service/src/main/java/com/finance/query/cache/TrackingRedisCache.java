@@ -17,8 +17,10 @@ import java.util.regex.Pattern;
 
 /**
  * Wraps Spring's RedisCache to intercept cache writes.
- * Every time a cache entry is written, the key is registered in CacheKeyRegistry
- * so it can be bulk-deleted at eviction time without SCAN.
+ * Every time a cache entry is written — or served from a hit — the key is
+ * registered in CacheKeyRegistry so it can be bulk-deleted at eviction time
+ * without SCAN. Registering on hits makes the tracking self-healing: a key
+ * that survived an eviction is visible to the next one.
  *
  * All other operations (get, evict, clear) delegate straight to the underlying RedisCache.
  */

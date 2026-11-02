@@ -240,7 +240,10 @@ resilience4j:
         max-concurrent-calls: 200
         max-wait-duration: 0ms
       auth-cb:
-        max-concurrent-calls: 200
+        # The refresh-race probe fires 4 concurrent refreshes per user, so 100
+        # users can present ~400 auth calls at once. auth-service's R2DBC (50)
+        # and Lettuce (50) pools are sized for it.
+        max-concurrent-calls: 400
         max-wait-duration: 0ms
       ocr-cb:
         max-concurrent-calls: 50

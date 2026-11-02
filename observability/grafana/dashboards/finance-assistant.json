@@ -667,7 +667,7 @@
       },
       "targets": [
         {
-          "expr": "spring_cloud_gateway_requests_seconds_max{job=\"api-gateway\",routeId!=\"command-service-sse\"} * 1000",
+          "expr": "max by (routeId) (spring_cloud_gateway_requests_seconds_max{job=\"api-gateway\",routeId!=\"command-service-sse\"}) * 1000",
           "refId": "A",
           "legendFormat": "{{routeId}} max",
           "instant": false,

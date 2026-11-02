@@ -24,18 +24,19 @@ REDIS_POD=${REDIS_POD:-redis-0}
 
 MODE=""
 DO_REDIS=0
+REDIS_ONLY=0
 APPLY=0
 ALLOW_ALL=0
 
 usage() {
-    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 for arg in "$@"; do
     case "$arg" in
         --scenario)   MODE=scenario ;;
         --all)        MODE=all ;;
-        --redis-only) MODE=redis ;;
+        --redis-only) DO_REDIS=1; REDIS_ONLY=1 ;;
         --redis)      DO_REDIS=1 ;;
         --yes|-y)     APPLY=1 ;;
         --i-mean-all) ALLOW_ALL=1 ;;
@@ -44,7 +45,11 @@ for arg in "$@"; do
         *) echo "unknown argument: $arg" >&2; usage >&2; exit 2 ;;
     esac
 done
-MODE=${MODE:-scenario}
+if [ "$REDIS_ONLY" -eq 0 ]; then
+    MODE=${MODE:-scenario}
+else
+    MODE=${MODE:-redis}
+fi
 
 psql_exec() {
     # $1 = SQL. Runs inside the primary pod with the pod's own DB_USER/DB_NAME,
@@ -180,10 +185,6 @@ flush_redis() {
     kubectl -n "$NAMESPACE" exec "$REDIS_POD" -- \
         sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning FLUSHALL'
 }
-
-if [ "$MODE" = "redis" ]; then
-    DO_REDIS=1
-fi
 
 if [ "$MODE" != "redis" ]; then
     if [ "$MODE" = "all" ]; then

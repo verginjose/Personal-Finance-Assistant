@@ -295,7 +295,9 @@ The **Data — Postgres & Redis** dashboard needs two datasources that the
 Argo-managed Grafana Deployment provides but that are not stored in git:
 
 - **Postgres** (`postgres-ds`) — built-in datasource pointing at
-  `postgres-replica:5432`. Read-only use: every panel is a `SELECT`.
+  `postgres-primary:5432`. It must be the primary: statistics are not
+  replicated, so row counts and scan figures on the replica are all zero.
+  Read-only use: every panel is a `SELECT`.
 - **Redis** (`redis-ds`) — the `redis-datasource` plugin, installed through
   `GF_INSTALL_PLUGINS` and pointed at `redis:6379`.
 

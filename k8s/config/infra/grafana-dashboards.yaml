@@ -72,6 +72,7 @@ data:
                 "type": "postgres",
                 "uid": "postgres-ds"
               },
+              "editorMode": "code",
               "format": "table",
               "rawQuery": true,
               "rawSql": "SELECT pg_database_size(current_database()) AS value"
@@ -133,6 +134,7 @@ data:
                 "type": "postgres",
                 "uid": "postgres-ds"
               },
+              "editorMode": "code",
               "format": "table",
               "rawQuery": true,
               "rawSql": "SELECT count(*) || ' / ' || current_setting('max_connections') AS value FROM pg_stat_activity"
@@ -193,6 +195,7 @@ data:
                 "type": "postgres",
                 "uid": "postgres-ds"
               },
+              "editorMode": "code",
               "format": "table",
               "rawQuery": true,
               "rawSql": "SELECT COALESCE(round(100.0 * blks_hit / NULLIF(blks_hit + blks_read, 0), 1), 100) AS value FROM pg_stat_database WHERE datname = current_database()"
@@ -263,6 +266,7 @@ data:
                 "type": "postgres",
                 "uid": "postgres-ds"
               },
+              "editorMode": "code",
               "format": "table",
               "rawQuery": true,
               "rawSql": "SELECT COALESCE(round(extract(epoch FROM now() - pg_last_xact_replay_timestamp())), 0) AS value"
@@ -333,6 +337,7 @@ data:
                 "type": "postgres",
                 "uid": "postgres-ds"
               },
+              "editorMode": "code",
               "format": "table",
               "rawQuery": true,
               "rawSql": "SELECT extract(epoch FROM now() - pg_postmaster_start_time()) AS value"
@@ -395,6 +400,7 @@ data:
                 "type": "postgres",
                 "uid": "postgres-ds"
               },
+              "editorMode": "code",
               "format": "table",
               "rawQuery": true,
               "rawSql": "SELECT deadlocks AS value FROM pg_stat_database WHERE datname = current_database()"
@@ -478,6 +484,7 @@ data:
                 "type": "postgres",
                 "uid": "postgres-ds"
               },
+              "editorMode": "code",
               "format": "table",
               "rawQuery": true,
               "rawSql": "SELECT schemaname AS \"Schema\",\n       relname AS \"Table\",\n       n_live_tup AS \"Rows\",\n       n_dead_tup AS \"Dead\",\n       pg_total_relation_size(relid) AS \"Size\",\n       pg_indexes_size(relid) AS \"Indexes\",\n       seq_scan AS \"Seq scans\",\n       idx_scan AS \"Idx scans\",\n       to_char(last_vacuum, 'MM-DD HH24:MI') AS \"Last vacuum\"\nFROM pg_stat_user_tables\nORDER BY pg_total_relation_size(relid) DESC"
@@ -652,6 +659,7 @@ data:
                 "type": "postgres",
                 "uid": "postgres-ds"
               },
+              "editorMode": "code",
               "format": "table",
               "rawQuery": true,
               "rawSql": "SELECT status AS \"Status\",\n       count(*) AS \"Events\",\n       to_char(min(created_at), 'MM-DD HH24:MI') AS \"Oldest\",\n       to_char(max(created_at), 'MM-DD HH24:MI') AS \"Newest\"\nFROM finance.outbox_events\nGROUP BY status\nORDER BY count(*) DESC"
@@ -736,6 +744,7 @@ data:
                 "type": "postgres",
                 "uid": "postgres-ds"
               },
+              "editorMode": "code",
               "format": "table",
               "rawQuery": true,
               "rawSql": "SELECT pid AS \"PID\",\n       usename AS \"User\",\n       state AS \"State\",\n       wait_event_type AS \"Wait type\",\n       wait_event AS \"Wait\",\n       round(extract(epoch FROM now() - state_change)) AS \"Seconds\",\n       left(query, 90) AS \"Query\"\nFROM pg_stat_activity\nWHERE pid <> pg_backend_pid() AND state <> 'idle'\nORDER BY \"Seconds\" DESC NULLS LAST\nLIMIT 25"
@@ -833,6 +842,7 @@ data:
                 "type": "postgres",
                 "uid": "postgres-ds"
               },
+              "editorMode": "code",
               "format": "table",
               "rawQuery": true,
               "rawSql": "SELECT schemaname AS \"Schema\",\n       relname AS \"Table\",\n       indexrelname AS \"Index\",\n       idx_scan AS \"Scans\",\n       pg_relation_size(indexrelid) AS \"Size\"\nFROM pg_stat_user_indexes\nWHERE idx_scan = 0\nORDER BY pg_relation_size(indexrelid) DESC\nLIMIT 20"
@@ -913,6 +923,7 @@ data:
                 "type": "postgres",
                 "uid": "postgres-ds"
               },
+              "editorMode": "code",
               "format": "table",
               "rawQuery": true,
               "rawSql": "SELECT name AS \"Setting\", setting AS \"Value\", unit AS \"Unit\", short_desc AS \"Description\"\nFROM pg_settings\nWHERE name IN (\n    'server_version', 'max_connections', 'shared_buffers', 'work_mem',\n    'maintenance_work_mem', 'effective_cache_size', 'max_wal_size',\n    'min_wal_size', 'wal_level', 'max_wal_senders', 'max_replication_slots',\n    'autovacuum', 'autovacuum_naptime', 'checkpoint_completion_target',\n    'random_page_cost'\n)\nORDER BY name"

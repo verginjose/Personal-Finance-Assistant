@@ -1,8 +1,10 @@
 apiVersion: 1
 
 # Read-only Postgres datasource used by the "Data — Postgres & Redis"
-# dashboard. It points at the replica on purpose: every panel in that
-# dashboard is a SELECT, and reads should not compete with writes.
+# dashboard. It points at the PRIMARY on purpose: PostgreSQL's statistics
+# collector is per-instance and is not replicated, so on the standby
+# pg_stat_user_tables.n_live_tup is 0 and cache/scan figures are meaningless.
+# Every panel is a SELECT on lightweight catalog/statistics views.
 #
 # Credentials come from the Grafana Deployment's environment, which is fed
 # from the postgres-secrets Secret (see k8s/infrastructure/grafana.yaml).
@@ -14,7 +16,7 @@ datasources:
     uid: postgres-ds
     access: proxy
     editable: true
-    url: postgres-replica:5432
+    url: postgres-primary:5432
     database: $__env{POSTGRES_DS_DB}
     user: $__env{POSTGRES_DS_USER}
     jsonData:
@@ -22,7 +24,7 @@ datasources:
       maxOpenConns: 4
       maxIdleConns: 2
       connMaxLifetime: 14400
-      postgresVersion: 1600
+      postgresVersion: 1500
       timescaledb: false
     secureJsonData:
       password: $__env{POSTGRES_DS_PASSWORD}

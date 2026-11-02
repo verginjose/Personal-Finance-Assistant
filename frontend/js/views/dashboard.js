@@ -31,13 +31,29 @@ export async function renderDashboard(container) {
       </div>
     </div>`;
 
+  // AI insights call the LLM and can take seconds. Start that request now but
+  // never await it with the rest of the page: the advisor panel already shows
+  // its skeleton, and KPIs/charts must paint as soon as their own data lands.
+  api.get('/analytics/ai-insights', { userId })
+    .then((ai) => {
+      if (document.getElementById('d-ai-insights-list')) renderAiData('d', ai, refreshAdvisor);
+    })
+    .catch((e) => {
+      if (document.getElementById('d-ai-insights-list')) {
+        renderAiData('d', { error: e.message }, refreshAdvisor);
+      }
+    });
+
+  // Wire refresh immediately so it works while the first request is in flight.
+  const aiRefresh = document.getElementById('d-ai-refresh');
+  if (aiRefresh) aiRefresh.onclick = () => refreshAdvisor();
+
   try {
-    const [summary, pie, timeline, health, ai, budgets, goals] = await Promise.all([
+    const [summary, pie, timeline, health, budgets, goals] = await Promise.all([
       api.get('/upsert/summary', { userId }),
       api.get('/analytics/category-pie-chart', { userId, transactionFilter: 'EXPENSE' }),
       api.get('/analytics/timeline-chart', { userId, timelineType: 'MONTHLY' }),
       api.get('/analytics/health-score', { userId }).catch(() => null),
-      api.get('/analytics/ai-insights', { userId }).catch((e) => ({ error: e.message })),
       api.get('/upsert/budgets', { userId }).catch(() => []),
       api.get('/upsert/goals', { userId }).catch(() => [])
     ]);
@@ -122,8 +138,6 @@ export async function renderDashboard(container) {
     }
 
     renderHealthData('d', health);
-
-    renderAiData('d', ai && ai.error ? { error: ai.error } : ai, refreshAdvisor);
 
     const pieWrap = document.getElementById('d-pie-wrap');
     if (!pieWrap) return;

@@ -2,20 +2,39 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderDashboard } from '../../js/views/dashboard.js';
 import { Auth } from '../../js/utils/api.js';
 
-function mockFetchJson(data) {
-  global.fetch.mockResolvedValueOnce({
+function jsonResponse(data) {
+  return {
     status: 200,
     ok: true,
     text: async () => JSON.stringify(data),
-  });
+  };
 }
 
-function mockDashboardApis() {
-  mockFetchJson({ totalIncome: 50000, totalExpense: 30000, netBalance: 20000, totalCount: 12 });
-  mockFetchJson({ labels: ['Food'], datasets: [{ data: [100] }] });
-  mockFetchJson({ labels: ['Jan'], datasets: [{ label: 'Income', data: [1000] }] });
-  mockFetchJson({ totalScore: 720, grade: 'A', summary: 'Solid', breakdown: { savings: 80 } });
-  mockFetchJson({ summary: 'All good', insights: [{ title: 'Tip', message: 'Save more', type: 'INFO' }] });
+function mockDashboardApis({ aiDelay = 0 } = {}) {
+  global.fetch.mockImplementation((url) => {
+    const u = String(url);
+    if (u.includes('/analytics/ai-insights')) {
+      const data = { summary: 'All good', insights: [{ title: 'Tip', message: 'Save more', type: 'INFO' }] };
+      if (aiDelay) {
+        return new Promise((resolve) => setTimeout(() => resolve(jsonResponse(data)), aiDelay));
+      }
+      return Promise.resolve(jsonResponse(data));
+    }
+    if (u.includes('/analytics/category-pie-chart')) {
+      return Promise.resolve(jsonResponse({ labels: ['Food'], datasets: [{ data: [100] }] }));
+    }
+    if (u.includes('/analytics/timeline-chart')) {
+      return Promise.resolve(jsonResponse({ labels: ['Jan'], datasets: [{ label: 'Income', data: [1000] }] }));
+    }
+    if (u.includes('/analytics/health-score')) {
+      return Promise.resolve(jsonResponse({ totalScore: 720, grade: 'A', summary: 'Solid', breakdown: { savings: 80 } }));
+    }
+    if (u.includes('/upsert/summary')) {
+      return Promise.resolve(jsonResponse({ totalIncome: 50000, totalExpense: 30000, netBalance: 20000, totalCount: 12 }));
+    }
+    // budgets, goals and anything else
+    return Promise.resolve(jsonResponse([]));
+  });
 }
 
 describe('renderDashboard', () => {
@@ -47,5 +66,21 @@ describe('renderDashboard', () => {
     });
     expect(container.querySelector('#d-health-score')?.textContent).toBe('720');
     expect(container.querySelector('#d-health-grade')?.textContent).toBe('Grade A');
+  });
+
+  it('does not hold the page for slow AI insights', async () => {
+    mockDashboardApis({ aiDelay: 250 });
+    await renderDashboard(container);
+
+    // The dashboard has already resolved while the AI request is still in
+    // flight, so every other panel must be painted.
+    expect(container.querySelector('.stat-card.income .stat-value')?.textContent).toContain('50,000');
+    expect(container.querySelector('#d-health-score')?.textContent).toBe('720');
+    expect(container.querySelector('#d-ai-summary')?.textContent).toContain('Analyzing');
+    expect(container.querySelectorAll('#d-ai-insights-list .advisor-skeleton').length).toBeGreaterThan(0);
+
+    await vi.waitFor(() => {
+      expect(container.querySelector('#d-ai-insights-list')?.textContent).toContain('Save more');
+    });
   });
 });

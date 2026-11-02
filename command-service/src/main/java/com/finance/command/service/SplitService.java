@@ -602,25 +602,56 @@ public class SplitService {
 
         return switch (expense.getSplitType()) {
             case EQUAL -> generateEqualSplits(expense, members);
-            case PERCENTAGE -> generatePercentageSplits(expense, req, members);
-            case EXACT, SETTLEMENT -> generateExactSplits(expense, req, members);
+            case PERCENTAGE -> {
+                requirePercentageTotal(req, members);
+                yield generatePercentageSplits(expense, req, members);
+            }
+            case EXACT, SETTLEMENT -> {
+                requireExactTotal(req, members, expense.getAmount());
+                yield generateExactSplits(expense, req, members);
+            }
         };
     }
 
     private List<ExpenseSplit> generateEqualSplits(SharedExpense expense, List<GroupMember> members) {
-        BigDecimal each = expense.getAmount()
-                .divide(BigDecimal.valueOf(members.size()), 2, RoundingMode.HALF_UP);
-        List<ExpenseSplit> splits = members.stream().map(m -> {
+        List<BigDecimal> shares = splitEqually(expense.getAmount(), members.size());
+        List<ExpenseSplit> splits = new ArrayList<>(members.size());
+        for (int i = 0; i < members.size(); i++) {
+            GroupMember m = members.get(i);
             ExpenseSplit s = new ExpenseSplit();
             s.setSharedExpense(expense);
             s.setUserId(m.getUserId());
             s.setUserName(m.getName());
-            s.setAmount(each);
+            s.setAmount(shares.get(i));
             s.setSettled(m.getUserId().equals(expense.getPaidBy()));
-            return s;
-        }).collect(Collectors.toList());
+            splits.add(s);
+        }
         return splitRepo.saveAll(splits);
     }
+
+    /**
+     * Divide {@code amount} into {@code count} shares that sum to exactly
+     * {@code amount}. A naive {@code amount / count} rounded per member loses
+     * or invents a paisa whenever the amount doesn't divide evenly (e.g.
+     * ₹100 / 3), which leaves the group's net balances not summing to zero and
+     * a settlement suggestion that can never be cleared. The leftover cents go
+     * one at a time to the first shares.
+     */
+    static List<BigDecimal> splitEqually(BigDecimal amount, int count) {
+        if (count <= 0) {
+            return List.of();
+        }
+        long totalCents = amount.setScale(2, RoundingMode.HALF_UP)
+                .movePointRight(2).longValueExact();
+        long base = totalCents / count;
+        long remainder = totalCents % count;
+        List<BigDecimal> shares = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            shares.add(BigDecimal.valueOf(base + (i < remainder ? 1 : 0), 2));
+        }
+        return shares;
+    }
+
     private List<ExpenseSplit> generatePercentageSplits(SharedExpense expense,
                                                         CreateSharedExpenseRequest req,
                                                         List<GroupMember> members) {
@@ -630,19 +661,103 @@ public class SplitService {
         if (pctMap.isEmpty()) {
             return generateEqualSplits(expense, members);
         }
-        List<ExpenseSplit> splits = members.stream().map(m -> {
-            BigDecimal pct = pctMap.getOrDefault(m.getUserId(), BigDecimal.ZERO);
-            BigDecimal share = expense.getAmount().multiply(pct)
-                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        List<BigDecimal> percentages = members.stream()
+                .map(m -> pctMap.getOrDefault(m.getUserId(), BigDecimal.ZERO))
+                .toList();
+        List<BigDecimal> shares = splitByPercentage(expense.getAmount(), percentages);
+        List<ExpenseSplit> splits = new ArrayList<>(members.size());
+        for (int i = 0; i < members.size(); i++) {
+            GroupMember m = members.get(i);
             ExpenseSplit s = new ExpenseSplit();
             s.setSharedExpense(expense);
             s.setUserId(m.getUserId());
             s.setUserName(m.getName());
-            s.setAmount(share);
+            s.setAmount(shares.get(i));
             s.setSettled(m.getUserId().equals(expense.getPaidBy()));
-            return s;
-        }).collect(Collectors.toList());
+            splits.add(s);
+        }
         return splitRepo.saveAll(splits);
+    }
+
+    /**
+     * Percentage split with exact cents: floor every share, then hand the
+     * leftover cents to the members with the largest fractional remainder
+     * (largest-remainder method). Callers must ensure the percentages sum to
+     * 100 so the leftover is never larger than {@code percentages.size()}.
+     */
+    static List<BigDecimal> splitByPercentage(BigDecimal amount, List<BigDecimal> percentages) {
+        int count = percentages.size();
+        if (count == 0) {
+            return List.of();
+        }
+        BigDecimal rounded = amount.setScale(2, RoundingMode.HALF_UP);
+        long totalCents = rounded.movePointRight(2).longValueExact();
+        long[] cents = new long[count];
+        BigDecimal[] fractions = new BigDecimal[count];
+        long allocated = 0;
+        for (int i = 0; i < count; i++) {
+            BigDecimal rawCents = rounded.multiply(percentages.get(i))
+                    .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+                    .movePointRight(2);
+            BigDecimal floored = rawCents.setScale(0, RoundingMode.FLOOR);
+            cents[i] = floored.longValueExact();
+            fractions[i] = rawCents.subtract(floored);
+            allocated += cents[i];
+        }
+        List<Integer> byRemainder = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            byRemainder.add(i);
+        }
+        byRemainder.sort((a, b) -> {
+            int byFraction = fractions[b].compareTo(fractions[a]);
+            return byFraction != 0 ? byFraction : Integer.compare(a, b);
+        });
+        long leftover = totalCents - allocated;
+        for (int i = 0; i < leftover && i < count; i++) {
+            cents[byRemainder.get(i)]++;
+        }
+        List<BigDecimal> shares = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            shares.add(BigDecimal.valueOf(cents[i], 2));
+        }
+        return shares;
+    }
+
+    /** Percentages are supplied per member; they must add up to 100. */
+    private void requirePercentageTotal(CreateSharedExpenseRequest req, List<GroupMember> members) {
+        if (req.getSplitDetails() == null || req.getSplitDetails().isEmpty()) {
+            return; // falls back to an equal split
+        }
+        Set<UUID> memberIds = members.stream().map(GroupMember::getUserId).collect(Collectors.toSet());
+        BigDecimal total = req.getSplitDetails().stream()
+                .filter(d -> memberIds.contains(d.getUserId()) && d.getValue() != null)
+                .map(CreateSharedExpenseRequest.SplitDetailRequest::getValue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (total.subtract(BigDecimal.valueOf(100)).abs().compareTo(new BigDecimal("0.01")) >= 0) {
+            throw new IllegalArgumentException("Percentage splits must add up to 100 (got " + total + ")");
+        }
+    }
+
+    /**
+     * EXACT (and internally generated SETTLEMENT) splits must allocate the
+     * whole expense; otherwise the stored splits would not sum to the amount
+     * paid and group balances could never settle.
+     */
+    private void requireExactTotal(CreateSharedExpenseRequest req, List<GroupMember> members,
+                                   BigDecimal amount) {
+        if (req.getSplitDetails() == null || req.getSplitDetails().isEmpty()) {
+            return; // falls back to an equal split
+        }
+        Set<UUID> memberIds = members.stream().map(GroupMember::getUserId).collect(Collectors.toSet());
+        BigDecimal total = req.getSplitDetails().stream()
+                .filter(d -> memberIds.contains(d.getUserId()) && d.getValue() != null)
+                .map(CreateSharedExpenseRequest.SplitDetailRequest::getValue)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (total.setScale(2, RoundingMode.HALF_UP)
+                .compareTo(amount.setScale(2, RoundingMode.HALF_UP)) != 0) {
+            throw new IllegalArgumentException("Exact splits must add up to the expense amount "
+                    + amount + " (got " + total + ")");
+        }
     }
 
     private List<ExpenseSplit> generateExactSplits(SharedExpense expense,

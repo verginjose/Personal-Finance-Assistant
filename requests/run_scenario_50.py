@@ -686,6 +686,40 @@ def verify_member(client, member, checks, args):
         checks.status(200, status, label)
 
 
+def check_balances_settle(checks, balances, label):
+    """A group's net balances must sum to zero and every settlement suggestion
+    must actually clear the debt it claims to.
+
+    Split rounding used to make the shares of one expense add up to a few paise
+    more or less than the amount paid. The group's nets then drifted away from
+    zero and the last debtor kept a balance no suggestion could clear, so this
+    asserts the arithmetic, not just that the endpoint answered 200.
+    """
+    if not isinstance(balances, dict):
+        checks.ok(False, f"{label}: balances payload", repr(balances)[:200])
+        return
+
+    members = balances.get("memberBalances") or []
+    debts = balances.get("simplifiedDebts") or []
+
+    net_total = round(sum(float(m.get("netBalance", 0) or 0) for m in members), 2)
+    checks.ok(abs(net_total) < 0.005,
+              f"{label}: net balances sum to zero",
+              f"sum={net_total} over {len(members)} members")
+
+    outstanding = {str(m.get("userId")): round(float(m.get("netBalance", 0) or 0), 2)
+                   for m in members}
+    for d in debts:
+        amount = round(float(d.get("amount", 0) or 0), 2)
+        frm, to = str(d.get("fromUserId")), str(d.get("toUserId"))
+        outstanding[frm] = round(outstanding.get(frm, 0) + amount, 2)
+        outstanding[to] = round(outstanding.get(to, 0) - amount, 2)
+    unresolved = {u: v for u, v in outstanding.items() if abs(v) >= 0.005}
+    checks.ok(not unresolved,
+              f"{label}: suggestions settle every member",
+              f"unresolved={unresolved}")
+
+
 def verify_group(client, group, checks, args):
     if not group.group_id:
         checks.ok(False, "group exists", f"group {group.index}")
@@ -710,10 +744,12 @@ def verify_group(client, group, checks, args):
               "archived membership count matches",
               f"{len(archived)} archived, {group.archived} requested")
 
-    status, _, _ = client.request(
+    status, balances, _ = client.request(
         "groups", f"/upsert/groups/{group.group_id}/balances", "GET",
         headers=leader.headers())
     checks.status(200, status, "group balances")
+    if status == 200:
+        check_balances_settle(checks, balances, "group balances")
 
     status, _, _ = client.request(
         "groups", f"/upsert/groups/{group.group_id}/activity?page=0&size=20",

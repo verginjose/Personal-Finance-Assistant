@@ -27,7 +27,7 @@ node_modules/
 # Golden-test artifacts
 requests/golden-report*.json
 requests/golden-soak-*.log
-requests/__pycache__/
+__pycache__/
 
 # Generated test credentials (passwords)
 requests/golden-users*.csv

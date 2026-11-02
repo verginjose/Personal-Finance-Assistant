@@ -87,6 +87,11 @@ public class TrackingRedisCache extends RedisCache {
                 pending.put(pendingKey, consistencyGuard.snapshot(scope));
             } else {
                 pending.remove(pendingKey);
+                // A hit must also (re)register the key: an eviction deletes the
+                // registry Set along with the value, and a key that is only ever
+                // read after that would otherwise be invisible to the next
+                // eviction and stay stale for its entire TTL.
+                register(key);
             }
         }
         return value;
@@ -153,6 +158,8 @@ public class TrackingRedisCache extends RedisCache {
         ValueWrapper existing = super.putIfAbsent(key, value);
         if (existing == null) {         // null = just written
             register(key);
+        } else {
+            register(key);              // another thread's value is in the cache
         }
         return existing;
     }

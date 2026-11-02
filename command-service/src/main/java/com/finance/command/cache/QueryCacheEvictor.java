@@ -3,8 +3,10 @@ package com.finance.command.cache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
@@ -13,6 +15,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -82,17 +85,34 @@ public class QueryCacheEvictor {
     /**
      * Evict all query-service cache entries for the given group.
      * Covers: group-details, group-balances, group-expenses, group-activity,
-     *         and user-groups for all member users. The deletion is immediate;
-     *         the write token published after commit guards the refill race
-     *         that the old delayed second delete used to paper over.
+     *         and user-groups for all member users.
+     *
+     * <p>Both the deletion and the write tokens run {@code afterCommit}.
+     * Evicting inside the transaction opened a window in which a reader could
+     * refill the cache from the pre-commit row (the generation had not moved
+     * yet); that stale value then stuck for the cache's whole TTL. After the
+     * commit, a refill either sees the new row or is refused by the consistency
+     * guard because the replica has not replayed the write.
      */
     public void evictGroupKeys(Long groupId, Set<UUID> memberIds) {
-        try {
-            doEvictGroup(groupId, memberIds);
-        } catch (Exception e) {
-            log.warn("QueryCacheEvictor: group eviction failed for groupId={}: {}", groupId, e.getMessage());
+        Runnable work = () -> {
+            try {
+                doEvictGroup(groupId, memberIds);
+            } catch (Exception e) {
+                log.warn("QueryCacheEvictor: group eviction failed for groupId={}: {}", groupId, e.getMessage());
+            }
+            publishWriteTokens(memberIds, Set.of(groupId));
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    work.run();
+                }
+            });
+        } else {
+            work.run();
         }
-        markWrite(memberIds, Set.of(groupId));
     }
 
     // ── User-level eviction ───────────────────────────────────────────────────
@@ -183,27 +203,62 @@ public class QueryCacheEvictor {
 
     /**
      * Single eviction wave for a group:
-     *  1. Evict everything stored in the group tracking Set (group-details, group-expenses,
-     *     group-balances, group-activity) — written by query-service TrackingRedisCache.
-     *  2. Evict user-groups keys for all members via their user-key registry sets.
+     *  1. Evict the deterministic group-balances key plus everything stored in
+     *     the group tracking Set (group-details, group-expenses, group-balances,
+     *     group-activity) — written by query-service TrackingRedisCache.
+     *  2. If the tracking Set was empty (a cached key that was never registered,
+     *     or a Set removed by an earlier eviction), fall back to scanning the
+     *     group's other well-known key prefixes so nothing stays stale for the
+     *     full TTL.
+     *  3. Evict user-groups keys for all members via their user-key registry sets.
      */
     private void doEvictGroup(Long groupId, Set<UUID> memberIds) {
-        // 1. Group-tracked keys via Set registry
         String groupSet = GROUP_SET_PREFIX + groupId;
         Set<String> groupKeys = readSetMembers(groupSet);
-        if (!groupKeys.isEmpty()) {
-            redisTemplate.executePipelined((RedisCallback<?>) connection -> {
-                for (String k : groupKeys) {
-                    connection.keyCommands().del(k.getBytes());
-                }
-                connection.keyCommands().del(groupSet.getBytes());
-                return null;
-            });
-            log.trace("doEvictGroup: deleted {} group-tracked keys for groupId={}", groupKeys.size(), groupId);
+
+        Set<String> toDelete = new java.util.HashSet<>(groupKeys);
+        // The balance key is deterministic. Deleting it unconditionally closes
+        // the gap where the registry Set missed the fill: without this the
+        // cached balance served its pre-write payload until the 10-minute TTL.
+        toDelete.add(QUERY_PREFIX + "group-balances:" + groupId);
+        if (groupKeys.isEmpty()) {
+            toDelete.addAll(scanGroupKeys(groupId));
         }
 
-        // 2. user-groups keys for each member via their user-key registry
+        redisTemplate.executePipelined((RedisCallback<?>) connection -> {
+            for (String k : toDelete) {
+                connection.keyCommands().del(k.getBytes());
+            }
+            connection.keyCommands().del(groupSet.getBytes());
+            return null;
+        });
+        log.trace("doEvictGroup: deleted {} keys for groupId={} (registry had {})",
+                toDelete.size(), groupId, groupKeys.size());
+
+        // 3. user-groups keys for each member via their user-key registry
         doEvictUserGroups(memberIds);
+    }
+
+    /**
+     * SCAN (not KEYS) for the suffixed group caches when the registry Set is
+     * empty. The household cache holds few keys, but SCAN keeps this safe if a
+     * tenant grows.
+     */
+    private Set<String> scanGroupKeys(Long groupId) {
+        Set<String> found = new java.util.HashSet<>();
+        for (String cache : List.of("group-details", "group-expenses", "group-activity")) {
+            String pattern = QUERY_PREFIX + cache + ":" + groupId + "-*";
+            redisTemplate.execute((RedisCallback<Void>) connection -> {
+                try (Cursor<byte[]> cursor = connection.keyCommands().scan(
+                        ScanOptions.scanOptions().match(pattern).count(200).build())) {
+                    while (cursor.hasNext()) {
+                        found.add(new String(cursor.next(), StandardCharsets.UTF_8));
+                    }
+                }
+                return null;
+            });
+        }
+        return found;
     }
 
     /**

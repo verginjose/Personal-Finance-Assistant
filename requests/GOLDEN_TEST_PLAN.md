@@ -59,28 +59,30 @@ hours, keeping the `kubectl port-forward` alive between runs.
   OCR and scheduler rows may legitimately appear during the run, so seeded
   totals are asserted as a floor while the three read paths must agree exactly.
 
-## Known findings from the first runs (2026-11-02)
+## Findings from the first runs (2026-11-02)
 
-- **`group-balances` cache can serve a stale payload for its full 10-minute
-  TTL after a write.** The cache is guarded and evicted per group, but eviction
-  depends on every filled key being present in the Redis registry set
-  `finance:query:v1:group-keys:<groupId>`. A controlled probe showed the
-  balance key cached with a fresh 600 s TTL while its registry set was still
-  empty; the following `POST .../expenses` therefore deleted nothing, and the
-  cached balances kept reporting the pre-expense nets. Once the key had been
-  registered (after another read), deleting an expense *did* evict it and the
-  next read was correct, so the defect is a registration/eviction race rather
-  than a missing delete path. Stage 10 is the regression guard: it warms the
-  cache, mutates it and fails if the cached payload does not converge within
-  `--cache-timeout` (45 s, far below the 10-minute TTL).
-  Fix direction: re-register on cache hits as well as fills
-  (`TrackingRedisCache.get(Object)` currently only snapshots), or make
-  `doEvictGroup` fall back to deleting `finance:analytics:v1:group-balances:<id>`
-  when the registry set is empty; a smarter option is to key the fingerprint
-  off the write generation so a missed registry entry cannot pin a stale value.
+- **`group-balances` could serve a stale payload for its full 10-minute TTL
+  after a write.** Eviction depended on every filled key being present in the
+  Redis registry set `finance:query:v1:group-keys:<groupId>`. A controlled
+  probe showed the balance key cached with a fresh 600 s TTL while its registry
+  set was empty; the following `POST .../expenses` therefore deleted nothing,
+  and the cached balances kept reporting the pre-expense nets. Once the key had
+  been registered (after another read), deleting an expense *did* evict it.
+  Stage 10 is the regression guard.
+  **Fixed** in this commit set: `QueryCacheEvictor` now always deletes the
+  deterministic `group-balances:<id>` key and SCANs the other group prefixes
+  when the registry set is empty; group eviction plus its write tokens run in
+  `afterCommit` (not inside the transaction, which left a refill window); and
+  `TrackingRedisCache` re-registers a key on a cache hit, not only on a fill.
 - **Group expense count must be asserted exactly.** The earlier scenario used
   `listed >= posted - deleted`, which is trivially true when a delete is not
-  reflected. The golden test now polls for the exact count.
+  reflected. The golden test now polls for the exact regular-expense count
+  (settlement rows excluded).
+- **Seeded recurring rows must not be deleted.** The random delete step
+  sampled every created row, so ~25% of users lost the daily/monthly fixtures
+  the recurrence checks assert on. Deletes now skip `recurring_ids`.
+- **Groq allows 30 OCR-completion requests/minute.** The OCR service now
+  spaces calls and retries 429s; see the section above.
 - The user-level cache paths (`summary`, single-entry, search) converge in
   ~0.5–2.5 s and pass consistently; the daily/monthly recurring seeds are
   detected and replicated to the read model on every run.

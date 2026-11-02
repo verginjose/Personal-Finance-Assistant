@@ -1301,20 +1301,27 @@ def verify_member(client, member, checks, args):
               f"{summary.get('totalExpense')} >= {member.expected_expense:.2f}")
 
     # Cross-endpoint consistency: the analytics projection must agree with the
-    # summary projection for the same user. Both are cached independently, so
-    # this catches a stale analytics cache or a divergent read path.
-    (status, comp), agree = poll(
-        lambda: client.request("analytics", f"/analytics/comprehensive?userId={uid}",
-                               "GET", headers=member.headers())[:2],
-        lambda r: r[0] == 200 and isinstance(r[1], dict)
-        and abs(float(r[1].get("totalIncome", 0) or 0)
-                - float(summary.get("totalIncome", 0) or 0)) < eps
-        and abs(float(r[1].get("totalExpense", 0) or 0)
-                - float(summary.get("totalExpense", 0) or 0)) < eps,
+    # summary projection for the same user. Both are cached independently and
+    # both are re-read inside the poll: OCR rows can land between comparisons,
+    # so pinning one side to an older snapshot would make this disagree forever.
+    def both_totals():
+        s1, summ = _summary(client, member)
+        s2, comp = client.request(
+            "analytics", f"/analytics/comprehensive?userId={uid}", "GET",
+            headers=member.headers())[:2]
+        return s1, s2, summ, comp if isinstance(comp, dict) else {}
+
+    (s1, s2, summ, comp), agree = poll(
+        both_totals,
+        lambda r: r[0] == 200 and r[1] == 200 and isinstance(r[3], dict)
+        and abs(float(r[3].get("totalIncome", 0) or 0)
+                - float(r[2].get("totalIncome", 0) or 0)) < eps
+        and abs(float(r[3].get("totalExpense", 0) or 0)
+                - float(r[2].get("totalExpense", 0) or 0)) < eps,
         timeout=max(10.0, args.verify_timeout))
     checks.ok(agree, "analytics totals agree with summary",
-              f"analytics={comp if not isinstance(comp, dict) else (comp.get('totalIncome'), comp.get('totalExpense'))} "
-              f"summary=({summary.get('totalIncome')}, {summary.get('totalExpense')})")
+              f"analytics=({comp.get('totalIncome')}, {comp.get('totalExpense')}) "
+              f"summary=({summ.get('totalIncome')}, {summ.get('totalExpense')})")
 
     status, body, _ = client.request("personal", f"/upsert/recurring?userId={uid}",
                                      "GET", headers=member.headers())

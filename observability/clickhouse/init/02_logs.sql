@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS logs (
     message String,
     stack_trace String,
     container String,
+    pod String,
+    logger String,
+    thread String,
     compose_project LowCardinality(String),
 
     INDEX idx_message message TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 1,

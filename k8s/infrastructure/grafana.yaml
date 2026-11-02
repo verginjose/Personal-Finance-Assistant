@@ -52,7 +52,23 @@ spec:
               valueFrom:
                 secretKeyRef: { name: grafana-secrets, key: GRAFANA_ADMIN_PASSWORD }
             - name: GF_INSTALL_PLUGINS
-              value: grafana-clickhouse-datasource
+              # redis-datasource powers the "Data — Postgres & Redis" dashboard
+              # (live DBSIZE / INFO / SCAN queries, no exporter pod needed).
+              value: grafana-clickhouse-datasource,redis-datasource
+            # Read-only Postgres datasource credentials. The Secret is the
+            # single source; the provisioning file only references these names.
+            - name: POSTGRES_DS_DB
+              valueFrom:
+                secretKeyRef: { name: postgres-secrets, key: DB_NAME }
+            - name: POSTGRES_DS_USER
+              valueFrom:
+                secretKeyRef: { name: postgres-secrets, key: DB_USER }
+            - name: POSTGRES_DS_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-secrets, key: DB_PASSWORD }
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: redis-secrets, key: REDIS_PASSWORD }
             - name: GF_SECURITY_ALLOW_EMBEDDING
               value: "true"
             - name: GF_AUTH_ANONYMOUS_ENABLED

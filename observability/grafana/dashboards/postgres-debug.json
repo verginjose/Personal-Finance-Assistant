@@ -1,13 +1,13 @@
 {
   "uid": "postgres-debug",
-  "title": "Postgres \u2014 Debug & Runbook",
+  "title": "Postgres — Debug & Runbook",
   "tags": [
     "finance-assistant",
     "postgres"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "editable": true,
   "graphTooltip": 0,
@@ -82,7 +82,7 @@
   "panels": [
     {
       "id": 1,
-      "title": "Postgres logs \u2014 $service | $search",
+      "title": "Postgres logs — $service | $search",
       "type": "logs",
       "datasource": {
         "type": "grafana-clickhouse-datasource",
@@ -92,7 +92,7 @@
       "targets": [
         {
           "queryType": "sql",
-          "rawSql": "SELECT timestamp, message, service, level FROM default.logs WHERE service LIKE '$service' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
+          "rawSql": "SELECT timestamp, message, level, service, pod, logger FROM default.logs WHERE service LIKE '$service' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
           "refId": "A",
           "format": "logs"
         }
@@ -100,9 +100,9 @@
       "options": {
         "dedupStrategy": "none",
         "enableLogDetails": true,
-        "prettifyLogMessage": true,
+        "prettifyLogMessage": false,
         "showTime": true,
-        "showLabels": true,
+        "showLabels": false,
         "showCommonLabels": false,
         "wrapLogMessage": true,
         "sortOrder": "Descending"
@@ -240,7 +240,7 @@
     },
     {
       "id": 4,
-      "title": "Runbook \u2014 psql commands",
+      "title": "Runbook — psql commands",
       "type": "text",
       "options": {
         "mode": "markdown",

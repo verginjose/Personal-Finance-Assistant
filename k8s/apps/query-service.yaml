@@ -73,6 +73,11 @@ spec:
             - secretRef:
                 name: query-service-secrets
           env:
+            # Structured (one-line JSON) stdout for the Vector -> ClickHouse
+            # pipeline. Without this profile logback logs a human-readable
+            # line, which is what local runs want.
+            - name: SPRING_PROFILES_ACTIVE
+              value: structured-logs
             # Read side of CQRS: reads from the streaming replica.
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://postgres-replica:5432/$(DB_NAME)

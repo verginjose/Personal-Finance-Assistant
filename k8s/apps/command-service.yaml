@@ -72,6 +72,11 @@ spec:
             - secretRef:
                 name: command-service-secrets
           env:
+            # Structured (one-line JSON) stdout for the Vector -> ClickHouse
+            # pipeline. Without this profile logback logs a human-readable
+            # line, which is what local runs want.
+            - name: SPRING_PROFILES_ACTIVE
+              value: structured-logs
             # Write side of CQRS: always hits the primary.
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://postgres-primary:5432/$(DB_NAME)

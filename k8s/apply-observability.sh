@@ -92,6 +92,10 @@ for target in "${TARGETS[@]}"; do
       mkdir -p "${render}/grafana-datasources"
       cp "${ROOT_DIR}/observability/grafana/provisioning/datasources/prometheus.yml" \
         "${render}/grafana-datasources/"
+      cp "${K8S_DIR}/config/grafana/postgres.yml" \
+        "${render}/grafana-datasources/"
+      cp "${K8S_DIR}/config/grafana/redis.yml" \
+        "${render}/grafana-datasources/"
       CLICKHOUSE_PASSWORD="$(env_value CLICKHOUSE_PASSWORD)" \
         envsubst '${CLICKHOUSE_PASSWORD}' \
         < "${K8S_DIR}/config/grafana/clickhouse.yml" \

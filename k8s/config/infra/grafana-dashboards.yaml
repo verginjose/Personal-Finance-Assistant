@@ -1,10 +1,1977 @@
 apiVersion: v1
 data:
+  data-explorer.json: |
+    {
+      "uid": "data-explorer",
+      "title": "Data — Postgres & Redis",
+      "tags": [
+        "finance-assistant",
+        "postgres",
+        "redis",
+        "data"
+      ],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "editable": true,
+      "graphTooltip": 0,
+      "time": {
+        "from": "now-15m",
+        "to": "now"
+      },
+      "timepicker": {
+        "refresh_intervals": [
+          "5s",
+          "15s",
+          "30s",
+          "1m",
+          "5m"
+        ],
+        "time_options": [
+          "5m",
+          "15m",
+          "1h",
+          "3h",
+          "6h",
+          "12h",
+          "24h"
+        ]
+      },
+      "templating": {
+        "list": []
+      },
+      "description": "Live metadata for the data layer: Postgres table row counts and sizes, outbox backlog, indexes, settings, active sessions; Redis keys, memory, clients and per-prefix key counts. All panels are current-state reads (no history), so time range only affects the activity table.",
+      "panels": [
+        {
+          "id": 100,
+          "type": "row",
+          "title": "Postgres — capacity & health",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 1,
+          "title": "Database size",
+          "type": "stat",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "Total on-disk size of the finance_assistant database.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT pg_database_size(current_database()) AS value"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "bytes",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "auto",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 1,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 2,
+          "title": "Connections",
+          "type": "stat",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "Backends currently connected, out of max_connections.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT count(*) || ' / ' || current_setting('max_connections') AS value FROM pg_stat_activity"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 4,
+            "y": 1,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 3,
+          "title": "Cache hit ratio",
+          "type": "stat",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "Shared-buffer hit ratio for this database. Below ~99% means the working set no longer fits.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT COALESCE(round(100.0 * blks_hit / NULLIF(blks_hit + blks_read, 0), 1), 100) AS value FROM pg_stat_database WHERE datname = current_database()"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "percent",
+              "decimals": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 95
+                  },
+                  {
+                    "color": "green",
+                    "value": 99
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 8,
+            "y": 1,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 4,
+          "title": "Replica lag",
+          "type": "stat",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "Seconds between the last replayed transaction and now, measured on the replica. Zero means caught up.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT COALESCE(round(extract(epoch FROM now() - pg_last_xact_replay_timestamp())), 0) AS value"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "s",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 10
+                  },
+                  {
+                    "color": "red",
+                    "value": 60
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 1,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 5,
+          "title": "Uptime",
+          "type": "stat",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "Time since the primary last started.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT extract(epoch FROM now() - pg_postmaster_start_time()) AS value"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "s",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 16,
+            "y": 1,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 6,
+          "title": "Deadlocks",
+          "type": "stat",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "Cumulative deadlocks since the primary started.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT deadlocks AS value FROM pg_stat_database WHERE datname = current_database()"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 10
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 20,
+            "y": 1,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 101,
+          "type": "row",
+          "title": "Postgres — tables & activity",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 6,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 7,
+          "title": "Tables — rows, size, scans",
+          "type": "table",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "Every user table with live/dead tuple counts, total and index size, scan counts and last vacuum.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT schemaname AS \"Schema\",\n       relname AS \"Table\",\n       n_live_tup AS \"Rows\",\n       n_dead_tup AS \"Dead\",\n       pg_total_relation_size(relid) AS \"Size\",\n       pg_indexes_size(relid) AS \"Indexes\",\n       seq_scan AS \"Seq scans\",\n       idx_scan AS \"Idx scans\",\n       to_char(last_vacuum, 'MM-DD HH24:MI') AS \"Last vacuum\"\nFROM pg_stat_user_tables\nORDER BY pg_total_relation_size(relid) DESC"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false,
+                "filterable": true
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Size"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Indexes"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Rows"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Dead"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-text"
+                    }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "green",
+                          "value": null
+                        },
+                        {
+                          "color": "orange",
+                          "value": 1000
+                        },
+                        {
+                          "color": "red",
+                          "value": 10000
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Seq scans"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Idx scans"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "displayName": "Size",
+                "desc": true
+              }
+            ],
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "fields": ""
+            }
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 7,
+            "w": 24,
+            "h": 11
+          }
+        },
+        {
+          "id": 8,
+          "title": "Outbox backlog",
+          "type": "table",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "Outbox events by status. A growing PENDING count means the publisher is behind.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT status AS \"Status\",\n       count(*) AS \"Events\",\n       to_char(min(created_at), 'MM-DD HH24:MI') AS \"Oldest\",\n       to_char(max(created_at), 'MM-DD HH24:MI') AS \"Newest\"\nFROM finance.outbox_events\nGROUP BY status\nORDER BY count(*) DESC"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false,
+                "filterable": true
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Events"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "displayName": "Events",
+                "desc": true
+              }
+            ],
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "fields": ""
+            }
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 18,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "id": 9,
+          "title": "Active sessions",
+          "type": "table",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "Non-idle backends, longest first. Look here for idle-in-transaction and lock waits.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT pid AS \"PID\",\n       usename AS \"User\",\n       state AS \"State\",\n       wait_event_type AS \"Wait type\",\n       wait_event AS \"Wait\",\n       round(extract(epoch FROM now() - state_change)) AS \"Seconds\",\n       left(query, 90) AS \"Query\"\nFROM pg_stat_activity\nWHERE pid <> pg_backend_pid() AND state <> 'idle'\nORDER BY \"Seconds\" DESC NULLS LAST\nLIMIT 25"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false,
+                "filterable": true
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Seconds"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "s"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "displayName": "Seconds",
+                "desc": true
+              }
+            ],
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "fields": ""
+            }
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 18,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "id": 102,
+          "type": "row",
+          "title": "Postgres — indexes & settings",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 26,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 10,
+          "title": "Unused indexes",
+          "type": "table",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "Indexes with zero scans since the last statistics reset, largest first. Candidates for removal.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT schemaname AS \"Schema\",\n       relname AS \"Table\",\n       indexrelname AS \"Index\",\n       idx_scan AS \"Scans\",\n       pg_relation_size(indexrelid) AS \"Size\"\nFROM pg_stat_user_indexes\nWHERE idx_scan = 0\nORDER BY pg_relation_size(indexrelid) DESC\nLIMIT 20"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false,
+                "filterable": true
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Size"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "displayName": "Size",
+                "desc": true
+              }
+            ],
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "fields": ""
+            }
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 27,
+            "w": 12,
+            "h": 9
+          }
+        },
+        {
+          "id": 11,
+          "title": "Settings",
+          "type": "table",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "The settings that explain most performance behaviour. server_version and shared_buffers are the first to check.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT name AS \"Setting\", setting AS \"Value\", unit AS \"Unit\", short_desc AS \"Description\"\nFROM pg_settings\nWHERE name IN (\n    'server_version', 'max_connections', 'shared_buffers', 'work_mem',\n    'maintenance_work_mem', 'effective_cache_size', 'max_wal_size',\n    'min_wal_size', 'wal_level', 'max_wal_senders', 'max_replication_slots',\n    'autovacuum', 'autovacuum_naptime', 'checkpoint_completion_target',\n    'random_page_cost'\n)\nORDER BY name"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false,
+                "filterable": true
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [],
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "fields": ""
+            }
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 27,
+            "w": 12,
+            "h": 9
+          }
+        },
+        {
+          "id": 103,
+          "type": "row",
+          "title": "Redis — live state",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 36,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 12,
+          "title": "Total keys",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "DBSIZE on the primary.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "cli",
+              "command": "",
+              "query": "dbsize"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 37,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 13,
+          "title": "Used memory",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "used_memory from INFO memory.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "command",
+              "command": "info",
+              "section": "memory",
+              "query": ""
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "bytes",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 4,
+            "y": 37,
+            "w": 4,
+            "h": 5
+          },
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "used_memory"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 14,
+          "title": "Connected clients",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "connected_clients from INFO clients.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "command",
+              "command": "info",
+              "section": "clients",
+              "query": ""
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 8,
+            "y": 37,
+            "w": 4,
+            "h": 5
+          },
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "connected_clients"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 15,
+          "title": "Ops / sec",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "instantaneous_ops_per_sec from INFO stats.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "command",
+              "command": "info",
+              "section": "stats",
+              "query": ""
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "ops",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 5000
+                  },
+                  {
+                    "color": "red",
+                    "value": 20000
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 37,
+            "w": 4,
+            "h": 5
+          },
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "instantaneous_ops_per_sec"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 16,
+          "title": "Evicted keys",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "evicted_keys from INFO stats. Non-zero means maxmemory is being hit.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "command",
+              "command": "info",
+              "section": "stats",
+              "query": ""
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 16,
+            "y": 37,
+            "w": 4,
+            "h": 5
+          },
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "evicted_keys"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 17,
+          "title": "Uptime",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "uptime_in_seconds from INFO server.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "command",
+              "command": "info",
+              "section": "server",
+              "query": ""
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "s",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 20,
+            "y": 37,
+            "w": 4,
+            "h": 5
+          },
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "uptime_in_seconds"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 104,
+          "type": "row",
+          "title": "Redis — keys by prefix",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 42,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 18,
+          "title": "refresh_token:*",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "Number of keys matching refresh_token:* (KEYS refresh_token:*).",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "cli",
+              "command": "",
+              "query": "keys refresh_token:*"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "count"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 43,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 19,
+          "title": "user_tokens:*",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "Number of keys matching user_tokens:* (KEYS user_tokens:*).",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "cli",
+              "command": "",
+              "query": "keys user_tokens:*"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "count"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 4,
+            "y": 43,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 20,
+          "title": "idem:*",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "Number of keys matching idem:* (KEYS idem:*).",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "cli",
+              "command": "",
+              "query": "keys idem:*"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "count"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 8,
+            "y": 43,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 21,
+          "title": "finance:*",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "Number of keys matching finance:* (KEYS finance:*).",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "cli",
+              "command": "",
+              "query": "keys finance:*"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "count"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 43,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 22,
+          "title": "token_blacklist:*",
+          "type": "stat",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "Number of keys matching token_blacklist:* (KEYS token_blacklist:*).",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "cli",
+              "command": "",
+              "query": "keys token_blacklist:*"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "color": {
+                "mode": "thresholds"
+              },
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "count"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "graphMode": "none",
+            "textMode": "value",
+            "colorMode": "value",
+            "justifyMode": "center",
+            "orientation": "auto"
+          },
+          "gridPos": {
+            "x": 16,
+            "y": 43,
+            "w": 4,
+            "h": 5
+          }
+        },
+        {
+          "id": 23,
+          "type": "text",
+          "title": "How these counts are produced",
+          "gridPos": {
+            "x": 20,
+            "y": 43,
+            "w": 4,
+            "h": 5
+          },
+          "options": {
+            "mode": "markdown",
+            "code": {
+              "language": "plaintext",
+              "showLineNumbers": false,
+              "showMiniMap": false
+            },
+            "content": "`KEYS <prefix>*` on the primary, counted by the stat panel.\n\nKEYS is O(N) and blocks the server while it runs. That is fine for the ~10k keys this homelab holds; do not reuse this panel against a much larger dataset — switch to SCAN there.\n\nTotals: `DBSIZE` in the row above."
+          }
+        },
+        {
+          "id": 105,
+          "type": "row",
+          "title": "Redis — server details",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 48,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 24,
+          "title": "Keyspace",
+          "type": "table",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "Per-database key and expiry counts (INFO keyspace).",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "command",
+              "command": "info",
+              "section": "keyspace",
+              "query": ""
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false,
+                "filterable": true
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [],
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "fields": ""
+            }
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 49,
+            "w": 8,
+            "h": 9
+          }
+        },
+        {
+          "id": 25,
+          "title": "Replication",
+          "type": "table",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "role, connected_slaves and replication offsets (INFO replication).",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "command",
+              "command": "info",
+              "section": "replication",
+              "query": ""
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false,
+                "filterable": true
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [],
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "fields": ""
+            }
+          },
+          "gridPos": {
+            "x": 8,
+            "y": 49,
+            "w": 8,
+            "h": 9
+          }
+        },
+        {
+          "id": 26,
+          "title": "Server",
+          "type": "table",
+          "datasource": {
+            "type": "redis-datasource",
+            "uid": "redis-ds"
+          },
+          "description": "version, mode, uptime and process details (INFO server).",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "redis-datasource",
+                "uid": "redis-ds"
+              },
+              "type": "command",
+              "command": "info",
+              "section": "server",
+              "query": ""
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false,
+                "filterable": true
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [],
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "fields": ""
+            }
+          },
+          "gridPos": {
+            "x": 16,
+            "y": 49,
+            "w": 8,
+            "h": 9
+          }
+        }
+      ]
+    }
   finance-assistant.json: |
     {
       "timezone": "browser",
       "schemaVersion": 39,
-      "version": 1,
+      "version": 2,
       "refresh": "15s",
       "time": {
         "from": "now-1h",
@@ -31,7 +1998,7 @@ data:
         ]
       },
       "uid": "finance-assistant",
-      "title": "Finance Assistant \u2014 Overview & Debug",
+      "title": "Finance Assistant — Overview & Debug",
       "tags": [
         "finance-assistant"
       ],
@@ -186,6 +2153,19 @@ data:
       },
       "panels": [
         {
+          "id": 20,
+          "type": "row",
+          "title": "Health at a glance",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
           "id": 1,
           "title": "Services up",
           "type": "stat",
@@ -231,16 +2211,16 @@ data:
               ],
               "fields": ""
             },
-            "graphMode": "none",
-            "textMode": "value",
+            "graphMode": "area",
+            "textMode": "auto",
             "colorMode": "value",
-            "justifyMode": "auto"
+            "justifyMode": "center"
           },
           "gridPos": {
             "x": 0,
-            "y": 0,
-            "w": 4,
-            "h": 4
+            "y": 1,
+            "w": 6,
+            "h": 5
           }
         },
         {
@@ -285,16 +2265,16 @@ data:
               ],
               "fields": ""
             },
-            "graphMode": "none",
-            "textMode": "value",
+            "graphMode": "area",
+            "textMode": "auto",
             "colorMode": "none",
-            "justifyMode": "auto"
+            "justifyMode": "center"
           },
           "gridPos": {
-            "x": 4,
-            "y": 0,
-            "w": 5,
-            "h": 4
+            "x": 6,
+            "y": 1,
+            "w": 6,
+            "h": 5
           }
         },
         {
@@ -346,30 +2326,30 @@ data:
               ],
               "fields": ""
             },
-            "graphMode": "none",
-            "textMode": "value",
+            "graphMode": "area",
+            "textMode": "auto",
             "colorMode": "background",
-            "justifyMode": "auto"
+            "justifyMode": "center"
           },
           "gridPos": {
-            "x": 9,
-            "y": 0,
-            "w": 5,
-            "h": 4
+            "x": 12,
+            "y": 1,
+            "w": 6,
+            "h": 5
           }
         },
         {
-          "id": 4,
-          "title": "CPU used",
+          "id": 11,
+          "title": "p99 latency",
           "type": "stat",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "description": "CPU in use across the namespace, as a percentage of the sum of all CPU limits.",
+          "description": "99th percentile request latency across the four Spring services, excluding the SSE stream.",
           "targets": [
             {
-              "expr": "100 * sum((rate(container_cpu_usage_seconds_total{namespace=\"pfa\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_cpu_quota{namespace=\"pfa\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -377,8 +2357,9 @@ data:
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "percent",
-              "decimals": 1,
+              "unit": "ms",
+              "decimals": 0,
+              "mappings": [],
               "color": {
                 "mode": "thresholds"
               },
@@ -391,98 +2372,49 @@ data:
                   },
                   {
                     "color": "orange",
-                    "value": 60
+                    "value": 300
                   },
                   {
                     "color": "red",
-                    "value": 85
+                    "value": 1000
                   }
                 ]
-              },
-              "mappings": []
-            }
+              }
+            },
+            "overrides": []
           },
           "options": {
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
               ],
-              "fields": ""
+              "fields": "",
+              "values": false
             },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "background",
-            "justifyMode": "auto"
+            "graphMode": "area",
+            "textMode": "auto",
+            "colorMode": "value",
+            "justifyMode": "center"
           },
           "gridPos": {
-            "x": 14,
-            "y": 0,
-            "w": 5,
-            "h": 4
+            "x": 18,
+            "y": 1,
+            "w": 6,
+            "h": 5
           }
         },
         {
-          "id": 5,
-          "title": "Memory used",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Memory in use across the namespace, as a percentage of the sum of all memory limits.",
-          "targets": [
-            {
-              "expr": "100 * sum((container_memory_working_set_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_memory_limit_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percent",
-              "decimals": 1,
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "orange",
-                    "value": 60
-                  },
-                  {
-                    "color": "red",
-                    "value": 85
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "none",
-            "textMode": "value",
-            "colorMode": "background",
-            "justifyMode": "auto"
-          },
+          "id": 21,
+          "type": "row",
+          "title": "Traffic",
+          "collapsed": false,
           "gridPos": {
-            "x": 19,
-            "y": 0,
-            "w": 5,
-            "h": 4
-          }
+            "x": 0,
+            "y": 6,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
         },
         {
           "id": 6,
@@ -535,9 +2467,9 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 4,
+            "y": 7,
             "w": 12,
-            "h": 8
+            "h": 9
           }
         },
         {
@@ -591,10 +2523,23 @@ data:
           },
           "gridPos": {
             "x": 12,
-            "y": 4,
+            "y": 7,
             "w": 12,
-            "h": 8
+            "h": 9
           }
+        },
+        {
+          "id": 22,
+          "type": "row",
+          "title": "Latency",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 16,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
         },
         {
           "id": 8,
@@ -654,9 +2599,9 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 12,
+            "y": 17,
             "w": 24,
-            "h": 8
+            "h": 9
           },
           "description": "Response time percentiles per service (ms), excluding the long-lived notifications SSE stream."
         },
@@ -711,15 +2656,167 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 20,
+            "y": 26,
             "w": 24,
-            "h": 8
+            "h": 9
           },
           "description": "Maximum response time per Spring Cloud Gateway route (ms). The notifications SSE route is excluded because its duration is connection lifetime."
         },
         {
+          "id": 23,
+          "type": "row",
+          "title": "Resource pressure",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 35,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 4,
+          "title": "CPU used",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "description": "CPU in use across the namespace, as a percentage of the sum of all CPU limits.",
+          "targets": [
+            {
+              "expr": "100 * sum((rate(container_cpu_usage_seconds_total{namespace=\"pfa\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_cpu_quota{namespace=\"pfa\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
+              "refId": "A",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 1,
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 60
+                  },
+                  {
+                    "color": "red",
+                    "value": 85
+                  }
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "graphMode": "area",
+            "textMode": "auto",
+            "colorMode": "background",
+            "justifyMode": "center"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 36,
+            "w": 12,
+            "h": 5
+          }
+        },
+        {
+          "id": 5,
+          "title": "Memory used",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "description": "Memory in use across the namespace, as a percentage of the sum of all memory limits.",
+          "targets": [
+            {
+              "expr": "100 * sum((container_memory_working_set_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_memory_limit_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
+              "refId": "A",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 1,
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 60
+                  },
+                  {
+                    "color": "red",
+                    "value": 85
+                  }
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "graphMode": "area",
+            "textMode": "auto",
+            "colorMode": "background",
+            "justifyMode": "center"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 36,
+            "w": 12,
+            "h": 5
+          }
+        },
+        {
+          "id": 24,
+          "type": "row",
+          "title": "Logs",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 40,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
           "id": 9,
-          "title": "Logs \u2014 $service | $level | $search",
+          "title": "Logs — $service | $level | $search",
           "type": "logs",
           "datasource": {
             "type": "grafana-clickhouse-datasource",
@@ -728,7 +2825,7 @@ data:
           "targets": [
             {
               "queryType": "sql",
-              "rawSql": "SELECT timestamp, if(stack_trace != '', concat(message, char(10), stack_trace), message) AS message, service, level FROM default.logs WHERE service ILIKE '$service' AND level ILIKE '$level' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
+              "rawSql": "SELECT timestamp, if(stack_trace != '', concat(message, char(10), stack_trace), message) AS message, level, service, pod, logger FROM default.logs WHERE service ILIKE '$service' AND level ILIKE '$level' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
               "refId": "A",
               "format": "logs"
             }
@@ -736,9 +2833,9 @@ data:
           "options": {
             "dedupStrategy": "none",
             "enableLogDetails": true,
-            "prettifyLogMessage": true,
+            "prettifyLogMessage": false,
             "showTime": true,
-            "showLabels": true,
+            "showLabels": false,
             "showCommonLabels": false,
             "wrapLogMessage": true,
             "sortOrder": "Descending"
@@ -799,13 +2896,13 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 28,
+            "y": 41,
             "w": 24,
-            "h": 16
+            "h": 20
           }
         }
       ],
-      "description": "Service health, traffic, latency and searchable logs. Start here when something breaks."
+      "description": "Service health, traffic, latency and logs in one place. Rows are grouped by question: is everything up, how much traffic, how fast, and what is running out of resources."
     }
   pods.json: |
     {
@@ -1221,14 +3318,14 @@ data:
   postgres-debug.json: |
     {
       "uid": "postgres-debug",
-      "title": "Postgres \u2014 Debug & Runbook",
+      "title": "Postgres — Debug & Runbook",
       "tags": [
         "finance-assistant",
         "postgres"
       ],
       "timezone": "browser",
       "schemaVersion": 39,
-      "version": 1,
+      "version": 2,
       "refresh": "15s",
       "editable": true,
       "graphTooltip": 0,
@@ -1303,7 +3400,7 @@ data:
       "panels": [
         {
           "id": 1,
-          "title": "Postgres logs \u2014 $service | $search",
+          "title": "Postgres logs — $service | $search",
           "type": "logs",
           "datasource": {
             "type": "grafana-clickhouse-datasource",
@@ -1313,7 +3410,7 @@ data:
           "targets": [
             {
               "queryType": "sql",
-              "rawSql": "SELECT timestamp, message, service, level FROM default.logs WHERE service LIKE '$service' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
+              "rawSql": "SELECT timestamp, message, level, service, pod, logger FROM default.logs WHERE service LIKE '$service' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
               "refId": "A",
               "format": "logs"
             }
@@ -1321,9 +3418,9 @@ data:
           "options": {
             "dedupStrategy": "none",
             "enableLogDetails": true,
-            "prettifyLogMessage": true,
+            "prettifyLogMessage": false,
             "showTime": true,
-            "showLabels": true,
+            "showLabels": false,
             "showCommonLabels": false,
             "wrapLogMessage": true,
             "sortOrder": "Descending"
@@ -1461,7 +3558,7 @@ data:
         },
         {
           "id": 4,
-          "title": "Runbook \u2014 psql commands",
+          "title": "Runbook — psql commands",
           "type": "text",
           "options": {
             "mode": "markdown",
@@ -1485,14 +3582,14 @@ data:
   redis-debug.json: |
     {
       "uid": "redis-debug",
-      "title": "Redis \u2014 Debug & Runbook",
+      "title": "Redis — Debug & Runbook",
       "tags": [
         "finance-assistant",
         "redis"
       ],
       "timezone": "browser",
       "schemaVersion": 39,
-      "version": 1,
+      "version": 2,
       "refresh": "15s",
       "editable": true,
       "graphTooltip": 0,
@@ -1567,7 +3664,7 @@ data:
       "panels": [
         {
           "id": 1,
-          "title": "Redis logs \u2014 $service | $search",
+          "title": "Redis logs — $service | $search",
           "type": "logs",
           "datasource": {
             "type": "grafana-clickhouse-datasource",
@@ -1577,7 +3674,7 @@ data:
           "targets": [
             {
               "queryType": "sql",
-              "rawSql": "SELECT timestamp, message, service, level FROM default.logs WHERE service LIKE '$service' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
+              "rawSql": "SELECT timestamp, message, level, service, pod, logger FROM default.logs WHERE service LIKE '$service' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
               "refId": "A",
               "format": "logs"
             }
@@ -1585,9 +3682,9 @@ data:
           "options": {
             "dedupStrategy": "none",
             "enableLogDetails": true,
-            "prettifyLogMessage": true,
+            "prettifyLogMessage": false,
             "showTime": true,
-            "showLabels": true,
+            "showLabels": false,
             "showCommonLabels": false,
             "wrapLogMessage": true,
             "sortOrder": "Descending"
@@ -1725,7 +3822,7 @@ data:
         },
         {
           "id": 4,
-          "title": "Runbook \u2014 redis-cli commands",
+          "title": "Runbook — redis-cli commands",
           "type": "text",
           "options": {
             "mode": "markdown",
@@ -1733,7 +3830,7 @@ data:
               "language": "bash",
               "showLineNumbers": true
             },
-            "content": "## Copy/paste runbook\n\nRun these from the repo root. `REDIS_PW` comes from `.env`; never paste the\npassword into a ticket or a Grafana panel.\n\n```bash\nexport REDIS_PW=$(sed -n 's/^REDIS_PASSWORD=//p' .env)\nMASTER=$(kubectl -n pfa get pod -l app=redis -o jsonpath='{.items[0].metadata.name}')\nREPLICA=$(kubectl -n pfa get pod -l app=redis-replica -o jsonpath='{.items[0].metadata.name}')\nCLI=\"redis-cli -a $REDIS_PW --no-auth-warning\"\n```\n\n### 1. Is it alive?\n\n```bash\nkubectl -n pfa exec $MASTER  -- $CLI ping                 # PONG\nkubectl -n pfa exec $REPLICA -- $CLI ping\nkubectl -n pfa exec $MASTER  -- $CLI info server | grep -E 'redis_version|uptime_in_seconds|process_id'\nkubectl -n pfa exec $MASTER  -- $CLI info keyspace        # db0:keys=\u2026,expires=\u2026,avg_ttl=\u2026\nkubectl -n pfa exec $MASTER  -- $CLI dbsize\n```\n\n### 2. Replication (why reads are stale)\n\n```bash\nkubectl -n pfa exec $MASTER  -- $CLI info replication     # role:master, connected_slaves\nkubectl -n pfa exec $REPLICA -- $CLI info replication     # role:slave, master_link_status:up\n```\n\nWatch `master_link_status` (must be `up`), `master_last_io_seconds_ago`\n(should be < 10) and compare `slave_repl_offset` to the master's\n`master_repl_offset`.\n\n### 3. Memory, eviction and hit rate\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI info memory \\\n  | grep -E 'used_memory_human|maxmemory_human|maxmemory_policy|mem_fragmentation_ratio'\nkubectl -n pfa exec $MASTER -- $CLI info stats \\\n  | grep -E 'keyspace_hits|keyspace_misses|evicted_keys|rejected_connections|expired_keys'\nkubectl -n pfa exec $MASTER -- $CLI config get maxmemory-policy\n```\n\n`evicted_keys` climbing = the cache is under pressure: raise the limit or\nreduce TTLs. A falling hit ratio with a growing `dbsize` usually means stale\ncache keys, not a Redis fault.\n\n### 4. Auth caches (auth-service / query-service)\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'refresh_token:*' | head\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'user_tokens:*'    | head\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'token_blacklist:*'| head\nkubectl -n pfa exec $MASTER -- $CLI ttl  'refresh_token:<id>'\nkubectl -n pfa exec $MASTER -- $CLI memory usage 'refresh_token:<id>'\n```\n\nPrefer `--scan` over `keys '*'`; `keys` blocks the single-threaded server.\n\n### 5. Slow operations and clients\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI slowlog len\nkubectl -n pfa exec $MASTER -- $CLI slowlog get 20\nkubectl -n pfa exec $MASTER -- $CLI info clients | grep -E 'connected_clients|blocked_clients'\nkubectl -n pfa exec $MASTER -- $CLI client list\nkubectl -n pfa exec $MASTER -- $CLI latency latest\n```\n\n### 6. Live traffic (short burst only)\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI monitor      # Ctrl-C after a few seconds\n```\n\n`monitor` adds load and can print secrets \u2014 use it for seconds, not minutes.\n\n### 7. Persistence checks\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI info persistence | grep -E 'rdb_last_bgsave_status|aof_last_bgrewrite_status|rdb_changes_since_last_save'\nkubectl -n pfa exec $MASTER -- $CLI bgsave      # async; never `save` in prod\n```\n\n### Last resort\n\n`FLUSHDB` / `FLUSHALL` delete the auth token caches and every cached\naggregate. Only run after a verified backup, and expect all users to be\nlogged out.\n"
+            "content": "## Copy/paste runbook\n\nRun these from the repo root. `REDIS_PW` comes from `.env`; never paste the\npassword into a ticket or a Grafana panel.\n\n```bash\nexport REDIS_PW=$(sed -n 's/^REDIS_PASSWORD=//p' .env)\nMASTER=$(kubectl -n pfa get pod -l app=redis -o jsonpath='{.items[0].metadata.name}')\nREPLICA=$(kubectl -n pfa get pod -l app=redis-replica -o jsonpath='{.items[0].metadata.name}')\nCLI=\"redis-cli -a $REDIS_PW --no-auth-warning\"\n```\n\n### 1. Is it alive?\n\n```bash\nkubectl -n pfa exec $MASTER  -- $CLI ping                 # PONG\nkubectl -n pfa exec $REPLICA -- $CLI ping\nkubectl -n pfa exec $MASTER  -- $CLI info server | grep -E 'redis_version|uptime_in_seconds|process_id'\nkubectl -n pfa exec $MASTER  -- $CLI info keyspace        # db0:keys=…,expires=…,avg_ttl=…\nkubectl -n pfa exec $MASTER  -- $CLI dbsize\n```\n\n### 2. Replication (why reads are stale)\n\n```bash\nkubectl -n pfa exec $MASTER  -- $CLI info replication     # role:master, connected_slaves\nkubectl -n pfa exec $REPLICA -- $CLI info replication     # role:slave, master_link_status:up\n```\n\nWatch `master_link_status` (must be `up`), `master_last_io_seconds_ago`\n(should be < 10) and compare `slave_repl_offset` to the master's\n`master_repl_offset`.\n\n### 3. Memory, eviction and hit rate\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI info memory \\\n  | grep -E 'used_memory_human|maxmemory_human|maxmemory_policy|mem_fragmentation_ratio'\nkubectl -n pfa exec $MASTER -- $CLI info stats \\\n  | grep -E 'keyspace_hits|keyspace_misses|evicted_keys|rejected_connections|expired_keys'\nkubectl -n pfa exec $MASTER -- $CLI config get maxmemory-policy\n```\n\n`evicted_keys` climbing = the cache is under pressure: raise the limit or\nreduce TTLs. A falling hit ratio with a growing `dbsize` usually means stale\ncache keys, not a Redis fault.\n\n### 4. Auth caches (auth-service / query-service)\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'refresh_token:*' | head\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'user_tokens:*'    | head\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'token_blacklist:*'| head\nkubectl -n pfa exec $MASTER -- $CLI ttl  'refresh_token:<id>'\nkubectl -n pfa exec $MASTER -- $CLI memory usage 'refresh_token:<id>'\n```\n\nPrefer `--scan` over `keys '*'`; `keys` blocks the single-threaded server.\n\n### 5. Slow operations and clients\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI slowlog len\nkubectl -n pfa exec $MASTER -- $CLI slowlog get 20\nkubectl -n pfa exec $MASTER -- $CLI info clients | grep -E 'connected_clients|blocked_clients'\nkubectl -n pfa exec $MASTER -- $CLI client list\nkubectl -n pfa exec $MASTER -- $CLI latency latest\n```\n\n### 6. Live traffic (short burst only)\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI monitor      # Ctrl-C after a few seconds\n```\n\n`monitor` adds load and can print secrets — use it for seconds, not minutes.\n\n### 7. Persistence checks\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI info persistence | grep -E 'rdb_last_bgsave_status|aof_last_bgrewrite_status|rdb_changes_since_last_save'\nkubectl -n pfa exec $MASTER -- $CLI bgsave      # async; never `save` in prod\n```\n\n### Last resort\n\n`FLUSHDB` / `FLUSHALL` delete the auth token caches and every cached\naggregate. Only run after a verified backup, and expect all users to be\nlogged out.\n"
           },
           "gridPos": {
             "x": 0,

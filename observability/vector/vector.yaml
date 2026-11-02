@@ -19,28 +19,46 @@ transforms:
       .service         = string(.label."com.docker.compose.service")  ?? "unknown"
       .compose_project = string(.label."com.docker.compose.project")  ?? "unknown"
       .container       = string(.container_name)                       ?? "unknown"
+      .pod             = string(.container_name)                       ?? ""
+      .logger          = ""
+      .thread          = ""
 
       # Try parsing JSON first (for Spring Boot LogstashEncoder)
       parsed, err = parse_json(.message)
       if err == null {
          # Merge parsed JSON fields into root
          . = merge!(., parsed)
-         
+
          # LogstashEncoder outputs the message in "message" field
-         .level = string(.level) ?? "INFO"
+         .level = upcase(string(.level) ?? "INFO")
          .trace_id = string(.traceId) ?? ""
          .span_id = string(.spanId) ?? ""
-         
+         .logger = string(.logger_name) ?? ""
+         .thread = string(.thread_name) ?? ""
+
          if exists(.stack_trace) {
             .stack_trace = string(.stack_trace) ?? ""
          }
       } else {
-         # Fallback for non-JSON logs (Postgres, Redis, Kafka)
-         parsed_lvl, err_lvl = parse_regex(.message, r'(?P<level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)')
-         .level = if err_lvl == null { parsed_lvl.level } else { "INFO" }
+         # Fallback for plain-text logs (nginx, uvicorn, registry, Postgres, Redis)
+         level = "INFO"
+         m, e = parse_regex(string(.message) ?? "", r'(?i)\b(?P<lvl>trace|debug|info|notice|warn|warning|error|fatal|critical|panic|log)\b')
+         if e == null {
+            level = upcase(m.lvl) ?? "INFO"
+         }
+         .level = level
          .trace_id = ""
          .span_id = ""
       }
+
+      # Normalise the different vocabularies to the five dashboard labels.
+      lvl = upcase(string(.level))
+      lvl = replace(lvl, "WARNING", "WARN")
+      lvl = replace(lvl, "NOTICE", "INFO")
+      lvl = replace(lvl, "LOG", "INFO")
+      lvl = replace(lvl, "CRITICAL", "FATAL")
+      lvl = replace(lvl, "PANIC", "FATAL")
+      .level = lvl
 
       .timestamp = format_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S%.3f")
 
@@ -59,7 +77,14 @@ transforms:
       !contains(string(.message) ?? "", "Checking match of request") &&
       !contains(string(.message) ?? "", "Trying to match using") &&
       !contains(string(.message) ?? "", "No matches found") &&
-      !contains(string(.message) ?? "", "Authorization successful")
+      !contains(string(.message) ?? "", "Authorization successful") &&
+      # Health probes and per-request duplicates add volume, not signal.
+      !contains(string(.message) ?? "", "kube-probe") &&
+      !contains(string(.message) ?? "", "GET /health") &&
+      !contains(string(.message) ?? "", "actuator/health") &&
+      !contains(string(.message) ?? "", "GET /v2/") &&
+      !contains(string(.message) ?? "", "msg=\"response completed\"") &&
+      !contains(string(.message) ?? "", "Received internal cache evict request")
 
   mask_pii:
     type: remap

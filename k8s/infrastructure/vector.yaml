@@ -69,24 +69,49 @@ data:
         inputs: ["exclude_self"]
         source: |
           .service         = string(.kubernetes.pod_labels.app) ?? "unknown"
+          # Keep the pod and the Java logger/thread so the Grafana logs panel
+          # can show where a line came from instead of only the workload name.
+          .pod             = string(.kubernetes.pod_name) ?? ""
           .compose_project = string(.kubernetes.pod_namespace) ?? "unknown"
           .container       = string(.kubernetes.container_name) ?? "unknown"
+          .logger          = ""
+          .thread          = ""
 
-          parsed, err = parse_json(.message)
+          raw = string(.message) ?? ""
+          parsed, err = parse_json(raw)
           if err == null {
              . = merge!(., parsed)
-             .level = string(.level) ?? "INFO"
+             .level = upcase(string(.level) ?? "INFO")
              .trace_id = string(.traceId) ?? ""
              .span_id = string(.spanId) ?? ""
+             .logger = string(.logger_name) ?? ""
+             .thread = string(.thread_name) ?? ""
              if exists(.stack_trace) {
                 .stack_trace = string(.stack_trace) ?? ""
              }
           } else {
-             parsed_lvl, err_lvl = parse_regex(.message, r'(?P<level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)')
-             .level = if err_lvl == null { parsed_lvl.level } else { "INFO" }
+             # Plain-text services (nginx, uvicorn, registry, Postgres, Redis).
+             # Use the level token the source already prints instead of
+             # labelling everything INFO; leave the message itself untouched.
+             level = "INFO"
+             m, e = parse_regex(raw, r'(?i)\b(?P<lvl>trace|debug|info|notice|warn|warning|error|fatal|critical|panic|log)\b')
+             if e == null {
+                level = upcase(m.lvl) ?? "INFO"
+             }
+             .level = level
              .trace_id = ""
              .span_id = ""
           }
+
+          # Normalise the different vocabularies to the five labels the
+          # dashboards and colour mappings use.
+          lvl = upcase(string(.level))
+          lvl = replace(lvl, "WARNING", "WARN")
+          lvl = replace(lvl, "NOTICE", "INFO")
+          lvl = replace(lvl, "LOG", "INFO")
+          lvl = replace(lvl, "CRITICAL", "FATAL")
+          lvl = replace(lvl, "PANIC", "FATAL")
+          .level = lvl
 
           .timestamp = format_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S%.3f")
 
@@ -104,7 +129,19 @@ data:
           !contains(string(.message) ?? "", "Checking match of request") &&
           !contains(string(.message) ?? "", "Trying to match using") &&
           !contains(string(.message) ?? "", "No matches found") &&
-          !contains(string(.message) ?? "", "Authorization successful")
+          !contains(string(.message) ?? "", "Authorization successful") &&
+          # Liveness/readiness probes: one line every few seconds per service,
+          # with no diagnostic value once the pod is up.
+          !contains(string(.message) ?? "", "kube-probe") &&
+          !contains(string(.message) ?? "", "GET /health") &&
+          !contains(string(.message) ?? "", "actuator/health") &&
+          !contains(string(.message) ?? "", "GET /v2/") &&
+          # Registry prints both an access line and a "response completed" line
+          # for every request; keep the access line only.
+          !contains(string(.message) ?? "", "msg=\"response completed\"") &&
+          # Command-service asks query-service to evict cache after every write
+          # during load tests; the outcome is logged separately.
+          !contains(string(.message) ?? "", "Received internal cache evict request")
 
       mask_pii:
         type: remap

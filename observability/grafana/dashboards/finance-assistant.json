@@ -1,7 +1,7 @@
 {
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "time": {
     "from": "now-1h",
@@ -28,7 +28,7 @@
     ]
   },
   "uid": "finance-assistant",
-  "title": "Finance Assistant \u2014 Overview & Debug",
+  "title": "Finance Assistant — Overview & Debug",
   "tags": [
     "finance-assistant"
   ],
@@ -183,6 +183,19 @@
   },
   "panels": [
     {
+      "id": 20,
+      "type": "row",
+      "title": "Health at a glance",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
       "id": 1,
       "title": "Services up",
       "type": "stat",
@@ -228,16 +241,16 @@
           ],
           "fields": ""
         },
-        "graphMode": "none",
-        "textMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
         "colorMode": "value",
-        "justifyMode": "auto"
+        "justifyMode": "center"
       },
       "gridPos": {
         "x": 0,
-        "y": 0,
-        "w": 4,
-        "h": 4
+        "y": 1,
+        "w": 6,
+        "h": 5
       }
     },
     {
@@ -282,16 +295,16 @@
           ],
           "fields": ""
         },
-        "graphMode": "none",
-        "textMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
         "colorMode": "none",
-        "justifyMode": "auto"
+        "justifyMode": "center"
       },
       "gridPos": {
-        "x": 4,
-        "y": 0,
-        "w": 5,
-        "h": 4
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 5
       }
     },
     {
@@ -343,30 +356,30 @@
           ],
           "fields": ""
         },
-        "graphMode": "none",
-        "textMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
         "colorMode": "background",
-        "justifyMode": "auto"
+        "justifyMode": "center"
       },
       "gridPos": {
-        "x": 9,
-        "y": 0,
-        "w": 5,
-        "h": 4
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 5
       }
     },
     {
-      "id": 4,
-      "title": "CPU used",
+      "id": 11,
+      "title": "p99 latency",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus-ds"
       },
-      "description": "CPU in use across the namespace, as a percentage of the sum of all CPU limits.",
+      "description": "99th percentile request latency across the four Spring services, excluding the SSE stream.",
       "targets": [
         {
-          "expr": "100 * sum((rate(container_cpu_usage_seconds_total{namespace=\"pfa\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_cpu_quota{namespace=\"pfa\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
           "refId": "A",
           "instant": true,
           "format": "table"
@@ -374,8 +387,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
-          "decimals": 1,
+          "unit": "ms",
+          "decimals": 0,
+          "mappings": [],
           "color": {
             "mode": "thresholds"
           },
@@ -388,98 +402,49 @@
               },
               {
                 "color": "orange",
-                "value": 60
+                "value": 300
               },
               {
                 "color": "red",
-                "value": 85
+                "value": 1000
               }
             ]
-          },
-          "mappings": []
-        }
+          }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
           ],
-          "fields": ""
+          "fields": "",
+          "values": false
         },
-        "graphMode": "none",
-        "textMode": "value",
-        "colorMode": "background",
-        "justifyMode": "auto"
+        "graphMode": "area",
+        "textMode": "auto",
+        "colorMode": "value",
+        "justifyMode": "center"
       },
       "gridPos": {
-        "x": 14,
-        "y": 0,
-        "w": 5,
-        "h": 4
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 5
       }
     },
     {
-      "id": 5,
-      "title": "Memory used",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus-ds"
-      },
-      "description": "Memory in use across the namespace, as a percentage of the sum of all memory limits.",
-      "targets": [
-        {
-          "expr": "100 * sum((container_memory_working_set_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_memory_limit_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
-          "refId": "A",
-          "instant": true,
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "decimals": 1,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 60
-              },
-              {
-                "color": "red",
-                "value": 85
-              }
-            ]
-          },
-          "mappings": []
-        }
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "graphMode": "none",
-        "textMode": "value",
-        "colorMode": "background",
-        "justifyMode": "auto"
-      },
+      "id": 21,
+      "type": "row",
+      "title": "Traffic",
+      "collapsed": false,
       "gridPos": {
-        "x": 19,
-        "y": 0,
-        "w": 5,
-        "h": 4
-      }
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
     },
     {
       "id": 6,
@@ -532,9 +497,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 7,
         "w": 12,
-        "h": 8
+        "h": 9
       }
     },
     {
@@ -588,10 +553,23 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 4,
+        "y": 7,
         "w": 12,
-        "h": 8
+        "h": 9
       }
+    },
+    {
+      "id": 22,
+      "type": "row",
+      "title": "Latency",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
     },
     {
       "id": 8,
@@ -651,9 +629,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 17,
         "w": 24,
-        "h": 8
+        "h": 9
       },
       "description": "Response time percentiles per service (ms), excluding the long-lived notifications SSE stream."
     },
@@ -708,15 +686,167 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 20,
+        "y": 26,
         "w": 24,
-        "h": 8
+        "h": 9
       },
       "description": "Maximum response time per Spring Cloud Gateway route (ms). The notifications SSE route is excluded because its duration is connection lifetime."
     },
     {
+      "id": 23,
+      "type": "row",
+      "title": "Resource pressure",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 4,
+      "title": "CPU used",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "description": "CPU in use across the namespace, as a percentage of the sum of all CPU limits.",
+      "targets": [
+        {
+          "expr": "100 * sum((rate(container_cpu_usage_seconds_total{namespace=\"pfa\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_cpu_quota{namespace=\"pfa\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
+          "refId": "A",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "mappings": []
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "graphMode": "area",
+        "textMode": "auto",
+        "colorMode": "background",
+        "justifyMode": "center"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 12,
+        "h": 5
+      }
+    },
+    {
+      "id": 5,
+      "title": "Memory used",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus-ds"
+      },
+      "description": "Memory in use across the namespace, as a percentage of the sum of all memory limits.",
+      "targets": [
+        {
+          "expr": "100 * sum((container_memory_working_set_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_memory_limit_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
+          "refId": "A",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "mappings": []
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "graphMode": "area",
+        "textMode": "auto",
+        "colorMode": "background",
+        "justifyMode": "center"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 36,
+        "w": 12,
+        "h": 5
+      }
+    },
+    {
+      "id": 24,
+      "type": "row",
+      "title": "Logs",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
       "id": 9,
-      "title": "Logs \u2014 $service | $level | $search",
+      "title": "Logs — $service | $level | $search",
       "type": "logs",
       "datasource": {
         "type": "grafana-clickhouse-datasource",
@@ -725,7 +855,7 @@
       "targets": [
         {
           "queryType": "sql",
-          "rawSql": "SELECT timestamp, if(stack_trace != '', concat(message, char(10), stack_trace), message) AS message, service, level FROM default.logs WHERE service ILIKE '$service' AND level ILIKE '$level' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
+          "rawSql": "SELECT timestamp, if(stack_trace != '', concat(message, char(10), stack_trace), message) AS message, level, service, pod, logger FROM default.logs WHERE service ILIKE '$service' AND level ILIKE '$level' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
           "refId": "A",
           "format": "logs"
         }
@@ -733,9 +863,9 @@
       "options": {
         "dedupStrategy": "none",
         "enableLogDetails": true,
-        "prettifyLogMessage": true,
+        "prettifyLogMessage": false,
         "showTime": true,
-        "showLabels": true,
+        "showLabels": false,
         "showCommonLabels": false,
         "wrapLogMessage": true,
         "sortOrder": "Descending"
@@ -796,11 +926,11 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 28,
+        "y": 41,
         "w": 24,
-        "h": 16
+        "h": 20
       }
     }
   ],
-  "description": "Service health, traffic, latency and searchable logs. Start here when something breaks."
+  "description": "Service health, traffic, latency and logs in one place. Rows are grouped by question: is everything up, how much traffic, how fast, and what is running out of resources."
 }

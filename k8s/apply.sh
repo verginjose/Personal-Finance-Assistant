@@ -110,6 +110,10 @@ echo "==> Rendering Grafana provisioning ConfigMaps"
 grafana_dir="${render_dir}/grafana-datasources"
 mkdir -p "${grafana_dir}"
 cp "${ROOT_DIR}/observability/grafana/provisioning/datasources/prometheus.yml" "${grafana_dir}/"
+# Postgres and Redis datasources read their credentials from the Grafana
+# Deployment environment ($__env{...}), so their files carry no secrets.
+cp "${K8S_DIR}/config/grafana/postgres.yml" "${grafana_dir}/"
+cp "${K8S_DIR}/config/grafana/redis.yml" "${grafana_dir}/"
 envsubst '${CLICKHOUSE_PASSWORD}' \
   < "${K8S_DIR}/config/grafana/clickhouse.yml" \
   > "${grafana_dir}/clickhouse.yml"

@@ -1,0 +1,25 @@
+apiVersion: 1
+
+# Redis datasource for the "Data — Postgres & Redis" dashboard. Uses the
+# redis-datasource plugin installed by GF_INSTALL_PLUGINS in the Grafana
+# Deployment, so panels can run DBSIZE / INFO / SCAN against the live server
+# instead of relying on an exporter's precomputed metrics.
+#
+# The password is injected from the redis-secrets Secret into the Grafana
+# environment and resolved by Grafana at provisioning time.
+datasources:
+  - name: Redis
+    type: redis-datasource
+    uid: redis-ds
+    access: proxy
+    editable: true
+    url: redis://redis:6379
+    jsonData:
+      client: standalone
+      addr: redis:6379
+      poolSize: 4
+      timeout: 10
+      pingInterval: 0
+      pipelineWindow: 0
+    secureJsonData:
+      password: $__env{REDIS_PASSWORD}

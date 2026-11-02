@@ -69,6 +69,11 @@ spec:
             - secretRef:
                 name: auth-service-secrets
           env:
+            # Structured (one-line JSON) stdout for the Vector -> ClickHouse
+            # pipeline. Without this profile logback logs a human-readable
+            # line, which is what local runs want.
+            - name: SPRING_PROFILES_ACTIVE
+              value: structured-logs
             # Derived values. $(VAR) resolves against the envFrom variables,
             # which Kubernetes injects before this list.
             - name: SPRING_R2DBC_URL

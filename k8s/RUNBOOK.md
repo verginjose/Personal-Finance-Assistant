@@ -267,6 +267,7 @@ kubectl -n pfa port-forward svc/grafana 3000:3000 &
 | Dashboard | What it answers |
 |---|---|
 | **Finance Assistant — Overview & Debug** | service health, requests, 5xx, p95/p99 latency, and searchable logs in one place |
+| **Data — Postgres & Redis** | live row counts and table sizes, outbox backlog, active sessions, indexes, settings; Redis keys, memory, clients and per-prefix key counts |
 | **Pods — CPU / memory / restarts** | which pod is under CPU/memory pressure or restarting |
 | **Redis — Debug & Runbook** | Redis master/replica logs, replication health, pod pressure, and copy-paste `redis-cli` commands |
 | **Postgres — Debug & Runbook** | Postgres primary/replica logs, replication and recovery, pod pressure, and copy-paste `psql` commands |
@@ -287,6 +288,43 @@ directly with `./k8s/apply-observability.sh dashboards`.
 
 > Note: anything you change *inside* the Grafana UI is lost on the next
 > rollout for provisioned dashboards. Change the JSON file instead.
+
+### Data layer datasources
+
+The **Data — Postgres & Redis** dashboard needs two datasources that the
+Argo-managed Grafana Deployment provides but that are not stored in git:
+
+- **Postgres** (`postgres-ds`) — built-in datasource pointing at
+  `postgres-replica:5432`. Read-only use: every panel is a `SELECT`.
+- **Redis** (`redis-ds`) — the `redis-datasource` plugin, installed through
+  `GF_INSTALL_PLUGINS` and pointed at `redis:6379`.
+
+Credentials are not in the provisioning files. The Grafana Deployment reads
+`postgres-secrets` and `redis-secrets` into `POSTGRES_DS_*` / `REDIS_PASSWORD`
+environment variables, and the YAML references them with `$__env{...}`.
+Render and apply the ConfigMap with:
+
+```bash
+./k8s/apply-observability.sh datasources
+```
+
+The per-prefix Redis counters use `KEYS <prefix>*`, which is O(N) and blocks
+the server. That is acceptable for the ~10k keys here; use `SCAN` before
+pointing the same panel at a much larger dataset.
+
+### Log format
+
+Spring services emit one-line JSON only under the `structured-logs` profile,
+which `k8s/apps/*.yaml` sets through `SPRING_PROFILES_ACTIVE`. That is what
+lets Vector fill the `service`, `level`, `logger`, `thread` and `pod` columns
+in ClickHouse. Without the profile — `mvn spring-boot:run`, docker compose —
+logback prints a human-readable line instead, which is what you want when
+reading logs in a terminal.
+
+Vector drops health-probe noise (`kube-probe`, `GET /health`, `GET /v2/`),
+the registry's duplicate `response completed` line, and the command-service
+cache-evict request line before anything reaches ClickHouse. If a real line
+goes missing, check `k8s/infrastructure/vector.yaml` → `filter_noise`.
 
 ### Where pod metrics come from
 

@@ -73,6 +73,11 @@ spec:
             - secretRef:
                 name: api-gateway-secrets
           env:
+            # Structured (one-line JSON) stdout for the Vector -> ClickHouse
+            # pipeline. Without this profile logback logs a human-readable
+            # line, which is what local runs want.
+            - name: SPRING_PROFILES_ACTIVE
+              value: structured-logs
             # The gateway reads MINIO_SECRET_KEY; the Secret stores the
             # MinIO root password under its infrastructure-wide name.
             - name: MINIO_SECRET_KEY

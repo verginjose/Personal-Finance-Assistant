@@ -167,6 +167,9 @@ class Client:
     def _once(self, path, method, headers, body, files, timeout):
         url = f"{self.base}{API_PREFIX}{path}"
         hdrs = dict(headers or {})
+        # Cloudflare rejects the default Python-urllib User-Agent (error 1010),
+        # so a public GATEWAY_URL needs a real one.
+        hdrs.setdefault("User-Agent", "pfa-loadtest/1.0")
         data = None
         if files:
             data, ctype = self._build_multipart(files)

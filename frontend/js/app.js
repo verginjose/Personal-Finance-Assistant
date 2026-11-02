@@ -214,14 +214,14 @@ function renderShell() {
 
 export function navigateTo(view) {
   currentView = view;
-  
+
   // Update sidebar
   document.querySelectorAll('#sidebar-nav a').forEach(a => {
     const active = a.dataset.view === view;
     a.classList.toggle('active', active);
     a.setAttribute('aria-current', active ? 'page' : 'false');
   });
-  
+
   // Update bottom nav
   document.querySelectorAll('#bottom-nav .bottom-nav-item[data-view]').forEach(a => {
     const active = a.dataset.view === view;
@@ -231,6 +231,12 @@ export function navigateTo(view) {
   document.getElementById('sidebar-overlay').classList.remove('open');
   renderView();
 }
+
+// Template strings use inline handlers like onclick="navigateTo('transactions')".
+// Inline handlers resolve names in global scope, where a module-level export is
+// not visible (this broke the dashboard's Add Transaction / Set a Goal buttons
+// for users with no data). Expose it explicitly.
+window.navigateTo = navigateTo;
 
 function renderView() {
   const root = document.getElementById('view-root');

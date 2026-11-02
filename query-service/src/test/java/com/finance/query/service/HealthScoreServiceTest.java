@@ -140,16 +140,16 @@ class HealthScoreServiceTest {
 
     private List<CategoryRow> buildCategories(int count) {
         List<CategoryRow> list = new ArrayList<>();
-        List<String> categories=new ArrayList<>(List.of("FOOD_AND_DINING",
-                "TRANSPORT",
-                "HOUSING",
-                "UTILITIES",
-                "HEALTHCARE",
-                "EDUCATION",
-                "ENTERTAINMENT",
-                " SHOPPING",
-                "TRAVEL",
-                " INSURANCE"));
+        List<String> categories=new ArrayList<>(List.of("RESTAURANTS",
+                "PUBLIC_TRANSPORT",
+                "RENT",
+                "ELECTRICITY",
+                "MEDICINES",
+                "TUITION_AND_FEES",
+                "MOVIES_AND_EVENTS",
+                "CLOTHING",
+                "FLIGHT_AND_TRAIN",
+                "HEALTH_INSURANCE"));
         for (int i = 0; i < count; i++) {
             final BigDecimal amount = BigDecimal.valueOf(1000L * (i + 1));
             final Long txCount = (long) (i + 1);

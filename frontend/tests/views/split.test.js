@@ -10,6 +10,31 @@ function mockFetchJson(data, status = 200) {
   });
 }
 
+/**
+ * URL-routed mock for the group-detail screen. The view loads activity,
+ * group, members, expenses and balances concurrently, so a queued
+ * mockResolvedValueOnce sequence breaks whenever the fetch order changes.
+ */
+function mockGroupDetailApi(members) {
+  global.fetch.mockImplementation(async (url, opts = {}) => {
+    const p = new URL(url).pathname;
+    const method = (opts.method || 'GET').toUpperCase();
+    const json = (data, status = 200) => ({ status, ok: status < 400, text: async () => JSON.stringify(data) });
+
+    if (method === 'POST' && p.endsWith('/expenses')) return json({ id: 99 }, 201);
+    if (method === 'POST' && p.endsWith('/auth/users/bulk')) {
+      return json(members.map(m => ({ userId: m.userId, name: m.name })));
+    }
+    if (p.endsWith('/activity')) return json({ content: [], totalPages: 1 });
+    if (p.endsWith('/members')) return json(members);
+    if (p.endsWith('/expenses')) return json({ content: [], totalPages: 1 });
+    if (p.endsWith('/balances')) return json({ memberBalances: [], simplifiedDebts: [] });
+    if (p.endsWith('/groups/5')) return json({ id: 5, name: 'Trip' });
+    if (p.endsWith('/groups')) return json([{ id: 5, name: 'Trip', description: '' }]);
+    return json({});
+  });
+}
+
 describe('renderSplit', () => {
   const userId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
   let container;
@@ -97,15 +122,10 @@ describe('renderSplit', () => {
 
   it('sends paidBy UUID when adding a shared expense', async () => {
     const memberUserId = 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff';
-    mockFetchJson([{ id: 5, name: 'Trip', description: '' }]);
+    mockGroupDetailApi([{ id: 1, name: 'Me', userId: memberUserId, status: 'ACCEPTED' }]);
     await renderSplit(container);
     await vi.waitFor(() => expect(container.querySelector('.group-card')).toBeTruthy());
 
-    mockFetchJson({ id: 5, name: 'Trip' });
-    mockFetchJson([{ id: 1, name: 'Me', userId: memberUserId }]);
-    mockFetchJson([]);
-    mockFetchJson({ memberBalances: [], simplifiedDebts: [] });
-    mockFetchJson([]);
     container.querySelector('.group-card').click();
 
     await vi.waitFor(() => expect(document.getElementById('sp-add-expense')).toBeTruthy());
@@ -116,7 +136,6 @@ describe('renderSplit', () => {
     document.querySelector('#ae-desc').value = 'Lunch';
     document.querySelector('#ae-amt').value = '200';
     document.querySelector('#ae-paid').value = memberUserId;
-    mockFetchJson({ id: 99 }, 201);
 
     document.querySelector('#ae-form').requestSubmit();
 
@@ -138,18 +157,13 @@ describe('renderSplit', () => {
   it('sends splitDetails when using percentage split', async () => {
     const memberA = 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff';
     const memberB = 'cccccccc-dddd-eeee-ffff-000000000000';
-    mockFetchJson([{ id: 5, name: 'Trip', description: '' }]);
+    mockGroupDetailApi([
+      { id: 1, name: 'alice', userId: memberA, status: 'ACCEPTED' },
+      { id: 2, name: 'bob', userId: memberB, status: 'ACCEPTED' }
+    ]);
     await renderSplit(container);
     await vi.waitFor(() => expect(container.querySelector('.group-card')).toBeTruthy());
 
-    mockFetchJson({ id: 5, name: 'Trip' });
-    mockFetchJson([
-      { id: 1, name: 'alice', userId: memberA },
-      { id: 2, name: 'bob', userId: memberB }
-    ]);
-    mockFetchJson([]);
-    mockFetchJson({ memberBalances: [], simplifiedDebts: [] });
-    mockFetchJson([]);
     container.querySelector('.group-card').click();
 
     await vi.waitFor(() => expect(document.getElementById('sp-add-expense')).toBeTruthy());
@@ -167,7 +181,6 @@ describe('renderSplit', () => {
 
     document.getElementById(`ae-split-${memberA}`).value = '60';
     document.getElementById(`ae-split-${memberB}`).value = '40';
-    mockFetchJson({ id: 100 }, 201);
 
     document.querySelector('#ae-form').requestSubmit();
 

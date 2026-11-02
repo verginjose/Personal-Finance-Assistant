@@ -84,7 +84,7 @@ class AiInsightsServiceTest {
         BigDecimal income  = new BigDecimal("30000");
         BigDecimal expense = new BigDecimal("20000");
         List<CategoryRow> cats = new ArrayList<>();
-        final Category category= Category.valueOf("FOOD_AND_DINING");
+        final Category category= Category.valueOf("RESTAURANTS");
         final BigDecimal amount=new BigDecimal("8000");
         cats.add(new CategoryRow() {
             @Override
@@ -108,7 +108,7 @@ class AiInsightsServiceTest {
         assertThat(prompt).contains("30000");
         assertThat(prompt).contains("20000");
         assertThat(prompt).contains("10000"); // net
-        assertThat(prompt).contains("FOOD_AND_DINING");
+        assertThat(prompt).contains("RESTAURANTS");
     }
 
     @Test
@@ -124,13 +124,8 @@ class AiInsightsServiceTest {
     @Test
     @DisplayName("generateInsights: returns default response when user has no transactions")
     void generateInsights_noTransactions_returnsDefaultMessage() {
-        when(repository.getTotalAmountByTypeAndDateRange(any(), ArgumentMatchers.eq(TransactionType.INCOME), any(), any()))
-                .thenReturn(null);
-        when(repository.getTotalAmountByTypeAndDateRange(any(), ArgumentMatchers.eq(TransactionType.EXPENSE), any(), any()))
-                .thenReturn(null);
-        when(repository.getCategoryAnalyticsByDateRange(any(), any(), any()))
-                .thenReturn(Collections.emptyList());
-
+        // generateInsights() now reads getTotalAmountByType()/getAllCategoryAnalytics();
+        // unstubbed mocks return null/empty, which is the "no transactions" case.
         AiInsightResponse res = service.generateInsights(userId);
 
         assertThat(res.getSummary()).containsIgnoringCase("transaction");

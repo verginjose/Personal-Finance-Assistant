@@ -11,7 +11,6 @@ import {
   progressBar,
   typeBadge,
   categoryOptions,
-  EXPENSE_CATS,
   renderHealthData,
   renderAiData,
 } from '../js/utils/ui.js';
@@ -36,7 +35,7 @@ describe('ui utilities', () => {
   });
 
   it('formats category labels', () => {
-    expect(formatCategory('FOOD_AND_DINING')).toBe('FOOD AND DINING');
+    expect(formatCategory('RESTAURANTS')).toBe('Restaurants');
   });
 
   it('formats dates from ISO strings', () => {
@@ -80,8 +79,8 @@ describe('ui utilities', () => {
   });
 
   it('generates category option elements', () => {
-    const html = categoryOptions(EXPENSE_CATS.slice(0, 2), 'FOOD_AND_DINING');
-    expect(html).toContain('value="FOOD_AND_DINING"');
+    const html = categoryOptions(['RENT', 'RESTAURANTS'], 'RESTAURANTS');
+    expect(html).toContain('value="RESTAURANTS"');
     expect(html).toContain('selected');
   });
 

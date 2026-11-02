@@ -68,6 +68,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             WHERE t.userId = :userId
               AND t.deletedAt IS NULL
               AND (cast(:type as string) IS NULL OR t.type = :type)
+              AND (cast(:category as string) IS NULL OR t.category = :category)
               AND (cast(:start as timestamp) IS NULL OR t.createdAt >= :start)
               AND (cast(:end as timestamp) IS NULL OR t.createdAt <= :end)
             ORDER BY t.createdAt DESC
@@ -75,6 +76,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
     Page<TransactionEntry> findByUserIdAndFilters(
             @Param("userId") UUID userId,
             @Param("type") TransactionType type,
+            @Param("category") Category category,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end,
             Pageable pageable);

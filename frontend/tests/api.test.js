@@ -84,6 +84,9 @@ describe('api client', () => {
     window.addEventListener('auth-expired', handler);
 
     global.fetch.mockResolvedValueOnce({ status: 401, ok: false, text: async () => '{}' });
+    // The client retries via /auth/refresh when a refresh token is stored;
+    // a failed refresh is what clears the session.
+    global.fetch.mockResolvedValueOnce({ status: 401, ok: false, text: async () => '{}' });
     await expect(api.get('/upsert/summary')).rejects.toThrow('Session expired');
     expect(Auth.isLoggedIn()).toBe(false);
     expect(handler).toHaveBeenCalled();

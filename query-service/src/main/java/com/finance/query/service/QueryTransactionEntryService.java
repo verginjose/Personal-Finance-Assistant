@@ -1,6 +1,7 @@
 package com.finance.query.service;
 
 import com.finance.query.dto.CreateEntryResponse;
+import com.finance.query.model.Category;
 import com.finance.query.model.TransactionEntry;
 import com.finance.query.model.TransactionType;
 import com.finance.query.repository.TransactionEntryRepository;
@@ -39,16 +40,16 @@ public class QueryTransactionEntryService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "transactions", key = "#userId + ':' + (#type != null ? #type : 'ALL') + ':' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX') + ':' + #page + ':' + #size", sync = true)
+    @Cacheable(value = "transactions", key = "#userId + ':' + (#type != null ? #type : 'ALL') + ':' + (#category != null ? #category : 'ALL_CATS') + ':' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX') + ':' + #page + ':' + #size", sync = true)
     public Page<TransactionEntry> getEntriesByUserId(
-            UUID userId, TransactionType type,
+            UUID userId, TransactionType type, Category category,
             LocalDate startDate, LocalDate endDate,
             int page, int size) {
 
         LocalDateTime start = startDate != null ? startDate.atStartOfDay()          : null;
         LocalDateTime end   = endDate   != null ? endDate.atTime(23, 59, 59) : null;
 
-        return repository.findByUserIdAndFilters(userId, type, start, end, PageRequest.of(page, size));
+        return repository.findByUserIdAndFilters(userId, type, category, start, end, PageRequest.of(page, size));
     }
 
     @Transactional(readOnly = true)

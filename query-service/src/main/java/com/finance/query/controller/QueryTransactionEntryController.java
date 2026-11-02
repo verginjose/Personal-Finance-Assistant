@@ -1,6 +1,7 @@
 package com.finance.query.controller;
 
 import com.finance.query.dto.CreateEntryResponse;
+import com.finance.query.model.Category;
 import com.finance.query.model.TransactionEntry;
 import com.finance.query.model.TransactionType;
 import com.finance.query.service.QueryTransactionEntryService;
@@ -50,11 +51,12 @@ public class QueryTransactionEntryController {
     public ResponseEntity<Page<TransactionEntry>> getEntries(
             @RequestParam UUID userId,
             @RequestParam(required = false) TransactionType type,
+            @RequestParam(required = false) Category category,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(service.getEntriesByUserId(userId, type, startDate, endDate, page, size));
+        return ResponseEntity.ok(service.getEntriesByUserId(userId, type, category, startDate, endDate, page, size));
     }
 
     @GetMapping("/search")

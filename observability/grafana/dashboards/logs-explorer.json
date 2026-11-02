@@ -1,0 +1,532 @@
+{
+  "uid": "logs-explorer",
+  "title": "Logs — Search & Debug",
+  "tags": [
+    "finance-assistant",
+    "logs",
+    "debug"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "editable": true,
+  "graphTooltip": 0,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "3h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d"
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "custom",
+        "query": "api-gateway,auth-service,command-service,query-service,ocr-service,frontend,postgres-primary,postgres-replica,redis,redis-replica,rabbitmq,clickhouse,grafana,prometheus,registry,cloudflared,minio,vector,ci-runner",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [
+          {
+            "text": "All",
+            "value": "$__all",
+            "selected": true
+          }
+        ],
+        "includeAll": true,
+        "allValue": "%",
+        "multi": false
+      },
+      {
+        "name": "level",
+        "label": "Level",
+        "type": "custom",
+        "query": "TRACE,DEBUG,INFO,WARN,ERROR,FATAL",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": [
+          {
+            "text": "All",
+            "value": "$__all",
+            "selected": true
+          }
+        ],
+        "includeAll": true,
+        "allValue": "%",
+        "multi": false
+      },
+      {
+        "name": "search",
+        "label": "Search",
+        "type": "textbox",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "query": ""
+      }
+    ]
+  },
+  "description": "Searchable ClickHouse logs on their own page: free-text search over message and logger, service/level filters, matched/error/warn counts and volume over time.",
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Search",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 1,
+      "title": "Logs — $service | $level | $search",
+      "type": "logs",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse-ds"
+      },
+      "description": "Matching lines, newest first. $search looks in message and logger. Expand a line to see pod, logger, thread and trace id.",
+      "targets": [
+        {
+          "queryType": "sql",
+          "rawSql": "SELECT timestamp, if(stack_trace != '', concat(message, char(10), stack_trace), message) AS message, level, service, pod, logger, trace_id FROM default.logs WHERE service ILIKE '$service' AND level ILIKE '$level' AND (message ILIKE '%${search}%' OR logger ILIKE '%${search}%') AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 1000",
+          "refId": "A",
+          "format": "logs"
+        }
+      ],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "level"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ERROR": {
+                        "color": "red",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "WARN": {
+                        "color": "orange",
+                        "index": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "INFO": {
+                        "color": "green",
+                        "index": 2
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "DEBUG": {
+                        "color": "blue",
+                        "index": 3
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "FATAL": {
+                        "color": "purple",
+                        "index": 4
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 24,
+        "h": 22
+      }
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Volume in range",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "title": "Matched lines",
+      "type": "stat",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse-ds"
+      },
+      "description": "Lines matching the current service, level and search filters.",
+      "targets": [
+        {
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM default.logs WHERE service ILIKE '$service' AND level ILIKE '$level' AND (message ILIKE '%${search}%' OR logger ILIKE '%${search}%') AND $__timeFilter(timestamp)",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 8,
+        "h": 5
+      }
+    },
+    {
+      "id": 3,
+      "title": "Errors",
+      "type": "stat",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse-ds"
+      },
+      "description": "ERROR lines for the selected service and search, regardless of the level filter.",
+      "targets": [
+        {
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM default.logs WHERE service ILIKE '$service' AND level = 'ERROR' AND (message ILIKE '%${search}%' OR logger ILIKE '%${search}%') AND $__timeFilter(timestamp)",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 24,
+        "w": 8,
+        "h": 5
+      }
+    },
+    {
+      "id": 4,
+      "title": "Warnings",
+      "type": "stat",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse-ds"
+      },
+      "description": "WARN lines for the selected service and search, regardless of the level filter.",
+      "targets": [
+        {
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM default.logs WHERE service ILIKE '$service' AND level = 'WARN' AND (message ILIKE '%${search}%' OR logger ILIKE '%${search}%') AND $__timeFilter(timestamp)",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 24,
+        "w": 8,
+        "h": 5
+      }
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Volume over time",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 5,
+      "title": "Lines per service",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse-ds"
+      },
+      "description": "Log volume per service for the current filters.",
+      "targets": [
+        {
+          "queryType": "sql",
+          "rawSql": "SELECT $__timeInterval(timestamp) AS time, service, count() AS lines FROM default.logs WHERE service ILIKE '$service' AND level ILIKE '$level' AND (message ILIKE '%${search}%' OR logger ILIKE '%${search}%') AND $__timeFilter(timestamp) GROUP BY time, service ORDER BY time",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "sum",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "id": 6,
+      "title": "Errors per service",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse-ds"
+      },
+      "description": "ERROR volume per service; the level filter does not apply to this panel.",
+      "targets": [
+        {
+          "queryType": "sql",
+          "rawSql": "SELECT $__timeInterval(timestamp) AS time, service, count() AS errors FROM default.logs WHERE service ILIKE '$service' AND level = 'ERROR' AND (message ILIKE '%${search}%' OR logger ILIKE '%${search}%') AND $__timeFilter(timestamp) GROUP BY time, service ORDER BY time",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "sum",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 9
+      }
+    }
+  ]
+}

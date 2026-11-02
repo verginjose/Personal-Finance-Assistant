@@ -266,7 +266,8 @@ kubectl -n pfa port-forward svc/grafana 3000:3000 &
 
 | Dashboard | What it answers |
 |---|---|
-| **Finance Assistant — Overview & Debug** | service health, requests, 5xx, p95/p99 latency, and searchable logs in one place |
+| **Finance Assistant — Overview & Debug** | service health, traffic, 5xx, p95/p99 latency and resource pressure |
+| **Logs — Search & Debug** | searchable ClickHouse logs with service/level filters, matched/error/warn counts and volume over time |
 | **Data — Postgres & Redis** | live row counts and table sizes, outbox backlog, active sessions, indexes, settings; Redis keys, memory, clients and per-prefix key counts |
 | **Pods — CPU / memory / restarts** | which pod is under CPU/memory pressure or restarting |
 | **Redis — Debug & Runbook** | Redis master/replica logs, replication health, pod pressure, and copy-paste `redis-cli` commands |

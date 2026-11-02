@@ -69,11 +69,13 @@ hours, keeping the `kubectl port-forward` alive between runs.
   and the cached balances kept reporting the pre-expense nets. Once the key had
   been registered (after another read), deleting an expense *did* evict it.
   Stage 10 is the regression guard.
-  **Fixed** in this commit set: `QueryCacheEvictor` now always deletes the
+  **Fixed** in `39ff430`: `QueryCacheEvictor` now always deletes the
   deterministic `group-balances:<id>` key and SCANs the other group prefixes
   when the registry set is empty; group eviction plus its write tokens run in
   `afterCommit` (not inside the transaction, which left a refill window); and
   `TrackingRedisCache` re-registers a key on a cache hit, not only on a fill.
+  A worked timeline of the failure and the fix is in
+  [`GROUP-BALANCES-STALE-CACHE.md`](GROUP-BALANCES-STALE-CACHE.md).
 - **Group expense count must be asserted exactly.** The earlier scenario used
   `listed >= posted - deleted`, which is trivially true when a delete is not
   reflected. The golden test now polls for the exact regular-expense count

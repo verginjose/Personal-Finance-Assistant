@@ -172,6 +172,10 @@ resilience4j:
         sliding-window-size: 300
         minimum-number-of-calls: 100
         failure-rate-threshold: 80
+        # A saturated admission-control semaphore is not a dependency failure.
+        # Counting it opened the breaker while every backend was healthy.
+        ignore-exceptions:
+          - io.github.resilience4j.bulkhead.BulkheadFullException
         wait-duration-in-open-state: 15s
         permitted-number-of-calls-in-half-open-state: 10
         slow-call-duration-threshold: 10s
@@ -180,20 +184,28 @@ resilience4j:
         sliding-window-size: 150
         minimum-number-of-calls: 60
         failure-rate-threshold: 80
+        ignore-exceptions:
+          - io.github.resilience4j.bulkhead.BulkheadFullException
         wait-duration-in-open-state: 30s
         permitted-number-of-calls-in-half-open-state: 5
         slow-call-duration-threshold: 20s
         slow-call-rate-threshold: 80
       auth-cb:
         sliding-window-size: 50
+        minimum-number-of-calls: 30
         failure-rate-threshold: 60
+        ignore-exceptions:
+          - io.github.resilience4j.bulkhead.BulkheadFullException
         wait-duration-in-open-state: 15s
         permitted-number-of-calls-in-half-open-state: 5
         slow-call-duration-threshold: 5s
         slow-call-rate-threshold: 85
       ocr-cb:
         sliding-window-size: 20
+        minimum-number-of-calls: 10
         failure-rate-threshold: 50
+        ignore-exceptions:
+          - io.github.resilience4j.bulkhead.BulkheadFullException
         wait-duration-in-open-state: 45s
         permitted-number-of-calls-in-half-open-state: 4
         slow-call-duration-threshold: 20s
@@ -210,6 +222,29 @@ resilience4j:
         timeout-duration: 60s
       auth-cb:
         timeout-duration: 15s
+  # Spring Cloud CircuitBreaker installs a Resilience4j semaphore bulkhead per
+  # circuit breaker using Resilience4j's defaults: 25 concurrent calls with no
+  # wait. The 50-user scenario exceeds 25 in-flight calls on every route, so
+  # the semaphore rejected calls with BulkheadFullException in ~0.07 ms and the
+  # rejection was recorded as a circuit-breaker failure — that is the "~0.1 ms
+  # transport error" that tripped the breakers. Size each bulkhead at the
+  # concurrency its backend is provisioned for; it still bounds in-flight
+  # calls, but well above the working set. max-wait-duration stays 0 because a
+  # waiting semaphore blocks the single gateway event-loop thread.
+  bulkhead:
+    instances:
+      upsert-cb:
+        max-concurrent-calls: 200
+        max-wait-duration: 0ms
+      analytics-cb:
+        max-concurrent-calls: 200
+        max-wait-duration: 0ms
+      auth-cb:
+        max-concurrent-calls: 200
+        max-wait-duration: 0ms
+      ocr-cb:
+        max-concurrent-calls: 50
+        max-wait-duration: 0ms
 
 logging:
   level:

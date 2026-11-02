@@ -2127,7 +2127,7 @@ data:
     {
       "timezone": "browser",
       "schemaVersion": 39,
-      "version": 2,
+      "version": 3,
       "refresh": "15s",
       "time": {
         "from": "now-1h",
@@ -2247,77 +2247,161 @@ data:
               }
             ],
             "includeAll": true,
-            "allValue": "%",
+            "allValue": ".*",
             "multi": false
-          },
-          {
-            "name": "level",
-            "label": "Log Level",
-            "type": "custom",
-            "query": "INFO,WARN,ERROR,DEBUG,FATAL",
-            "current": {
-              "text": "All",
-              "value": "$__all"
-            },
-            "options": [
-              {
-                "text": "All",
-                "value": "$__all",
-                "selected": true
-              },
-              {
-                "text": "INFO",
-                "value": "INFO",
-                "selected": false
-              },
-              {
-                "text": "WARN",
-                "value": "WARN",
-                "selected": false
-              },
-              {
-                "text": "ERROR",
-                "value": "ERROR",
-                "selected": false
-              },
-              {
-                "text": "DEBUG",
-                "value": "DEBUG",
-                "selected": false
-              },
-              {
-                "text": "FATAL",
-                "value": "FATAL",
-                "selected": false
-              }
-            ],
-            "includeAll": true,
-            "allValue": "%",
-            "multi": false
-          },
-          {
-            "name": "search",
-            "label": "Search",
-            "type": "textbox",
-            "current": {
-              "text": "",
-              "value": ""
-            },
-            "query": ""
           }
         ]
       },
       "panels": [
+        {
+          "id": 23,
+          "type": "row",
+          "title": "Resource pressure",
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "panels": []
+        },
+        {
+          "id": 4,
+          "title": "CPU used",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "description": "CPU in use across the namespace, as a percentage of the sum of all CPU limits.",
+          "targets": [
+            {
+              "expr": "100 * sum((rate(container_cpu_usage_seconds_total{namespace=\"pfa\",container!=\"\",container!=\"POD\",pod=~\"$service.*\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_cpu_quota{namespace=\"pfa\",container!=\"\",container!=\"POD\",pod=~\"$service.*\"} / container_spec_cpu_period{namespace=\"pfa\",container!=\"\",container!=\"POD\",pod=~\"$service.*\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
+              "refId": "A",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 1,
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 60
+                  },
+                  {
+                    "color": "red",
+                    "value": 85
+                  }
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "graphMode": "area",
+            "textMode": "auto",
+            "colorMode": "background",
+            "justifyMode": "center"
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 12,
+            "x": 0,
+            "y": 1
+          }
+        },
+        {
+          "id": 5,
+          "title": "Memory used",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "description": "Memory in use across the namespace, as a percentage of the sum of all memory limits.",
+          "targets": [
+            {
+              "expr": "100 * sum((container_memory_working_set_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\",pod=~\"$service.*\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_memory_limit_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\",pod=~\"$service.*\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
+              "refId": "A",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "decimals": 1,
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 60
+                  },
+                  {
+                    "color": "red",
+                    "value": 85
+                  }
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "graphMode": "area",
+            "textMode": "auto",
+            "colorMode": "background",
+            "justifyMode": "center"
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 12,
+            "x": 12,
+            "y": 1
+          }
+        },
         {
           "id": 20,
           "type": "row",
           "title": "Health at a glance",
           "collapsed": false,
           "gridPos": {
-            "x": 0,
-            "y": 0,
+            "h": 1,
             "w": 24,
-            "h": 1
+            "x": 0,
+            "y": 6
           },
           "panels": []
         },
@@ -2332,7 +2416,7 @@ data:
           "description": "Prometheus scrape targets currently UP (api-gateway, auth-service, command-service, query-service).",
           "targets": [
             {
-              "expr": "sum(up{job=~\"api-gateway|auth-service|command-service|query-service\"})",
+              "expr": "sum(up{job=~\"$service\",job=~\"api-gateway|auth-service|command-service|query-service\"})",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -2373,10 +2457,10 @@ data:
             "justifyMode": "center"
           },
           "gridPos": {
-            "x": 0,
-            "y": 1,
+            "h": 5,
             "w": 6,
-            "h": 5
+            "x": 0,
+            "y": 7
           }
         },
         {
@@ -2390,7 +2474,7 @@ data:
           "description": "HTTP requests per minute handled by all four services.",
           "targets": [
             {
-              "expr": "round(sum(rate(http_server_requests_seconds_count{job=~\"api-gateway|auth-service|command-service|query-service\"}[1m])) * 60)",
+              "expr": "round(sum(rate(http_server_requests_seconds_count{job=~\"$service\",job=~\"api-gateway|auth-service|command-service|query-service\"}[1m])) * 60)",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -2427,10 +2511,10 @@ data:
             "justifyMode": "center"
           },
           "gridPos": {
-            "x": 6,
-            "y": 1,
+            "h": 5,
             "w": 6,
-            "h": 5
+            "x": 6,
+            "y": 7
           }
         },
         {
@@ -2443,7 +2527,7 @@ data:
           },
           "targets": [
             {
-              "expr": "round(sum(rate(http_server_requests_seconds_count{job=~\"api-gateway|auth-service|command-service|query-service\",status=~\"5..\"}[1m])) * 60)",
+              "expr": "round(sum(rate(http_server_requests_seconds_count{job=~\"$service\",job=~\"api-gateway|auth-service|command-service|query-service\",status=~\"5..\"}[1m])) * 60)",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -2488,10 +2572,10 @@ data:
             "justifyMode": "center"
           },
           "gridPos": {
-            "x": 12,
-            "y": 1,
+            "h": 5,
             "w": 6,
-            "h": 5
+            "x": 12,
+            "y": 7
           }
         },
         {
@@ -2502,10 +2586,10 @@ data:
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "description": "99th percentile request latency across the four Spring services, excluding the SSE stream.",
+          "description": "99th percentile request latency for the selected service (all four Spring services when All), excluding the notifications SSE stream.",
           "targets": [
             {
-              "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{job=~\"$service\",job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -2553,10 +2637,10 @@ data:
             "justifyMode": "center"
           },
           "gridPos": {
-            "x": 18,
-            "y": 1,
+            "h": 5,
             "w": 6,
-            "h": 5
+            "x": 18,
+            "y": 7
           }
         },
         {
@@ -2565,10 +2649,10 @@ data:
           "title": "Traffic",
           "collapsed": false,
           "gridPos": {
-            "x": 0,
-            "y": 6,
+            "h": 1,
             "w": 24,
-            "h": 1
+            "x": 0,
+            "y": 12
           },
           "panels": []
         },
@@ -2582,7 +2666,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))",
+              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"$service\",job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))",
               "refId": "A",
               "legendFormat": "{{job}}",
               "instant": false,
@@ -2622,10 +2706,10 @@ data:
             }
           },
           "gridPos": {
-            "x": 0,
-            "y": 7,
+            "h": 9,
             "w": 12,
-            "h": 9
+            "x": 0,
+            "y": 13
           }
         },
         {
@@ -2638,7 +2722,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"api-gateway|auth-service|command-service|query-service\",status=~\"5..\"}[5m]))",
+              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"$service\",job=~\"api-gateway|auth-service|command-service|query-service\",status=~\"5..\"}[5m]))",
               "refId": "A",
               "legendFormat": "{{job}}",
               "instant": false,
@@ -2678,10 +2762,10 @@ data:
             }
           },
           "gridPos": {
-            "x": 12,
-            "y": 7,
+            "h": 9,
             "w": 12,
-            "h": 9
+            "x": 12,
+            "y": 13
           }
         },
         {
@@ -2690,10 +2774,10 @@ data:
           "title": "Latency",
           "collapsed": false,
           "gridPos": {
-            "x": 0,
-            "y": 16,
+            "h": 1,
             "w": 24,
-            "h": 1
+            "x": 0,
+            "y": 22
           },
           "panels": []
         },
@@ -2707,14 +2791,14 @@ data:
           },
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
+              "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"$service\",job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
               "refId": "A",
               "legendFormat": "{{job}} p95",
               "instant": false,
               "range": true
             },
             {
-              "expr": "histogram_quantile(0.99, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
+              "expr": "histogram_quantile(0.99, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"$service\",job=~\"api-gateway|auth-service|command-service|query-service\"}[5m]))) * 1000",
               "refId": "B",
               "legendFormat": "{{job}} p99",
               "instant": false,
@@ -2754,12 +2838,12 @@ data:
             }
           },
           "gridPos": {
-            "x": 0,
-            "y": 17,
+            "h": 9,
             "w": 24,
-            "h": 9
+            "x": 0,
+            "y": 23
           },
-          "description": "Response time percentiles per service (ms), excluding the long-lived notifications SSE stream."
+          "description": "Response time percentiles per service (ms) for the selected service (all when All), excluding the long-lived notifications SSE stream."
         },
         {
           "id": 10,
@@ -2811,151 +2895,12 @@ data:
             }
           },
           "gridPos": {
-            "x": 0,
-            "y": 26,
+            "h": 9,
             "w": 24,
-            "h": 9
+            "x": 0,
+            "y": 32
           },
           "description": "Maximum response time per Spring Cloud Gateway route (ms). The notifications SSE route is excluded because its duration is connection lifetime."
-        },
-        {
-          "id": 23,
-          "type": "row",
-          "title": "Resource pressure",
-          "collapsed": false,
-          "gridPos": {
-            "x": 0,
-            "y": 35,
-            "w": 24,
-            "h": 1
-          },
-          "panels": []
-        },
-        {
-          "id": 4,
-          "title": "CPU used",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "CPU in use across the namespace, as a percentage of the sum of all CPU limits.",
-          "targets": [
-            {
-              "expr": "100 * sum((rate(container_cpu_usage_seconds_total{namespace=\"pfa\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_cpu_quota{namespace=\"pfa\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percent",
-              "decimals": 1,
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "orange",
-                    "value": 60
-                  },
-                  {
-                    "color": "red",
-                    "value": 85
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "area",
-            "textMode": "auto",
-            "colorMode": "background",
-            "justifyMode": "center"
-          },
-          "gridPos": {
-            "x": 0,
-            "y": 36,
-            "w": 12,
-            "h": 5
-          }
-        },
-        {
-          "id": 5,
-          "title": "Memory used",
-          "type": "stat",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus-ds"
-          },
-          "description": "Memory in use across the namespace, as a percentage of the sum of all memory limits.",
-          "targets": [
-            {
-              "expr": "100 * sum((container_memory_working_set_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120)) / sum((container_spec_memory_limit_bytes{namespace=\"pfa\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=\"pfa\"} @ end()))) - 120))",
-              "refId": "A",
-              "instant": true,
-              "format": "table"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percent",
-              "decimals": 1,
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "orange",
-                    "value": 60
-                  },
-                  {
-                    "color": "red",
-                    "value": 85
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "graphMode": "area",
-            "textMode": "auto",
-            "colorMode": "background",
-            "justifyMode": "center"
-          },
-          "gridPos": {
-            "x": 12,
-            "y": 36,
-            "w": 12,
-            "h": 5
-          }
         }
       ],
       "description": "Service health, traffic, latency and logs in one place. Rows are grouped by question: is everything up, how much traffic, how fast, and what is running out of resources."

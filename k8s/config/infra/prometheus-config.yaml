@@ -27,6 +27,14 @@ data:
           - source_labels: [routeId]
             regex: command-service-sse
             action: drop
+          # The same stream is also recorded by the gateway's own
+          # http_server_requests_* series, which carry no routeId (every proxied
+          # request is uri="UNKNOWN"). The gateway tags the notifications path
+          # with a constant pattern (SseObservationConfig), so drop it there too;
+          # otherwise a stream's lifetime lands in the latency histograms.
+          - source_labels: [uri]
+            regex: /api/upsert/notifications/.*
+            action: drop
 
       - job_name: auth-service
         metrics_path: /actuator/prometheus

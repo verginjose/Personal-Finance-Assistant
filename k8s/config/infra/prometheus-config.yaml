@@ -19,6 +19,14 @@ data:
         metrics_path: /actuator/prometheus
         static_configs:
           - targets: ['api-gateway:8080']
+        metric_relabel_configs:
+          # The notifications endpoint is a long-lived SSE stream: its observed
+          # duration is connection lifetime, not request latency, and one
+          # reconnecting browser is enough to own the 99th percentile. Drop the
+          # route-level series so it cannot skew the gateway panels.
+          - source_labels: [routeId]
+            regex: command-service-sse
+            action: drop
 
       - job_name: auth-service
         metrics_path: /actuator/prometheus
@@ -29,6 +37,13 @@ data:
         metrics_path: /actuator/prometheus
         static_configs:
           - targets: ['command-service:8081']
+        metric_relabel_configs:
+          # Same reasoning as the gateway SSE route: a stream's duration is how
+          # long the browser stayed connected, so keep it out of the latency
+          # histograms entirely.
+          - source_labels: [uri]
+            regex: /notifications/stream
+            action: drop
 
       - job_name: query-service
         metrics_path: /actuator/prometheus

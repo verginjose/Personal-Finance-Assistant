@@ -598,7 +598,7 @@ data:
         },
         {
           "id": 8,
-          "title": "Latency p95 / p99 by service",
+          "title": "Latency p95 / p99 by service (excl. SSE)",
           "type": "timeseries",
           "datasource": {
             "type": "prometheus",
@@ -658,7 +658,64 @@ data:
             "w": 24,
             "h": 8
           },
-          "description": "Response time percentiles per service (ms)."
+          "description": "Response time percentiles per service (ms), excluding the long-lived notifications SSE stream."
+        },
+        {
+          "id": 10,
+          "title": "Gateway latency by route (max)",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "targets": [
+            {
+              "expr": "spring_cloud_gateway_requests_seconds_max{job=\"api-gateway\",routeId!=\"command-service-sse\"} * 1000",
+              "refId": "A",
+              "legendFormat": "{{routeId}} max",
+              "instant": false,
+              "range": true
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ms",
+              "decimals": 2,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                },
+                "axisSoftMin": 0
+              }
+            }
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 20,
+            "w": 24,
+            "h": 8
+          },
+          "description": "Maximum response time per Spring Cloud Gateway route (ms). The notifications SSE route is excluded because its duration is connection lifetime."
         },
         {
           "id": 9,
@@ -742,7 +799,7 @@ data:
           },
           "gridPos": {
             "x": 0,
-            "y": 20,
+            "y": 28,
             "w": 24,
             "h": 16
           }

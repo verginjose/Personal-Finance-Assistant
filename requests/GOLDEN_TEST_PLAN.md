@@ -85,6 +85,18 @@ hours, keeping the `kubectl port-forward` alive between runs.
   ~0.5–2.5 s and pass consistently; the daily/monthly recurring seeds are
   detected and replicated to the read model on every run.
 
+## Groq OCR rate limit
+
+The OCR service calls Groq once per unique receipt text. This account allows
+**30 requests/minute**. The extractor now spaces calls by `60 / GROQ_RPM`
+(default 30) and retries `429`s with `Retry-After` (or a 2 s floor) up to
+`GROQ_MAX_ATTEMPTS` (default 5) instead of acking the job as failed. The
+200-image fixture therefore needs ~7 minutes to fill the OCR/LLM caches the
+first time a pod starts; afterwards both caches are hit and the queue drains
+immediately. The golden test itself never asserts Groq-derived rows — uploads
+assert `202` + `receiptId` — so the limit cannot turn the run red; the
+OCR→transaction half of the stage is created synchronously by the test.
+
 ## Operational notes
 
 - Everything goes through the gateway (`/api/**`); direct service ports are

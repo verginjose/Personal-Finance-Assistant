@@ -37,6 +37,30 @@ ocr_cache: TTLCache   = TTLCache(maxsize=500, ttl=86400)  # 24h
 llm_cache: TTLCache   = TTLCache(maxsize=200, ttl=86400)  # 24h
 rate_cache: dict      = {}   # {"rates": {...}, "date": "..."}
 
+# ── Groq rate limit ──────────────────────────────────────────────────────────
+# Groq allows 30 OCR-completion requests per minute on this account. The
+# consumer is sequential, so a single spacing gate between calls is enough;
+# 429s are retried with the server's Retry-After (or exponential backoff).
+GROQ_RPM = float(os.getenv("GROQ_RPM", "30"))
+GROQ_MIN_INTERVAL = 60.0 / GROQ_RPM if GROQ_RPM > 0 else 0.0
+GROQ_MAX_ATTEMPTS = int(os.getenv("GROQ_MAX_ATTEMPTS", "5"))
+_groq_next_at = 0.0
+_groq_gate = None  # asyncio.Lock, created lazily on the running loop
+
+
+async def _groq_wait_turn():
+    """Reserve the next Groq slot and sleep until it arrives."""
+    global _groq_next_at, _groq_gate
+    if _groq_gate is None:
+        _groq_gate = asyncio.Lock()
+    async with _groq_gate:
+        now = time.monotonic()
+        slot = max(now, _groq_next_at)
+        _groq_next_at = slot + GROQ_MIN_INTERVAL
+    delay = slot - time.monotonic()
+    if delay > 0:
+        await asyncio.sleep(delay)
+
 # ── PaddleOCR engine & HTTP Client (global, loaded once) ──────────────────────
 ocr_engine: Optional[PaddleOCR] = None
 http_client: Optional[httpx.AsyncClient] = None
@@ -278,14 +302,29 @@ async def _call_groq_generic(prompt: str) -> dict | list:
     }
 
     client = http_client if http_client else httpx.AsyncClient()
-    r = await client.post(
-        GROQ_URL,
-        json=payload,
-        headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-        timeout=40.0
-    )
-    if r.status_code != 200:
+    attempt = 0
+    while True:
+        await _groq_wait_turn()
+        r = await client.post(
+            GROQ_URL,
+            json=payload,
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            timeout=40.0
+        )
+        if r.status_code == 200:
+            break
+        attempt += 1
+        if r.status_code != 429 or attempt >= GROQ_MAX_ATTEMPTS:
             raise RuntimeError(f"Groq HTTP {r.status_code}: {r.text}")
+        retry_after = r.headers.get("Retry-After")
+        try:
+            delay = max(float(retry_after), GROQ_MIN_INTERVAL) if retry_after else GROQ_MIN_INTERVAL
+        except ValueError:
+            delay = GROQ_MIN_INTERVAL
+        delay = min(max(delay, 1.0), 30.0)
+        log.warning("Groq rate limited (attempt %d/%d); retrying in %.1fs",
+                    attempt, GROQ_MAX_ATTEMPTS, delay)
+        await asyncio.sleep(delay)
 
     content = r.json()["choices"][0]["message"]["content"]
     result = json.loads(content)

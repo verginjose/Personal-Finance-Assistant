@@ -467,26 +467,31 @@ def verify_member(client, member, checks, args):
     # replica read), then re-poll the summary until it agrees with the listing
     # or verify_timeout expires -- a summary that never converges is a real
     # stale-cache defect, not a harness race.
-    listed, income, expense, page = 0, 0.0, 0.0, 0
-    while page < 50:
-        status, body, _ = client.request(
-            "personal", f"/upsert/entries?userId={uid}&page={page}&size=173",
-            "GET", headers=member.headers())
-        if status != 200 or not isinstance(body, dict):
-            break
-        rows = body.get("content", [])
-        if not rows:
-            break
-        for row in rows:
-            amount = float(row.get("amount", 0) or 0)
-            if row.get("type") == "INCOME":
-                income += amount
-            else:
-                expense += amount
-            listed += 1
-        page += 1
-        if listed >= int(body.get("totalElements", listed) or listed):
-            break
+    def read_listing():
+        """Sum the transaction listing with a page size that misses its cache key."""
+        listed, income, expense, page = 0, 0.0, 0.0, 0
+        while page < 50:
+            status, body, _ = client.request(
+                "personal", f"/upsert/entries?userId={uid}&page={page}&size=173",
+                "GET", headers=member.headers())
+            if status != 200 or not isinstance(body, dict):
+                break
+            rows = body.get("content", [])
+            if not rows:
+                break
+            for row in rows:
+                amount = float(row.get("amount", 0) or 0)
+                if row.get("type") == "INCOME":
+                    income += amount
+                else:
+                    expense += amount
+                listed += 1
+            page += 1
+            if listed >= int(body.get("totalElements", listed) or listed):
+                break
+        return listed, income, expense
+
+    listed, income, expense = read_listing()
     eps = 0.05
     settle_deadline = time.time() + args.verify_timeout
     while True:
@@ -497,6 +502,11 @@ def verify_member(client, member, checks, args):
         if time.time() >= settle_deadline:
             break
         time.sleep(0.5)
+        # Both endpoints are read-model projections and OCR rows can land while
+        # they are being compared. Re-read the listing as well as the summary,
+        # otherwise an OCR row appended after the one-shot listing read makes
+        # the summary legitimately larger forever and the check can never pass.
+        listed, income, expense = read_listing()
         status, summary, _ = client.request(
             "personal", f"/upsert/summary?userId={uid}", "GET",
             headers=member.headers())

@@ -21,9 +21,14 @@ spring:
         default_schema: finance
   datasource:
     hikari:
-      maximum-pool-size: 30
+      # The 50-user scenario keeps ~50 analytics/read calls in flight. At 30
+      # connections the pool saturates (active=30, idle=0, waiting≈47) and
+      # 5 s connection timeouts turn into 500s. The replica allows 200
+      # connections and was using ~30, so 60 leaves plenty of headroom; the
+      # timeout is also raised so a burst waits instead of failing.
+      maximum-pool-size: 60
       minimum-idle: 5
-      connection-timeout: 5000
+      connection-timeout: 15000
 
   # ── Redis & Caching ─────────────────────────────────────────────────────────
   cache:

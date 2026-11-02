@@ -582,7 +582,12 @@ def stage_personal(client, member, checks, args, rng):
     member.budget_id = resp.get("budgetId") or resp.get("id")
 
     # ── Delete a random subset in parallel across the cohort ────────────────
-    victims = rng.sample(member.created, k=min(args.deletes, len(member.created)))
+    # Recurring rows are excluded: they are the fixtures the subscription and
+    # recurrence checks assert on, and deleting one would make the read-model
+    # checks fail for a reason that has nothing to do with the application.
+    recurring = set(member.recurring_ids)
+    deletable = [rec for rec in member.created if rec[0] not in recurring]
+    victims = rng.sample(deletable, k=min(args.deletes, len(deletable)))
     for tx_id, tx_type, amount in victims:
         status, _, _ = client.request(
             "personal", f"/upsert/delete/{tx_id}?userId={member.user_id}",

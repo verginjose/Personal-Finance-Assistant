@@ -106,6 +106,7 @@ metadata:
     app: redis-replica
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   selector:
     matchLabels:

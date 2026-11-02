@@ -30,6 +30,7 @@ metadata:
     app: registry
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   strategy:
     type: Recreate          # RWO volume: never two pods at once

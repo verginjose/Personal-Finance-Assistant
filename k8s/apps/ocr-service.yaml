@@ -61,6 +61,7 @@ metadata:
     app: ocr-service
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   # ReadWriteOnce volume + a heavyweight GPU process: never run two at once.
   strategy:

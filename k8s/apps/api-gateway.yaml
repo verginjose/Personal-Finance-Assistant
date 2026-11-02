@@ -42,6 +42,7 @@ metadata:
     app: api-gateway
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
+  revisionHistoryLimit: 3
   replicas: 1
   strategy:
     type: RollingUpdate

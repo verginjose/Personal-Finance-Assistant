@@ -51,6 +51,10 @@ spring:
           # of the backend.
           max-idle-time: 10s
           max-life-time: 60s
+          # max-idle-time is only enforced by the periodic eviction sweep, so a
+          # stale connection can otherwise survive up to the sweep interval.
+          # 5 s keeps the pool ahead of Tomcat's 20 s keep-alive timeout.
+          eviction-interval: 5s
       routes:
         # Auth lives in its own service now. The path is forwarded unchanged
         # (/api/auth/** -> auth-service /api/auth/**).
@@ -61,8 +65,11 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
+                # Production sizing: many users can share one NAT/proxy IP and
+                # the key is IP+path, so 10/s throttled normal login bursts.
+                # 50/s still bounds credential-stuffing per IP.
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@ipPathKeyResolver}"
             - name: CircuitBreaker
@@ -89,8 +96,8 @@ spring:
             - StripPrefix=1
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@userKeyResolver}"
             - name: CircuitBreaker
@@ -107,8 +114,8 @@ spring:
             - StripPrefix=1
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@userKeyResolver}"
             - name: CircuitBreaker
@@ -124,8 +131,8 @@ spring:
             - StripPrefix=1
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@userKeyResolver}"
             - name: CircuitBreaker

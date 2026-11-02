@@ -1120,18 +1120,36 @@ def stage_group_cache(client, group, checks, args):
     leader = group.members[0]
     budget = max(10.0, args.cache_timeout)
 
-    # The group projection may still be catching up with the expenses posted in
-    # the previous stage, so wait for the first 200 before taking a baseline.
+    # The group projection is still catching up with the expenses posted in the
+    # previous stage, so a single 200 is not a baseline — it may be a partial
+    # view that later reads legitimately extend. Warm the cache, then require
+    # two consecutive identical payloads before treating it as settled.
     for _ in range(2):
         _balances(client, group, leader)
-    (status, before), ready = poll(
-        lambda: _balances(client, group, leader),
-        lambda r: r[0] == 200 and isinstance(r[1], dict),
-        timeout=budget)
+
+    def stable_baseline():
+        s1, b1 = _balances(client, group, leader)
+        if s1 != 200 or not isinstance(b1, dict):
+            return None
+        sig1 = _balance_signature(b1)
+        time.sleep(0.6)
+        s2, b2 = _balances(client, group, leader)
+        if s2 != 200 or not isinstance(b2, dict):
+            return None
+        return sig1 if _balance_signature(b2) == sig1 else None
+
+    status, before_sig = 0, None
+    deadline = time.time() + budget
+    while time.time() < deadline:
+        status, _ = _balances(client, group, leader)
+        if status == 200:
+            before_sig = stable_baseline()
+            if before_sig is not None:
+                break
+        time.sleep(0.4)
     checks.status(200, status, "warm group balances")
-    if not ready:
+    if before_sig is None:
         return
-    before_sig = _balance_signature(before)
 
     canary_amount = 2016.00
     status, resp, _ = client.request(

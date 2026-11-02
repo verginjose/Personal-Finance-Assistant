@@ -41,6 +41,16 @@ spring:
     gateway:
       httpclient:
         connect-timeout: 5000
+        pool:
+          # Recycle idle connections before Tomcat's keep-alive timeout
+          # (server.tomcat.connection-timeout, default 20 s) closes them. A
+          # pooled connection the backend has already closed fails the next
+          # request in ~0.1 ms with PrematureCloseException; that is the
+          # transient error the circuit breaker was counting as a dependency
+          # failure under bursty load. Recycling at 10 s keeps the pool ahead
+          # of the backend.
+          max-idle-time: 10s
+          max-life-time: 60s
       routes:
         # Auth lives in its own service now. The path is forwarded unchanged
         # (/api/auth/** -> auth-service /api/auth/**).
@@ -137,18 +147,29 @@ resilience4j:
     instances:
       # Sized for ~50 concurrent writers. A 10-sample window plus a 3s slow
       # threshold opened the breaker as soon as Postgres queued; the window is
-      # now wide enough that a brief burst cannot trip it by itself, and 150
+      # now wide enough that a brief burst cannot trip it by itself, and 300
       # samples ride out the slow tail the group-expense path produces.
+      #
+      # The failure threshold is 80%, not 60%, on purpose. Under the 50-user
+      # scenario the breaker was tripping while the backend was healthy: the
+      # failed calls averaged ~0.15 ms (transport-level socket errors on
+      # recycled keep-alive connections), the slow-call rate stayed 0, no
+      # service returned 5xx, and no error was logged. A breaker is there to
+      # stop hammering a dependency that is down — a dependency that is down
+      # fails ~100%, so 80% still trips within one window while a burst of
+      # transient per-call errors no longer takes the whole route offline.
       upsert-cb:
-        sliding-window-size: 150
-        failure-rate-threshold: 60
+        sliding-window-size: 300
+        minimum-number-of-calls: 100
+        failure-rate-threshold: 80
         wait-duration-in-open-state: 15s
         permitted-number-of-calls-in-half-open-state: 10
         slow-call-duration-threshold: 10s
         slow-call-rate-threshold: 85
       analytics-cb:
-        sliding-window-size: 50
-        failure-rate-threshold: 60
+        sliding-window-size: 150
+        minimum-number-of-calls: 60
+        failure-rate-threshold: 80
         wait-duration-in-open-state: 30s
         permitted-number-of-calls-in-half-open-state: 5
         slow-call-duration-threshold: 20s

@@ -121,28 +121,6 @@ services:
     networks:
       - finance-network
 
-  redis-replica:
-    image: redis:7-alpine
-    container_name: redis-replica
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    ports:
-      - "127.0.0.1:6380:6379"
-    command: redis-server --replicaof redis 6379
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    networks:
-      - finance-network
-
   command-service:
     build:
       context: ./command-service

@@ -31,7 +31,7 @@ k8s/
 ├── infrastructure/            # stateful deps + observability
 │   ├── postgres-primary.yaml
 │   ├── postgres-replica.yaml
-│   ├── redis.yaml             # master + replica
+│   ├── redis.yaml             # single cache/token store
 │   ├── rabbitmq.yaml
 │   ├── minio.yaml
 │   ├── clickhouse.yaml
@@ -219,7 +219,7 @@ Caveats:
 
 **Application pods** — namespace `pfa`: the six services (`frontend`,
 `api-gateway`, `auth-service`, `command-service`, `query-service`, `ocr-service`) and their
-dependencies (`postgres-primary/replica`, `redis`, `redis-replica`,
+dependencies (`postgres-primary/replica`, `redis`,
 `rabbitmq`, `minio`, `clickhouse`, `vector`, `prometheus`, `grafana`) plus
 `cloudflared` for the public URL. These are *consumers* of the flow, not
 participants: they notice it only when their Deployment's `image:` changes.
@@ -572,7 +572,7 @@ reachable with `port-forward` (they are `ClusterIP` services, matching the
 | `docker-compose` healthchecks | `readinessProbe` / `livenessProbe`; Spring services also get a `startupProbe` on `/actuator/health/liveness` |
 | `restart: on-failure` | automatic pod restarts + probes |
 | Postgres replica runs `pg_basebackup` inline | an `initContainer` seeds the empty PVC once, then streams WAL |
-| Redis replica has no auth against a password-protected client | master runs with `--requirepass`, replica with `--masterauth` (compose's Redis had no password while clients sent one) |
+| Redis had a password-less replica in compose | k8s runs a single `redis` with `--requirepass`; the unused read replica was dropped |
 | RabbitMQ guest user from another container | `loopback_users.guest = false` so in-cluster clients can use guest |
 | Vector reads the Docker socket | Vector DaemonSet reads `/var/log/pods` via the Kubernetes API, filtered to the `pfa` namespace |
 | `cloudflared` on the compose network | `optional/cloudflared.yaml`, routed to `frontend.pfa.svc.cluster.local:80` |

@@ -234,7 +234,7 @@ kubectl -n pfa exec postgres-replica-0 -- \
 
 # Redis
 kubectl -n pfa exec redis-0 -- redis-cli -a "$REDIS_PW" --no-auth-warning info keyspace
-kubectl -n pfa exec redis-replica-<pod> -- redis-cli -a "$REDIS_PW" --no-auth-warning info replication
+kubectl -n pfa exec redis-0 -- redis-cli -a "$REDIS_PW" --no-auth-warning info replication
 
 # RabbitMQ queues (expect ocr-jobs, consumers=1)
 kubectl -n pfa exec rabbitmq-0 -- rabbitmqctl list_queues name messages consumers
@@ -278,7 +278,7 @@ kubectl -n pfa exec deploy/grafana -- \
 | **Logs — Search & Debug** | searchable ClickHouse logs with service/level filters, matched/error/warn counts and volume over time |
 | **Data — Postgres & Redis** | live row counts and table sizes, outbox backlog, active sessions, indexes, settings; Redis keys, memory, clients and per-prefix key counts |
 | **Pods — CPU / memory / restarts** | which pod is under CPU/memory pressure or restarting |
-| **Redis — Debug & Runbook** | Redis master/replica logs, replication health, pod pressure, and copy-paste `redis-cli` commands |
+| **Redis — Debug & Runbook** | Redis logs, pod pressure, memory/keyspace and copy-paste `redis-cli` commands |
 | **Postgres — Debug & Runbook** | Postgres primary/replica logs, replication and recovery, pod pressure, and copy-paste `psql` commands |
 
 Dashboards are files in `observability/grafana/dashboards/`. The committed

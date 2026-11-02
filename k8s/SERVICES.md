@@ -180,7 +180,6 @@ errors = `GROQ_*` credentials; slow first start = model download into the PVC.
 | `postgres-primary` | `ankane/pgvector:0.5.1` | 5432 | `data-postgres-primary` | writes; schemas `auth`, `finance`, `groups`, `activity` |
 | `postgres-replica` | same | 5432 | `data-postgres-replica` | streaming replica; read-only |
 | `redis` | `redis:7-alpine` | 6379 | PVC | tokens, rate limits, query cache |
-| `redis-replica` | `redis:7-alpine` | 6379 | PVC | replica of `redis` |
 | `rabbitmq` | `rabbitmq:3-management-alpine` | 5672 / 15672 | PVC | exchange `finance-events`, queue `ocr-jobs` |
 | `minio` | `pgsty/minio` | 9000 / 9001 | PVC | buckets `receipts`, `profiles` |
 | `clickhouse` | `clickhouse:24.8` | 8123 / 9000 | PVC | log analytics (`observability/clickhouse`) |

@@ -1369,10 +1369,12 @@ def verify_group(client, group, checks, args):
         return
     leader = group.members[0]
 
-    # Exactly the expenses that were posted and not deleted: the cache canary
-    # was created and deleted again, so it nets out. A count above the expected
-    # value means a deletion was not reflected in the read model.
-    expected_expenses = args.expenses * len(group.members) - group.deleted
+    # Exactly the expenses that were posted and not deleted, plus one row per
+    # recorded settlement (the settle endpoint stores a SETTLEMENT expense).
+    # The cache canary was created and deleted again, so it nets out. A count
+    # above the expected value means a deletion was not reflected.
+    expected_expenses = (args.expenses * len(group.members)
+                         - group.deleted + group.settled)
     (status, body), count_ok = poll(
         lambda: client.request(
             "groups", f"/upsert/groups/{group.group_id}/expenses?page=0&size=100",

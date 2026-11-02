@@ -55,6 +55,9 @@ spring:
           # stale connection can otherwise survive up to the sweep interval.
           # 5 s keeps the pool ahead of Tomcat's 20 s keep-alive timeout.
           eviction-interval: 5s
+          # Expose reactor.netty.connection.provider.* (allocated, idle,
+          # pending, created) so pool behaviour is visible during load tests.
+          metrics: true
       routes:
         # Auth lives in its own service now. The path is forwarded unchanged
         # (/api/auth/** -> auth-service /api/auth/**).

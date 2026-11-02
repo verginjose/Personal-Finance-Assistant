@@ -1,5 +1,13 @@
 server:
   port: 8084
+  tomcat:
+    # Tomcat defaults to closing a connection after 100 keep-alive requests.
+    # The gateway holds those connections in its own pool, so the server-side
+    # close races a request the gateway has already written onto the connection,
+    # which surfaces as a ~0.1 ms PrematureCloseException and counts as a
+    # circuit-breaker failure. The gateway already recycles connections itself
+    # (max-idle-time 10 s, max-life-time 60 s), so let it own the lifetime.
+    max-keep-alive-requests: -1
 
 spring:
   threads:

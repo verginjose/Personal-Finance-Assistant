@@ -39,6 +39,12 @@ public class AuthService {
         return Mono.fromCallable(work).subscribeOn(Schedulers.boundedElastic());
     }
 
+    private static String normalizeCurrency(String code) {
+        if (code == null || code.isBlank()) return "INR";
+        String normalized = code.trim().toUpperCase();
+        return normalized.matches("[A-Z]{3}") ? normalized : "INR";
+    }
+
     @Transactional(readOnly = true)
     public Mono<LoginResponse> login(LoginRequest request) {
         return userRepository.findByEmail(request.email())
@@ -56,7 +62,8 @@ public class AuthService {
                                     .then(Mono.fromCallable(() -> {
                                         log.info("User logged in: {} [{}]", user.getEmail(), user.getRole());
                                         return new LoginResponse(token, refreshToken, user.getId().toString(),
-                                                user.getEmail(), user.getActualUsername(), user.getRole().name());
+                                                user.getEmail(), user.getActualUsername(), user.getRole().name(),
+                                                normalizeCurrency(user.getDefaultCurrency()));
                                     }).subscribeOn(Schedulers.boundedElastic()));
                         }));
     }
@@ -75,11 +82,13 @@ public class AuthService {
                                                 .username(request.username())
                                                 .password(hash)
                                                 .role(request.role())
+                                                .defaultCurrency(normalizeCurrency(request.defaultCurrency()))
                                                 .build()))
                                         .map(saved -> {
                                             log.info("Registered: {} (@{})", saved.getEmail(), saved.getActualUsername());
                                             return new RegisterResponse(saved.getId().toString(), saved.getEmail(),
-                                                    saved.getActualUsername(), saved.getRole().name());
+                                                    saved.getActualUsername(), saved.getRole().name(),
+                                                    normalizeCurrency(saved.getDefaultCurrency()));
                                         });
                             });
                 });
@@ -100,7 +109,7 @@ public class AuthService {
                                 String newAccessToken = jwtService.generateToken(email, userId, role);
                                 String newRefreshToken = UUID.randomUUID().toString();
                                 return tokenRedisService.saveRefreshTokenReactive(newRefreshToken, email, userId, role, refreshExpirationMs)
-                                        .thenReturn(new LoginResponse(newAccessToken, newRefreshToken, userId, email, "", role))
+                                        .thenReturn(new LoginResponse(newAccessToken, newRefreshToken, userId, email, "", role, null))
                                         .doOnSuccess(r -> log.info("Tokens rotated for user: {}", email));
                             }));
                 });

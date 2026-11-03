@@ -1,5 +1,20 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110302';
-import { icon } from '../utils/icons.js?v=2026110302';
+import { api, Auth, toast } from '../utils/api.js?v=2026110303';
+import { icon } from '../utils/icons.js?v=2026110303';
+import { currencyOptionHtml } from '../utils/ui.js?v=2026110303';
+
+/** Best-effort default from the browser locale; the user can always change it. */
+function localCurrencyGuess() {
+  const locale = (navigator.language || 'en-IN').toUpperCase();
+  if (locale.endsWith('-US')) return 'USD';
+  if (locale.endsWith('-GB')) return 'GBP';
+  if (locale.endsWith('-AE')) return 'AED';
+  if (locale.endsWith('-AU')) return 'AUD';
+  if (locale.endsWith('-CA')) return 'CAD';
+  if (locale.endsWith('-SG')) return 'SGD';
+  if (locale.endsWith('-JP')) return 'JPY';
+  if (/-(DE|FR|ES|IT|NL|IE|PT|AT|BE|FI|GR|SK|SI|LT|LV|EE|LU|CY|MT)$/.test(locale)) return 'EUR';
+  return 'INR';
+}
 
 export function renderAuth(container) {
   let mode = 'login';
@@ -41,6 +56,13 @@ export function renderAuth(container) {
               <label for="auth-username">Username</label>
               <input class="form-input" id="auth-username" type="text" placeholder="johndoe" required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]+" autocomplete="username">
               <p style="font-size:.78rem;color:var(--text-muted);margin-top:6px">Letters, numbers, and underscores only</p>
+            </div>
+            <div class="form-group">
+              <label for="auth-currency">Default currency</label>
+              <select class="form-select" id="auth-currency" required>
+                ${currencyOptionHtml(localCurrencyGuess())}
+              </select>
+              <p style="font-size:.78rem;color:var(--text-muted);margin-top:6px">Receipts and reports are converted to this currency.</p>
             </div>` : ''}
             <div class="form-group">
               <label for="auth-pass">Password</label>
@@ -73,7 +95,8 @@ export function renderAuth(container) {
     try {
       if (mode === 'register') {
         const username = document.getElementById('auth-username').value.trim();
-        await api.post('/auth/register', { email, username, password, role: 'USER' });
+        const defaultCurrency = document.getElementById('auth-currency')?.value || 'INR';
+        await api.post('/auth/register', { email, username, password, role: 'USER', defaultCurrency });
         toast('Account created! Signing in…', 'success');
       }
       const data = await api.post('/auth/login', { email, password });

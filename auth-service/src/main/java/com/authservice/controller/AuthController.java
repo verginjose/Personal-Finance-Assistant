@@ -52,13 +52,15 @@ public class AuthController {
                         "email", authentication.getName(),
                         "role",  authentication.getAuthorities().iterator().next().getAuthority(),
                         "profilePicture", user.getProfilePicture() != null ? user.getProfilePicture() : "",
-                        "username", user.getActualUsername()
+                        "username", user.getActualUsername(),
+                        "defaultCurrency", user.getDefaultCurrency() != null ? user.getDefaultCurrency() : "INR"
                 )))
                 .defaultIfEmpty(ResponseEntity.ok(Map.of(
                         "email", authentication.getName(),
                         "role",  authentication.getAuthorities().iterator().next().getAuthority(),
                         "profilePicture", "",
-                        "username", ""
+                        "username", "",
+                        "defaultCurrency", "INR"
                 )));
     }
 
@@ -74,6 +76,14 @@ public class AuthController {
                     .flatMap(user -> {
                         if (body.containsKey("profilePicture")) {
                             user.setProfilePicture(body.get("profilePicture"));
+                        }
+
+                        if (body.containsKey("defaultCurrency")) {
+                            String currency = body.get("defaultCurrency").trim().toUpperCase();
+                            if (!currency.matches("[A-Z]{3}")) {
+                                return Mono.just(ResponseEntity.badRequest().body(Map.of("message", "Default currency must be a 3-letter ISO code")));
+                            }
+                            user.setDefaultCurrency(currency);
                         }
 
                         if (body.containsKey("username")) {

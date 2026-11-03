@@ -147,7 +147,8 @@ export async function renderTransactions(container) {
     document.getElementById('t-batch-import').disabled = true;
     
     try {
-      const res = await api.post(`/bill/batch-process/${userId}`, formData, { raw: true });
+      const target = encodeURIComponent(Auth.getDefaultCurrency());
+      const res = await api.post(`/bill/batch-process/${userId}?targetCurrency=${target}`, formData, { raw: true });
       if (!res.ok) throw new Error('Upload failed');
       toast('Statement uploaded. Extracting transactions...', 'info');
       document.getElementById('t-batch-import').innerHTML = `${icon('loader', 'sm')} Processing...`;
@@ -188,6 +189,10 @@ export async function renderTransactions(container) {
 }
 
 function showBatchModal(userId, transactions, onSuccess) {
+  const displayAmount = (t) => {
+    const converted = Number(t.amountDefault);
+    return Number.isFinite(converted) && converted > 0 ? converted : (t.amount || 0);
+  };
   const tableRows = transactions.map((t, idx) => `
     <tr>
       <td><input type="text" class="form-input" id="b-name-${idx}" value="${esc(t.name || '')}"></td>
@@ -197,7 +202,7 @@ function showBatchModal(userId, transactions, onSuccess) {
           <option value="INCOME" ${t.type === 'INCOME' ? 'selected' : ''}>Income</option>
         </select>
       </td>
-      <td><input type="number" class="form-input" id="b-amt-${idx}" value="${t.amount || 0}" step="0.01"></td>
+      <td><input type="number" class="form-input" id="b-amt-${idx}" value="${displayAmount(t)}" step="0.01"></td>
       <td><input type="date" class="form-input" id="b-date-${idx}" value="${t.date || ''}"></td>
     </tr>
   `).join('');
@@ -225,7 +230,7 @@ function showBatchModal(userId, transactions, onSuccess) {
           name: document.getElementById(`b-name-${idx}`).value,
           amount: parseFloat(document.getElementById(`b-amt-${idx}`).value) || 0,
           type: document.getElementById(`b-type-${idx}`).value,
-          currency: t.currency || 'INR',
+          currency: t.defaultCurrency || t.currency || 'INR',
           category: t.type === 'EXPENSE' ? (t.expenseCategory || 'OTHERS') : (t.incomeCategory || 'OTHERS'),
           description: 'Imported from bank statement',
           createdAt: isoDate

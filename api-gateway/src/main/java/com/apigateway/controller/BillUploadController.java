@@ -31,11 +31,12 @@ public class BillUploadController {
     @PostMapping(value = "/process/{userId}", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
     public Mono<ResponseEntity<Map<String, String>>> uploadBill(
             @PathVariable String userId,
-            @RequestPart("file") FilePart filePart) {
+            @RequestPart("file") FilePart filePart,
+            @RequestParam(value = "targetCurrency", required = false) String targetCurrency) {
 
         String receiptId = UUID.randomUUID().toString();
         return storage.store(filePart, minioBucket, userId, true)
-                .flatMap(object -> publishOcrJob(userId, receiptId, object.objectName(), "false"))
+                .flatMap(object -> publishOcrJob(userId, receiptId, object.objectName(), "false", targetCurrency))
                 .map(sent -> ResponseEntity.status(HttpStatus.ACCEPTED)
                         .body(Map.of(
                                 "message", "Receipt accepted for OCR processing",
@@ -51,12 +52,13 @@ public class BillUploadController {
     @PostMapping(value = "/batch-process/{userId}", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
     public Mono<ResponseEntity<Map<String, String>>> uploadBatchBill(
             @PathVariable String userId,
-            @RequestPart("file") FilePart filePart) {
+            @RequestPart("file") FilePart filePart,
+            @RequestParam(value = "targetCurrency", required = false) String targetCurrency) {
 
         String receiptId = UUID.randomUUID().toString();
         String prefix = userId + "-batch-" + UUID.randomUUID();
         return storage.store(filePart, minioBucket, prefix, true)
-                .flatMap(object -> publishOcrJob(userId, receiptId, object.objectName(), "true"))
+                .flatMap(object -> publishOcrJob(userId, receiptId, object.objectName(), "true", targetCurrency))
                 .map(sent -> ResponseEntity.status(HttpStatus.ACCEPTED)
                         .body(Map.of(
                                 "message", "Batch statement accepted for processing",
@@ -70,15 +72,18 @@ public class BillUploadController {
     }
 
     /** RabbitTemplate is blocking, so it runs off the event loop. */
-    private Mono<String> publishOcrJob(String userId, String receiptId, String objectName, String isBatch) {
+    private Mono<String> publishOcrJob(String userId, String receiptId, String objectName, String isBatch,
+                                       String targetCurrency) {
         return Mono.fromCallable(() -> {
-                    Map<String, String> event = Map.of(
-                            "userId", userId,
-                            "receiptId", receiptId,
-                            "objectName", objectName,
-                            "bucket", minioBucket,
-                            "isBatch", isBatch
-                    );
+                    Map<String, String> event = new java.util.HashMap<>();
+                    event.put("userId", userId);
+                    event.put("receiptId", receiptId);
+                    event.put("objectName", objectName);
+                    event.put("bucket", minioBucket);
+                    event.put("isBatch", isBatch);
+                    if (targetCurrency != null && !targetCurrency.isBlank()) {
+                        event.put("targetCurrency", targetCurrency.trim().toUpperCase());
+                    }
                     rabbitTemplate.convertAndSend("finance-events", "ocr.job", event);
                     return objectName;
                 })

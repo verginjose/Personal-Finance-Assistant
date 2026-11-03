@@ -77,6 +77,7 @@ async def process_mq_message(message: aio_pika.abc.AbstractIncomingMessage):
             bucket = body.get("bucket", "receipts")
             
             is_batch = str(body.get("isBatch")).lower() == "true"
+            target_currency = body.get("targetCurrency") or "INR"
             
             log.info("Received OCR job from RabbitMQ for user %s: s3://%s/%s (batch: %s)", user_id, bucket, object_name, is_batch)
             
@@ -92,7 +93,7 @@ async def process_mq_message(message: aio_pika.abc.AbstractIncomingMessage):
             if object_name.lower().endswith(".csv"):
                 content_type = "text/csv"
                 
-            await _process_and_notify(user_id, data, object_name, content_type, is_batch)
+            await _process_and_notify(user_id, data, object_name, content_type, is_batch, target_currency)
             
         except Exception as e:
             log.error("Failed to process RabbitMQ message: %s", e)
@@ -226,12 +227,22 @@ async def _refresh_rates():
         log.error("Exchange rate fetch error: %s", e)
 
 
-def _convert_currency(amount: float, currency: str) -> dict:
+def _convert_currency(amount: float, currency: str, target_currency: str = "INR") -> dict:
     rates = rate_cache.get("rates", {})
-    normalized = "INR" if currency == "₹" else currency.upper()
+    normalized = "INR" if currency == "₹" else (currency or "INR").upper()
+    target = (target_currency or "INR").upper()
+    # Fall back to INR when the target isn't in the ECB rate set.
+    if target != "USD" and target not in rates:
+        target = "INR"
     in_usd = amount if normalized == "USD" else amount / rates.get(normalized, 1.0)
     in_inr = in_usd * rates.get("INR", 83.0)
-    return {"amountInr": round(in_inr, 2), "amountUsd": round(in_usd, 2)}
+    in_target = in_usd * rates.get(target, 1.0)
+    return {
+        "amountInr": round(in_inr, 2),
+        "amountUsd": round(in_usd, 2),
+        "amountDefault": round(in_target, 2),
+        "defaultCurrency": target,
+    }
 
 
 GROQ_PROMPT_TEMPLATE = """Extract financial data from this receipt/document. Return ONLY valid JSON.
@@ -338,7 +349,8 @@ async def _call_groq(text: str, is_batch: bool = False) -> dict | list:
 
 
 
-async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: str, is_batch: bool = False) -> dict | list:
+async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: str, is_batch: bool = False,
+                      target_currency: str = "INR") -> dict | list:
     is_pdf = filename.lower().endswith(".pdf") or content_type == "application/pdf"
     is_csv = filename.lower().endswith(".csv") or content_type == "text/csv"
     
@@ -360,7 +372,7 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
         if not isinstance(doc, list):
             doc = doc.get("transactions", []) if isinstance(doc, dict) else []
         for item in doc:
-            conversion = _convert_currency(float(item.get("amount", 0)), item.get("currency", "INR"))
+            conversion = _convert_currency(float(item.get("amount", 0)), item.get("currency", "INR"), target_currency)
             results.append({
                 "userId": user_id,
                 "name": item.get("vendor"),
@@ -374,10 +386,12 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
                 "recurring": item.get("recurring", False),
                 "amountInr": conversion["amountInr"],
                 "amountUsd": conversion["amountUsd"],
+                "amountDefault": conversion["amountDefault"],
+                "defaultCurrency": conversion["defaultCurrency"],
             })
         return results
 
-    conversion = _convert_currency(float(doc.get("amount", 0)), doc.get("currency", "INR"))
+    conversion = _convert_currency(float(doc.get("amount", 0)), doc.get("currency", "INR"), target_currency)
     return {
         "userId": user_id,
         "name": doc.get("vendor"),
@@ -391,12 +405,15 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
         "recurring": doc.get("recurring", False),
         "amountInr": conversion["amountInr"],
         "amountUsd": conversion["amountUsd"],
+        "amountDefault": conversion["amountDefault"],
+        "defaultCurrency": conversion["defaultCurrency"],
     }
 
 
-async def _process_and_notify(user_id: str, data: bytes, filename: str, content_type: str, is_batch: bool = False):
+async def _process_and_notify(user_id: str, data: bytes, filename: str, content_type: str, is_batch: bool = False,
+                              target_currency: str = "INR"):
     try:
-        result = await _parse_bill(user_id, data, filename, content_type, is_batch)
+        result = await _parse_bill(user_id, data, filename, content_type, is_batch, target_currency)
         payload = {"userId": user_id, "status": "SUCCESS", "data": result, "message": "Bill parsed successfully"}
     except Exception as e:
         log.error("Bill parsing failed: %s", e)

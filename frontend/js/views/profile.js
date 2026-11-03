@@ -1,16 +1,19 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110302';
-import { icon } from '../utils/icons.js?v=2026110302';
-import { esc, pageHeader, openModal } from '../utils/ui.js?v=2026110302';
+import { api, Auth, toast } from '../utils/api.js?v=2026110303';
+import { icon } from '../utils/icons.js?v=2026110303';
+import { esc, pageHeader, openModal, currencyOptionHtml } from '../utils/ui.js?v=2026110303';
 export async function renderProfile(container) {
   const email = Auth.getEmail();
   const userId = Auth.getUserId();
   
   let profilePicture = '';
   let currentUsername = '';
+  let defaultCurrency = Auth.getDefaultCurrency();
   try {
     const me = await api.get('/auth/me');
     profilePicture = me.profilePicture || '';
     currentUsername = me.username || '';
+    defaultCurrency = me.defaultCurrency || defaultCurrency;
+    Auth.setDefaultCurrency(defaultCurrency);
   } catch (e) {
     console.error('Failed to load profile', e);
   }
@@ -38,6 +41,7 @@ export async function renderProfile(container) {
             <p class="profile-email">${icon('mail', 'xs')} ${esc(email || '—')}</p>
             <div class="profile-chips">
               <span class="profile-chip profile-chip--ok">${icon('shield', 'xs')} Secured</span>
+              <span class="profile-chip">${icon('wallet', 'xs')} ${esc(defaultCurrency)}</span>
               <span class="profile-chip">${icon('at-sign', 'xs')} ID ${esc(shortId)}</span>
             </div>
           </div>
@@ -56,6 +60,25 @@ export async function renderProfile(container) {
       </section>
 
       <div class="profile-side">
+        <section class="profile-panel">
+          <div class="profile-panel-head">
+            <div class="profile-panel-icon">${icon('wallet', 'sm')}</div>
+            <div>
+              <h3>Default currency</h3>
+              <p>Receipts and reports are converted to this currency.</p>
+            </div>
+          </div>
+          <form id="p-currency-form" class="profile-form">
+            <div class="profile-field">
+              <label for="p-currency">Currency</label>
+              <div class="profile-inline-form">
+                <select class="form-select" id="p-currency">${currencyOptionHtml(defaultCurrency)}</select>
+                <button type="submit" class="btn btn-primary">Save</button>
+              </div>
+            </div>
+          </form>
+        </section>
+
         <section class="profile-panel">
           <div class="profile-panel-head">
             <div class="profile-panel-icon">${icon('lock', 'sm')}</div>
@@ -97,6 +120,16 @@ export async function renderProfile(container) {
         username: document.getElementById('p-username').value
       });
       toast('Username updated successfully', 'success');
+    } catch (err) { toast(err.message, 'error'); }
+  };
+
+  document.getElementById('p-currency-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const currency = document.getElementById('p-currency').value;
+    try {
+      await api.put('/auth/profile', { defaultCurrency: currency });
+      Auth.setDefaultCurrency(currency);
+      toast(`Default currency set to ${currency}`, 'success');
     } catch (err) { toast(err.message, 'error'); }
   };
 

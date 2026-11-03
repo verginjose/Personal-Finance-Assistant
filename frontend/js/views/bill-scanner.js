@@ -1,17 +1,21 @@
-import {api, Auth, toast} from '../utils/api.js?v=2026110302';
-import { icon } from '../utils/icons.js?v=2026110302';
-import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=2026110302';
-import {navigateTo} from '../app.js?v=2026110302';
+import {api, Auth, toast} from '../utils/api.js?v=2026110303';
+import { icon } from '../utils/icons.js?v=2026110303';
+import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch, openModal} from '../utils/ui.js?v=2026110303';
+import {navigateTo} from '../app.js?v=2026110303';
+
+// The review dialog is rendered into <body>, so its close handle must survive
+// outside the view closure (saveTransaction navigates away and closes it).
+let activeReviewClose = null;
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
   container.innerHTML = `
     ${pageHeader('Bill Scanner', 'Upload a receipt and let AI extract the details')}
-    <div class="scanner-container fade-up">
+    <div class="scanner-single fade-up">
       <div class="card scanner-upload-card">
         <span class="ocr-eyebrow">${icon('scan', 'xs')} Step 1 · Upload</span>
         <h3 class="scanner-title">Scan a receipt</h3>
-        <p class="scanner-sub">We'll read the merchant, amount, date and category for you.</p>
+        <p class="scanner-sub">We'll read the merchant, amount, date and category, then convert it to your default currency.</p>
         <div class="drop-zone" id="bs-drop" role="button" tabindex="0" aria-label="Upload receipt">
           <div class="drop-icon">${icon('document', 'lg')}</div>
           <p>Drag &amp; drop a receipt image or PDF here</p>
@@ -23,17 +27,8 @@ export async function renderBillScanner(container) {
           ${icon('scan', 'sm')} Process Receipt
         </button>
       </div>
-      <div class="card ocr-result-card" id="bs-result" style="display:none; height:fit-content;">
-        <div class="ocr-result-head">
-          <div>
-            <span class="ocr-eyebrow">${icon('sparkles', 'xs')} Step 2 · Review</span>
-            <h3>Extracted data</h3>
-          </div>
-          <span class="badge badge-info">AI preview — edit before saving</span>
-        </div>
-        <form id="bs-preview-form" class="ocr-form"></form>
-      </div>
     </div>`;
+  const defaultCurrency = Auth.getDefaultCurrency();
 
   let groupsCache = [];
   try {
@@ -76,12 +71,17 @@ export async function renderBillScanner(container) {
       type === 'INCOME' ? result.incomeCategory : result.expenseCategory,
       type
     );
-    const amount = parseFloat((result.amount || '0').toString().replace(/[^0-9.]/g, '')) || 0;
-    let currency = (result.currency || 'INR').trim().toUpperCase();
-    if (currency.length !== 3) {
+    const amountOriginal = parseFloat((result.amount || '0').toString().replace(/[^0-9.]/g, '')) || 0;
+    let originalCurrency = (result.currency || 'INR').trim().toUpperCase();
+    if (originalCurrency.length !== 3) {
       const map = { '₹': 'INR', RS: 'INR', 'RS.': 'INR', $: 'USD', '€': 'EUR', '£': 'GBP' };
-      currency = map[currency] || 'INR';
+      originalCurrency = map[originalCurrency] || 'INR';
     }
+    // OCR converts server-side to the user's saved default currency.
+    const currency = (result.defaultCurrency || defaultCurrency || originalCurrency).toUpperCase();
+    const converted = Number(result.amountDefault);
+    const amount = Number.isFinite(converted) && converted > 0 ? converted : amountOriginal;
+    const wasConverted = currency !== originalCurrency;
 
     const form = document.getElementById('bs-preview-form');
     const dateDisplay = (() => {
@@ -98,6 +98,7 @@ export async function renderBillScanner(container) {
           <span class="ocr-summary-label">Detected amount</span>
           <div class="ocr-amount"><span class="ocr-amount-currency">${escapeAttr(currency)}</span><span id="bs-amount-preview">${amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span></div>
           <div class="ocr-summary-name" id="bs-name-preview">${esc(result.name || 'OCR Receipt')}</div>
+          ${wasConverted ? `<div class="ocr-conversion">${icon('refresh', 'xs')} Converts to ${esc(currency)} · original ${amountOriginal.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${esc(originalCurrency)}</div>` : ''}
         </div>
         <div class="ocr-summary-meta">
           <span class="ocr-type-badge ${type === 'INCOME' ? 'is-income' : 'is-expense'}">${type === 'INCOME' ? icon('trending-up', 'xs') : icon('trending-down', 'xs')} ${type === 'INCOME' ? 'Income' : 'Expense'}</span>
@@ -223,6 +224,19 @@ export async function renderBillScanner(container) {
     form.onsubmit = (e) => { e.preventDefault(); saveTransaction(userId); };
   }
 
+  function openReviewModal(result) {
+    if (activeReviewClose) activeReviewClose();
+    const { close } = openModal('Review extracted data', `
+      <div class="ocr-modal-head">
+        <span class="ocr-eyebrow">${icon('sparkles', 'xs')} AI extraction</span>
+        <p>Check the fields below, then save. Nothing is stored until you confirm.</p>
+      </div>
+      <form id="bs-preview-form" class="ocr-form"></form>
+    `, { size: 'lg' });
+    activeReviewClose = close;
+    renderPreviewForm(result);
+  }
+
   uploadBtn.onclick = async () => {
     if (!selectedFile) return;
     uploadBtn.disabled = true;
@@ -230,7 +244,8 @@ export async function renderBillScanner(container) {
     try {
       const fd = new FormData();
       fd.append('file', selectedFile);
-      const res = await api.upload(`/bill/process/${userId}`, fd);
+      const target = encodeURIComponent(Auth.getDefaultCurrency());
+      const res = await api.upload(`/bill/process/${userId}?targetCurrency=${target}`, fd);
       if (res && res.url) {
         window._bsReceiptUrl = res.url;
       }
@@ -248,8 +263,7 @@ export async function renderBillScanner(container) {
   window._bsOcrListener = (e) => {
     const detail = e.detail;
     if (detail.status === 'SUCCESS' && detail.data) {
-      document.getElementById('bs-result').style.display = 'block';
-      renderPreviewForm(detail.data);
+      openReviewModal(detail.data);
     }
     uploadBtn.disabled = !selectedFile;
     uploadBtn.innerHTML = `${icon('scan', 'sm')} Process Receipt`;
@@ -303,6 +317,7 @@ async function saveTransaction(userId) {
           recurring: isRecurring,
           receiptUrl: window._bsReceiptUrl || null
         }));
+        if (activeReviewClose) { activeReviewClose(); activeReviewClose = null; }
         navigateTo('transactions');
         toast('Forwarded to personal transactions page', 'info');
       } else {
@@ -314,6 +329,7 @@ async function saveTransaction(userId) {
         date: dateVal,
         receiptUrl: window._bsReceiptUrl || null
       }));
+      if (activeReviewClose) { activeReviewClose(); activeReviewClose = null; }
       navigateTo('split');
       toast('Forwarded to group split page', 'info');
     }
@@ -321,6 +337,6 @@ async function saveTransaction(userId) {
     toast('Save failed: ' + err.message, 'error');
   } finally {
     saveBtn.disabled = false;
-    saveBtn.textContent = 'Save as Transaction';
+    saveBtn.innerHTML = `${icon('check', 'sm')} Save transaction`;
   }
 }

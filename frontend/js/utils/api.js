@@ -10,6 +10,8 @@ export const Auth = {
   getUserId()      { return localStorage.getItem('pfa_userId'); },
   getEmail()       { return localStorage.getItem('pfa_email'); },
   getName()               { return localStorage.getItem('pfa_name');},
+  getDefaultCurrency()    { return localStorage.getItem('pfa_defaultCurrency') || 'INR'; },
+  setDefaultCurrency(c)   { if (c) localStorage.setItem('pfa_defaultCurrency', String(c).toUpperCase()); },
   isLoggedIn()     { return !!this.getToken(); },
 
   save(data) {
@@ -18,10 +20,12 @@ export const Auth = {
     localStorage.setItem('pfa_userId',  data.userId);
     localStorage.setItem('pfa_email',   data.email);
     localStorage.setItem('pfa_name',    data.name || data.username || '');
+    if (data.defaultCurrency) this.setDefaultCurrency(data.defaultCurrency);
   },
 
   clear() {
-    ['pfa_token','pfa_refresh','pfa_userId','pfa_email'].forEach(k => localStorage.removeItem(k));
+    ['pfa_token','pfa_refresh','pfa_userId','pfa_email','pfa_name','pfa_defaultCurrency']
+      .forEach(k => localStorage.removeItem(k));
   }
 };
 

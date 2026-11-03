@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS auth.users (
     role VARCHAR(50) NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     account_non_locked BOOLEAN NOT NULL DEFAULT TRUE,
-    profile_picture TEXT
+    profile_picture TEXT,
+    default_currency VARCHAR(3) NOT NULL DEFAULT 'INR'
 );
 
 -- Repair an auth.users table that Hibernate already created with only
@@ -30,6 +31,7 @@ ALTER TABLE auth.users ALTER COLUMN role DROP DEFAULT;
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS account_non_locked BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS profile_picture TEXT;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS default_currency VARCHAR(3) NOT NULL DEFAULT 'INR';
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON auth.users(username);
 CREATE INDEX IF NOT EXISTS idx_users_email ON auth.users(email);

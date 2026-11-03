@@ -18,8 +18,19 @@ export function avatar(name, size = 32, profilePicUrl = null) {
   return `<img src="${url}" alt="${esc(name)}" class="avatar" style="width:${size}px; height:${size}px; border-radius:50%; vertical-align:middle; object-fit:cover;">`;
 }
 
-export function formatCurrency(n, currency = 'INR') {
-  const sym = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '';
+/** Currencies the backend exchange-rate feed (ECB/Frankfurter) supports. */
+export const CURRENCY_OPTIONS = [
+  'INR', 'USD', 'EUR', 'GBP', 'AED', 'AUD', 'CAD', 'CHF', 'CNY', 'JPY',
+  'SGD', 'HKD', 'NZD', 'SEK', 'ZAR', 'BRL', 'MXN', 'THB', 'MYR', 'PHP',
+];
+
+export function currencyOptionHtml(selected = 'INR') {
+  const current = String(selected || 'INR').toUpperCase();
+  const list = CURRENCY_OPTIONS.includes(current) ? CURRENCY_OPTIONS : [current, ...CURRENCY_OPTIONS];
+  return list.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
+}
+
+export function formatCurrency(n, currency = 'INR') {  const sym = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '';
   const num = Number(n || 0);
   if (sym) {
     return sym + num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -372,6 +383,7 @@ export function aiPanelHtml(prefix) {
       <div id="${prefix}-ai-insights-list" class="advisor-grid" aria-live="polite" aria-busy="true">
         ${skeleton}
       </div>
+      <div id="${prefix}-ai-goals" class="advisor-goals" hidden></div>
     </div>`;
 }
 

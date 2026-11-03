@@ -1,13 +1,9 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110302';
-import { createDoughnut, destroyChart } from '../utils/charts.js?v=2026110302';
-import { navigateTo } from '../app.js?v=2026110302';
-import { icon } from '../utils/icons.js?v=2026110302';
+import { api, Auth, toast } from '../utils/api.js?v=2026110303';
+import { icon } from '../utils/icons.js?v=2026110303';
 import {
-  pageHeader, skeletonKpiRow, skeletonChart,
-  healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, formatCurrency, alertBanner
-} from '../utils/ui.js?v=2026110302';
-
-let pieChart = null;
+  pageHeader, skeletonKpiRow,
+  healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, formatCurrency, alertBanner, esc
+} from '../utils/ui.js?v=2026110303';
 
 export async function renderDashboard(container) {
   const userId = Auth.getUserId();
@@ -18,12 +14,7 @@ export async function renderDashboard(container) {
       ${healthPanelHtml('d')}
       ${aiPanelHtml('d')}
     </div>
-    <div id="d-kpis">${skeletonKpiRow(4)}</div>
-    <div id="d-goals" class="card-grid fade-up" style="margin-top:24px;display:none;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:20px;"></div>
-    <div class="card fade-up" style="margin-top:24px">
-      <div class="card-header"><h3>Spending by Category</h3></div>
-      <div class="chart-container" id="d-pie-wrap" style="max-width:560px;margin:0 auto">${skeletonChart()}</div>
-    </div>`;
+    <div id="d-kpis">${skeletonKpiRow(4)}</div>`;
 
   // AI insights call the LLM and can take seconds. Start that request now but
   // never await it with the rest of the page: the advisor panel already shows
@@ -43,9 +34,8 @@ export async function renderDashboard(container) {
   if (aiRefresh) aiRefresh.onclick = () => refreshAdvisor();
 
   try {
-    const [summary, pie, health, budgets, goals] = await Promise.all([
+    const [summary, health, budgets, goals] = await Promise.all([
       api.get('/upsert/summary', { userId }),
-      api.get('/analytics/category-pie-chart', { userId, transactionFilter: 'EXPENSE' }),
       api.get('/analytics/health-score', { userId }).catch(() => null),
       api.get('/upsert/budgets', { userId }).catch(() => []),
       api.get('/upsert/goals', { userId }).catch(() => [])
@@ -91,71 +81,37 @@ export async function renderDashboard(container) {
       </div>`;
     }
 
-    // Goal Forecasting
-    const goalsContainer = document.getElementById('d-goals');
-    if (goalsContainer) {
-      goalsContainer.style.display = 'grid';
+    // Goal forecasts are embedded in the AI advisor card, not a separate row.
+    const goalsContainer = document.getElementById('d-ai-goals');
     const activeGoals = goals.filter(g => !g.completed);
-    
-    if (activeGoals.length > 0) {
-      let goalsHtml = '';
+    if (goalsContainer && activeGoals.length > 0) {
+      const parts = [];
       for (const g of activeGoals) {
         try {
           const forecast = await api.get(`/analytics/goals/${g.id}/forecast`, { userId: Auth.getUserId() });
-          const velocityLine = forecast.monthlyVelocity > 0
-            ? `<span style="color:var(--accent-g);font-size:0.8rem">${icon('trending-up','xs')} ${formatCurrency(forecast.monthlyVelocity, g.currency)}/mo velocity</span>`
+          const velocity = forecast.monthlyVelocity > 0
+            ? `<span class="advisor-goal-velocity">${icon('trending-up', 'xs')} ${formatCurrency(forecast.monthlyVelocity, g.currency)}/mo</span>`
             : '';
-          goalsHtml += `
-            <div class="card" style="border-left:3px solid var(--accent-g);display:flex;align-items:flex-start;gap:14px;padding:16px 20px">
-              <div style="width:36px;height:36px;border-radius:50%;background:rgba(34,201,147,0.12);display:flex;align-items:center;justify-content:center;color:var(--accent-g);flex-shrink:0">${icon('target','sm')}</div>
-              <div style="min-width:0">
-                <div style="font-weight:700;margin-bottom:2px">${g.name}</div>
-                <div style="font-size:0.85rem;color:var(--text-dim);line-height:1.5">${forecast.message}</div>
-                ${velocityLine}
+          parts.push(`
+            <div class="advisor-goal">
+              <div class="advisor-goal-icon">${icon('target', 'sm')}</div>
+              <div class="advisor-goal-body">
+                <div class="advisor-goal-name">${esc(g.name)}</div>
+                <div class="advisor-goal-msg">${esc(forecast.message)}</div>
+                ${velocity}
               </div>
-            </div>`;
+            </div>`);
         } catch (e) { console.error('Failed to forecast goal', g.id); }
       }
-      goalsContainer.innerHTML = goalsHtml;
-    } else {
-      goalsContainer.innerHTML = `
-        <div class="card" style="border-left:3px solid var(--border);grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:18px 20px">
-          <div style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;color:var(--text-muted);flex-shrink:0">${icon('target')}</div>
-          <div>
-            <div style="font-weight:600;margin-bottom:2px">No Active Goals</div>
-            <div style="font-size:0.85rem;color:var(--text-dim)">Create a savings goal to track progress and get AI forecasts!</div>
-          </div>
-          <a href="#" onclick="event.preventDefault();navigateTo('goals')" style="margin-left:auto;" class="btn btn-secondary btn-sm">Set a Goal</a>
-        </div>`;
-    }
+      if (parts.length) {
+        goalsContainer.innerHTML = `
+          <div class="advisor-goals-head">${icon('target', 'xs')} Goal forecasts</div>
+          <div class="advisor-goals-row">${parts.join('')}</div>`;
+        goalsContainer.hidden = false;
+      }
     }
 
     renderHealthData('d', health);
-
-    const pieWrap = document.getElementById('d-pie-wrap');
-    if (!pieWrap) return;
-    pieWrap.innerHTML = '<canvas id="d-pie"></canvas>';
-    pieChart = destroyChart(pieChart);
-    if (pie?.labels?.length && pie.datasets?.[0]?.data) {
-      pieChart = createDoughnut(document.getElementById('d-pie'), pie.labels, pie.datasets[0].data, '', (label, value) => {
-        // Find the category key matching the label
-        // Labels are typically formatted, e.g. 'Food and Dining' -> 'FOOD_AND_DINING'
-        const categoryKey = label.toUpperCase().replace(/\s+/g, '_');
-        
-        // Wait, how do we pass filter to transactions page?
-        // We'll set it in localStorage briefly or just navigate
-        // Since we don't have a state management system, we can store it in sessionStorage
-        sessionStorage.setItem('pendingCategoryFilter', categoryKey);
-        navigateTo('transactions');
-      });
-    } else {
-      pieWrap.innerHTML = `
-        <div class="empty-state" style="padding:40px">
-          <div class="empty-icon">${icon('pie-chart','lg')}</div>
-          <p>No expense data yet</p>
-          <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="navigateTo('transactions')">Add Transaction</button></div>
-        </div>`;
-    }
   } catch (err) {
     toast('Failed to load dashboard: ' + err.message, 'error');
   }

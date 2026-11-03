@@ -50,6 +50,11 @@ public class User implements UserDetails {
   @Column("profile_picture")
   private String profilePicture;
 
+  /** ISO-4217 code the user wants every converted amount/report shown in. */
+  @Column("default_currency")
+  @Builder.Default
+  private String defaultCurrency = "INR";
+
   // ── UserDetails contract ──────────────────────────────────────────────────
 
   @Override

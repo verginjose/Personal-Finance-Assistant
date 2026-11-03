@@ -1,8 +1,8 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110302';
-import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=2026110302';
+import { api, Auth, toast } from '../utils/api.js?v=2026110303';
+import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=2026110303';
 import {
   pageHeader, skeletonChart, formatCurrency, formatCategory, esc
-} from '../utils/ui.js?v=2026110302';
+} from '../utils/ui.js?v=2026110303';
 
 let charts = [];
 let loadToken = 0;

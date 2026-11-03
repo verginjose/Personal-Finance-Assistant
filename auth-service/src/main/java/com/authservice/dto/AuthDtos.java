@@ -34,6 +34,9 @@ public class AuthDtos {
             @Size(min = 8, message = "Password must be at least 8 characters")
             String password,
 
+            @Size(min = 3, max = 3, message = "Default currency must be a 3-letter ISO code")
+            String defaultCurrency,
+
             @NotNull(message = "Role is required")
             Role role
     ) {}
@@ -46,14 +49,16 @@ public class AuthDtos {
             String userId,
             String email,
             String username,
-            String role
+            String role,
+            String defaultCurrency
     ) {}
 
     public record RegisterResponse(
             String userId,
             String email,
             String username,
-            String role
+            String role,
+            String defaultCurrency
     ) {}
 
     public record UserSearchResult(

@@ -1,18 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    app.js — SPA Router + Shell
    ═══════════════════════════════════════════════════════════════════════════ */
-import { Auth, SseManager, api } from './utils/api.js?v=2026110302';
-import { icon } from './utils/icons.js?v=2026110302';
-import { renderAuth }          from './views/auth.js?v=2026110302';
-import { esc }                 from './utils/ui.js?v=2026110302';
-import { renderDashboard }     from './views/dashboard.js?v=2026110302';
-import { renderTransactions }  from './views/transactions.js?v=2026110302';
-import { renderBillScanner }   from './views/bill-scanner.js?v=2026110302';
-import { renderSplit }         from './views/split.js?v=2026110302';
-import { renderAnalytics }     from './views/analytics.js?v=2026110302';
-import { renderProfile }       from './views/profile.js?v=2026110302';
-import { renderSubscriptions } from './views/subscriptions.js?v=2026110302';
-import { renderGoals }         from './views/goals.js?v=2026110302';
+import { Auth, SseManager, api } from './utils/api.js?v=2026110303';
+import { icon } from './utils/icons.js?v=2026110303';
+import { renderAuth }          from './views/auth.js?v=2026110303';
+import { esc }                 from './utils/ui.js?v=2026110303';
+import { renderDashboard }     from './views/dashboard.js?v=2026110303';
+import { renderTransactions }  from './views/transactions.js?v=2026110303';
+import { renderBillScanner }   from './views/bill-scanner.js?v=2026110303';
+import { renderSplit }         from './views/split.js?v=2026110303';
+import { renderAnalytics }     from './views/analytics.js?v=2026110303';
+import { renderProfile }       from './views/profile.js?v=2026110303';
+import { renderSubscriptions } from './views/subscriptions.js?v=2026110303';
+import { renderGoals }         from './views/goals.js?v=2026110303';
 
 const NAV_ITEMS = [
   { id: 'dashboard',      icon: 'dashboard',      label: 'Dashboard' },
@@ -198,8 +198,9 @@ function renderShell() {
 
   renderView();
 
-  // Load profile picture async
+  // Load profile picture + preferences async
   api.get('/auth/me').then(me => {
+    Auth.setDefaultCurrency(me.defaultCurrency);
     if (me.profilePicture) {
       const sidebarAvatar = document.getElementById('shell-avatar');
       if (sidebarAvatar) {

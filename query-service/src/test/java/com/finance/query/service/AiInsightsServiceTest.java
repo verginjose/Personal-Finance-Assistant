@@ -116,7 +116,7 @@ class AiInsightsServiceTest {
 
         service.regenerateInsights(userId);
 
-        verify(cache).evict(userId);
+        verify(cache).evict("v2:" + userId);
         verify(repository).getTotalAmountByType(userId, TransactionType.INCOME);
     }
 
@@ -161,6 +161,42 @@ class AiInsightsServiceTest {
         assertThatCode(() -> service.buildPrompt(
                 BigDecimal.valueOf(5000), BigDecimal.valueOf(3000), Collections.emptyList(), Collections.emptyList(), Collections.emptyList()))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("buildPrompt: refers to goals by name, never by numeric id")
+    void buildPrompt_usesGoalNameNotId() {
+        GoalForecastingService.GoalForecast goal = new GoalForecastingService.GoalForecast();
+        goal.setGoalId(1122L);
+        goal.setGoalName("Japan Trip");
+        goal.setSavedAmount(new BigDecimal("40000"));
+        goal.setTargetAmount(new BigDecimal("200000"));
+        goal.setMessage("On track to finish in 8 months.");
+
+        String prompt = service.buildPrompt(
+                new BigDecimal("50000"), new BigDecimal("30000"),
+                Collections.emptyList(), List.of(goal), Collections.emptyList());
+
+        assertThat(prompt).contains("Japan Trip");
+        assertThat(prompt).doesNotContain("Goal 1122");
+        assertThat(prompt).contains("Never mention numeric goal IDs");
+    }
+
+    @Test
+    @DisplayName("buildRuleBasedInsights: names the stalled goal instead of a generic goal")
+    void buildRuleBasedInsights_stalledGoal_usesName() {
+        GoalForecastingService.GoalForecast goal = new GoalForecastingService.GoalForecast();
+        goal.setGoalId(99L);
+        goal.setGoalName("Emergency Fund");
+        goal.setMonthlyVelocity(BigDecimal.ZERO);
+
+        AiInsightResponse res = service.buildRuleBasedInsights(
+                new BigDecimal("50000"), new BigDecimal("30000"),
+                Collections.emptyList(), List.of(goal), Collections.emptyList());
+
+        assertThat(res.getInsights()).anyMatch(i ->
+                i.getTitle().contains("Emergency Fund")
+                        && i.getMessage().contains("Emergency Fund"));
     }
 
     // ── generateInsights — no transactions ───────────────────────────────────

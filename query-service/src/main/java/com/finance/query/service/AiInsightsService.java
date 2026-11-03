@@ -50,8 +50,15 @@ public class AiInsightsService {
     /** Injected from {@link com.finance.query.config.HttpClientConfig}. */
     private final HttpClient httpClient;
 
+    /**
+     * Cache key version. Bump it whenever the prompt/output contract changes so
+     * advice cached under the old rules (e.g. "Goal 1122") is not served for
+     * the full 24-hour TTL after a deploy.
+     */
+    private static final String CACHE_KEY_VERSION = "v2:";
+
     // Cache AI insights for 24 hours per user (avoid repeated LLM calls)
-    @Cacheable(value = "ai-insights", key = "#userId")
+    @Cacheable(value = "ai-insights", key = "'v2:' + #userId")
     public AiInsightResponse generateInsights(UUID userId) {
         BigDecimal income  = safeAmount(repository.getTotalAmountByType(userId, TransactionType.valueOf("INCOME")));
         BigDecimal expense = safeAmount(repository.getTotalAmountByType(userId, TransactionType.valueOf("EXPENSE")));
@@ -91,7 +98,7 @@ public class AiInsightsService {
     public AiInsightResponse regenerateInsights(UUID userId) {
         Cache cache = cacheManager.getCache("ai-insights");
         if (cache != null) {
-            cache.evict(userId);
+            cache.evict(CACHE_KEY_VERSION + userId);
         }
         return generateInsights(userId);
     }
@@ -122,9 +129,16 @@ public class AiInsightsService {
         if (!goalForecasts.isEmpty()) {
             sb.append("\n- Active Savings Goals:\n");
             for (GoalForecastingService.GoalForecast gf : goalForecasts) {
-                sb.append("  Goal ").append(gf.getGoalId()).append(": ").append(gf.getMessage()).append("\n");
+                sb.append("  \"").append(goalName(gf)).append("\"");
+                if (gf.getSavedAmount() != null && gf.getTargetAmount() != null) {
+                    sb.append(" (saved ₹").append(gf.getSavedAmount())
+                      .append(" of ₹").append(gf.getTargetAmount()).append(")");
+                }
+                sb.append(": ").append(gf.getMessage()).append("\n");
             }
-            sb.append("\nProvide suggestions on how to accelerate these goals by reducing spending in specific categories.\n");
+            sb.append("\nWhen you mention a goal, use its name exactly as written in quotes above. ")
+              .append("Never mention numeric goal IDs — the user does not see them.\n");
+            sb.append("Provide suggestions on how to accelerate these goals by reducing spending in specific categories.\n");
         }
 
         if (!budgetTrends.isEmpty()) {
@@ -289,12 +303,20 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
 
         // Goal momentum
         if (goals != null && !goals.isEmpty()) {
-            boolean stalled = goals.stream().anyMatch(g -> g.getMonthlyVelocity() == null
-                    || g.getMonthlyVelocity().compareTo(BigDecimal.ZERO) <= 0);
-            if (stalled) {
+            List<String> stalled = goals.stream()
+                    .filter(g -> g.getMonthlyVelocity() == null
+                            || g.getMonthlyVelocity().compareTo(BigDecimal.ZERO) <= 0)
+                    .map(AiInsightsService::goalName)
+                    .toList();
+            if (!stalled.isEmpty()) {
                 insights.add(new AiInsightResponse.Insight(
-                        "Give Your Goals a Push",
-                        "At least one savings goal has no monthly momentum yet. Automate a small transfer each month to get it moving.",
+                        "Give " + stalled.get(0) + " a Push",
+                        (stalled.size() == 1
+                                ? stalled.get(0)
+                                : String.join(", ", stalled))
+                                + (stalled.size() == 1 ? " has" : " have")
+                                + " no monthly momentum yet. Automate a small transfer each month to get "
+                                + (stalled.size() == 1 ? "it" : "them") + " moving.",
                         "TIP", 3));
             } else {
                 insights.add(new AiInsightResponse.Insight(
@@ -317,6 +339,12 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
 
         return new AiInsightResponse(insights, summary,
                 LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+    }
+
+    /** Goal names are the only thing the user (and the LLM) should ever see. */
+    private static String goalName(GoalForecastingService.GoalForecast forecast) {
+        String name = forecast.getGoalName();
+        return name == null || name.isBlank() ? "Savings goal" : name.trim();
     }
 
     private static String prettyCategory(Category category) {

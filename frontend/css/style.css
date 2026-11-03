@@ -1141,6 +1141,31 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
   margin-bottom: 6px;
 }
 
+.analytics-actions {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.analytics-actions .btn { white-space: nowrap; flex: 1 1 auto; }
+.analytics-actions .btn:disabled { opacity: 0.6; cursor: progress; }
+
+.card-subtitle {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+.stat-card .stat-value--text {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+.stat-card .stat-hint { font-size: 0.74rem; color: var(--text-muted); margin-top: 4px; }
+.stat-card .stat-value.is-negative { color: var(--accent); }
+
 
 /* ── Pagination ──────────────────────────────────────────────────────────── */
 .pagination { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: var(--space-5); }

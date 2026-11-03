@@ -130,7 +130,20 @@ public class TrackingRedisCache extends RedisCache {
         // value stale. The snapshot records both before the load; the tokens
         // are re-read after it. When either check fails the value is returned
         // but not stored, so it cannot stick in the cache for its TTL.
+        //
+        // A miss immediately after a write is the common case here, and the
+        // replica needs a few milliseconds to stream the commit. Wait for it
+        // before loading: otherwise the fill reads the pre-write row, the
+        // pre-load replica check refuses to cache it (correctly), and every
+        // subsequent read repeats the same race until the TTL — which is what
+        // made a 45 s poll miss a canary expense. Waiting closes the window
+        // and lets the value be cached.
         CacheConsistencyGuard.Snapshot before = consistencyGuard.snapshot(scope);
+        if (before != null && !before.replicaCaughtUp()) {
+            if (consistencyGuard.awaitReplica(before.wal(), CacheConsistencyGuard.REPLICA_WAIT_MS)) {
+                before = new CacheConsistencyGuard.Snapshot(before.gen(), before.wal(), true);
+            }
+        }
         T value = loadValue(key, valueLoader);
         if (value != null && consistencyGuard.canCache(scope, before)) {
             super.put(key, value);

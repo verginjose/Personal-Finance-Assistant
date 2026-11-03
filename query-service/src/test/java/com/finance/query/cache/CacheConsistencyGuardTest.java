@@ -99,14 +99,64 @@ class CacheConsistencyGuardTest {
     }
 
     @Test
-    @DisplayName("caches when the scope has no write tokens yet")
-    void cachesWhenNoTokens() {
+    @DisplayName("refuses to cache when the scope has no write tokens")
+    void refusesWhenNoTokens() {
+        // Missing tokens cannot be distinguished from lost tokens, and a value
+        // that cannot be proven fresh must not be stored for the whole TTL.
         when(redis.opsForValue()).thenReturn(ops);
         when(ops.multiGet(any())).thenReturn(Arrays.asList(null, null));
 
         CacheConsistencyGuard.Snapshot before = guard.snapshot(SCOPE);
 
-        assertThat(guard.canCache(SCOPE, before)).isTrue();
+        assertThat(before).isNull();
+        assertThat(guard.canCache(SCOPE, before)).isFalse();
+        verify(jdbc, never()).queryForObject(anyString(), eq(Boolean.class), any());
+    }
+
+    @Test
+    @DisplayName("refuses to cache when the WAL token is missing but the generation exists")
+    void refusesWhenWalTokenMissing() {
+        when(redis.opsForValue()).thenReturn(ops);
+        when(ops.multiGet(any())).thenReturn(Arrays.asList("7", null));
+
+        CacheConsistencyGuard.Snapshot before = guard.snapshot(SCOPE);
+
+        assertThat(before).isNull();
+        assertThat(guard.canCache(SCOPE, before)).isFalse();
+        verify(jdbc, never()).queryForObject(anyString(), eq(Boolean.class), any());
+    }
+
+    @Test
+    @DisplayName("waits for the replica to replay the write before the load")
+    void awaitsReplicaUntilCaughtUp() {
+        // The fill right after a write races the ~10 ms replay window.
+        when(jdbc.queryForObject(anyString(), eq(Boolean.class), any()))
+                .thenReturn(false, false, true);
+
+        boolean caughtUp = guard.awaitReplica("0/95BEDD0", 250);
+
+        assertThat(caughtUp).isTrue();
+        verify(jdbc, times(3)).queryForObject(anyString(), eq(Boolean.class), eq("0/95BEDD0"));
+    }
+
+    @Test
+    @DisplayName("gives up waiting when the replica stays behind")
+    void awaitReplicaTimesOut() {
+        when(jdbc.queryForObject(anyString(), eq(Boolean.class), any())).thenReturn(false);
+
+        long started = System.nanoTime();
+        boolean caughtUp = guard.awaitReplica("0/95BEDD0", 20);
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000;
+
+        assertThat(caughtUp).isFalse();
+        assertThat(elapsedMs).isBetween(15L, 500L);
+    }
+
+    @Test
+    @DisplayName("does not wait when there is no WAL token")
+    void awaitReplicaIgnoresBlankToken() {
+        assertThat(guard.awaitReplica("", 250)).isFalse();
+        assertThat(guard.awaitReplica(null, 250)).isFalse();
         verify(jdbc, never()).queryForObject(anyString(), eq(Boolean.class), any());
     }
 
@@ -126,7 +176,8 @@ class CacheConsistencyGuardTest {
     @DisplayName("re-reads the tokens after the load, not just once")
     void readsTokensBeforeAndAfter() {
         when(redis.opsForValue()).thenReturn(ops);
-        when(ops.multiGet(any())).thenReturn(Arrays.asList("1", null));
+        when(ops.multiGet(any())).thenReturn(List.of("1", "0/95BEDD0"));
+        when(jdbc.queryForObject(anyString(), eq(Boolean.class), any())).thenReturn(true);
 
         CacheConsistencyGuard.Snapshot before = guard.snapshot(SCOPE);
         guard.canCache(SCOPE, before);

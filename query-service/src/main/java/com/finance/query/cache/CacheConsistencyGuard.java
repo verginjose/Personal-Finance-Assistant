@@ -37,6 +37,16 @@ public class CacheConsistencyGuard {
     private static final String GEN_PREFIX = "finance:gen:";
     private static final String WAL_PREFIX = "finance:wal:";
 
+    /**
+     * How long a cache fill may wait for the replica to replay the last write
+     * before it loads. A fill that races a write by a few milliseconds reads a
+     * pre-write row from the replica; waiting for the replay closes that window
+     * instead of merely detecting it.
+     */
+    public static final long REPLICA_WAIT_MS = 250;
+
+    private static final long REPLICA_POLL_MS = 5;
+
     private final StringRedisTemplate redis;
     private final JdbcTemplate jdbc;
 
@@ -63,6 +73,15 @@ public class CacheConsistencyGuard {
             }
             String gen = values.get(0);
             String wal = values.get(1);
+            // Fail closed when the tokens are missing: without a WAL token the
+            // guard cannot prove the replica has replayed the last write, and
+            // an unverifiable value must not be cached for the whole TTL.
+            // (A scope that never saw a write has no tokens — it is rare on the
+            // write-side caches this guard protects, and an uncached read is
+            // always correct.)
+            if (gen == null || wal == null || wal.isBlank()) {
+                return null;
+            }
             return new Snapshot(gen, wal, replicaHasReplayed(wal));
         } catch (Exception e) {
             log.warn("CacheConsistencyGuard: token read failed for scope={}: {}", scope, e.getMessage());
@@ -79,7 +98,7 @@ public class CacheConsistencyGuard {
         }
         try {
             List<String> after = readTokens(scope);
-            if (after == null || after.size() < 2) {
+            if (after == null || after.size() < 2 || after.get(0) == null) {
                 return false;
             }
             if (!Objects.equals(before.gen(), after.get(0))) {
@@ -103,6 +122,38 @@ public class CacheConsistencyGuard {
         }
     }
 
+    /**
+     * Waits, bounded, until the replica has replayed past {@code lsn}.
+     *
+     * <p>A cache fill that starts a few milliseconds after a write can read the
+     * row from a replica that has not streamed the commit yet (observed: 11 ms
+     * of replay lag on this cluster). Waiting here means the loader runs only
+     * once the write is visible, so the value it caches is genuinely fresh.
+     *
+     * @return true if caught up before the deadline, false on timeout or when
+     *         the token is unknown (caller must then not cache the value)
+     */
+    public boolean awaitReplica(String lsn, long maxWaitMs) {
+        if (lsn == null || lsn.isBlank()) {
+            return false;
+        }
+        long deadline = System.nanoTime() + maxWaitMs * 1_000_000L;
+        while (true) {
+            if (replicaHasReplayed(lsn)) {
+                return true;
+            }
+            if (System.nanoTime() >= deadline) {
+                return false;
+            }
+            try {
+                Thread.sleep(REPLICA_POLL_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+    }
+
     private List<String> readTokens(String scope) {
         return redis.opsForValue()
                 .multiGet(List.of(GEN_PREFIX + scope, WAL_PREFIX + scope));
@@ -110,11 +161,11 @@ public class CacheConsistencyGuard {
 
     /**
      * Asks the read-side database whether it has replayed past {@code lsn}.
-     * On a primary (or when the token is unknown) there is nothing to wait for.
+     * An unknown token is not proof of freshness, so it fails closed.
      */
     private boolean replicaHasReplayed(String lsn) {
         if (lsn == null || lsn.isBlank()) {
-            return true;
+            return false;
         }
         Boolean caughtUp = jdbc.queryForObject(
                 "select coalesce(pg_last_wal_replay_lsn() >= ?::pg_lsn, true)",

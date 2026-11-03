@@ -98,12 +98,18 @@ public class QueryCacheEvictor {
      */
     public void evictGroupKeys(Long groupId, Set<UUID> memberIds) {
         Runnable work = () -> {
+            // Publish the generation/WAL token *before* deleting the keys. A
+            // reader that refills between the delete and the bump used to be
+            // certified against the pre-write generation, so it could store the
+            // pre-delete value and pin it for the TTL. Bumping first makes any
+            // concurrent fill fail the guard; the delete then removes whatever
+            // the cache holds, and the next read reloads from the committed row.
+            publishWriteTokens(memberIds, Set.of(groupId));
             try {
                 doEvictGroup(groupId, memberIds);
             } catch (Exception e) {
                 log.warn("QueryCacheEvictor: group eviction failed for groupId={}: {}", groupId, e.getMessage());
             }
-            publishWriteTokens(memberIds, Set.of(groupId));
         };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

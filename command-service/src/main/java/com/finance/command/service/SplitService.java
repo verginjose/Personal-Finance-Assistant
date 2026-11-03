@@ -1,6 +1,5 @@
 package com.finance.command.service;
 
-import com.finance.command.cache.CacheKeyRegistry;
 import com.finance.command.dto.*;
 import com.finance.command.model.*;
 import com.finance.command.model.GroupActivity.ActivityType;
@@ -14,8 +13,6 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import javax.security.auth.callback.LanguageCallback;
 import java.math.BigDecimal;
@@ -38,7 +35,6 @@ public class SplitService {
     private final TransactionEntryService transactionEntryService;
     private final UserValidationService userValidationService;
     private final GroupActivityService groupActivityService;
-    private final CacheKeyRegistry cacheKeyRegistry;
     private final NotificationService notificationService;
     private final org.springframework.cache.CacheManager cacheManager;
     private final com.finance.command.cache.QueryCacheEvictor queryCacheEvictor;
@@ -67,8 +63,7 @@ public class SplitService {
                 "@" + creatorName + " created the group \"" + group.getName() + "\"",
                 group.getId());
         log.info("Group created: id={}, name={}", group.getId(), group.getName());
-        evictUserGroupsForMembers(group.getId());
-        evictUserCachesAfterCommit(Set.of(req.getCreatedBy()));
+        queryCacheEvictor.evictGroupKeys(group.getId(), Set.of(req.getCreatedBy()));
         return group;
     }
 
@@ -214,9 +209,7 @@ public class SplitService {
             Objects.requireNonNull(cacheManager.getCache("group-activity")).evict(groupId);
         }
         Set<UUID> memberIds = members.stream().map(GroupMember::getUserId).collect(Collectors.toSet());
-        evictUserGroupsForMembers(groupId);
         queryCacheEvictor.evictGroupKeys(groupId, memberIds);
-        evictUserCachesAfterCommit(memberIds);
     }
 
     @Caching(evict = {
@@ -230,16 +223,9 @@ public class SplitService {
                 .orElseThrow(() -> new IllegalArgumentException("Membership not found"));
         member.setArchived(archive);
         memberRepo.save(member);
-        evictUserGroupsForMembers(groupId);
+        // One invalidation wave: bump the write tokens, delete the group keys,
+        // and delete this user's user-groups catalog entry.
         queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
-        // Full user-level invalidation, after commit and after the write-token
-        // bump registered above. This replaces the fire-and-forget HTTP call to
-        // query-service's /internal/cache-evict: both services share Redis and
-        // the same finance:analytics:v1:user-keys registry, so the delete can
-        // run here synchronously. The HTTP call was @Async and unordered — it
-        // deleted reader caches for a row that was not yet visible, which is
-        // how a racing fill pinned the pre-commit value for the cache TTL.
-        evictUserCachesAfterCommit(Set.of(userId));
     }
 
     /* ─── MEMBERS ─── */
@@ -270,9 +256,8 @@ public class SplitService {
                 "event", "group-invite",
                 "groupId", groupId)));
                 
-        evictUserGroupsForMembers(groupId);
-        queryCacheEvictor.evictGroupKeys(groupId, Set.of(req.getUserId()));
-        evictUserCachesAfterCommit(Set.of(req.getUserId()));
+        // The member list is part of every member's user-groups payload.
+        queryCacheEvictor.evictGroupKeys(groupId, memberIds(groupId));
         return member;
     }
 
@@ -307,9 +292,8 @@ public class SplitService {
                 ActivityType.MEMBER_ADDED,
                 "@" + actorName + " joined the group",
                 member.getId());
-        evictUserGroupsForMembers(groupId);
-        queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
-        evictUserCachesAfterCommit(Set.of(userId));
+        // Membership changed: every member's user-groups payload is stale.
+        queryCacheEvictor.evictGroupKeys(groupId, memberIds(groupId));
     }
 
     @Caching(evict = {
@@ -328,9 +312,8 @@ public class SplitService {
         }
 
         memberRepo.delete(member);
-        evictUserGroupsForMembers(groupId);
-        queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
-        evictUserCachesAfterCommit(Set.of(userId));
+        // Membership changed: every member's user-groups payload is stale.
+        queryCacheEvictor.evictGroupKeys(groupId, memberIds(groupId));
     }
 
     @Caching(evict = {
@@ -362,9 +345,8 @@ public class SplitService {
                                            // for now
                 "@" + actorName + " left the group",
                 member.getId());
-        evictUserGroupsForMembers(groupId);
-        queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
-        evictUserCachesAfterCommit(Set.of(userId));
+        // Membership changed: every member's user-groups payload is stale.
+        queryCacheEvictor.evictGroupKeys(groupId, memberIds(groupId));
     }
 
     @Transactional(readOnly = true)
@@ -418,7 +400,7 @@ public class SplitService {
 
         List<ExpenseSplit> splits = generateSplits(expense, req, allMembers); // see Fix #7
         createPersonalTransactions(expense, splits, group);
-        evictAnalyticsCacheForSplits(splits, expense.getId(), "SPLIT_EXPENSE", expense.getPaidBy());
+        evictAnalyticsCacheForSplits(splits, expense.getPaidBy());
 
         ActivityType logType = expense.getSplitType() == SharedExpense.SplitType.SETTLEMENT
                 ? ActivityType.SETTLEMENT_RECORDED
@@ -447,7 +429,6 @@ public class SplitService {
             }
         });
 
-        evictUserGroupsForMembers(req.getGroupId());
         // Evict query-service group-scoped caches (group-balances, group-expenses,
         // group-activity, group-details). The @Caching above only clears this
         // service's own namespace; without this the query-service balance/detail
@@ -490,7 +471,7 @@ public class SplitService {
         splitRepo.deleteAll(splits);
         expenseRepo.delete(expense);
 
-        evictAnalyticsCacheForSplits(splits, expenseId, "SPLIT_EXPENSE_DELETE",expense.getPaidBy());
+        evictAnalyticsCacheForSplits(splits, expense.getPaidBy());
 
         String actorName = resolveMemberName(groupId, actorUserId);
         groupActivityService.log(groupId, actorUserId, actorName,
@@ -499,7 +480,6 @@ public class SplitService {
                         + "\" (" + expense.getAmount() + " " + expense.getCurrency() + ")",
                 expenseId);
         log.info("Shared expense deleted: id={}, group={}", expenseId, groupId);
-        evictUserGroupsForMembers(groupId);
         // Same as addSharedExpense: clear query-service group caches (balances,
         // expenses, activity, details) so the read side reflects the deletion.
         Set<UUID> affectedMemberIds = memberRepo.findByGroupId(groupId).stream()
@@ -582,13 +562,14 @@ public class SplitService {
         transactionLinkRepo.saveAll(links);
     }
 
-    private void evictAnalyticsCacheForSplits(List<ExpenseSplit> splits, Long referenceId, String operation, UUID payerId) {
+    private void evictAnalyticsCacheForSplits(List<ExpenseSplit> splits, UUID payerId) {
         Set<UUID> affectedUsers = splits.stream()
                 .filter(s -> s.getAmount().compareTo(BigDecimal.ZERO) > 0)
                 .map(ExpenseSplit::getUserId)
                 .collect(Collectors.toSet());
         if (payerId != null) affectedUsers.add(payerId);
-        evictUserCachesAfterCommit(affectedUsers);
+        // Their non-group reads (summary, analytics, transactions) changed too.
+        queryCacheEvictor.evictUserKeysWithReplicationGuard(affectedUsers);
     }
 
     private Category toTransactionCategory(SharedExpense expense) {
@@ -974,61 +955,10 @@ public class SplitService {
                         userValidationService.requireRegisteredUser(userId)));
     }
 
-    /**
-     * Evicts every tracked cache key for the given users, after commit.
-     *
-     * <p>Replaces the former fire-and-forget HTTP call to query-service's
-     * {@code /internal/cache-evict}. Both services share Redis and the same
-     * {@code finance:analytics:v1:user-keys:<id>} registry, so the delete runs
-     * here: synchronously, after the commit, and behind the write-token bumps
-     * registered by the calling method. The HTTP call was {@code @Async} and
-     * unordered — it could delete a reader's cache entry before the new row was
-     * visible, and a fill racing that window kept the pre-commit value for the
-     * cache TTL.
-     */
-    private void evictUserCachesAfterCommit(Collection<UUID> userIds) {
-        if (userIds == null || userIds.isEmpty()) {
-            return;
-        }
-        Set<UUID> distinct = new HashSet<>(userIds);
-        afterCommit(() -> distinct.forEach(cacheKeyRegistry::evictForUser));
-    }
-
-    /**
-     * Runs cache-eviction work only after the surrounding transaction commits.
-     *
-     * <p>Evicting inside the transaction deletes reader caches for a write that
-     * is not yet visible; a reader that refills in that window stores the
-     * pre-commit row, and the write's own post-commit eviction may run before
-     * that fill's put — leaving the stale value pinned for the cache TTL.
-     * After-commit ordering keeps the delete behind both the commit and the
-     * write-token bump.
-     */
-    private void afterCommit(Runnable action) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    action.run();
-                }
-            });
-        } else {
-            action.run();
-        }
-    }
-
-    private void evictUserGroupsForMembers(Long groupId) {
-        var members = memberRepo.findByGroupId(groupId);
-        // Evict own user-groups cache
-        var cache = cacheManager.getCache("user-groups");
-        if (cache != null) {
-            members.forEach(m -> cache.evict(m.getUserId()));
-        }
-        // Directly evict query-service user-groups keys — same Redis, no pub/sub needed
-        Set<UUID> memberIds = members.stream().map(GroupMember::getUserId).collect(Collectors.toSet());
-        queryCacheEvictor.evictUserGroupsKeys(memberIds);
-        // Publish the write tokens after commit so the read side won't cache a
-        // user-groups fill that raced this change or read a lagging replica.
-        queryCacheEvictor.markUserWrites(memberIds);
+    /** Member ids of a group, for invalidating every affected user-groups entry. */
+    private Set<UUID> memberIds(Long groupId) {
+        return memberRepo.findByGroupId(groupId).stream()
+                .map(GroupMember::getUserId)
+                .collect(Collectors.toSet());
     }
 }

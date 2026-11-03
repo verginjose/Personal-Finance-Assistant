@@ -9,7 +9,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -71,15 +70,28 @@ public class QueryCacheEvictor {
      * The token — not a timer — is what stops a stale refill from being
      * cached: query-service refuses to store a fill whose generation moved or
      * whose WAL position the replica has not replayed yet.
+     *
+     * <p>Both the bump and the delete run in {@code afterCommit}, in that
+     * order. Deleting inside the transaction let a reader refill from the
+     * pre-commit row, validate against the old generation, and keep the value
+     * after the commit moved it.
      */
     public void evictUserKeysWithReplicationGuard(UUID userId) {
-        cacheKeyRegistry.evictForUser(userId);
-        markWrite(Set.of(userId), Set.of());
+        evictUserKeysWithReplicationGuard(Set.of(userId));
     }
 
-    /** Same contract as {@link #evictUserKeysWithReplicationGuard} for user-groups. */
-    public void markUserWrites(Set<UUID> userIds) {
-        markWrite(userIds, Set.of());
+    /** Bulk form of {@link #evictUserKeysWithReplicationGuard(UUID)}. */
+    public void evictUserKeysWithReplicationGuard(Set<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return;
+        }
+        Set<UUID> users = new java.util.HashSet<>(userIds);
+        runAfterCommit(() -> {
+            publishWriteTokens(users, Set.of());
+            for (UUID userId : users) {
+                cacheKeyRegistry.evictForUser(userId);
+            }
+        });
     }
 
     // ── Group-level eviction ──────────────────────────────────────────────────
@@ -97,20 +109,25 @@ public class QueryCacheEvictor {
      * guard because the replica has not replayed the write.
      */
     public void evictGroupKeys(Long groupId, Set<UUID> memberIds) {
-        Runnable work = () -> {
+        Set<UUID> members = memberIds == null ? Set.of() : new java.util.HashSet<>(memberIds);
+        runAfterCommit(() -> {
             // Publish the generation/WAL token *before* deleting the keys. A
             // reader that refills between the delete and the bump used to be
             // certified against the pre-write generation, so it could store the
             // pre-delete value and pin it for the TTL. Bumping first makes any
             // concurrent fill fail the guard; the delete then removes whatever
             // the cache holds, and the next read reloads from the committed row.
-            publishWriteTokens(memberIds, Set.of(groupId));
+            publishWriteTokens(members, Set.of(groupId));
             try {
-                doEvictGroup(groupId, memberIds);
+                doEvictGroup(groupId, members);
             } catch (Exception e) {
                 log.warn("QueryCacheEvictor: group eviction failed for groupId={}: {}", groupId, e.getMessage());
             }
-        };
+        });
+    }
+
+    /** Runs {@code work} after the surrounding transaction commits, or now if there is none. */
+    private void runAfterCommit(Runnable work) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
@@ -123,46 +140,7 @@ public class QueryCacheEvictor {
         }
     }
 
-    // ── User-level eviction ───────────────────────────────────────────────────
-
-    /**
-     * Evict the user-groups cache for the given users.
-     * Reads the actual tracked keys from the user-key registry set rather
-     * than constructing hardcoded key strings.
-     */
-    @Async
-    public void evictUserGroupsKeys(Set<UUID> userIds) {
-        try {
-            doEvictUserGroups(userIds);
-            log.debug("QueryCacheEvictor: evicted user-groups for {} users", userIds.size());
-        } catch (Exception e) {
-            log.warn("QueryCacheEvictor: user-groups eviction failed: {}", e.getMessage());
-        }
-    }
-
     // ── Write tokens ──────────────────────────────────────────────────────────
-
-    /**
-     * Publish the write synchronisation tokens after the transaction commits.
-     * Consumers (query-service CacheConsistencyGuard) use them to reject cache
-     * fills that raced this write or that the read replica has not replayed.
-     *
-     * Runs in {@code afterCommit}, so a reader can never observe a token for a
-     * write that is not yet visible on the primary.
-     */
-    private void markWrite(Set<UUID> userIds, Set<Long> groupIds) {
-        Runnable publish = () -> publishWriteTokens(userIds, groupIds);
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    publish.run();
-                }
-            });
-        } else {
-            publish.run();
-        }
-    }
 
     private void publishWriteTokens(Set<UUID> userIds, Set<Long> groupIds) {
         if ((userIds == null || userIds.isEmpty()) && (groupIds == null || groupIds.isEmpty())) {

@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110304';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026110304';
-import { icon } from '../utils/icons.js?v=2026110304';
+import { api, Auth, toast } from '../utils/api.js?v=2026110305';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026110305';
+import { icon } from '../utils/icons.js?v=2026110305';
 
 let currentGroupId = null;
 let expensesPage = 0, expensesTotal = 1;
@@ -38,10 +38,9 @@ export async function renderSplit(container) {
   activePanel = 'expenses';
   const userId = Auth.getUserId();
   container.innerHTML = `
-    ${pageHeader('Split Expenses', 'Manage shared expenses with groups', '<button class="btn btn-primary btn-sm" id="sp-create">+ New Group</button>')}
-    <div style="margin-bottom:16px">
+    ${pageHeader('Split Expenses', 'Manage shared expenses with groups', `
       <button class="btn btn-secondary btn-sm" id="sp-back" style="display:none">Back to Groups</button>
-    </div>
+      <button class="btn btn-primary btn-sm" id="sp-create">+ New Group</button>`)}
     <div id="sp-content" class="fade-up"></div>`;
 
   document.getElementById('sp-create').onclick = () => createGroupModal(userId);

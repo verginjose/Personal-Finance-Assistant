@@ -46,7 +46,7 @@ jobs:
     outputs:
       services: ${{ steps.changed.outputs.services }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -101,7 +101,7 @@ jobs:
     env:
       SERVICE: ${{ matrix.service }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Check out the branch tip, not github.sha. Every matrix job would
           # otherwise branch from the same triggering commit and their

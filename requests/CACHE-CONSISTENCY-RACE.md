@@ -7,7 +7,7 @@ returned `204`, while the DB row said `is_archived = false`.
 This follows the same format as
 [GROUP-BALANCES-STALE-CACHE.md](GROUP-BALANCES-STALE-CACHE.md): the two
 earlier fixes are `39ff430` and `aa33819`, the race below is `6affd31`, and
-the removal of the remaining HTTP eviction path is `ebaa08e`.
+the removal of the remaining HTTP eviction path is `6565cef`.
 
 ## The pieces
 
@@ -109,7 +109,7 @@ This makes the sequence `check → put → check → undo if needed`, which is s
 even though the three commands are not atomic. A Lua script doing
 `GET gen; SET key; if changed DEL key` would make it truly atomic; not needed.
 
-### `ebaa08e` — one eviction path instead of two
+### `6565cef` — one eviction path instead of two
 
 Both services share Redis and the same user-key registry, so the
 `/internal/cache-evict` HTTP hop was redundant. It was also the unordered

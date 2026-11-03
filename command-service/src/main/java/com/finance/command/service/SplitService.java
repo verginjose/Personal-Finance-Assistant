@@ -14,6 +14,8 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import javax.security.auth.callback.LanguageCallback;
 import java.math.BigDecimal;
@@ -232,9 +234,16 @@ public class SplitService {
                 .orElseThrow(() -> new IllegalArgumentException("Membership not found"));
         member.setArchived(archive);
         memberRepo.save(member);
-        cacheEvictPublisher.publishForUsers(Set.of(userId), "GROUP_ARCHIVED", groupId);
         evictUserGroupsForMembers(groupId);
         queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
+        // Publish the fan-out eviction only after the commit, and register it
+        // after the write-token callbacks above so the generation bump — the
+        // signal the read side uses to reject racing fills — lands before the
+        // async delete reaches query-service. Publishing inside the transaction
+        // deleted reader caches for a row that was not yet visible; a fill in
+        // flight then stored the pre-commit value, and the post-commit delete
+        // could not see it (the fill's tracking-set registration came later).
+        afterCommit(() -> cacheEvictPublisher.publishForUsers(Set.of(userId), "GROUP_ARCHIVED", groupId));
     }
 
     /* ─── MEMBERS ─── */
@@ -967,6 +976,30 @@ public class SplitService {
                 .map(GroupMember::getName)
                 .orElseGet(() -> userValidationService.displayName(
                         userValidationService.requireRegisteredUser(userId)));
+    }
+
+    /**
+     * Runs cache-eviction fan-out only after the surrounding transaction commits.
+     *
+     * <p>{@link CacheEvictPublisher#publishForUsers} dispatches an {@code @Async}
+     * HTTP call, so invoking it inside the transaction deletes reader caches
+     * for a write that is not yet visible. A reader that refills in that window
+     * stores the pre-commit row, and the write's own post-commit eviction may
+     * run before that fill's put — leaving the stale value pinned for the cache
+     * TTL. After-commit ordering keeps the delete behind both the commit and
+     * the write-token bump.
+     */
+    private void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 
     private void evictUserGroupsForMembers(Long groupId) {

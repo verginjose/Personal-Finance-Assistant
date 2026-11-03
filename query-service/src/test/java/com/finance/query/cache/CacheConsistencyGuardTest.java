@@ -184,4 +184,42 @@ class CacheConsistencyGuardTest {
 
         verify(ops, times(2)).multiGet(any());
     }
+
+    @Test
+    @DisplayName("post-put check passes when the generation is unchanged")
+    void postPutCheckPassesWhenGenerationUnchanged() {
+        when(redis.opsForValue()).thenReturn(ops);
+        when(ops.multiGet(any())).thenReturn(List.of("7", "0/95BEDD0"));
+        when(jdbc.queryForObject(anyString(), eq(Boolean.class), any())).thenReturn(true);
+
+        CacheConsistencyGuard.Snapshot before = guard.snapshot(SCOPE);
+        // canCache() sees the same generation, then the post-put re-check does too.
+        assertThat(guard.canCache(SCOPE, before)).isTrue();
+        assertThat(guard.generationUnchanged(SCOPE, before)).isTrue();
+    }
+
+    @Test
+    @DisplayName("post-put check fails when a write commits between canCache and the put")
+    void postPutCheckDetectsWriteBetweenCanCacheAndPut() {
+        // The reported race: the fill is validated against gen 7, the write's
+        // after-commit bump lands before the put completes, and the write's own
+        // delete has already run — so the just-stored value must be removed.
+        when(redis.opsForValue()).thenReturn(ops);
+        when(ops.multiGet(any()))
+                .thenReturn(List.of("7", "0/95BEDD0"))   // snapshot
+                .thenReturn(List.of("7", "0/95BEDD0"))   // canCache
+                .thenReturn(List.of("8", "0/9A00000"));  // post-put
+        when(jdbc.queryForObject(anyString(), eq(Boolean.class), any())).thenReturn(true);
+
+        CacheConsistencyGuard.Snapshot before = guard.snapshot(SCOPE);
+
+        assertThat(guard.canCache(SCOPE, before)).isTrue();
+        assertThat(guard.generationUnchanged(SCOPE, before)).isFalse();
+    }
+
+    @Test
+    @DisplayName("post-put check fails closed without a snapshot")
+    void postPutCheckFailsClosedWithoutSnapshot() {
+        assertThat(guard.generationUnchanged(SCOPE, null)).isFalse();
+    }
 }

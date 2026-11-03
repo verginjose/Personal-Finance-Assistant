@@ -147,6 +147,16 @@ public class TrackingRedisCache extends RedisCache {
         T value = loadValue(key, valueLoader);
         if (value != null && consistencyGuard.canCache(scope, before)) {
             super.put(key, value);
+            if (!consistencyGuard.generationUnchanged(scope, before)) {
+                // A write committed between canCache() and the put — each is a
+                // separate round-trip. That write's eviction may already have
+                // run (the pre-commit HTTP evict, and the after-commit delete
+                // that followed the token bump), so the value just stored is
+                // pre-write and nothing will remove it before its TTL. Remove
+                // it here; the caller still gets the loaded value.
+                evict(key);
+                return value;
+            }
             register(key);
         }
         return value;

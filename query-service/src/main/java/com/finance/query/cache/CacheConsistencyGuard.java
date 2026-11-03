@@ -123,6 +123,34 @@ public class CacheConsistencyGuard {
     }
 
     /**
+     * Re-checks the generation token after a cache write.
+     *
+     * <p>{@link #canCache} and the subsequent put are separate Redis
+     * round-trips. A write that commits between them is invisible to
+     * {@code canCache}, and the write's own eviction can have run before the
+     * put — the fill then stores a pre-write value that survives for the whole
+     * TTL. The caller invokes this immediately after the put and removes the
+     * entry when it returns false.
+     *
+     * @return true when the generation is still the one the snapshot saw
+     */
+    public boolean generationUnchanged(String scope, Snapshot before) {
+        if (before == null) {
+            return false;
+        }
+        try {
+            List<String> after = readTokens(scope);
+            if (after == null || after.size() < 2 || after.get(0) == null) {
+                return false;
+            }
+            return Objects.equals(before.gen(), after.get(0));
+        } catch (Exception e) {
+            log.warn("CacheConsistencyGuard: post-put token check failed for scope={}: {}", scope, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Waits, bounded, until the replica has replayed past {@code lsn}.
      *
      * <p>A cache fill that starts a few milliseconds after a write can read the

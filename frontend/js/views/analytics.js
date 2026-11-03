@@ -1,8 +1,9 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110303';
-import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=2026110303';
+import { api, Auth, toast } from '../utils/api.js?v=2026110304';
+import { icon } from '../utils/icons.js?v=2026110304';
+import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=2026110304';
 import {
   pageHeader, skeletonChart, formatCurrency, formatCategory, esc
-} from '../utils/ui.js?v=2026110303';
+} from '../utils/ui.js?v=2026110304';
 
 let charts = [];
 let loadToken = 0;
@@ -136,12 +137,11 @@ function sumSeries(chart) {
   return (chart?.datasets?.[0]?.data || []).reduce((total, value) => total + (Number(value) || 0), 0);
 }
 
-function renderKpis(income, expense) {
+function renderKpis(income, expense, count) {
   const wrap = document.getElementById('a-kpis');
   if (!wrap) return;
   const net = income - expense;
   const range = describeRange();
-  const timelineLabel = document.getElementById('a-timeline')?.selectedOptions?.[0]?.textContent || 'Monthly';
 
   wrap.innerHTML = `
     <div class="card stat-card income">
@@ -156,10 +156,10 @@ function renderKpis(income, expense) {
       <div class="stat-card-top"><div class="stat-label">Net</div></div>
       <div class="stat-value ${net < 0 ? 'is-negative' : ''}">${formatCurrency(net)}</div>
     </div>
-    <div class="card stat-card">
-      <div class="stat-card-top"><div class="stat-label">Range</div></div>
-      <div class="stat-value stat-value--text">${esc(range)}</div>
-      <div class="stat-hint">${esc(timelineLabel)} grouping</div>
+    <div class="card stat-card count">
+      <div class="stat-card-top"><div class="stat-label">Transactions</div><div class="stat-icon">${icon('list')}</div></div>
+      <div class="stat-value">${count ?? 0}</div>
+      <div class="stat-hint">${esc(range)}</div>
     </div>`;
 }
 
@@ -175,9 +175,10 @@ async function loadAnalytics(userId) {
   const caption = document.getElementById('a-timeline-caption');
   if (caption) caption.textContent = `${params.timelineType.charAt(0) + params.timelineType.slice(1).toLowerCase()} · ${describeRange()}`;
 
-  const [expResult, incResult] = await Promise.allSettled([
+  const [expResult, incResult, summaryResult] = await Promise.allSettled([
     api.get('/analytics/category-pie-chart', { ...params, transactionFilter: 'EXPENSE' }),
     api.get('/analytics/category-pie-chart', { ...params, transactionFilter: 'INCOME' }),
+    api.get('/upsert/summary', { userId }),
   ]);
 
   if (token !== loadToken) return; // A newer filter request superseded this one.
@@ -199,7 +200,10 @@ async function loadAnalytics(userId) {
     showError('a-bar-wrap', incResult.reason?.message);
   }
 
-  renderKpis(sumSeries(incPie), sumSeries(expPie));
+  const totalCount = summaryResult.status === 'fulfilled'
+    ? Number(summaryResult.value?.totalCount) || 0
+    : 0;
+  renderKpis(sumSeries(incPie), sumSeries(expPie), totalCount);
 
   api.get('/analytics/timeline-chart', params)
     .then(timeline => { if (token === loadToken) mountTimeline('a-timeline-wrap', 'a-timeline-chart', timeline); })

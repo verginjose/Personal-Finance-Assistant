@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110303';
-import { icon } from '../utils/icons.js?v=2026110303';
-import { currencyOptionHtml } from '../utils/ui.js?v=2026110303';
+import { api, Auth, toast } from '../utils/api.js?v=2026110304';
+import { icon } from '../utils/icons.js?v=2026110304';
+import { currencyOptionHtml } from '../utils/ui.js?v=2026110304';
 
 /** Best-effort default from the browser locale; the user can always change it. */
 function localCurrencyGuess() {

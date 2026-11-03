@@ -1675,6 +1675,7 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
 .profile-inline-form { display: flex; gap: 8px; align-items: stretch; }
 .profile-inline-form .form-input { flex: 1; min-width: 0; }
 
+.profile-main { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
 .profile-side { display: flex; flex-direction: column; gap: var(--space-6); }
 
 .profile-panel {
@@ -1900,10 +1901,6 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
   }
   
   /* Better focus states for accessibility */
-  .form-input:focus, .form-select:focus, .form-textarea:focus {
-    outline: 2px solid var(--primary);
-    outline-offset: 2px;
-  }
   .btn:focus {
     outline: 2px solid var(--primary);
     outline-offset: 2px;
@@ -2880,7 +2877,10 @@ body {
 }
 
 /* ── Shell & sidebar ─────────────────────────────────────────────────────── */
-.main-content { padding: 30px 38px 64px; }
+.main-content {
+  padding: 30px 38px 64px;
+  transition: margin-left 0.3s ease, padding-top 0.3s ease;
+}
 
 .sidebar {
   background: rgba(6, 11, 16, 0.82);
@@ -2909,6 +2909,65 @@ body {
 .sidebar-user { padding: 14px 16px; }
 .sidebar-user-avatar { box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.28); }
 .sidebar-user-name { font-weight: 600; letter-spacing: -0.01em; }
+
+/* Collapsible navigation (desktop). The sidebar slides out and a small
+   floating button brings it back; the choice survives reloads. */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-head .logo {
+  flex: 1;
+  min-width: 0;
+  border-bottom: none;
+  padding: 24px 8px 18px 20px;
+}
+
+.sidebar-collapse,
+.sidebar-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.sidebar-collapse:hover,
+.sidebar-expand:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
+}
+
+.sidebar-expand {
+  display: none;
+  position: fixed;
+  top: 22px;
+  left: 22px;
+  z-index: 90;
+  width: 40px;
+  height: 40px;
+  border-color: var(--border-strong);
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-dim);
+}
+.sidebar-expand:hover { color: var(--primary-l); border-color: rgba(20, 184, 166, 0.4); }
+
+#app-shell.sidebar-collapsed .sidebar { transform: translateX(-100%); }
+#app-shell.sidebar-collapsed .main-content { margin-left: 0; padding-top: 76px; }
+#app-shell.sidebar-collapsed .sidebar-expand { display: inline-flex; }
 
 /* ── Page header ─────────────────────────────────────────────────────────── */
 .page-header { align-items: flex-end; margin-bottom: 30px; }
@@ -3191,6 +3250,12 @@ tr:hover td { background: rgba(20, 184, 166, 0.045); }
 
 @media (max-width: 768px) {
   .main-content { padding: 18px 16px 100px; }
+  /* Mobile uses the drawer; the desktop collapse button has no meaning here. */
+  .sidebar-collapse { display: none; }
+  #app-shell.sidebar-collapsed .sidebar-expand { display: none; }
+  #app-shell.sidebar-collapsed .sidebar { transform: translateX(-100%); }
+  #app-shell.sidebar-collapsed .sidebar.open { transform: translateX(0); }
+  #app-shell.sidebar-collapsed .main-content { margin-left: 0; padding-top: 18px; }
   .page-header { margin-bottom: 22px; }
   .page-header h1 { font-size: 1.5rem; }
   .card { padding: 22px 20px; }
@@ -3222,12 +3287,11 @@ tr:hover td { background: rgba(20, 184, 166, 0.045); }
 }
 
 /* Focus ring consistency everywhere. */
+/* Inputs, selects and textareas already draw a border + ring on :focus.
+   Adding an outline here too painted a second rectangle around every field. */
 a:focus-visible,
 button:focus-visible,
-[role="button"]:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
+[role="button"]:focus-visible {
   outline: 2px solid var(--primary-l);
   outline-offset: 2px;
 }
@@ -3237,22 +3301,19 @@ textarea:focus-visible {
   .form-input, .form-select, .form-textarea { font-size: 16px; }
 }
 
-/* ── OCR review dialog & compact scanner ─────────────────────────────────── */
-.scanner-single { display: flex; justify-content: center; }
-.scanner-single .scanner-upload-card { width: 100%; max-width: 620px; }
-
-.modal:has(.ocr-form) { width: min(720px, calc(100vw - 32px)); }
-.modal-body:has(.ocr-form) { padding: 0; max-height: 76vh; overflow-y: auto; }
-.modal-body:has(.ocr-form) .ocr-save-bar {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  border-top: 1px solid var(--border);
-  backdrop-filter: blur(10px);
+/* ── OCR review & compact scanner ────────────────────────────────────────── */
+.scanner-single {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
 }
+.scanner-single .scanner-upload-card { width: 100%; max-width: 620px; }
+.scanner-single .ocr-result-card { width: 100%; max-width: 720px; }
 
-.ocr-modal-head { padding: 18px 24px 14px; border-bottom: 1px solid var(--border-light); }
-.ocr-modal-head p { font-size: 0.82rem; color: var(--text-dim); margin-top: 4px; }
+/* The review form sits inline at the end of the page; its save action is the
+   last element, so it scrolls into view instead of floating over the form. */
+.ocr-result-card[hidden] { display: none; }
 
 .ocr-conversion {
   display: flex;

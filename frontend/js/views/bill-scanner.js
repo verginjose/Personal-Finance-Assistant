@@ -1,11 +1,7 @@
-import {api, Auth, toast} from '../utils/api.js?v=2026110303';
-import { icon } from '../utils/icons.js?v=2026110303';
-import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch, openModal} from '../utils/ui.js?v=2026110303';
-import {navigateTo} from '../app.js?v=2026110303';
-
-// The review dialog is rendered into <body>, so its close handle must survive
-// outside the view closure (saveTransaction navigates away and closes it).
-let activeReviewClose = null;
+import {api, Auth, toast} from '../utils/api.js?v=2026110304';
+import { icon } from '../utils/icons.js?v=2026110304';
+import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=2026110304';
+import {navigateTo} from '../app.js?v=2026110304';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
@@ -27,6 +23,19 @@ export async function renderBillScanner(container) {
           ${icon('scan', 'sm')} Process Receipt
         </button>
       </div>
+
+      <!-- Review lives inline below the upload card so the page scrolls from
+           upload → review → save without a second floating surface. -->
+      <section class="card ocr-result-card" id="bs-result" hidden>
+        <div class="ocr-result-head">
+          <div>
+            <span class="ocr-eyebrow">${icon('sparkles', 'xs')} Step 2 · Review</span>
+            <h3>Extracted data</h3>
+          </div>
+          <span class="badge badge-info">AI preview — edit before saving</span>
+        </div>
+        <form id="bs-preview-form" class="ocr-form"></form>
+      </section>
     </div>`;
   const defaultCurrency = Auth.getDefaultCurrency();
 
@@ -224,17 +233,14 @@ export async function renderBillScanner(container) {
     form.onsubmit = (e) => { e.preventDefault(); saveTransaction(userId); };
   }
 
-  function openReviewModal(result) {
-    if (activeReviewClose) activeReviewClose();
-    const { close } = openModal('Review extracted data', `
-      <div class="ocr-modal-head">
-        <span class="ocr-eyebrow">${icon('sparkles', 'xs')} AI extraction</span>
-        <p>Check the fields below, then save. Nothing is stored until you confirm.</p>
-      </div>
-      <form id="bs-preview-form" class="ocr-form"></form>
-    `, { size: 'lg' });
-    activeReviewClose = close;
+  // The extracted data is shown inline at the end of the page, not in a modal.
+  // Users scroll through the fields, check them, then confirm at the bottom.
+  function showReview(result) {
+    const resultCard = document.getElementById('bs-result');
+    if (!resultCard) return;
+    resultCard.hidden = false;
     renderPreviewForm(result);
+    resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   uploadBtn.onclick = async () => {
@@ -263,7 +269,7 @@ export async function renderBillScanner(container) {
   window._bsOcrListener = (e) => {
     const detail = e.detail;
     if (detail.status === 'SUCCESS' && detail.data) {
-      openReviewModal(detail.data);
+      showReview(detail.data);
     }
     uploadBtn.disabled = !selectedFile;
     uploadBtn.innerHTML = `${icon('scan', 'sm')} Process Receipt`;
@@ -317,7 +323,6 @@ async function saveTransaction(userId) {
           recurring: isRecurring,
           receiptUrl: window._bsReceiptUrl || null
         }));
-        if (activeReviewClose) { activeReviewClose(); activeReviewClose = null; }
         navigateTo('transactions');
         toast('Forwarded to personal transactions page', 'info');
       } else {
@@ -329,7 +334,6 @@ async function saveTransaction(userId) {
         date: dateVal,
         receiptUrl: window._bsReceiptUrl || null
       }));
-      if (activeReviewClose) { activeReviewClose(); activeReviewClose = null; }
       navigateTo('split');
       toast('Forwarded to group split page', 'info');
     }

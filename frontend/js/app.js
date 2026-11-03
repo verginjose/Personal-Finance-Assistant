@@ -1,18 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    app.js — SPA Router + Shell
    ═══════════════════════════════════════════════════════════════════════════ */
-import { Auth, SseManager, api } from './utils/api.js?v=2026110303';
-import { icon } from './utils/icons.js?v=2026110303';
-import { renderAuth }          from './views/auth.js?v=2026110303';
-import { esc }                 from './utils/ui.js?v=2026110303';
-import { renderDashboard }     from './views/dashboard.js?v=2026110303';
-import { renderTransactions }  from './views/transactions.js?v=2026110303';
-import { renderBillScanner }   from './views/bill-scanner.js?v=2026110303';
-import { renderSplit }         from './views/split.js?v=2026110303';
-import { renderAnalytics }     from './views/analytics.js?v=2026110303';
-import { renderProfile }       from './views/profile.js?v=2026110303';
-import { renderSubscriptions } from './views/subscriptions.js?v=2026110303';
-import { renderGoals }         from './views/goals.js?v=2026110303';
+import { Auth, SseManager, api } from './utils/api.js?v=2026110304';
+import { icon } from './utils/icons.js?v=2026110304';
+import { renderAuth }          from './views/auth.js?v=2026110304';
+import { esc }                 from './utils/ui.js?v=2026110304';
+import { renderDashboard }     from './views/dashboard.js?v=2026110304';
+import { renderTransactions }  from './views/transactions.js?v=2026110304';
+import { renderBillScanner }   from './views/bill-scanner.js?v=2026110304';
+import { renderSplit }         from './views/split.js?v=2026110304';
+import { renderAnalytics }     from './views/analytics.js?v=2026110304';
+import { renderProfile }       from './views/profile.js?v=2026110304';
+import { renderSubscriptions } from './views/subscriptions.js?v=2026110304';
+import { renderGoals }         from './views/goals.js?v=2026110304';
 
 const NAV_ITEMS = [
   { id: 'dashboard',      icon: 'dashboard',      label: 'Dashboard' },
@@ -46,12 +46,19 @@ function renderShell() {
   const initial = name[0].toUpperCase();
 
   let profilePicHtml = `<div class="sidebar-user-avatar" id="shell-avatar">${initial}</div>`;
-  
+
+  // Sidebar collapse is a desktop preference; remembered across reloads.
+  let sidebarCollapsed = false;
+  try { sidebarCollapsed = localStorage.getItem('pfa_sidebar_collapsed') === '1'; } catch { /* storage unavailable */ }
+
   root.innerHTML = `
-    <div id="app-shell">
+    <div id="app-shell" class="${sidebarCollapsed ? 'sidebar-collapsed' : ''}">
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
       <aside class="sidebar" id="sidebar">
-        <div class="logo">${icon('logo', 'sm')} PFA</div>
+        <div class="sidebar-head">
+          <div class="logo">${icon('logo', 'sm')} PFA</div>
+          <button type="button" class="sidebar-collapse" id="sidebar-collapse" aria-label="Hide navigation" title="Hide navigation">${icon('chevron-left', 'sm')}</button>
+        </div>
         <nav id="sidebar-nav" aria-label="Main navigation">
           ${NAV_ITEMS.map(n => `
             <a href="#" data-view="${n.id}" class="${n.id === currentView ? 'active' : ''}" aria-current="${n.id === currentView ? 'page' : 'false'}">
@@ -70,6 +77,7 @@ function renderShell() {
         </div>
       </aside>
       <div class="main-content">
+        <button type="button" class="sidebar-expand" id="sidebar-expand" aria-label="Show navigation" title="Show navigation">${icon('menu')}</button>
         <div class="mobile-header">
           <button id="menu-toggle" aria-label="Open menu">${icon('menu')}</button>
           <span class="mobile-logo">PFA</span>
@@ -157,6 +165,14 @@ function renderShell() {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebar-overlay').classList.remove('open');
   };
+
+  const shell = document.getElementById('app-shell');
+  const setSidebarCollapsed = (collapsed) => {
+    shell.classList.toggle('sidebar-collapsed', collapsed);
+    try { localStorage.setItem('pfa_sidebar_collapsed', collapsed ? '1' : '0'); } catch { /* storage unavailable */ }
+  };
+  document.getElementById('sidebar-collapse')?.addEventListener('click', () => setSidebarCollapsed(true));
+  document.getElementById('sidebar-expand')?.addEventListener('click', () => setSidebarCollapsed(false));
 
   // Bottom Sheets Logic
   const moreMenuOverlay = document.getElementById('more-menu-overlay');

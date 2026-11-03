@@ -56,16 +56,16 @@ describe('renderDashboard', () => {
     expect(container.querySelector('#d-ai-insights-list')).toBeTruthy();
   });
 
-  it('populates summary KPIs after data loads', async () => {
+  it('renders health data without a duplicate KPI row', async () => {
     mockDashboardApis();
     await renderDashboard(container);
 
     await vi.waitFor(() => {
-      const income = container.querySelector('.stat-card.income .stat-value');
-      expect(income?.textContent).toContain('50,000');
+      expect(container.querySelector('#d-health-score')?.textContent).toBe('720');
     });
-    expect(container.querySelector('#d-health-score')?.textContent).toBe('720');
     expect(container.querySelector('#d-health-grade')?.textContent).toBe('Grade A');
+    // Income, expense and transaction totals live on the Analytics page now.
+    expect(container.querySelector('.stat-card')).toBeNull();
   });
 
   it('does not hold the page for slow AI insights', async () => {
@@ -74,7 +74,6 @@ describe('renderDashboard', () => {
 
     // The dashboard has already resolved while the AI request is still in
     // flight, so every other panel must be painted.
-    expect(container.querySelector('.stat-card.income .stat-value')?.textContent).toContain('50,000');
     expect(container.querySelector('#d-health-score')?.textContent).toBe('720');
     expect(container.querySelector('#d-ai-summary')?.textContent).toContain('Analyzing');
     expect(container.querySelectorAll('#d-ai-insights-list .advisor-skeleton').length).toBeGreaterThan(0);

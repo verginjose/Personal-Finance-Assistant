@@ -1,9 +1,9 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110303';
-import { icon } from '../utils/icons.js?v=2026110303';
+import { api, Auth, toast } from '../utils/api.js?v=2026110304';
+import { icon } from '../utils/icons.js?v=2026110304';
 import {
-  pageHeader, skeletonKpiRow,
+  pageHeader,
   healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, formatCurrency, alertBanner, esc
-} from '../utils/ui.js?v=2026110303';
+} from '../utils/ui.js?v=2026110304';
 
 export async function renderDashboard(container) {
   const userId = Auth.getUserId();
@@ -13,8 +13,7 @@ export async function renderDashboard(container) {
     <div class="dashboard-top fade-up">
       ${healthPanelHtml('d')}
       ${aiPanelHtml('d')}
-    </div>
-    <div id="d-kpis">${skeletonKpiRow(4)}</div>`;
+    </div>`;
 
   // AI insights call the LLM and can take seconds. Start that request now but
   // never await it with the rest of the page: the advisor panel already shows
@@ -34,8 +33,7 @@ export async function renderDashboard(container) {
   if (aiRefresh) aiRefresh.onclick = () => refreshAdvisor();
 
   try {
-    const [summary, health, budgets, goals] = await Promise.all([
-      api.get('/upsert/summary', { userId }),
+    const [health, budgets, goals] = await Promise.all([
       api.get('/analytics/health-score', { userId }).catch(() => null),
       api.get('/upsert/budgets', { userId }).catch(() => []),
       api.get('/upsert/goals', { userId }).catch(() => [])
@@ -58,28 +56,7 @@ export async function renderDashboard(container) {
       alertsContainer.innerHTML = alertsHtml.join('');
     }
 
-    const kpisContainer = document.getElementById('d-kpis');
-    if (kpisContainer) {
-      kpisContainer.innerHTML = `
-      <div class="card-grid card-grid-4 fade-up">
-        <div class="card stat-card income">
-          <div class="stat-card-top"><div class="stat-label">Total Income</div><div class="stat-icon">${icon('trending-up')}</div></div>
-          <div class="stat-value">${formatCurrency(summary.totalIncome)}</div>
-        </div>
-        <div class="card stat-card expense">
-          <div class="stat-card-top"><div class="stat-label">Total Expenses</div><div class="stat-icon">${icon('trending-down')}</div></div>
-          <div class="stat-value">${formatCurrency(summary.totalExpense)}</div>
-        </div>
-        <div class="card stat-card balance">
-          <div class="stat-card-top"><div class="stat-label">Net Balance</div><div class="stat-icon">${icon('wallet')}</div></div>
-          <div class="stat-value">${formatCurrency(summary.netBalance)}</div>
-        </div>
-        <div class="card stat-card count">
-          <div class="stat-card-top"><div class="stat-label">Transactions</div><div class="stat-icon">${icon('list')}</div></div>
-          <div class="stat-value">${summary.totalCount ?? 0}</div>
-        </div>
-      </div>`;
-    }
+    // Income, expense and transaction totals live on the Analytics page.
 
     // Goal forecasts are embedded in the AI advisor card, not a separate row.
     const goalsContainer = document.getElementById('d-ai-goals');

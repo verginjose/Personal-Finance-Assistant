@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110303';
-import { icon } from '../utils/icons.js?v=2026110303';
-import { esc, pageHeader, openModal, currencyOptionHtml } from '../utils/ui.js?v=2026110303';
+import { api, Auth, toast } from '../utils/api.js?v=2026110304';
+import { icon } from '../utils/icons.js?v=2026110304';
+import { esc, pageHeader, openModal, currencyOptionHtml } from '../utils/ui.js?v=2026110304';
 export async function renderProfile(container) {
   const email = Auth.getEmail();
   const userId = Auth.getUserId();
@@ -25,6 +25,7 @@ export async function renderProfile(container) {
   container.innerHTML = `
     ${pageHeader('Profile', 'Manage your account and security settings')}
     <div class="profile-layout fade-up">
+      <div class="profile-main">
       <section class="profile-hero" aria-label="Account overview">
         <div class="profile-hero-aura" aria-hidden="true"></div>
         <div class="profile-hero-body">
@@ -58,6 +59,18 @@ export async function renderProfile(container) {
           </div>
         </form>
       </section>
+
+        <section class="profile-panel">
+          <div class="profile-panel-head">
+            <div class="profile-panel-icon profile-panel-icon--warn">${icon('shield', 'sm')}</div>
+            <div>
+              <h3>Session</h3>
+              <p>Sign out from this device. Your data remains saved.</p>
+            </div>
+          </div>
+          <button class="btn btn-danger profile-submit" id="p-logout">${icon('log-out', 'sm')} Sign out</button>
+        </section>
+      </div>
 
       <div class="profile-side">
         <section class="profile-panel">
@@ -98,17 +111,6 @@ export async function renderProfile(container) {
             </div>
             <button type="submit" class="btn btn-primary profile-submit">Update password</button>
           </form>
-        </section>
-
-        <section class="profile-panel">
-          <div class="profile-panel-head">
-            <div class="profile-panel-icon profile-panel-icon--warn">${icon('shield', 'sm')}</div>
-            <div>
-              <h3>Session</h3>
-              <p>Sign out from this device. Your data remains saved.</p>
-            </div>
-          </div>
-          <button class="btn btn-danger profile-submit" id="p-logout">${icon('log-out', 'sm')} Sign out</button>
         </section>
       </div>
     </div>`;

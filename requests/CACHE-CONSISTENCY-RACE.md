@@ -7,7 +7,8 @@ returned `204`, while the DB row said `is_archived = false`.
 This follows the same format as
 [GROUP-BALANCES-STALE-CACHE.md](GROUP-BALANCES-STALE-CACHE.md): the two
 earlier fixes are `39ff430` and `aa33819`, the race below is `6affd31`, and
-the removal of the remaining HTTP eviction path is `6565cef`.
+the removal of the remaining HTTP eviction path is `6565cef`, and the
+single-wave optimisation is `964edfd`.
 
 ## The pieces
 
@@ -124,6 +125,25 @@ half of the race.
   `query-service/.../InternalCacheController`.
 
 The invalidation contract is now: **commit → bump gen/wal → delete directly**.
+
+### `964edfd` — one invalidation wave per write
+
+After the HTTP path was gone, a group write still ran three overlapping
+evictions: `evictUserGroupsForMembers` (an `@Async` user-groups delete, a
+second generation bump, and a command-cache evict), `evictGroupKeys`, and
+`evictUserCachesAfterCommit` (a full user evict). The same user-groups keys
+were deleted up to three times.
+
+Every write now makes one `evictGroupKeys(groupId, affectedUsers)` call —
+one bump per scope, one group-key delete, one user-groups delete per user.
+Membership changes pass every member id (`memberIds(groupId)`), archive passes
+only the acting user. Expense writes add
+`evictUserKeysWithReplicationGuard(affectedUsers)` for the users' non-group
+caches (summary, analytics, transactions).
+
+That user-level method also moved its delete into `afterCommit`, behind the
+bump. It had been deleting inside the transaction, leaving the same window
+open for every transaction write.
 
 ## Files touched
 

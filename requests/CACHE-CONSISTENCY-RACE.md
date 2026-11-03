@@ -7,8 +7,9 @@ returned `204`, while the DB row said `is_archived = false`.
 This follows the same format as
 [GROUP-BALANCES-STALE-CACHE.md](GROUP-BALANCES-STALE-CACHE.md): the two
 earlier fixes are `39ff430` and `aa33819`, the race below is `6affd31`, and
-the removal of the remaining HTTP eviction path is `6565cef`, and the
-single-wave optimisation is `418d207`.
+the removal of the remaining HTTP eviction path is `6565cef`, the
+single-wave optimisation is `418d207`, and the asynchronous-commit fix is
+`ad3cf8f`.
 
 ## The pieces
 
@@ -145,12 +146,44 @@ That user-level method also moved its delete into `afterCommit`, behind the
 bump. It had been deleting inside the transaction, leaving the same window
 open for every transaction write.
 
+### `ad3cf8f` — the WAL token was the write position, not the insert position
+
+The retest on the afternoon of 2026-11-03, with `6affd31`/`6565cef`/`418d207`
+deployed, reproduced the same stale read. The defect was in the token itself.
+
+The primary runs with `synchronous_commit=off`
+(`k8s/infrastructure/postgres-primary.yaml`): `COMMIT` returns once the commit
+record is written to the WAL buffers, and the WAL writer flushes it 200–600 ms
+later. `pg_current_wal_lsn()` returns the **write** position, which can still
+point *before* that commit record. Publishing it meant:
+
+- `finance:wal:<scope>` was an older position than the commit;
+- the reader's `pg_last_wal_replay_lsn() >= wal` check was already true, so
+  the snapshot said `replicaCaughtUp` and `awaitReplica()` never waited;
+- the loader read the pre-commit row from the replica and cached it for 600 s.
+
+Reproduced live: after a `PUT …/archive?archive=true`, the token equalled the
+primary LSN read *before* the request (e.g. `0/3D70AD20`), while the post-write
+position was `0/3D70AD90`. The immediate GET returned the previous state and
+that value was cached.
+
+Fix:
+
+- publish `pg_current_wal_insert_lsn()`, which includes this backend's commit
+  record by the time `afterCommit` runs;
+- raise `REPLICA_WAIT_MS` from 250 ms to 1000 ms so an immediate read waits
+  through the asynchronous-commit flush window instead of returning the
+  pre-commit row. The wait only applies when the scope's replica is behind,
+  i.e. within about a second of a write.
+
 ## Files touched
 
 - `query-service/.../cache/TrackingRedisCache.java` — post-put generation
   re-check.
 - `query-service/.../cache/CacheConsistencyGuard.java` —
-  `generationUnchanged`.
+  `generationUnchanged`, and `REPLICA_WAIT_MS` raised to 1 s.
+- `command-service/.../cache/QueryCacheEvictor.java` — publishes the WAL
+  **insert** position (`pg_current_wal_insert_lsn()`).
 - `command-service/.../service/SplitService.java` — after-commit evictions.
 - `command-service/.../service/OutboxProcessor.java` — direct Redis retry.
 - `command-service/.../cache/CacheKeyRegistry.java` — `evictForUser` returns

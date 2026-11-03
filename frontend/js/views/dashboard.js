@@ -108,7 +108,7 @@ export async function renderDashboard(container) {
       let goalsHtml = '';
       for (const g of activeGoals) {
         try {
-          const forecast = await api.get(`/analytics/goals/${g.id}/forecast`);
+          const forecast = await api.get(`/analytics/goals/${g.id}/forecast`, { userId: Auth.getUserId() });
           const velocityLine = forecast.monthlyVelocity > 0
             ? `<span style="color:var(--accent-g);font-size:0.8rem">${icon('trending-up','xs')} ${formatCurrency(forecast.monthlyVelocity, g.currency)}/mo velocity</span>`
             : '';

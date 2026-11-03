@@ -1004,6 +1004,18 @@ def stage_ocr(client, member, checks, args, rng):
 # ────────────────────────────────────────────────────────────────────────────
 # Stages 7-11 — groups
 # ────────────────────────────────────────────────────────────────────────────
+def _trace(msg):
+    """Append a timestamped line to $GOLDEN_TRACE when set (test diagnosis only)."""
+    path = os.environ.get("GOLDEN_TRACE")
+    if not path:
+        return
+    try:
+        with open(path, "a") as fh:
+            fh.write(f"{time.time():.3f} {msg}\n")
+    except OSError:
+        pass
+
+
 def stage_group_create(client, group, checks, args):
     leader = group.members[0]
     status, body, _ = client.request(
@@ -1015,6 +1027,7 @@ def stage_group_create(client, group, checks, args):
     group.group_id = body.get("id")
     if not group.group_id:
         return
+    _trace(f"GROUP {group.index} {group.group_id}")
     group.accepted = [leader]
 
     for peer in group.members[1:]:
@@ -1171,10 +1184,12 @@ def stage_group_cache(client, group, checks, args):
                 break
         time.sleep(0.4)
     checks.status(200, status, "warm group balances")
+    _trace(f"BASELINE {group.group_id} ready={before_sig is not None}")
     if before_sig is None:
         return
 
     canary_amount = 2016.00
+    _trace(f"CANARY_POST {group.group_id}")
     status, resp, _ = client.request(
         "groups", f"/upsert/groups/{group.group_id}/expenses", "POST",
         headers=leader.headers(),
@@ -1184,6 +1199,7 @@ def stage_group_cache(client, group, checks, args):
               "expenseCategory": "RESTAURANTS", "currency": "INR"})
     checks.status(201, status, "post cache canary expense")
     canary_id = resp.get("id") if isinstance(resp, dict) else None
+    _trace(f"CANARY_CREATED {group.group_id} {canary_id}")
     if not canary_id:
         return
 
@@ -1195,11 +1211,13 @@ def stage_group_cache(client, group, checks, args):
     checks.ok(changed, "group balances cache evicts after a new expense",
               f"status={status} before={before_sig} after={_balance_signature(after)}")
     checks.metrics.note_cache_latency("balances after create", time.time() - started)
+    _trace(f"BALANCES_CHANGED {group.group_id} changed={changed} took={time.time()-started:.2f}")
 
     status, _, _ = client.request(
         "groups", f"/upsert/groups/{group.group_id}/expenses/{canary_id}",
         "DELETE", headers=leader.headers())
     checks.status(200, status, "delete cache canary expense")
+    _trace(f"CANARY_DELETED {group.group_id} status={status}")
     if status != 200:
         return
 
@@ -1212,6 +1230,7 @@ def stage_group_cache(client, group, checks, args):
               f"status={status} expected={before_sig} "
               f"observed={_balance_signature(restored)}")
     checks.metrics.note_cache_latency("balances after delete", time.time() - started)
+    _trace(f"BALANCES_RESTORED {group.group_id} back={back} took={time.time()-started:.2f}")
 
 
 def stage_settle_or_archive(client, group, member, checks, args, rng):

@@ -541,6 +541,12 @@ async function showModal(userId, existing, onDone) {
   };
   updateCats();
   document.getElementById('m-type').onchange = updateCats;
+
+  // The Type select is native by default, so its open list is painted by
+  // Chrome (blue selection on white) instead of the dark theme.
+  if (window.TomSelect) {
+    new TomSelect('#m-type', { create: false, controlInput: null });
+  }
 }
 
 async function editTransaction(userId, id) {

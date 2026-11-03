@@ -1,9 +1,9 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110307';
-import { icon } from '../utils/icons.js?v=2026110307';
+import { api, Auth, toast } from '../utils/api.js?v=2026110308';
+import { icon } from '../utils/icons.js?v=2026110308';
 import {
   pageHeader,
   healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, formatCurrency, alertBanner, esc
-} from '../utils/ui.js?v=2026110307';
+} from '../utils/ui.js?v=2026110308';
 
 export async function renderDashboard(container) {
   const userId = Auth.getUserId();

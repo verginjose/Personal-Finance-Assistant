@@ -1130,6 +1130,11 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
   border: 1px solid var(--border);
   margin-bottom: 24px;
   backdrop-filter: blur(8px);
+  /* The fade-up animation leaves a transform on the cards below, making them
+     stacking contexts that paint over the toolbar. Without this the View By
+     dropdown opens underneath the Expense Breakdown card. */
+  position: relative;
+  z-index: 20;
 }
 
 .analytics-toolbar label {

@@ -129,6 +129,12 @@ re-registered.
   longer depends on the registry for the key that matters. Priya's cab write
   therefore removes the stale value; the next read reloads and shows
   `1800 / −600 / −1200`.
+- **The token is published before the delete** (`aa33819`). Deleting first
+  left a millisecond-wide window: a reader could miss between the `DEL` and
+  the generation bump, load the pre-delete row from a lagging replica, and
+  have it accepted because the generation it snapshotted was still the
+  pre-write one. With the bump first, that concurrent fill fails the guard;
+  the delete then clears whatever the cache holds.
 - **Hits re-register.** Even if a key survives an eviction, the next read puts
   it back into `S`, so the following write can evict it.
 - **Empty `S` is no longer a no-op.** The evictor SCANs

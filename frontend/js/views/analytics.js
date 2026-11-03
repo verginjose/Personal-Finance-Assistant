@@ -1,9 +1,9 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110305';
-import { icon } from '../utils/icons.js?v=2026110305';
-import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=2026110305';
+import { api, Auth, toast } from '../utils/api.js?v=2026110307';
+import { icon } from '../utils/icons.js?v=2026110307';
+import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=2026110307';
 import {
   pageHeader, skeletonChart, formatCurrency, formatCategory, esc
-} from '../utils/ui.js?v=2026110305';
+} from '../utils/ui.js?v=2026110307';
 
 let charts = [];
 let loadToken = 0;
@@ -61,9 +61,15 @@ export async function renderAnalytics(container) {
       <div class="chart-container" id="a-bar-wrap">${skeletonChart()}</div>
     </div>`;
 
+  // Native <select> popups are painted by the OS/Chrome (blue highlight, white
+  // list), which ignores the dark UI. Tom Select keeps the same control but
+  // renders a themed dropdown.
+  if (window.TomSelect) {
+    new TomSelect('#a-timeline', { create: false, controlInput: null });
+  }
   if (window.flatpickr) {
-    flatpickr('#a-start', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
-    flatpickr('#a-end', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
+    flatpickr('#a-start', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true, theme: 'dark' });
+    flatpickr('#a-end', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true, theme: 'dark' });
   }
 
   document.getElementById('a-apply').onclick = () => loadAnalytics(userId);
@@ -73,7 +79,10 @@ export async function renderAnalytics(container) {
     if (startEl) { if (startEl._flatpickr) startEl._flatpickr.clear(); else startEl.value = ''; }
     if (endEl) { if (endEl._flatpickr) endEl._flatpickr.clear(); else endEl.value = ''; }
     const timelineEl = document.getElementById('a-timeline');
-    if (timelineEl) timelineEl.value = 'MONTHLY';
+    if (timelineEl) {
+      if (timelineEl.tomselect) timelineEl.tomselect.setValue('MONTHLY', true);
+      else timelineEl.value = 'MONTHLY';
+    }
     loadAnalytics(userId);
   };
 

@@ -2282,6 +2282,17 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
 .ts-wrapper.single .ts-control:after {
   border-color: var(--text-dim) transparent transparent transparent !important;
 }
+/* Tom Select copies the original select's classes onto its wrapper, so the
+   wrapper also carries .form-select. Left alone, that paints the field border
+   and background a second time around .ts-control — the "double border" seen
+   on Add Expense (paid by/category/split type) and the OCR fields. */
+.ts-wrapper.form-select {
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
 
 /* ══════════════════════════════════════════════════════════════════
    REDESIGNED GROUP DETAIL — Compact Header + Vertical Side-Tab Pane

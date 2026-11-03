@@ -1,7 +1,7 @@
-import {api, Auth, toast} from '../utils/api.js?v=2026110305';
-import { icon } from '../utils/icons.js?v=2026110305';
-import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=2026110305';
-import {navigateTo} from '../app.js?v=2026110305';
+import {api, Auth, toast} from '../utils/api.js?v=2026110307';
+import { icon } from '../utils/icons.js?v=2026110307';
+import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=2026110307';
+import {navigateTo} from '../app.js?v=2026110307';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
@@ -228,7 +228,7 @@ export async function renderBillScanner(container) {
       new TomSelect('#bs-dest', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' }});
     }
     if (window.flatpickr) {
-      flatpickr('#bs-date', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
+      flatpickr('#bs-date', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true, theme: 'dark' });
     }
     form.onsubmit = (e) => { e.preventDefault(); saveTransaction(userId); };
   }

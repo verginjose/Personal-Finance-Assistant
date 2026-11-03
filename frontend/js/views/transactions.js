@@ -73,8 +73,8 @@ export async function renderTransactions(container) {
   const closePanel = () => { panel.classList.remove('open'); overlay.classList.remove('open'); };
 
   if (window.flatpickr) {
-    flatpickr('#t-start', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
-    flatpickr('#t-end', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true });
+    flatpickr('#t-start', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true, theme: 'dark' });
+    flatpickr('#t-end', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true, theme: 'dark' });
   }
 
   document.getElementById('t-filter-btn').onclick = openPanel;

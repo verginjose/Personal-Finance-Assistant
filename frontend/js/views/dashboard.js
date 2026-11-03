@@ -1,13 +1,13 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110301';
-import { createDoughnut, createLine, destroyChart } from '../utils/charts.js?v=2026110301';
-import { navigateTo } from '../app.js?v=2026110301';
-import { icon } from '../utils/icons.js?v=2026110301';
+import { api, Auth, toast } from '../utils/api.js?v=2026110302';
+import { createDoughnut, destroyChart } from '../utils/charts.js?v=2026110302';
+import { navigateTo } from '../app.js?v=2026110302';
+import { icon } from '../utils/icons.js?v=2026110302';
 import {
   pageHeader, skeletonKpiRow, skeletonChart,
   healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData, formatCurrency, alertBanner
-} from '../utils/ui.js?v=2026110301';
+} from '../utils/ui.js?v=2026110302';
 
-let pieChart = null, lineChart = null;
+let pieChart = null;
 
 export async function renderDashboard(container) {
   const userId = Auth.getUserId();
@@ -20,15 +20,9 @@ export async function renderDashboard(container) {
     </div>
     <div id="d-kpis">${skeletonKpiRow(4)}</div>
     <div id="d-goals" class="card-grid fade-up" style="margin-top:24px;display:none;grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));gap:20px;"></div>
-    <div class="card-grid card-grid-2" style="margin-top:24px">
-      <div class="card fade-up">
-        <div class="card-header"><h3>Spending by Category</h3></div>
-        <div class="chart-container" id="d-pie-wrap">${skeletonChart()}</div>
-      </div>
-      <div class="card fade-up">
-        <div class="card-header"><h3>Monthly Timeline</h3></div>
-        <div class="chart-container" id="d-line-wrap">${skeletonChart()}</div>
-      </div>
+    <div class="card fade-up" style="margin-top:24px">
+      <div class="card-header"><h3>Spending by Category</h3></div>
+      <div class="chart-container" id="d-pie-wrap" style="max-width:560px;margin:0 auto">${skeletonChart()}</div>
     </div>`;
 
   // AI insights call the LLM and can take seconds. Start that request now but
@@ -49,10 +43,9 @@ export async function renderDashboard(container) {
   if (aiRefresh) aiRefresh.onclick = () => refreshAdvisor();
 
   try {
-    const [summary, pie, timeline, health, budgets, goals] = await Promise.all([
+    const [summary, pie, health, budgets, goals] = await Promise.all([
       api.get('/upsert/summary', { userId }),
       api.get('/analytics/category-pie-chart', { userId, transactionFilter: 'EXPENSE' }),
-      api.get('/analytics/timeline-chart', { userId, timelineType: 'MONTHLY' }),
       api.get('/analytics/health-score', { userId }).catch(() => null),
       api.get('/upsert/budgets', { userId }).catch(() => []),
       api.get('/upsert/goals', { userId }).catch(() => [])
@@ -160,21 +153,6 @@ export async function renderDashboard(container) {
         <div class="empty-state" style="padding:40px">
           <div class="empty-icon">${icon('pie-chart','lg')}</div>
           <p>No expense data yet</p>
-          <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="navigateTo('transactions')">Add Transaction</button></div>
-        </div>`;
-    }
-
-    const lineWrap = document.getElementById('d-line-wrap');
-    if (!lineWrap) return;
-    lineWrap.innerHTML = '<canvas id="d-line"></canvas>';
-    lineChart = destroyChart(lineChart);
-    if (timeline?.labels?.length && timeline.datasets) {
-      lineChart = createLine(document.getElementById('d-line'), timeline.labels, timeline.datasets);
-    } else {
-      lineWrap.innerHTML = `
-        <div class="empty-state" style="padding:40px">
-          <div class="empty-icon">${icon('analytics','lg')}</div>
-          <p>No timeline data yet</p>
           <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="navigateTo('transactions')">Add Transaction</button></div>
         </div>`;
     }

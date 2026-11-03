@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110301';
-import { icon } from '../utils/icons.js?v=2026110301';
-import { esc, pageHeader, openModal } from '../utils/ui.js?v=2026110301';
+import { api, Auth, toast } from '../utils/api.js?v=2026110302';
+import { icon } from '../utils/icons.js?v=2026110302';
+import { esc, pageHeader, openModal } from '../utils/ui.js?v=2026110302';
 export async function renderProfile(container) {
   const email = Auth.getEmail();
   const userId = Auth.getUserId();
@@ -15,42 +15,78 @@ export async function renderProfile(container) {
     console.error('Failed to load profile', e);
   }
 
+  const displayName = currentUsername || (email ? email.split('@')[0] : 'User');
+  const initial = (displayName || 'U')[0].toUpperCase();
+  const shortId = userId ? userId.substring(0, 12) : '—';
+
   container.innerHTML = `
     ${pageHeader('Profile', 'Manage your account and security settings')}
-    <div class="profile-grid fade-up">
-      <div class="card">
-        <div class="card-header"><h3>Account Info</h3></div>
-        <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
-          <div class="profile-avatar-lg" id="p-avatar" style="cursor:pointer;position:relative;overflow:hidden;background-size:cover;background-position:center;${profilePicture ? `background-image:url('${profilePicture}')` : ''}" title="Click to change profile picture">
-            ${profilePicture ? '' : (email || 'U')[0].toUpperCase()}
-            <div class="avatar-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;color:#fff;">${icon('camera', 'sm')}</div>
+    <div class="profile-layout fade-up">
+      <section class="profile-hero" aria-label="Account overview">
+        <div class="profile-hero-aura" aria-hidden="true"></div>
+        <div class="profile-hero-body">
+          <div class="profile-avatar-wrap">
+            <div class="profile-avatar-lg" id="p-avatar" style="cursor:pointer;position:relative;overflow:hidden;${profilePicture ? `background-image:url('${profilePicture}')` : ''}" title="Click to change profile picture" role="button" tabindex="0" aria-label="Change profile picture">
+              ${profilePicture ? '' : initial}
+              <div class="avatar-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;color:#fff;pointer-events:none;">${icon('camera', 'sm')}</div>
+            </div>
+            <input type="file" id="p-avatar-upload" accept="image/*" hidden>
           </div>
-          <input type="file" id="p-avatar-upload" accept="image/*" hidden>
-          <div style="flex:1">
-            <div style="font-weight:600;font-size:1.05rem">${esc(email || 'User')}</div>
-            <div style="color:var(--text-dim);font-size:.82rem;margin-top:2px">ID: ${esc(userId?.substring(0, 16) || '—')}…</div>
+          <div class="profile-identity">
+            <span class="profile-eyebrow">${icon('sparkles', 'xs')} Personal account</span>
+            <h2 class="profile-name">${esc(displayName)}</h2>
+            <p class="profile-email">${icon('mail', 'xs')} ${esc(email || '—')}</p>
+            <div class="profile-chips">
+              <span class="profile-chip profile-chip--ok">${icon('shield', 'xs')} Secured</span>
+              <span class="profile-chip">${icon('at-sign', 'xs')} ID ${esc(shortId)}</span>
+            </div>
           </div>
         </div>
-        <form id="p-username-form" style="display:flex;gap:8px;align-items:flex-end;">
-          <div class="form-group" style="flex:1;margin-bottom:0;"><label for="p-username">Username</label>
-            <input class="form-input" id="p-username" type="text" value="${esc(currentUsername)}" required minlength="3" maxlength="30" pattern="^[a-zA-Z0-9_]+$"></div>
-          <button type="submit" class="btn btn-primary">Save Username</button>
+        <div class="profile-divider"></div>
+        <form id="p-username-form" class="profile-form">
+          <div class="profile-field">
+            <label for="p-username">Display name</label>
+            <p class="profile-help">This is how you appear in groups and shared expenses.</p>
+            <div class="profile-inline-form">
+              <input class="form-input" id="p-username" type="text" value="${esc(currentUsername)}" placeholder="Choose a username" required minlength="3" maxlength="30" pattern="^[a-zA-Z0-9_]+$">
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </div>
         </form>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3>Change Password</h3></div>
-        <form id="pw-form">
-          <div class="form-group"><label for="pw-current">Current Password</label>
-            <input class="form-input" id="pw-current" type="password" required minlength="8" autocomplete="current-password"></div>
-          <div class="form-group"><label for="pw-new">New Password</label>
-            <input class="form-input" id="pw-new" type="password" required minlength="8" autocomplete="new-password"></div>
-          <button type="submit" class="btn btn-primary" style="width:100%">Update Password</button>
-        </form>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3>Session</h3></div>
-        <p style="color:var(--text-dim);font-size:.88rem;margin-bottom:16px">Sign out from this device. Your data remains saved.</p>
-        <button class="btn btn-danger" id="p-logout" style="width:100%">${icon('log-out', 'sm')} Sign Out</button>
+      </section>
+
+      <div class="profile-side">
+        <section class="profile-panel">
+          <div class="profile-panel-head">
+            <div class="profile-panel-icon">${icon('lock', 'sm')}</div>
+            <div>
+              <h3>Change password</h3>
+              <p>Use at least 8 characters. You'll stay signed in on this device.</p>
+            </div>
+          </div>
+          <form id="pw-form" class="profile-form">
+            <div class="profile-field">
+              <label for="pw-current">Current password</label>
+              <input class="form-input" id="pw-current" type="password" required minlength="8" autocomplete="current-password" placeholder="Enter current password">
+            </div>
+            <div class="profile-field">
+              <label for="pw-new">New password</label>
+              <input class="form-input" id="pw-new" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters">
+            </div>
+            <button type="submit" class="btn btn-primary profile-submit">Update password</button>
+          </form>
+        </section>
+
+        <section class="profile-panel">
+          <div class="profile-panel-head">
+            <div class="profile-panel-icon profile-panel-icon--warn">${icon('shield', 'sm')}</div>
+            <div>
+              <h3>Session</h3>
+              <p>Sign out from this device. Your data remains saved.</p>
+            </div>
+          </div>
+          <button class="btn btn-danger profile-submit" id="p-logout">${icon('log-out', 'sm')} Sign out</button>
+        </section>
       </div>
     </div>`;
 
@@ -91,6 +127,9 @@ export async function renderProfile(container) {
   
   avatarDiv.onmouseenter = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '1';
   avatarDiv.onmouseleave = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '0';
+  avatarDiv.onfocus = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '1';
+  avatarDiv.onblur = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '0';
+  avatarDiv.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); avatarDiv.click(); } };
   
   avatarDiv.onclick = () => {
     const body = `

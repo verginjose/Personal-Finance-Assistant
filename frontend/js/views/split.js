@@ -1,10 +1,13 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110301';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026110301';
-import { icon } from '../utils/icons.js?v=2026110301';
+import { api, Auth, toast } from '../utils/api.js?v=2026110302';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026110302';
+import { icon } from '../utils/icons.js?v=2026110302';
 
 let currentGroupId = null;
 let expensesPage = 0, expensesTotal = 1;
 let activityPage = 0, activityTotal = 1;
+// Which group tab is showing. Kept module-level so a data refresh (delete,
+// revert, settle) can re-render the group without snapping back to Expenses.
+let activePanel = 'expenses';
 
 // Global notification listeners for Split view
 window.addEventListener('group-invite', () => {
@@ -32,6 +35,7 @@ window.addEventListener('debt-settled', (e) => {
 
 export async function renderSplit(container) {
   currentGroupId = null;
+  activePanel = 'expenses';
   const userId = Auth.getUserId();
   container.innerHTML = `
     ${pageHeader('Split Expenses', 'Manage shared expenses with groups', '<button class="btn btn-primary btn-sm" id="sp-create">+ New Group</button>')}
@@ -176,10 +180,15 @@ async function loadGroups(userId) {
   }
 }
 
-async function loadGroupDetail(groupId, userId) {
+async function loadGroupDetail(groupId, userId, opts = {}) {
+  // A plain load (opening a group) starts at Expenses page 1. A refresh after
+  // an in-place mutation keeps the tab and pagination the user was on.
+  if (!opts.preserveView) {
+    expensesPage = 0;
+    activityPage = 0;
+    activePanel = 'expenses';
+  }
   currentGroupId = groupId;
-  expensesPage = 0;
-  activityPage = 0;
   const el = document.getElementById('sp-content');
   document.getElementById('sp-back').style.display = '';
   document.getElementById('sp-create').style.display = 'none';
@@ -395,14 +404,17 @@ async function loadGroupDetail(groupId, userId) {
     }, { once: false });
 
     // Vertical split-pane nav switching
+    const setPanel = (panel) => {
+      activePanel = panel;
+      document.querySelectorAll('.split-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.panel === panel));
+      document.querySelectorAll('.split-pane-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById(`panel-${panel}`)?.classList.add('active');
+    };
     document.querySelectorAll('.split-nav-btn').forEach(btn => {
-      btn.onclick = () => {
-        document.querySelectorAll('.split-nav-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.split-pane-panel').forEach(p => p.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById(`panel-${btn.dataset.panel}`)?.classList.add('active');
-      };
+      btn.onclick = () => setPanel(btn.dataset.panel);
     });
+    // Restore the tab from before a re-render (expenses is the HTML default).
+    setPanel(activePanel);
 
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, eligibleMembers, userId);
 
@@ -413,7 +425,7 @@ async function loadGroupDetail(groupId, userId) {
       elList.innerHTML = exps.length ? exps.map(e => {
         const expData = { ...e, paidByName: resolveMemberNameLocally(e.paidBy) };
         return `
-        <div class="balance-item expense-row" data-exp='${esc(JSON.stringify(expData))}' style="padding:16px 0; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
+        <div class="balance-item expense-row" data-exp='${esc(JSON.stringify(expData))}' style="padding:16px 0; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
           <div>
              <div style="font-weight:600; font-size:1.05rem;">${esc(e.description || 'Expense')}</div>
              <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by ${avatar(resolveMemberNameLocally(e.paidBy), 16, resolveMemberAvatarLocally(e.paidBy))} @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span>${e.receiptUrl ? ` · <div class="badge badge-info" style="font-size:.68rem;padding: 2px 4px; cursor:pointer;" title="View receipt" onclick="event.stopPropagation(); window.openReceiptLightbox('${esc(e.receiptUrl)}')">${icon('document', 'xs')}</div>` : ''}</div>
@@ -440,7 +452,7 @@ async function loadGroupDetail(groupId, userId) {
             try {
               await api.delete(`/upsert/groups/${groupId}/expenses/${expenseId}`, { userId });
               toast('Expense deleted', 'success');
-              loadGroupDetail(groupId, userId);
+              loadGroupDetail(groupId, userId, { preserveView: true });
             } catch (err) { toast(err.message, 'error'); }
           }
         });
@@ -490,7 +502,7 @@ async function loadGroupDetail(groupId, userId) {
       const container = document.getElementById('activity-list');
       if (!container) return;
       container.innerHTML = actList?.length ? actList.map(a => `
-        <div class="activity-item" style="padding:12px 0; border-bottom:1px solid var(--border-light);">
+        <div class="activity-item">
           <div class="activity-message" style="font-weight:500; display:flex; justify-content:space-between; align-items:center; gap: 12px;">
             <span style="flex: 1; min-width: 0; word-break: break-word;">${esc(a.message)}</span>
             ${a.activityType === 'SETTLEMENT_RECORDED' ? `<button class="btn btn-danger btn-sm revert-btn" data-id="${a.referenceId}" title="Revert Settlement" style="padding:4px 8px; font-size:0.75rem; flex-shrink: 0;">Revert</button>` : ''}
@@ -505,7 +517,7 @@ async function loadGroupDetail(groupId, userId) {
             try {
               await api.delete(`/upsert/groups/${groupId}/expenses/${expenseId}`, { userId });
               toast('Settlement reverted successfully', 'success');
-              loadGroupDetail(groupId, userId);
+              loadGroupDetail(groupId, userId, { preserveView: true });
             } catch (err) { toast(err.message, 'error'); }
           }
         });
@@ -561,7 +573,7 @@ async function loadGroupDetail(groupId, userId) {
         try {
           await api.post(`/upsert/groups/${groupId}/settle`, null, { params: { fromUserId: btn.dataset.from, toUserId: btn.dataset.to } });
           toast('Settlement recorded!', 'success');
-          await loadGroupDetail(groupId, userId);
+          await loadGroupDetail(groupId, userId, { preserveView: true });
         } catch (e) { toast(e.message, 'error'); }
       });
     });
@@ -669,7 +681,7 @@ function openExpenseDetailsModal(e, groupId, userId) {
       await api.delete(`/upsert/groups/${groupId}/expenses/${e.id}`, { userId });
       toast('Expense deleted', 'success');
       document.querySelector('.modal-overlay').click();
-      loadGroupDetail(groupId, userId);
+      loadGroupDetail(groupId, userId, { preserveView: true });
     } catch (err) { toast(err.message, 'error'); }
   };
 }

@@ -1,17 +1,20 @@
-import {api, Auth, toast} from '../utils/api.js?v=2026110301';
-import { icon } from '../utils/icons.js?v=2026110301';
-import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=2026110301';
-import {navigateTo} from '../app.js?v=2026110301';
+import {api, Auth, toast} from '../utils/api.js?v=2026110302';
+import { icon } from '../utils/icons.js?v=2026110302';
+import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=2026110302';
+import {navigateTo} from '../app.js?v=2026110302';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
   container.innerHTML = `
     ${pageHeader('Bill Scanner', 'Upload a receipt and let AI extract the details')}
     <div class="scanner-container fade-up">
-      <div class="card" style="height:fit-content;">
+      <div class="card scanner-upload-card">
+        <span class="ocr-eyebrow">${icon('scan', 'xs')} Step 1 · Upload</span>
+        <h3 class="scanner-title">Scan a receipt</h3>
+        <p class="scanner-sub">We'll read the merchant, amount, date and category for you.</p>
         <div class="drop-zone" id="bs-drop" role="button" tabindex="0" aria-label="Upload receipt">
           <div class="drop-icon">${icon('document', 'lg')}</div>
-          <p>Drag & drop a receipt image or PDF here</p>
+          <p>Drag &amp; drop a receipt image or PDF here</p>
           <p style="margin-top:6px;font-size:.78rem;color:var(--text-muted)">JPEG, PNG, PDF — max 10 MB</p>
           <div class="file-name" id="bs-fname"></div>
         </div>
@@ -20,9 +23,15 @@ export async function renderBillScanner(container) {
           ${icon('scan', 'sm')} Process Receipt
         </button>
       </div>
-      <div class="card" id="bs-result" style="display:none; height:fit-content;">
-        <div class="card-header"><h3>Extracted Data</h3><span class="badge badge-info">OCR Preview — edit before saving</span></div>
-        <form id="bs-preview-form" style="display:grid;gap:10px"></form>
+      <div class="card ocr-result-card" id="bs-result" style="display:none; height:fit-content;">
+        <div class="ocr-result-head">
+          <div>
+            <span class="ocr-eyebrow">${icon('sparkles', 'xs')} Step 2 · Review</span>
+            <h3>Extracted data</h3>
+          </div>
+          <span class="badge badge-info">AI preview — edit before saving</span>
+        </div>
+        <form id="bs-preview-form" class="ocr-form"></form>
       </div>
     </div>`;
 
@@ -75,61 +84,122 @@ export async function renderBillScanner(container) {
     }
 
     const form = document.getElementById('bs-preview-form');
+    const dateDisplay = (() => {
+      if (!result.date) return 'No date detected';
+      const d = new Date(`${result.date}T00:00:00`);
+      return Number.isNaN(d.getTime())
+        ? result.date
+        : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    })();
+
     form.innerHTML = `
-      <div class="form-group">
-        <label for="bs-name">Name</label>
-        <input class="form-input" id="bs-name" value="${escapeAttr(result.name || 'OCR Receipt')}" maxlength="100" required>
-      </div>
-      <div class="form-row">
-        <div class="form-group" style="flex:1;">
-          <label for="bs-amount">Amount</label>
-          <input class="form-input" id="bs-amount" type="text" inputmode="decimal" pattern="^\\d+(\\.\\d{1,2})?$" title="Enter a valid amount" value="${amount}" required>
+      <div class="ocr-summary">
+        <div class="ocr-summary-main">
+          <span class="ocr-summary-label">Detected amount</span>
+          <div class="ocr-amount"><span class="ocr-amount-currency">${escapeAttr(currency)}</span><span id="bs-amount-preview">${amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span></div>
+          <div class="ocr-summary-name" id="bs-name-preview">${esc(result.name || 'OCR Receipt')}</div>
         </div>
-        <div class="form-group">
-          <label for="bs-currency">Currency</label>
-          <input class="form-input" id="bs-currency" value="${escapeAttr(currency)}" maxlength="3" required>
+        <div class="ocr-summary-meta">
+          <span class="ocr-type-badge ${type === 'INCOME' ? 'is-income' : 'is-expense'}">${type === 'INCOME' ? icon('trending-up', 'xs') : icon('trending-down', 'xs')} ${type === 'INCOME' ? 'Income' : 'Expense'}</span>
+          <span class="ocr-date">${icon('calendar', 'xs')} ${esc(dateDisplay)}</span>
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="bs-date">Date</label>
-          <input class="form-input" id="bs-date" type="date" value="${escapeAttr(result.date || '')}">
+
+      <section class="ocr-section">
+        <div class="ocr-section-head">
+          <span class="ocr-step">01</span>
+          <div><h4>Receipt details</h4><p>Check what was bought, how much, and when.</p></div>
         </div>
-        <div class="form-group" style="display:flex;align-items:center;padding-top:28px;gap:8px">
-          <input type="checkbox" id="bs-recurring" ${result.recurring ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--primary)">
-          <label for="bs-recurring" style="margin:0;cursor:pointer">Is Recurring?</label>
+        <div class="ocr-field-grid">
+          <div class="ocr-field ocr-field--full">
+            <label for="bs-name">Merchant / name</label>
+            <input class="form-input" id="bs-name" value="${escapeAttr(result.name || 'OCR Receipt')}" maxlength="100" required>
+          </div>
+          <div class="ocr-field">
+            <label for="bs-amount">Amount</label>
+            <div class="ocr-input-affix"><span>${escapeAttr(currency)}</span><input class="form-input" id="bs-amount" type="text" inputmode="decimal" pattern="^\\d+(\\.\\d{1,2})?$" title="Enter a valid amount" value="${amount}" required></div>
+          </div>
+          <div class="ocr-field">
+            <label for="bs-currency">Currency</label>
+            <input class="form-input" id="bs-currency" value="${escapeAttr(currency)}" maxlength="3" required>
+          </div>
+          <div class="ocr-field">
+            <label for="bs-date">Date</label>
+            <input class="form-input" id="bs-date" type="date" value="${escapeAttr(result.date || '')}">
+          </div>
+          <div class="ocr-field">
+            <span class="ocr-field-label">Repeat monthly</span>
+            <label class="ocr-switch">
+              <input type="checkbox" id="bs-recurring" ${result.recurring ? 'checked' : ''}>
+              <span class="ocr-switch-track" aria-hidden="true"></span>
+              <span>Is recurring</span>
+            </label>
+          </div>
         </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="bs-type">Type</label>
-          <select class="form-select" id="bs-type">
-            <option value="EXPENSE" ${type === 'EXPENSE' ? 'selected' : ''}>Expense</option>
-            <option value="INCOME" ${type === 'INCOME' ? 'selected' : ''}>Income</option>
-          </select>
+      </section>
+
+      <section class="ocr-section">
+        <div class="ocr-section-head">
+          <span class="ocr-step">02</span>
+          <div><h4>Classification</h4><p>How this entry should be grouped in your reports.</p></div>
         </div>
-        <div class="form-group" id="bs-cat-group">
-          <label for="bs-category">Category</label>
-          <input type="text" id="bs-cat-search" class="form-input category-search" placeholder="Search category..." style="margin-bottom: 8px;">
-          <select class="form-select category-select" id="bs-category"></select>
+        <div class="ocr-field-grid">
+          <div class="ocr-field">
+            <label for="bs-type">Type</label>
+            <select class="form-select" id="bs-type">
+              <option value="EXPENSE" ${type === 'EXPENSE' ? 'selected' : ''}>Expense</option>
+              <option value="INCOME" ${type === 'INCOME' ? 'selected' : ''}>Income</option>
+            </select>
+          </div>
+          <div class="ocr-field" id="bs-cat-group">
+            <label for="bs-category">Category</label>
+            <input type="text" id="bs-cat-search" class="form-input category-search" placeholder="Search category..." style="display:none;">
+            <select class="form-select category-select" id="bs-category"></select>
+          </div>
         </div>
-      </div>
-      <div class="form-group">
-        <label for="bs-desc">Description</label>
-        <textarea class="form-textarea" id="bs-desc" maxlength="500">${escapeAttr(result.description || 'Processed from bill scanner')}</textarea>
-      </div>
-      <div class="form-group" style="padding-top:10px;border-top:1px solid var(--border)">
-        <label for="bs-dest">Save Destination</label>
-        <select class="form-select" id="bs-dest">
-          <option value="PERSONAL">Personal Transaction</option>
-          ${groupsCache.map(g => `<option value="${g.id}">Group: ${esc(g.name)}</option>`).join('')}
-        </select>
-        <p style="font-size:0.8rem;color:var(--text-dim);margin-top:4px">Group expenses will default to an EQUAL split.</p>
-      </div>
-      <button type="submit" class="btn btn-success" style="width:100%;margin-top:4px" id="bs-save">Save Transaction</button>`;
+      </section>
+
+      <section class="ocr-section">
+        <div class="ocr-section-head">
+          <span class="ocr-step">03</span>
+          <div><h4>Details &amp; destination</h4><p>Add context and choose where this entry lives.</p></div>
+        </div>
+        <div class="ocr-field-grid">
+          <div class="ocr-field ocr-field--full">
+            <label for="bs-desc">Description</label>
+            <textarea class="form-textarea" id="bs-desc" maxlength="500" placeholder="Optional note about this transaction">${escapeAttr(result.description || 'Processed from bill scanner')}</textarea>
+          </div>
+          <div class="ocr-field ocr-field--full">
+            <label for="bs-dest">Save destination</label>
+            <select class="form-select" id="bs-dest">
+              <option value="PERSONAL">Personal transaction</option>
+              ${groupsCache.map(g => `<option value="${g.id}">Group: ${esc(g.name)}</option>`).join('')}
+            </select>
+            <p class="ocr-help">Group expenses will default to an EQUAL split.</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="ocr-save-bar">
+        <div class="ocr-save-hint">${icon('shield', 'xs')} Nothing is saved until you confirm.</div>
+        <button type="submit" class="btn btn-success" id="bs-save">${icon('check', 'sm')} Save transaction</button>
+      </div>`;
 
     const typeSelect = document.getElementById('bs-type');
     const catSelect = document.getElementById('bs-category');
+    const amountInput = document.getElementById('bs-amount');
+    const currencyInput = document.getElementById('bs-currency');
+    const nameInput = document.getElementById('bs-name');
+    const amountPreview = document.getElementById('bs-amount-preview');
+    const namePreview = document.getElementById('bs-name-preview');
+
+    // The summary mirrors the editable fields so the review panel stays honest.
+    const syncSummary = () => {
+      const value = parseFloat((amountInput.value || '0').toString().replace(/[^0-9.]/g, '')) || 0;
+      amountPreview.textContent = value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+      namePreview.textContent = nameInput.value.trim() || 'OCR Receipt';
+    };
+    [amountInput, currencyInput, nameInput].forEach(el => el.addEventListener('input', syncSummary));
 
     function fillCategories() {
       const t = typeSelect.value;

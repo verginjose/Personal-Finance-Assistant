@@ -1,9 +1,8 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110301';
-import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=2026110301';
+import { api, Auth, toast } from '../utils/api.js?v=2026110302';
+import { createDoughnut, createLine, createBar, destroyChart } from '../utils/charts.js?v=2026110302';
 import {
-  pageHeader, healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData,
-  skeletonChart, formatCurrency, formatCategory, esc
-} from '../utils/ui.js?v=2026110301';
+  pageHeader, skeletonChart, formatCurrency, formatCategory, esc
+} from '../utils/ui.js?v=2026110302';
 
 let charts = [];
 let loadToken = 0;
@@ -15,10 +14,6 @@ export async function renderAnalytics(container) {
 
   container.innerHTML = `
     ${pageHeader('Analytics', 'Deep insights into your finances', '<button class="btn btn-secondary" id="a-export">Export CSV</button>')}
-    <div class="dashboard-top fade-up">
-      ${healthPanelHtml('a')}
-      ${aiPanelHtml('a')}
-    </div>
     <div class="card-grid card-grid-4 fade-up" id="a-kpis" style="margin-bottom:20px" aria-live="polite"></div>
     <div class="analytics-toolbar fade-up" role="search" aria-label="Analytics filters">
       <div>
@@ -210,40 +205,12 @@ async function loadAnalytics(userId) {
     .then(timeline => { if (token === loadToken) mountTimeline('a-timeline-wrap', 'a-timeline-chart', timeline); })
     .catch(err => { if (token === loadToken) showError('a-timeline-wrap', err.message); });
 
-  api.get('/analytics/health-score', { userId })
-    .then(health => { if (token === loadToken) renderHealthData('a', health); })
-    .catch(err => toast('Health Score error: ' + err.message, 'error'));
-
-  api.get('/analytics/ai-insights', { userId })
-    .then(ai => { if (token === loadToken) renderAiData('a', ai, () => refreshAdvisor(userId)); })
-    .catch(err => {
-      if (token !== loadToken) return;
-      renderAiData('a', { error: err.message }, () => refreshAdvisor(userId));
-      toast('AI Insights error: ' + err.message, 'error');
-    });
-
   if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Apply Filters'; }
 }
 
 function showError(wrapId, message) {
   const wrap = document.getElementById(wrapId);
   if (wrap) wrap.innerHTML = `<p style="color:var(--accent)">${esc(message || 'Could not load this chart')}</p>`;
-}
-
-async function refreshAdvisor(userId) {
-  const btn = document.getElementById('a-ai-refresh');
-  if (btn) btn.disabled = true;
-  try {
-    const ai = await api.get('/analytics/ai-insights', { userId, refresh: true });
-    renderAiData('a', ai, () => refreshAdvisor(userId));
-    toast('Advice refreshed', 'success');
-  } catch (err) {
-    renderAiData('a', { error: err.message }, () => refreshAdvisor(userId));
-    toast('Could not refresh advice: ' + err.message, 'error');
-  } finally {
-    const current = document.getElementById('a-ai-refresh');
-    if (current) current.disabled = false;
-  }
 }
 
 function mountChart(wrapId, canvasId, data, type) {

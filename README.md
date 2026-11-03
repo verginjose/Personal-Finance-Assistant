@@ -194,6 +194,40 @@ recurring scheduler), security races, OCR receipt ingestion, split expenses
 Expected outcome: `PASS` with every check green. See
 `requests/GOLDEN_TEST_PLAN.md` for the full coverage map.
 
+Against the k3s cluster, port-forward the gateway first and point the test at it:
+```bash
+kubectl port-forward -n pfa svc/api-gateway 18090:8080 &
+cd requests
+python3 run_golden_test.py --users 100 --groups 10 --think-time 1.0 \
+  --bills 10 --base-url http://localhost:18090 \
+  --out golden-report.myrun.json --csv golden-users.myrun.csv
+```
+The exit code is **0 = PASS, 1 = FAIL**; the verdict is also printed at the end
+and stored as `"verdict"` in the report. Without `--out` / `--csv` the test
+writes `golden-report.json` and `golden-users.csv` into `requests/`. Defaults
+are 50 users; `--seed 11` (the default) makes the generated data deterministic.
+
+| Flag | Meaning |
+|---|---|
+| `--users`, `--groups`, `--members-per-group` | load shape |
+| `--txns`, `--months`, `--deletes` | personal transaction history per user |
+| `--expenses` | shared expenses per member |
+| `--bills` | OCR uploads per user (sampled from the 200-image dataset) |
+| `--think-time` | pause between a user's requests (`1.0` is realistic) |
+| `--cache-timeout` | how long the cache-consistency stages wait to converge (default 45 s) |
+| `--realistic` | spread arrivals and trim synthetic bursts so percentiles model real traffic (see `requests/GOLDEN_TEST_PLAN.md`) |
+| `--ramp-seconds` | realistic mode: window over which each stage's users start (default 20) |
+| `--refresh-race-fraction` | realistic mode: share of users that run the 4-way refresh race (default 5%) |
+| `--base-url` | gateway URL, or set `GATEWAY_URL` in the environment |
+
+For a sustained soak (one full run every 10 minutes for 5 hours, keeping the
+port-forward alive between runs):
+```bash
+cd requests && ./golden_soak.sh
+```
+Progress goes to `golden-soak-<timestamp>.log`; each run writes its own
+`golden-report.soak-<timestamp>-runNN.json` plus a one-line summary.
+
 ---
 ## Kubernetes Deployment (local k3s)
 

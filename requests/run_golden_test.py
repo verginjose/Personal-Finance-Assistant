@@ -604,7 +604,13 @@ def stage_personal(client, member, checks, args, rng):
 # ────────────────────────────────────────────────────────────────────────────
 # Stage 3 — security and concurrency races
 # ────────────────────────────────────────────────────────────────────────────
-def stage_refresh_race(client, member, checks):
+def stage_refresh_race(client, member, checks, race=True):
+    # Realistic mode exercises the rotation race for a small, seeded subset of
+    # users only. A real client refreshes once per access-token lifetime
+    # (15 min), not four times the instant it logs in, so firing the race for
+    # every user in one burst measures a workload that does not exist.
+    if not race:
+        return
     replay = member.refresh
     if not replay:
         return
@@ -1479,13 +1485,29 @@ def verify_group(client, group, checks, args):
 # ────────────────────────────────────────────────────────────────────────────
 # Orchestration
 # ────────────────────────────────────────────────────────────────────────────
+def _ramp(args, position, total):
+    """Realistic mode only: spread arrivals across ``--ramp-seconds``.
+
+    Without this every stage releases all users at the same instant, which
+    synchronises the whole run and makes each stage hit one endpoint class in
+    a single burst. Real traffic arrives continuously.
+    """
+    if not getattr(args, "realistic", False) or args.ramp_seconds <= 0 or total <= 1:
+        return
+    time.sleep(args.ramp_seconds * (position / (total - 1)))
+
+
 def run_stage(members, metrics, name, fn, args=None):
     if not members:
         return
 
+    total = len(members)
+    position = {m.idx: i for i, m in enumerate(members)}
+
     def wrapped(member):
         try:
             if args is not None:
+                _ramp(args, position[member.idx], total)
                 _think(args, random.Random(args.seed + 10000 + member.idx))
             fn(member)
         except Exception as exc:
@@ -1532,6 +1554,9 @@ def run(args):
     print(f"  receipts: {args.samples}")
     if args.think_time > 0:
         print(f"  pacing  : think-time 0..{2 * args.think_time:.1f}s before each step")
+    if args.realistic:
+        print(f"  mode    : realistic — arrivals over {args.ramp_seconds:.1f}s per stage, "
+              f"refresh race on {args.refresh_race_fraction:.0%} of users")
     started = time.time()
 
     print(f"\n{BOLD}Stage 1 — registering and logging in{RESET}")
@@ -1561,9 +1586,17 @@ def run(args):
               args=args)
 
     print(f"\n{BOLD}Stage 3 — security and concurrency races{RESET}")
+    if args.realistic:
+        race_count = max(1, round(len(ready) * args.refresh_race_fraction))
+        race_users = {m.idx for m in ready[:race_count]}
+        print(f"  refresh race: {race_count}/{len(ready)} users "
+              f"(fraction {args.refresh_race_fraction:.0%})")
+    else:
+        race_users = None  # every user races
     run_stage(ready, metrics, "security",
               lambda m: (
-                  stage_refresh_race(client, m, Checks(metrics, "security", f"user{m.idx}")),
+                  stage_refresh_race(client, m, Checks(metrics, "security", f"user{m.idx}"),
+                                     race=race_users is None or m.idx in race_users),
                   stage_idempotency(client, m, Checks(metrics, "security", f"user{m.idx}")),
                   stage_authz(client, m, Checks(metrics, "security", f"user{m.idx}"), group_of(m)),
               ),
@@ -1589,17 +1622,19 @@ def run(args):
 
     print(f"\n{BOLD}Stage 7 — creating {len(groups)} groups{RESET}")
     with ThreadPoolExecutor(max_workers=max(1, len(groups))) as pool:
-        list(pool.map(lambda g: (_think(args, random.Random(args.seed + g.index)),
+        list(pool.map(lambda p: (_ramp(args, p[0], len(groups)),
+                                 _think(args, random.Random(args.seed + p[1].index)),
                                  stage_group_create(
-                                     client, g, Checks(metrics, "groups", f"group{g.index}"),
-                                     args)), groups.values()))
+                                     client, p[1], Checks(metrics, "groups", f"group{p[1].index}"),
+                                     args)), enumerate(groups.values())))
 
     print(f"\n{BOLD}Stage 8 — accepting invitations{RESET}")
     with ThreadPoolExecutor(max_workers=max(1, len(active))) as pool:
-        list(pool.map(lambda m: (_think(args, random.Random(args.seed + 20000 + m.idx)),
+        list(pool.map(lambda p: (_ramp(args, p[0], len(active)),
+                                 _think(args, random.Random(args.seed + 20000 + p[1].idx)),
                                  stage_group_accept(
-                                     client, group_of(m), m,
-                                     Checks(metrics, "groups", f"user{m.idx}"))), active))
+                                     client, group_of(p[1]), p[1],
+                                     Checks(metrics, "groups", f"user{p[1].idx}"))), enumerate(active)))
 
     print(f"\n{BOLD}Stage 9 — shared expenses (EQUAL / PERCENTAGE / EXACT){RESET}")
     run_stage(active, metrics, "split",
@@ -1610,9 +1645,9 @@ def run(args):
 
     print(f"\n{BOLD}Stage 10 — group balances cache eviction{RESET}")
     with ThreadPoolExecutor(max_workers=max(1, len(groups))) as pool:
-        list(pool.map(lambda g: stage_group_cache(
-            client, g, Checks(metrics, "cache", f"group{g.index}"), args),
-            groups.values()))
+        list(pool.map(lambda p: (_ramp(args, p[0], len(groups)), stage_group_cache(
+            client, p[1], Checks(metrics, "cache", f"group{p[1].index}"), args)),
+            enumerate(groups.values())))
 
     print(f"\n{BOLD}Stage 11 — half settle, half archive{RESET}")
     run_stage(active, metrics, "settle",
@@ -1624,11 +1659,12 @@ def run(args):
 
     print(f"\n{BOLD}Stage 12 — deleting 5 expenses per group{RESET}")
     with ThreadPoolExecutor(max_workers=max(1, len(groups))) as pool:
-        list(pool.map(lambda g: (_think(args, random.Random(args.seed + 30000 + g.index)),
+        list(pool.map(lambda p: (_ramp(args, p[0], len(groups)),
+                                 _think(args, random.Random(args.seed + 30000 + p[1].index)),
                                  stage_group_deletes(
-                                     client, g, Checks(metrics, "split", f"group{g.index}"),
-                                     args, random.Random(args.seed + 3000 + g.index))),
-                      groups.values()))
+                                     client, p[1], Checks(metrics, "split", f"group{p[1].index}"),
+                                     args, random.Random(args.seed + 3000 + p[1].index))),
+                      enumerate(groups.values())))
 
     print(f"\n{BOLD}Stage 13 — verification{RESET}")
     run_stage(ready, metrics, "verify",
@@ -1761,6 +1797,13 @@ def parse_args(argv):
                         "take several seconds under load (TTL is 10 minutes, so "
                         "this still proves eviction, not expiry)")
     p.add_argument("--auth-concurrency", type=int, default=5)
+    p.add_argument("--realistic", action="store_true",
+                   help="spread stage arrivals over time instead of releasing all users "
+                        "at once, and exercise the refresh race for a small subset")
+    p.add_argument("--ramp-seconds", type=float, default=20.0,
+                   help="realistic mode: window over which each stage's users start")
+    p.add_argument("--refresh-race-fraction", type=float, default=0.05,
+                   help="realistic mode: fraction of users that run the 4-way refresh race")
     p.add_argument("--csv", default=os.path.join(here, "golden-users.csv"))
     p.add_argument("--out", default=os.path.join(here, "golden-report.json"))
     return p.parse_args(argv)

@@ -20,6 +20,32 @@ GATEWAY_URL=https://verginjose.cloud python3 requests/run_golden_test.py --users
 `golden_soak.sh` runs the 100-user scenario once every 10 minutes for five
 hours, keeping the `kubectl port-forward` alive between runs.
 
+## Default vs. realistic mode
+
+By default the test is a **stress envelope**, not a traffic model: every stage
+releases all users at the same instant, so each stage hits one endpoint class
+in a single burst, and every user fires the 4-way refresh race. That is
+deliberate — it finds contention bugs — but its latency percentiles are
+worst-case bounds (e.g. auth p99 is dominated by ~400 synchronized refreshes
+and 100 simultaneous BCrypt logins).
+
+`--realistic` spreads arrivals and trims the synthetic bursts so the
+percentiles describe something a product could actually see:
+
+```bash
+python3 requests/run_golden_test.py --users 100 --groups 10 --think-time 1.0 \
+    --realistic --base-url http://localhost:18090
+```
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--realistic` | off | enable the behaviours below |
+| `--ramp-seconds` | `20` | each stage's users start over this window instead of together |
+| `--refresh-race-fraction` | `0.05` | only this share of users runs the 4-way refresh race; the rest skip it (a real client refreshes once per 15-minute token lifetime) |
+
+Correctness is unchanged — all assertions still run and the verdict is still
+`PASS`/`FAIL`; only arrival timing and the size of the refresh burst change.
+
 ## What one run does
 
 | Stage | Coverage | Assertions |

@@ -2944,8 +2944,19 @@ data:
           {
             "name": "service",
             "label": "Service",
-            "type": "custom",
-            "query": "api-gateway,auth-service,command-service,query-service,ocr-service,frontend,postgres-primary,postgres-replica,redis,rabbitmq,clickhouse,grafana,prometheus,registry,cloudflared,minio,vector,ci-runner",
+            "type": "query",
+            "datasource": {
+              "type": "grafana-clickhouse-datasource",
+              "uid": "clickhouse-ds"
+            },
+            "definition": "SELECT DISTINCT service FROM default.logs WHERE timestamp >= now() - INTERVAL 7 DAY ORDER BY service",
+            "query": {
+              "queryType": "sql",
+              "rawSql": "SELECT DISTINCT service FROM default.logs WHERE timestamp >= now() - INTERVAL 7 DAY ORDER BY service",
+              "refId": "serviceVar",
+              "format": "table"
+            },
+            "refresh": 1,
             "current": {
               "text": "All",
               "value": "$__all"
@@ -3331,7 +3342,7 @@ data:
               "queryType": "sql",
               "rawSql": "SELECT $__timeInterval(timestamp) AS time, service, count() AS lines FROM default.logs WHERE service ILIKE '$service' AND level ILIKE '$level' AND (message ILIKE '%${search}%' OR logger ILIKE '%${search}%') AND $__timeFilter(timestamp) GROUP BY time, service ORDER BY time",
               "refId": "A",
-              "format": "time_series"
+              "format": "table"
             }
           ],
           "fieldConfig": {
@@ -3388,7 +3399,7 @@ data:
               "queryType": "sql",
               "rawSql": "SELECT $__timeInterval(timestamp) AS time, service, count() AS errors FROM default.logs WHERE service ILIKE '$service' AND level = 'ERROR' AND (message ILIKE '%${search}%' OR logger ILIKE '%${search}%') AND $__timeFilter(timestamp) GROUP BY time, service ORDER BY time",
               "refId": "A",
-              "format": "time_series"
+              "format": "table"
             }
           ],
           "fieldConfig": {

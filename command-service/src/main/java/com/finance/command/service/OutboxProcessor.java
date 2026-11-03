@@ -1,6 +1,6 @@
 package com.finance.command.service;
 
-import com.finance.command.events.CacheEvictPublisher;
+import com.finance.command.cache.CacheKeyRegistry;
 import com.finance.command.model.OutboxEvent;
 import com.finance.command.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +18,7 @@ import java.util.List;
 public class OutboxProcessor {
 
     private final OutboxEventRepository repository;
-    private final CacheEvictPublisher cacheEvictPublisher;
+    private final CacheKeyRegistry cacheKeyRegistry;
 
     @Scheduled(fixedDelayString = "${outbox.processor.delay:5000}")
     @SchedulerLock(
@@ -36,11 +36,11 @@ public class OutboxProcessor {
         log.info("Processing {} outbox events...", events.size());
 
         for (OutboxEvent event : events) {
-            // publishSync returns true only when the HTTP call to query-service returned 2xx.
-            // Marking PROCESSED on a false (or swallowed exception) was the old bug — events
-            // would be permanently lost even when the query-service was down.
-            boolean delivered = cacheEvictPublisher.publishSync(
-                    event.getUserId(), event.getEventType(), event.getEntityId());
+            // Evict directly in Redis — both services share the instance and the
+            // registry Set. This used to be an HTTP call to query-service's
+            // /internal/cache-evict; that hop is gone, so the retry no longer
+            // depends on the other service being up.
+            boolean delivered = cacheKeyRegistry.evictForUser(event.getUserId());
 
             if (delivered) {
                 event.setStatus(OutboxEvent.EventStatus.PROCESSED);

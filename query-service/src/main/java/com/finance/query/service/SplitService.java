@@ -1,7 +1,6 @@
 package com.finance.query.service;
 
 import com.finance.query.dto.*;
-import com.finance.query.events.CacheEvictPublisher;
 import com.finance.query.model.*;
 import com.finance.query.model.GroupActivity.ActivityType;
 import com.finance.query.repository.*;

@@ -106,35 +106,7 @@ public class CacheKeyRegistry {
         }
     }
 
-    // ─── User evict (your main flow) ─────────────────────────────────────────
-
-    public void evictForUser(UUID userId) {
-        String userSet = USER_KEY_PREFIX + userId;
-        try {
-            Set<String> keys = redisTemplate.execute((RedisCallback<Set<String>>) connection -> {
-                Set<byte[]> bytes = connection.setCommands().sMembers(userSet.getBytes());
-                if (bytes == null) return Collections.emptySet();
-                return bytes.stream().map(String::new).collect(Collectors.toSet());
-            });
-
-            if (keys == null || keys.isEmpty()) {
-                log.debug("Nothing to evict for user={}", userId);
-                return;
-            }
-
-            // Delete cache entries + registry set atomically
-            redisTemplate.executePipelined((RedisCallback<?>) connection -> {
-                keys.forEach(k -> connection.keyCommands()
-                        .del(k.getBytes()));
-                connection.keyCommands().del(userSet.getBytes());
-                return null;
-            });
-
-            log.info("Evicted {} keys for user={}", keys.size(), userId);
-        } catch (Exception e) {
-            log.error("evictForUser failed user={}: {}", userId, e.getMessage());
-        }
-    }
+    // ─── Cache-wide evict ───────────────────────────────────────────────────
 
     public void evictAllForCache(String cacheName) {
         String cacheSet    = CACHE_USER_PREFIX + cacheName;

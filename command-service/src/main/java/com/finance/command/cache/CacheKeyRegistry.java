@@ -108,7 +108,14 @@ public class CacheKeyRegistry {
 
     // ─── User evict (your main flow) ─────────────────────────────────────────
 
-    public void evictForUser(UUID userId) {
+    /**
+     * Deletes every cache key tracked for the user, plus the registry Set.
+     *
+     * @return true when the delete ran (including "nothing to evict"), false
+     *         when Redis failed — the outbox uses this to decide whether to
+     *         retry instead of marking the event PROCESSED.
+     */
+    public boolean evictForUser(UUID userId) {
         String userSet = USER_KEY_PREFIX + userId;
         try {
             Set<String> keys = redisTemplate.execute((RedisCallback<Set<String>>) connection -> {
@@ -119,7 +126,7 @@ public class CacheKeyRegistry {
 
             if (keys == null || keys.isEmpty()) {
                 log.debug("Nothing to evict for user={}", userId);
-                return;
+                return true;
             }
 
             // Delete cache entries + registry set atomically
@@ -131,8 +138,10 @@ public class CacheKeyRegistry {
             });
 
             log.info("Evicted {} keys for user={}", keys.size(), userId);
+            return true;
         } catch (Exception e) {
             log.error("evictForUser failed user={}: {}", userId, e.getMessage());
+            return false;
         }
     }
 

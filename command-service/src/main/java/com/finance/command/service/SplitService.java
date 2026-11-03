@@ -1,7 +1,7 @@
 package com.finance.command.service;
 
+import com.finance.command.cache.CacheKeyRegistry;
 import com.finance.command.dto.*;
-import com.finance.command.events.CacheEvictPublisher;
 import com.finance.command.model.*;
 import com.finance.command.model.GroupActivity.ActivityType;
 import com.finance.command.repository.*;
@@ -38,7 +38,7 @@ public class SplitService {
     private final TransactionEntryService transactionEntryService;
     private final UserValidationService userValidationService;
     private final GroupActivityService groupActivityService;
-    private final CacheEvictPublisher cacheEvictPublisher;
+    private final CacheKeyRegistry cacheKeyRegistry;
     private final NotificationService notificationService;
     private final org.springframework.cache.CacheManager cacheManager;
     private final com.finance.command.cache.QueryCacheEvictor queryCacheEvictor;
@@ -67,8 +67,8 @@ public class SplitService {
                 "@" + creatorName + " created the group \"" + group.getName() + "\"",
                 group.getId());
         log.info("Group created: id={}, name={}", group.getId(), group.getName());
-        cacheEvictPublisher.publishForUsers(Set.of(req.getCreatedBy()), "GROUP_CREATED", group.getId());
         evictUserGroupsForMembers(group.getId());
+        evictUserCachesAfterCommit(Set.of(req.getCreatedBy()));
         return group;
     }
 
@@ -213,14 +213,10 @@ public class SplitService {
         if (cacheManager.getCache("group-activity") != null) {
             Objects.requireNonNull(cacheManager.getCache("group-activity")).evict(groupId);
         }
-        cacheEvictPublisher.publishForUsers(
-                members.stream().map(GroupMember::getUserId).collect(Collectors.toSet()), 
-                "GROUP_DELETED", 
-                groupId);
-        
         Set<UUID> memberIds = members.stream().map(GroupMember::getUserId).collect(Collectors.toSet());
         evictUserGroupsForMembers(groupId);
         queryCacheEvictor.evictGroupKeys(groupId, memberIds);
+        evictUserCachesAfterCommit(memberIds);
     }
 
     @Caching(evict = {
@@ -236,14 +232,14 @@ public class SplitService {
         memberRepo.save(member);
         evictUserGroupsForMembers(groupId);
         queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
-        // Publish the fan-out eviction only after the commit, and register it
-        // after the write-token callbacks above so the generation bump — the
-        // signal the read side uses to reject racing fills — lands before the
-        // async delete reaches query-service. Publishing inside the transaction
-        // deleted reader caches for a row that was not yet visible; a fill in
-        // flight then stored the pre-commit value, and the post-commit delete
-        // could not see it (the fill's tracking-set registration came later).
-        afterCommit(() -> cacheEvictPublisher.publishForUsers(Set.of(userId), "GROUP_ARCHIVED", groupId));
+        // Full user-level invalidation, after commit and after the write-token
+        // bump registered above. This replaces the fire-and-forget HTTP call to
+        // query-service's /internal/cache-evict: both services share Redis and
+        // the same finance:analytics:v1:user-keys registry, so the delete can
+        // run here synchronously. The HTTP call was @Async and unordered — it
+        // deleted reader caches for a row that was not yet visible, which is
+        // how a racing fill pinned the pre-commit value for the cache TTL.
+        evictUserCachesAfterCommit(Set.of(userId));
     }
 
     /* ─── MEMBERS ─── */
@@ -274,9 +270,9 @@ public class SplitService {
                 "event", "group-invite",
                 "groupId", groupId)));
                 
-        cacheEvictPublisher.publishForUsers(Set.of(req.getUserId()), "MEMBER_ADDED", groupId);
         evictUserGroupsForMembers(groupId);
         queryCacheEvictor.evictGroupKeys(groupId, Set.of(req.getUserId()));
+        evictUserCachesAfterCommit(Set.of(req.getUserId()));
         return member;
     }
 
@@ -311,9 +307,9 @@ public class SplitService {
                 ActivityType.MEMBER_ADDED,
                 "@" + actorName + " joined the group",
                 member.getId());
-        cacheEvictPublisher.publishForUsers(Set.of(userId), "MEMBER_ACCEPTED", groupId);
         evictUserGroupsForMembers(groupId);
         queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
+        evictUserCachesAfterCommit(Set.of(userId));
     }
 
     @Caching(evict = {
@@ -332,9 +328,9 @@ public class SplitService {
         }
 
         memberRepo.delete(member);
-        cacheEvictPublisher.publishForUsers(Set.of(userId), "MEMBER_REJECTED", groupId);
         evictUserGroupsForMembers(groupId);
         queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
+        evictUserCachesAfterCommit(Set.of(userId));
     }
 
     @Caching(evict = {
@@ -366,9 +362,9 @@ public class SplitService {
                                            // for now
                 "@" + actorName + " left the group",
                 member.getId());
-        cacheEvictPublisher.publishForUsers(Set.of(userId), "MEMBER_LEFT", groupId);
         evictUserGroupsForMembers(groupId);
         queryCacheEvictor.evictGroupKeys(groupId, Set.of(userId));
+        evictUserCachesAfterCommit(Set.of(userId));
     }
 
     @Transactional(readOnly = true)
@@ -592,7 +588,7 @@ public class SplitService {
                 .map(ExpenseSplit::getUserId)
                 .collect(Collectors.toSet());
         if (payerId != null) affectedUsers.add(payerId);
-        cacheEvictPublisher.publishForUsers(affectedUsers, operation, referenceId);
+        evictUserCachesAfterCommit(affectedUsers);
     }
 
     private Category toTransactionCategory(SharedExpense expense) {
@@ -979,15 +975,34 @@ public class SplitService {
     }
 
     /**
-     * Runs cache-eviction fan-out only after the surrounding transaction commits.
+     * Evicts every tracked cache key for the given users, after commit.
      *
-     * <p>{@link CacheEvictPublisher#publishForUsers} dispatches an {@code @Async}
-     * HTTP call, so invoking it inside the transaction deletes reader caches
-     * for a write that is not yet visible. A reader that refills in that window
-     * stores the pre-commit row, and the write's own post-commit eviction may
-     * run before that fill's put — leaving the stale value pinned for the cache
-     * TTL. After-commit ordering keeps the delete behind both the commit and
-     * the write-token bump.
+     * <p>Replaces the former fire-and-forget HTTP call to query-service's
+     * {@code /internal/cache-evict}. Both services share Redis and the same
+     * {@code finance:analytics:v1:user-keys:<id>} registry, so the delete runs
+     * here: synchronously, after the commit, and behind the write-token bumps
+     * registered by the calling method. The HTTP call was {@code @Async} and
+     * unordered — it could delete a reader's cache entry before the new row was
+     * visible, and a fill racing that window kept the pre-commit value for the
+     * cache TTL.
+     */
+    private void evictUserCachesAfterCommit(Collection<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return;
+        }
+        Set<UUID> distinct = new HashSet<>(userIds);
+        afterCommit(() -> distinct.forEach(cacheKeyRegistry::evictForUser));
+    }
+
+    /**
+     * Runs cache-eviction work only after the surrounding transaction commits.
+     *
+     * <p>Evicting inside the transaction deletes reader caches for a write that
+     * is not yet visible; a reader that refills in that window stores the
+     * pre-commit row, and the write's own post-commit eviction may run before
+     * that fill's put — leaving the stale value pinned for the cache TTL.
+     * After-commit ordering keeps the delete behind both the commit and the
+     * write-token bump.
      */
     private void afterCommit(Runnable action) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {

@@ -3404,3 +3404,33 @@ button:focus-visible,
   .advisor-goals-row { grid-template-columns: 1fr; }
   .modal-body:has(.ocr-form) { max-height: 82vh; }
 }
+
+/* ── Mobile shell: keep the bottom nav pinned ──────────────────────────────
+   On phones the document itself scrolls, so the browser collapses/expands its
+   URL bar while you scroll. That resizes the viewport, and a position:fixed
+   bar then drifts up and down with it. Locking the app shell to the viewport
+   and scrolling only .main-content keeps the bar perfectly still.
+   Scoped to #app-shell so the logged-out auth screen can still scroll. */
+@media (max-width: 768px) {
+  #app-shell {
+    position: fixed;
+    inset: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .main-content {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  /* Composited blur on a fixed bar is what makes it shimmer/drift on iOS
+     while content scrolls underneath; a solid plate looks near-identical. */
+  .bottom-nav {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(7, 13, 18, 0.98);
+  }
+}

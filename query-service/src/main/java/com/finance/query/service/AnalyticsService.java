@@ -8,9 +8,12 @@ import com.finance.query.model.TransactionType;
 import com.finance.query.repository.TransactionEntryRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
+import java.time.temporal.WeekFields;
 import java.util.*;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -51,7 +54,7 @@ public class AnalyticsService {
 
     @Cacheable(
             value = "comprehensive-analytics",
-            key = "#request.userId + ':' + #request.timelineType + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate()"
+            key = "#request.userId + ':' + #request.timelineType + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
     )
     public Map<String, Object> getComprehensiveAnalytics(AnalyticsRequest request) {
         Map<String, Object> analytics = new LinkedHashMap<>();
@@ -91,7 +94,7 @@ public class AnalyticsService {
 
     @Cacheable(
             value = "category-analytics",
-            key = "#request.userId + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate()"
+            key = "#request.userId + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
     )
     public ChartData getCategoryAnalytics(AnalyticsRequest request) {
         List<CategoryRow> rows = fetchCategoryRows(request);
@@ -136,8 +139,8 @@ public class AnalyticsService {
     private List<CategoryRow> fetchCategoryRows(AnalyticsRequest request) {
         UUID userId             = request.getUserId();
         String type             = request.getTransactionFilter() != null ? request.getTransactionFilter().name() : null;
-        LocalDateTime startDate = request.getStartDate();
-        LocalDateTime endDate   = request.getEndDate();
+        LocalDateTime startDate = request.startUtc();
+        LocalDateTime endDate   = request.endUtc();
 
         if (type != null && startDate != null && endDate != null) {
             return repository.getCategoryAnalyticsByTypeAndDateRange(userId, TransactionType.valueOf(type), startDate, endDate);
@@ -154,7 +157,7 @@ public class AnalyticsService {
 
     @Cacheable(
             value = "timeline-analytics",
-            key = "#request.userId + ':' + #request.timelineType + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate()"
+            key = "#request.userId + ':' + #request.timelineType + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
     )
     public ChartData getTimelineAnalytics(AnalyticsRequest request) {
         String timelineType = request.getTimelineType() != null
@@ -169,6 +172,10 @@ public class AnalyticsService {
                 timelineData = buildDailyTimeline(request);
                 yield filterLabel + "Daily Transaction Trends";
             }
+            case "WEEKLY" -> {
+                timelineData = buildWeeklyTimeline(request);
+                yield filterLabel + "Weekly Transaction Trends";
+            }
             case "YEARLY" -> {
                 timelineData = buildYearlyTimeline(request);
                 yield filterLabel + "Yearly Transaction Trends";
@@ -182,10 +189,13 @@ public class AnalyticsService {
         return createTimelineChart(timelineData, chartTitle, request.getTransactionFilter());
     }
 
+    private List<DailyRow> fetchDailyRows(AnalyticsRequest request) {
+        return repository.getDailyAnalytics(
+                request.getUserId(), request.startUtc(), request.endUtc(), request.resolvedTzOffset());
+    }
+
     private List<TimelineAnalytics> buildDailyTimeline(AnalyticsRequest request) {
-        List<DailyRow> rows = request.getStartDate() != null && request.getEndDate() != null
-                ? repository.getDailyAnalyticsByDateRange(request.getUserId(), request.getStartDate(), request.getEndDate())
-                : repository.getAllDailyAnalytics(request.getUserId());
+        List<DailyRow> rows = fetchDailyRows(request);
 
         return rows.stream().map(row -> {
             LocalDate date = row.getDay().toLocalDate();
@@ -200,10 +210,39 @@ public class AnalyticsService {
         }).collect(Collectors.toList());
     }
 
+    /**
+     * Weekly buckets are derived from the already timezone-shifted daily rows,
+     * so a user's Monday starts where their own calendar says it does. Weeks
+     * use ISO numbering (Monday-first) and are labelled {@code 2026-W45}.
+     */
+    private List<TimelineAnalytics> buildWeeklyTimeline(AnalyticsRequest request) {
+        List<DailyRow> rows = fetchDailyRows(request);
+
+        Map<LocalDate, TimelineAnalytics> weeks = new TreeMap<>();
+        WeekFields isoWeeks = WeekFields.ISO;
+        for (DailyRow row : rows) {
+            LocalDate day = row.getDay().toLocalDate();
+            LocalDate weekStart = day.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            TimelineAnalytics entry = weeks.computeIfAbsent(weekStart, start -> {
+                int week = start.get(isoWeeks.weekOfWeekBasedYear());
+                int year = start.get(isoWeeks.weekBasedYear());
+                return new TimelineAnalytics(
+                        String.format("%d-W%02d", year, week),
+                        start.atStartOfDay(),
+                        start.plusWeeks(1).atStartOfDay().minusSeconds(1));
+            });
+            entry.setIncomeAmount(entry.getIncomeAmount().add(zeroIfNull(row.getIncomeAmount())));
+            entry.setExpenseAmount(entry.getExpenseAmount().add(zeroIfNull(row.getExpenseAmount())));
+            if (row.getTransactionCount() != null) {
+                entry.setTotalTransactions(entry.getTotalTransactions() + row.getTransactionCount());
+            }
+        }
+        return new ArrayList<>(weeks.values());
+    }
+
     private List<TimelineAnalytics> buildMonthlyTimeline(AnalyticsRequest request) {
-        List<MonthlyRow> rows = request.getStartDate() != null && request.getEndDate() != null
-                ? repository.getMonthlyAnalyticsByDateRange(request.getUserId(), request.getStartDate(), request.getEndDate())
-                : repository.getAllMonthlyAnalytics(request.getUserId());
+        List<MonthlyRow> rows = repository.getMonthlyAnalytics(
+                request.getUserId(), request.startUtc(), request.endUtc(), request.resolvedTzOffset());
 
         return rows.stream().map(row -> {
             int year = row.getYear(), month = row.getMonth();
@@ -216,9 +255,8 @@ public class AnalyticsService {
     }
 
     private List<TimelineAnalytics> buildYearlyTimeline(AnalyticsRequest request) {
-        List<YearlyRow> rows = request.getStartDate() != null && request.getEndDate() != null
-                ? repository.getYearlyAnalyticsByDateRange(request.getUserId(), request.getStartDate(), request.getEndDate())
-                : repository.getAllYearlyAnalytics(request.getUserId());
+        List<YearlyRow> rows = repository.getYearlyAnalytics(
+                request.getUserId(), request.startUtc(), request.endUtc(), request.resolvedTzOffset());
 
         return rows.stream().map(row -> {
             int year = row.getYear();
@@ -320,8 +358,8 @@ public class AnalyticsService {
 
     private BigDecimal getTotalAmountByType(AnalyticsRequest request, TransactionType type) {
         UUID userId             = request.getUserId();
-        LocalDateTime startDate = request.getStartDate();
-        LocalDateTime endDate   = request.getEndDate();
+        LocalDateTime startDate = request.startUtc();
+        LocalDateTime endDate   = request.endUtc();
 
         return (startDate != null && endDate != null)
                 ? repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.valueOf(type.name()), startDate, endDate)

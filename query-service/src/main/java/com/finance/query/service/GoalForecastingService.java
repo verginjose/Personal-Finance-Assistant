@@ -23,6 +23,10 @@ public class GoalForecastingService {
     @Data
     public static class GoalForecast {
         private Long goalId;
+        /** Human-readable goal name from the savings goal, never shown to the LLM as an id. */
+        private String goalName;
+        private BigDecimal targetAmount;
+        private BigDecimal savedAmount;
         private BigDecimal monthlyVelocity;
         private Integer estimatedMonthsRemaining;
         private LocalDate estimatedCompletionDate;
@@ -43,6 +47,9 @@ public class GoalForecastingService {
     public GoalForecast forecastGoal(SavingsGoal goal) {
         GoalForecast forecast = new GoalForecast();
         forecast.setGoalId(goal.getId());
+        forecast.setGoalName(goal.getName());
+        forecast.setTargetAmount(goal.getTargetAmount());
+        forecast.setSavedAmount(goal.getSavedAmount());
 
         if (goal.isCompleted()) {
             forecast.setMessage("Goal is already completed!");

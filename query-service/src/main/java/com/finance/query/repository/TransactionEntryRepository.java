@@ -193,87 +193,69 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     @Query(value = """
-            SELECT CAST(t.created_at AS date) AS day,
+            SELECT CAST(t.created_at + (COALESCE(CAST(:tzOffset AS integer), 0) * INTERVAL '1 minute') AS date) AS day,
                    SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
                    SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
                    COUNT(*) AS transactionCount
             FROM transaction_entries t
             WHERE t.user_id = :userId AND t.deleted_at IS NULL
+              AND (CAST(:start AS timestamp) IS NULL OR t.created_at >= CAST(:start AS timestamp))
+              AND (CAST(:end AS timestamp) IS NULL OR t.created_at <= CAST(:end AS timestamp))
             GROUP BY day
             ORDER BY day
             """, nativeQuery = true)
-    List<DailyRow> getAllDailyAnalytics(@Param("userId") UUID userId);
+    List<DailyRow> getDailyAnalytics(
+            @Param("userId") UUID userId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("tzOffset") Integer tzOffsetMinutes);
 
     @Query(value = """
-            SELECT CAST(t.created_at AS date) AS day,
-                   SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
-                   SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
+            SELECT EXTRACT(YEAR FROM s.local_time)::int  AS year,
+                   EXTRACT(MONTH FROM s.local_time)::int AS month,
+                   SUM(CASE WHEN s.type = 'INCOME'  THEN s.amount ELSE 0 END) AS incomeAmount,
+                   SUM(CASE WHEN s.type = 'EXPENSE' THEN s.amount ELSE 0 END) AS expenseAmount,
                    COUNT(*) AS transactionCount
-            FROM transaction_entries t
-            WHERE t.user_id = :userId AND t.deleted_at IS NULL
-              AND t.created_at BETWEEN :start AND :end
-            GROUP BY day
-            ORDER BY day
+            FROM (
+                SELECT t.type,
+                       t.amount,
+                       t.created_at + (COALESCE(CAST(:tzOffset AS integer), 0) * INTERVAL '1 minute') AS local_time
+                FROM transaction_entries t
+                WHERE t.user_id = :userId AND t.deleted_at IS NULL
+                  AND (CAST(:start AS timestamp) IS NULL OR t.created_at >= CAST(:start AS timestamp))
+                  AND (CAST(:end AS timestamp) IS NULL OR t.created_at <= CAST(:end AS timestamp))
+            ) s
+            GROUP BY 1, 2
+            ORDER BY 1, 2
             """, nativeQuery = true)
-    List<DailyRow> getDailyAnalyticsByDateRange(
+    List<MonthlyRow> getMonthlyAnalytics(
             @Param("userId") UUID userId,
-            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("tzOffset") Integer tzOffsetMinutes);
 
-    @Query("""
-            SELECT YEAR(t.createdAt)  AS year,
-                   MONTH(t.createdAt) AS month,
-                   SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
-                   SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
-                   COUNT(t) AS transactionCount
-            FROM TransactionEntry t
-            WHERE t.userId = :userId AND t.deletedAt IS NULL
-            GROUP BY YEAR(t.createdAt), MONTH(t.createdAt)
-            ORDER BY year, month
-            """)
-    List<MonthlyRow> getAllMonthlyAnalytics(@Param("userId") UUID userId);
-
-    @Query("""
-            SELECT YEAR(t.createdAt)  AS year,
-                   MONTH(t.createdAt) AS month,
-                   SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
-                   SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
-                   COUNT(t) AS transactionCount
-            FROM TransactionEntry t
-            WHERE t.userId = :userId AND t.deletedAt IS NULL
-              AND t.createdAt BETWEEN :start AND :end
-            GROUP BY YEAR(t.createdAt), MONTH(t.createdAt)
-            ORDER BY year, month
-            """)
-    List<MonthlyRow> getMonthlyAnalyticsByDateRange(
+    @Query(value = """
+            SELECT EXTRACT(YEAR FROM s.local_time)::int AS year,
+                   SUM(CASE WHEN s.type = 'INCOME'  THEN s.amount ELSE 0 END) AS incomeAmount,
+                   SUM(CASE WHEN s.type = 'EXPENSE' THEN s.amount ELSE 0 END) AS expenseAmount,
+                   COUNT(*) AS transactionCount
+            FROM (
+                SELECT t.type,
+                       t.amount,
+                       t.created_at + (COALESCE(CAST(:tzOffset AS integer), 0) * INTERVAL '1 minute') AS local_time
+                FROM transaction_entries t
+                WHERE t.user_id = :userId AND t.deleted_at IS NULL
+                  AND (CAST(:start AS timestamp) IS NULL OR t.created_at >= CAST(:start AS timestamp))
+                  AND (CAST(:end AS timestamp) IS NULL OR t.created_at <= CAST(:end AS timestamp))
+            ) s
+            GROUP BY 1
+            ORDER BY 1
+            """, nativeQuery = true)
+    List<YearlyRow> getYearlyAnalytics(
             @Param("userId") UUID userId,
-            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
-
-    @Query("""
-            SELECT YEAR(t.createdAt) AS year,
-                   SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
-                   SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
-                   COUNT(t) AS transactionCount
-            FROM TransactionEntry t
-            WHERE t.userId = :userId AND t.deletedAt IS NULL
-            GROUP BY YEAR(t.createdAt)
-            ORDER BY year
-            """)
-    List<YearlyRow> getAllYearlyAnalytics(@Param("userId") UUID userId);
-
-    @Query("""
-            SELECT YEAR(t.createdAt) AS year,
-                   SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
-                   SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
-                   COUNT(t) AS transactionCount
-            FROM TransactionEntry t
-            WHERE t.userId = :userId AND t.deletedAt IS NULL
-              AND t.createdAt BETWEEN :start AND :end
-            GROUP BY YEAR(t.createdAt)
-            ORDER BY year
-            """)
-    List<YearlyRow> getYearlyAnalyticsByDateRange(
-            @Param("userId") UUID userId,
-            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("tzOffset") Integer tzOffsetMinutes);
 
     @Query(value = "SELECT COUNT(t.id) FROM transaction_entries t WHERE t.user_id = ?1 AND t.deleted_at IS NULL",
             nativeQuery = true)

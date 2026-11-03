@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026070701';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026070701';
-import { icon } from '../utils/icons.js?v=2026070701';
+import { api, Auth, toast } from '../utils/api.js?v=2026110301';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026110301';
+import { icon } from '../utils/icons.js?v=2026110301';
 
 let currentGroupId = null;
 let expensesPage = 0, expensesTotal = 1;

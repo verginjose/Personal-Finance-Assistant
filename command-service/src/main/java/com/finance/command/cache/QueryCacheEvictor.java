@@ -146,12 +146,18 @@ public class QueryCacheEvictor {
         if ((userIds == null || userIds.isEmpty()) && (groupIds == null || groupIds.isEmpty())) {
             return;
         }
-        // The commit record is flushed when afterCommit runs, so the current WAL
-        // position is >= this transaction's commit. Requiring the replica to
-        // replay past it therefore guarantees the write is visible there.
+        // Use the *insert* position, not pg_current_wal_lsn(). The primary runs
+        // with synchronous_commit=off (k8s/infrastructure/postgres-primary.yaml),
+        // so COMMIT returns once the commit record is in the WAL buffers — the
+        // *write* position pg_current_wal_lsn() reports can still point before
+        // that record until the WAL writer flushes it (200–600 ms later here).
+        // Publishing that older position let a reader see "replica caught up"
+        // while the replica still had the pre-commit row, and it cached that row
+        // for the TTL. The insert position always includes this backend's commit
+        // record by the time afterCommit runs.
         String lsn = null;
         try {
-            lsn = jdbcTemplate.queryForObject("select pg_current_wal_lsn()::text", String.class);
+            lsn = jdbcTemplate.queryForObject("select pg_current_wal_insert_lsn()::text", String.class);
         } catch (Exception e) {
             log.warn("QueryCacheEvictor: could not read WAL position: {}", e.getMessage());
         }

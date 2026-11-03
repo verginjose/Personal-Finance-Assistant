@@ -42,8 +42,16 @@ public class CacheConsistencyGuard {
      * before it loads. A fill that races a write by a few milliseconds reads a
      * pre-write row from the replica; waiting for the replay closes that window
      * instead of merely detecting it.
+     *
+     * <p>The bound must cover the primary's asynchronous-commit flush window:
+     * with {@code synchronous_commit=off} the WAL writer can take 200–600 ms to
+     * flush the commit record the replica has to replay. 250 ms was shorter
+     * than that window, so an immediate read after a write could time out, load
+     * the pre-commit row, and return it. One second covers the flush plus the
+     * replica replay with margin; it only applies when this scope's replica is
+     * actually behind (i.e. right after a write).
      */
-    public static final long REPLICA_WAIT_MS = 250;
+    public static final long REPLICA_WAIT_MS = 1000;
 
     private static final long REPLICA_POLL_MS = 5;
 

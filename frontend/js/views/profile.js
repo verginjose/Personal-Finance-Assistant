@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110308';
-import { icon } from '../utils/icons.js?v=2026110308';
-import { esc, pageHeader, openModal, currencyOptionHtml } from '../utils/ui.js?v=2026110308';
+import { api, Auth, toast } from '../utils/api.js?v=2026110309';
+import { icon } from '../utils/icons.js?v=2026110309';
+import { esc, pageHeader, openModal, currencyOptionHtml } from '../utils/ui.js?v=2026110309';
 export async function renderProfile(container) {
   const email = Auth.getEmail();
   const userId = Auth.getUserId();

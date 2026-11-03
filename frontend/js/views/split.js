@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110308';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026110308';
-import { icon } from '../utils/icons.js?v=2026110308';
+import { api, Auth, toast } from '../utils/api.js?v=2026110309';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026110309';
+import { icon } from '../utils/icons.js?v=2026110309';
 
 let currentGroupId = null;
 let expensesPage = 0, expensesTotal = 1;
@@ -439,7 +439,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       elList.querySelectorAll('.expense-row').forEach(row => {
         row.onclick = () => {
           const exp = JSON.parse(row.dataset.exp);
-          openExpenseDetailsModal(exp, groupId, userId);
+          openExpenseDetailsModal(exp, groupId, userId, eligibleMembers);
         };
       });
 
@@ -628,7 +628,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
   }
 }
 
-function openExpenseDetailsModal(e, groupId, userId) {
+function openExpenseDetailsModal(e, groupId, userId, members = []) {
   openModal('Expense Details', `
     <div class="modal-amount-hero">
       <div class="amount-value" style="color:var(--text)">${formatCurrency(e.amount, e.currency || 'INR')}</div>
@@ -664,14 +664,19 @@ function openExpenseDetailsModal(e, groupId, userId) {
 
   document.getElementById('m-edit-exp-btn').onclick = async () => {
     document.querySelector('.modal-overlay').click();
-    try {
-      const groupRes = await api.get(`/upsert/groups/${groupId}`);
-      const members = groupRes.members || [];
-      const eligibleMembers = members.filter(m => m.status === 'ACCEPTED');
-      setTimeout(() => editExpense(e, groupId, userId, eligibleMembers), 50);
-    } catch (err) {
-      toast('Failed to load group members', 'error');
+    // GET /upsert/groups/{id} returns the group only (no members), so use the
+    // members already loaded with the group, falling back to its endpoint.
+    let eligible = members.filter(m => m.status === 'ACCEPTED');
+    if (!eligible.length) {
+      try {
+        const raw = await api.get(`/upsert/groups/${groupId}/members`);
+        eligible = raw.filter(m => m.status === 'ACCEPTED');
+      } catch (err) {
+        toast('Failed to load group members', 'error');
+        return;
+      }
     }
+    setTimeout(() => editExpense(e, groupId, userId, eligible), 50);
   };
 
   document.getElementById('m-del-exp-btn').onclick = async () => {

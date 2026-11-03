@@ -88,7 +88,11 @@ spec:
               cpu: 150m
               memory: 384Mi
             limits:
-              cpu: "2"
+              # BCrypt login/register is CPU-bound (~60-100 ms per hash). A
+              # burst of 100 simultaneous logins on a 2-core limit queued for
+              # ~1.6 s each (p99 multi-second, measured by the golden test);
+              # 4 cores halves the queue while staying well inside the node.
+              cpu: "4"
               memory: 1536Mi
           startupProbe:
             httpGet:

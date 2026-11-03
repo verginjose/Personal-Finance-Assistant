@@ -55,10 +55,12 @@ spring:
       lettuce:
         pool:
           enabled: true
-          # Refresh-token rotation is Redis GETDEL, so the same 400-call burst
-          # hits Lettuce. 20 connections with a 200 ms wait would shed most of
-          # it; the node has headroom for 50.
-          max-active: 50
+          # Lettuce multiplexes simple commands on a connection, so the pool is
+          # only a concurrency valve. At 50 the golden test's refresh-rotation
+          # burst (400 concurrent replays x ~3 commands) queued long enough
+          # that the *losing* GETDEL calls took longer (442 ms) than the
+          # winners (357 ms). 200 leaves the node ample headroom.
+          max-active: 200
           max-idle: 10
           min-idle: 2
           max-wait: 1000ms

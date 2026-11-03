@@ -8,7 +8,7 @@ This follows the same format as
 [GROUP-BALANCES-STALE-CACHE.md](GROUP-BALANCES-STALE-CACHE.md): the two
 earlier fixes are `39ff430` and `aa33819`, the race below is `6affd31`, and
 the removal of the remaining HTTP eviction path is `6565cef`, and the
-single-wave optimisation is `964edfd`.
+single-wave optimisation is `418d207`.
 
 ## The pieces
 
@@ -126,7 +126,7 @@ half of the race.
 
 The invalidation contract is now: **commit → bump gen/wal → delete directly**.
 
-### `964edfd` — one invalidation wave per write
+### `418d207` — one invalidation wave per write
 
 After the HTTP path was gone, a group write still ran three overlapping
 evictions: `evictUserGroupsForMembers` (an `@Async` user-groups delete, a

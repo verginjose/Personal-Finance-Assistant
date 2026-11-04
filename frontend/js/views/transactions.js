@@ -1,17 +1,78 @@
-import { api, Auth, toast } from '../utils/api.js?v=1783271597';
-import { icon } from '../utils/icons.js?v=1783302413';
+import { api, Auth, toast } from '../utils/api.js?v=2026110417';
+import { icon } from '../utils/icons.js?v=2026110417';
 import {
-  esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
-  typeBadge, openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions, setupCategorySearch
-} from '../utils/ui.js?v=1783271597';
+  esc, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
+  openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions, setupCategorySearch
+} from '../utils/ui.js?v=2026110417';
 
 
 let currentPage = 0, totalPages = 0;
 
+function isoDay(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'unknown';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function dayLabel(key) {
+  const today = isoDay(new Date());
+  const yesterday = isoDay(new Date(Date.now() - 86400000));
+  if (key === today) return 'Today';
+  if (key === yesterday) return 'Yesterday';
+  const d = new Date(`${key}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? key
+    : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+function titleCase(value) {
+  return String(value || '').toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/** Inline category correction for auto-generated rows. */
+function startCategoryEdit(btn, userId) {
+  const t = JSON.parse(btn.closest('tr').dataset.txn);
+  const isIncome = t.type === 'INCOME';
+  const cats = isIncome ? INCOME_CATS : EXPENSE_CATS;
+  const current = t.expenseCategory || t.incomeCategory || t.category || 'OTHERS';
+
+  const select = document.createElement('select');
+  select.className = 'form-select';
+  select.style.fontSize = '0.82rem';
+  select.style.padding = '4px 8px';
+  select.innerHTML = categoryOptions(cats, current);
+  btn.replaceWith(select);
+  select.focus();
+
+  let settled = false;
+  const cancel = () => {
+    if (settled) return;
+    settled = true;
+    select.replaceWith(btn);
+  };
+
+  select.onchange = async () => {
+    settled = true;
+    const value = select.value;
+    select.disabled = true;
+    try {
+      await api.put('/upsert/update', { ...t, category: value, userId });
+      toast('Category updated', 'success');
+      loadTransactions(userId);
+    } catch (err) {
+      toast(err.message || 'Could not update category', 'error');
+      select.disabled = false;
+      settled = false;
+    }
+  };
+  select.onblur = () => setTimeout(cancel, 150);
+  select.onkeydown = (e) => { if (e.key === 'Escape') cancel(); };
+}
+
 export async function renderTransactions(container) {
   const userId = Auth.getUserId();
   container.innerHTML = `
-    ${pageHeader('Transactions', 'Manage your income and expenses', '<button class="btn btn-primary btn-sm" id="t-add">+ Add Transaction</button>')}
+    ${pageHeader('Transactions', '', '<button class="btn btn-primary btn-sm" id="t-add">Add transaction</button>')}
     <div class="toolbar fade-up">
       <div class="search-box">${icon('search', 'sm')}<input class="form-input" id="t-search" placeholder="Search by name or description…" aria-label="Search transactions"></div>
       <button class="btn btn-secondary btn-sm" id="t-filter-btn">${icon('filter', 'sm')} Filters</button>
@@ -21,8 +82,8 @@ export async function renderTransactions(container) {
     </div>
     <div class="table-wrap fade-up">
       <table>
-        <thead><tr><th>Name</th><th>Type</th><th>Category</th><th>Amount</th><th>Date</th></tr></thead>
-        <tbody id="t-body"><tr><td colspan="5" style="text-align:center;padding:48px;color:var(--text-dim)">Loading…</td></tr></tbody>
+        <thead><tr><th>Name</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
+        <tbody id="t-body"><tr><td colspan="3" style="text-align:center;padding:48px;color:var(--text-dim)">Loading…</td></tr></tbody>
       </table>
     </div>
     <div class="pagination" id="t-pagination"></div>
@@ -267,41 +328,55 @@ async function loadTransactions(userId) {
     totalPages = result.totalPages || 1;
 
     if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="5">${emptyState('receipt', 'No transactions found', 'Add a transaction or adjust your filters.')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="3">${emptyState('receipt', 'No transactions found', 'Add a transaction or adjust your filters.')}</td></tr>`;
     } else {
-      tbody.innerHTML = items.map(t => {
-        const isIncome = t.type === 'INCOME';
-        const txnIcon  = isIncome ? 'trending-up' : 'trending-down';
-        const iconBg   = isIncome ? 'rgba(34,201,147,0.12)' : 'rgba(249,115,22,0.12)';
-        const iconClr  = isIncome ? 'var(--accent-g)' : 'var(--accent)';
-        return `<tr data-txn='${esc(JSON.stringify(t))}' style="cursor:pointer;">
-        <td>
-          <div style="display:flex;align-items:center;gap:12px;">
-            <div style="width:36px;height:36px;border-radius:50%;background:${iconBg};display:flex;align-items:center;justify-content:center;color:${iconClr};flex-shrink:0">
-              ${icon(txnIcon, 'sm')}
-            </div>
-            <div>
-              <strong class="txn-name" style="font-size:0.93rem;">${esc(t.name)}</strong>
-              ${t.recurring ? `<span class="badge badge-recurring" style="margin-left:6px;">${icon('repeat', 'xs')} ${esc(t.recurringPeriod)}</span>` : ''}
-              ${t.receiptUrl ? `<span class="badge badge-info" style="margin-left:6px; font-size:.68rem; padding: 2px 4px; cursor:pointer;" onclick="event.stopPropagation(); window.openReceiptLightbox('${esc(t.receiptUrl)}')" title="View receipt">${icon('document', 'xs')} Receipt</span>` : ''}
-              <span class="txn-mobile-date">${formatDate(t.createdAt)}</span>
-              ${t.description ? `<br><small style="color:var(--text-dim)" class="desktop-only">${esc(t.description)}</small>` : ''}
-            </div>
-          </div>
-        </td>
-        <td>${typeBadge(t.type)}</td>
-        <td><span style="font-size:0.85rem;color:var(--text-dim)">${formatCategory(t.category)}</span></td>
-        <td style="text-align:right;font-weight:700;font-size:1.05rem;color:${isIncome ? 'var(--accent-g)' : 'var(--text)'}">
-          ${isIncome ? '+' : ''}${formatCurrency(t.amount, t.currency)}
-        </td>
-        <td style="font-size:.82rem;color:var(--text-dim)">${formatDate(t.createdAt)}</td>
-      </tr>`;
+      const currency = Auth.getDefaultCurrency();
+      const groups = new Map();
+      for (const t of items) {
+        const key = isoDay(t.createdAt);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(t);
+      }
+
+      tbody.innerHTML = [...groups.entries()].map(([key, rows]) => {
+        const dayTotal = rows.reduce((sum, t) =>
+          sum + (t.type === 'INCOME' ? Number(t.amount) : -Number(t.amount)), 0);
+        const dayRows = rows.map(t => {
+          const isIncome = t.type === 'INCOME';
+          const amount = formatMoney(isIncome ? Number(t.amount) : -Number(t.amount), t.currency || currency);
+          const cat = t.expenseCategory || t.incomeCategory || t.category || '';
+          const tags = [
+            t.recurring ? `<span class="txn-tag">${icon('repeat', 'xs')} ${esc(titleCase(t.recurringPeriod || ''))}</span>` : '',
+            t.receiptUrl ? `<span class="txn-tag" style="cursor:pointer" onclick="event.stopPropagation(); window.openReceiptLightbox('${esc(t.receiptUrl)}')" title="View receipt">${icon('document', 'xs')} Receipt</span>` : '',
+          ].join('');
+          return `<tr data-txn='${esc(JSON.stringify(t))}' style="cursor:pointer;">
+            <td>
+              <strong class="txn-name" style="font-size:0.92rem;font-weight:500;">${esc(t.name)}</strong>${tags}
+              ${t.description ? `<div class="txn-sub">${esc(t.description)}</div>` : ''}
+            </td>
+            <td>
+              <button type="button" class="cat-edit-btn" data-cat-id="${esc(String(t.id))}" title="Click to change category">${esc(formatCategory(cat))}</button>
+            </td>
+            <td class="amount-cell" style="color:${isIncome ? 'var(--accent-g)' : 'var(--text)'}">${amount}</td>
+          </tr>`;
+        }).join('');
+        return `
+          <tr class="ledger-day-row"><td colspan="3">${esc(dayLabel(key))}<span class="day-total">${formatMoney(dayTotal, currency)}</span></td></tr>
+          ${dayRows}`;
       }).join('');
-      
-      tbody.querySelectorAll('tr').forEach(tr => {
-        tr.onclick = () => {
+
+      tbody.querySelectorAll('tr[data-txn]').forEach(tr => {
+        tr.onclick = (e) => {
+          if (e.target.closest('.cat-edit-btn')) return;
           const t = JSON.parse(tr.dataset.txn);
           openTransactionDetailsModal(t, userId);
+        };
+      });
+
+      tbody.querySelectorAll('.cat-edit-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          startCategoryEdit(btn, userId);
         };
       });
     }
@@ -601,13 +676,13 @@ async function openTransactionDetailsModal(t, userId) {
   const amtColor = t.type === 'INCOME' ? 'var(--accent-g)' : 'var(--text)';
   openModal('Transaction Details', `
     <div class="modal-amount-hero">
-      <div class="amount-value" style="color:${amtColor}">${t.type === 'INCOME' ? '+' : ''}${formatCurrency(t.amount, t.currency)}</div>
+      <div class="amount-value" style="color:${amtColor}">${formatMoney(t.type === 'INCOME' ? Number(t.amount) : -Number(t.amount), t.currency)}</div>
       <div class="amount-name">${esc(t.name)}</div>
       <div class="amount-date">${formatDate(t.createdAt)}</div>
     </div>
 
     <div class="modal-detail-panel">
-      <div class="modal-detail-row"><span class="detail-label">Type</span><span class="detail-value">${typeBadge(t.type)}</span></div>
+      <div class="modal-detail-row"><span class="detail-label">Type</span><span class="detail-value">${t.type === 'INCOME' ? 'Income' : 'Expense'}</span></div>
       <div class="modal-detail-row"><span class="detail-label">Category</span><span class="detail-value">${esc(formatCategory(t.category))}</span></div>
       ${t.recurring ? `<div class="modal-detail-row"><span class="detail-label">Recurring</span><span class="detail-value">${esc(t.recurringPeriod)}</span></div>` : ''}
       ${t.description ? `<div class="modal-detail-row detail-block"><span class="detail-label">Note</span><span class="detail-value">${esc(t.description)}</span></div>` : ''}

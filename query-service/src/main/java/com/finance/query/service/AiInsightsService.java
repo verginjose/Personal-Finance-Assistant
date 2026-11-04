@@ -55,10 +55,10 @@ public class AiInsightsService {
      * advice cached under the old rules (e.g. "Goal 1122") is not served for
      * the full 24-hour TTL after a deploy.
      */
-    private static final String CACHE_KEY_VERSION = "v2:";
+    private static final String CACHE_KEY_VERSION = "v3:";
 
     // Cache AI insights for 24 hours per user (avoid repeated LLM calls)
-    @Cacheable(value = "ai-insights", key = "'v2:' + #userId")
+    @Cacheable(value = "ai-insights", key = "'v3:' + #userId")
     public AiInsightResponse generateInsights(UUID userId) {
         BigDecimal income  = safeAmount(repository.getTotalAmountByType(userId, TransactionType.valueOf("INCOME")));
         BigDecimal expense = safeAmount(repository.getTotalAmountByType(userId, TransactionType.valueOf("EXPENSE")));
@@ -109,9 +109,10 @@ public class AiInsightsService {
                        List<GoalForecastingService.GoalForecast> goalForecasts,
                        List<BudgetTrendService.BudgetTrend> budgetTrends) {
         StringBuilder sb = new StringBuilder();
-        sb.append("You are a highly engaging 'Financial Game Master' AI coach. Your goal is to gamify this user's finances and hype them up! ");
-        sb.append("Analyze their financial data and provide 3-5 hyper-specific, actionable insights using gaming terminology (e.g., 'Level Up!', 'Combo Breaker', 'XP Gained'). ");
-        sb.append("Make it fun, energetic, and slightly competitive. Do NOT use any emojis in your response. Avoid generic advice—be specific to their data.\n\n");
+        sb.append("You are a calm, precise personal-finance editor. Write plainly, in sentence case, with no hype and no gamification. ");
+        sb.append("Every insight must cite a concrete number or category from the data below. Never invent a figure, never say 'all your goals' when there is one, ");
+        sb.append("and never give generic advice that would fit any user. If there is nothing specific to say, return fewer insights. ");
+        sb.append("The category list contains expense categories only. Do NOT use any emojis.\n\n");
         sb.append("Overall Summary:\n");
         sb.append("- Total Income: ₹").append(income).append("\n");
         sb.append("- Total Expenses: ₹").append(expense).append("\n");
@@ -153,6 +154,7 @@ public class AiInsightsService {
 
 Priority must be 1 (most urgent) to 5 (nice to have). Return 3-5 insights, ordered by priority.
 Each title must be short (max 6 words); each message 1-2 sentences and reference a concrete number or category.
+For a goal with a deadline, say what it needs per month and what is actually being saved.
 Return ONLY valid JSON in this format (no markdown, no explanation):
 {"insights":[{"title":"string","message":"string","type":"WARNING|TIP|ACHIEVEMENT","priority":1}],"summary":"string"}
 """);
@@ -301,44 +303,55 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
             }
         }
 
-        // Goal momentum
+        // Goal status: name the goal, the required monthly saving, and the
+        // actual one. No plural template for a single goal.
         if (goals != null && !goals.isEmpty()) {
-            List<String> stalled = goals.stream()
-                    .filter(g -> g.getMonthlyVelocity() == null
-                            || g.getMonthlyVelocity().compareTo(BigDecimal.ZERO) <= 0)
-                    .map(AiInsightsService::goalName)
-                    .toList();
-            if (!stalled.isEmpty()) {
-                insights.add(new AiInsightResponse.Insight(
-                        "Give " + stalled.get(0) + " a Push",
-                        (stalled.size() == 1
-                                ? stalled.get(0)
-                                : String.join(", ", stalled))
-                                + (stalled.size() == 1 ? " has" : " have")
-                                + " no monthly momentum yet. Automate a small transfer each month to get "
-                                + (stalled.size() == 1 ? "it" : "them") + " moving.",
-                        "TIP", 3));
-            } else {
-                insights.add(new AiInsightResponse.Insight(
-                        "Goals Are Moving",
-                        "Your savings goals all have positive monthly momentum. Keep the transfers consistent to stay on schedule.",
-                        "ACHIEVEMENT", 3));
+            int added = 0;
+            for (GoalForecastingService.GoalForecast g : goals) {
+                if (added >= 2) break;
+                String name = goalName(g);
+                BigDecimal velocity = g.getMonthlyVelocity();
+                if (velocity == null || velocity.compareTo(BigDecimal.ZERO) <= 0) {
+                    insights.add(new AiInsightResponse.Insight(
+                            name + " has no momentum",
+                            name + " has no monthly contributions yet. Automate a small transfer to get it moving.",
+                            "TIP", 3));
+                    added++;
+                } else if (g.getRequiredMonthly() != null) {
+                    boolean behind = Boolean.FALSE.equals(g.getOnTrack());
+                    insights.add(new AiInsightResponse.Insight(
+                            name + (behind ? " is behind" : " is on track"),
+                            name + " needs " + money(g.getRequiredMonthly())
+                                    + "/mo; you're saving " + money(velocity) + "/mo.",
+                            behind ? "WARNING" : "ACHIEVEMENT", behind ? 1 : 3));
+                    added++;
+                }
             }
         }
 
-        insights.add(new AiInsightResponse.Insight(
-                "Track Every Expense",
-                "Consistent expense tracking is the foundation of financial health. Try to log every transaction the same day.",
-                "TIP", 5));
-
         normalizeInsights(insights);
 
-        String summary = net.compareTo(BigDecimal.ZERO) >= 0
-                ? "Good job staying in the positive overall! Net balance: ₹" + net.toPlainString()
-                : "Overall you overspent by ₹" + net.abs().toPlainString() + ". Review your spending patterns.";
+        // The summary should add something the figures strip does not already
+        // say, so it names where the money actually went.
+        String summary;
+        if (expense.compareTo(BigDecimal.ZERO) > 0 && categories != null && !categories.isEmpty()
+                && categories.get(0).getCategory() != null && categories.get(0).getTotalAmount() != null) {
+            CategoryRow top = categories.get(0);
+            double share = top.getTotalAmount().doubleValue() / expense.doubleValue() * 100;
+            summary = "Most of your spending went to " + prettyCategory(top.getCategory())
+                    + " (" + String.format("%.0f", share) + "%).";
+        } else if (net.compareTo(BigDecimal.ZERO) < 0) {
+            summary = "Spending exceeds income by ₹" + net.abs().toPlainString() + ".";
+        } else {
+            summary = "No spending to break down yet.";
+        }
 
         return new AiInsightResponse(insights, summary,
                 LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+    }
+
+    private static String money(BigDecimal value) {
+        return "₹" + value.setScale(0, java.math.RoundingMode.HALF_UP).toPlainString();
     }
 
     /** Goal names are the only thing the user (and the LLM) should ever see. */

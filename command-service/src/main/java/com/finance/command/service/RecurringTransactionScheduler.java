@@ -76,9 +76,13 @@ public class RecurringTransactionScheduler {
                                 original.getCurrency()
                         );
                         newEntry.setCategory(original.getCategory());
-                        newEntry.setDescription(missedPeriods > 1 ? 
-                                "Auto-generated (Aggregated " + missedPeriods + " missed periods): " + original.getDescription() :
-                                "Auto-generated: " + original.getDescription());
+                        String note = original.getDescription() == null ? "" : original.getDescription().trim();
+                        if (missedPeriods > 1) {
+                            newEntry.setDescription("Auto-generated (aggregated " + missedPeriods + " missed periods)"
+                                    + (note.isEmpty() ? "" : ": " + note));
+                        } else {
+                            newEntry.setDescription("Auto-generated" + (note.isEmpty() ? "" : ": " + note));
+                        }
                         newEntry.setRecurring(false); // The generated instance is not recurring itself
                         newEntry.setCreatedAt(now);
                         

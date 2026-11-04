@@ -1,41 +1,43 @@
-import {api, Auth, toast} from '../utils/api.js?v=2026110309';
-import { icon } from '../utils/icons.js?v=2026110309';
-import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=2026110309';
-import {navigateTo} from '../app.js?v=2026110309';
+import {api, Auth, toast} from '../utils/api.js?v=2026110417';
+import { icon } from '../utils/icons.js?v=2026110417';
+import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=2026110417';
+import {navigateTo} from '../app.js?v=2026110417';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
   container.innerHTML = `
-    ${pageHeader('Bill Scanner', 'Upload a receipt and let AI extract the details')}
-    <div class="scanner-single fade-up">
-      <div class="card scanner-upload-card">
-        <span class="ocr-eyebrow">${icon('scan', 'xs')} Step 1 · Upload</span>
-        <h3 class="scanner-title">Scan a receipt</h3>
-        <p class="scanner-sub">We'll read the merchant, amount, date and category, then convert it to your default currency.</p>
+    ${pageHeader('Bill Scanner', '')}
+    <div class="scanner-grid fade-up">
+      <div class="scanner-pane">
+        <h2>Read a receipt</h2>
+        <p class="pane-sub">Drop a photo or PDF. We'll read the merchant, amount, date and category, then convert it to ${esc(Auth.getDefaultCurrency())}.</p>
         <div class="drop-zone" id="bs-drop" role="button" tabindex="0" aria-label="Upload receipt">
           <div class="drop-icon">${icon('document', 'lg')}</div>
-          <p>Drag &amp; drop a receipt image or PDF here</p>
-          <p style="margin-top:6px;font-size:.78rem;color:var(--text-muted)">JPEG, PNG, PDF — max 10 MB</p>
+          <p>Drop a receipt here, or click to choose a file</p>
+          <p style="margin-top:6px;font-size:.78rem;color:var(--text-muted)">JPEG, PNG or PDF · max 10 MB</p>
           <div class="file-name" id="bs-fname"></div>
         </div>
         <input type="file" id="bs-file" accept="image/*,application/pdf" hidden>
-        <button class="btn btn-primary" id="bs-upload" style="width:100%;margin-top:20px" disabled>
-          ${icon('scan', 'sm')} Process Receipt
+        <button class="btn btn-primary" id="bs-upload" style="width:100%;margin-top:14px" disabled>
+          ${icon('scan', 'sm')} Read receipt
         </button>
+        <div class="read-reason" id="bs-reason">Choose a file first.</div>
       </div>
 
-      <!-- Review lives inline below the upload card so the page scrolls from
-           upload → review → save without a second floating surface. -->
-      <section class="card ocr-result-card" id="bs-result" hidden>
-        <div class="ocr-result-head">
-          <div>
-            <span class="ocr-eyebrow">${icon('sparkles', 'xs')} Step 2 · Review</span>
-            <h3>Extracted data</h3>
-          </div>
-          <span class="badge badge-info">AI preview — edit before saving</span>
+      <div class="scanner-pane">
+        <div class="scanner-placeholder" id="bs-placeholder">
+          No receipt yet.<br>Drop a photo or PDF on the left to add one.
         </div>
-        <form id="bs-preview-form" class="ocr-form"></form>
-      </section>
+        <section id="bs-result" hidden>
+          <div class="ocr-result-head">
+            <div>
+              <h2>Check the details</h2>
+              <p class="pane-sub">Edit anything the scan got wrong, then save.</p>
+            </div>
+          </div>
+          <form id="bs-preview-form" class="ocr-form"></form>
+        </section>
+      </div>
     </div>`;
   const defaultCurrency = Auth.getDefaultCurrency();
 
@@ -64,6 +66,8 @@ export async function renderBillScanner(container) {
     selectedFile = f;
     document.getElementById('bs-fname').textContent = f.name;
     uploadBtn.disabled = false;
+    const reason = document.getElementById('bs-reason');
+    if (reason) reason.textContent = 'Ready to read.';
   }
 
   function normalizeCategory(raw, type) {
@@ -192,7 +196,7 @@ export async function renderBillScanner(container) {
 
       <div class="ocr-save-bar">
         <div class="ocr-save-hint">${icon('shield', 'xs')} Nothing is saved until you confirm.</div>
-        <button type="submit" class="btn btn-success" id="bs-save">${icon('check', 'sm')} Save transaction</button>
+        <button type="submit" class="btn btn-primary" id="bs-save">${icon('check', 'sm')} Save transaction</button>
       </div>`;
 
     const typeSelect = document.getElementById('bs-type');
@@ -238,15 +242,18 @@ export async function renderBillScanner(container) {
   function showReview(result) {
     const resultCard = document.getElementById('bs-result');
     if (!resultCard) return;
+    const placeholder = document.getElementById('bs-placeholder');
+    if (placeholder) placeholder.hidden = true;
     resultCard.hidden = false;
     renderPreviewForm(result);
-    resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   uploadBtn.onclick = async () => {
     if (!selectedFile) return;
     uploadBtn.disabled = true;
-    uploadBtn.innerHTML = '<span class="spinner"></span> Processing…';
+    uploadBtn.innerHTML = '<span class="spinner"></span> Reading…';
+    const reason = document.getElementById('bs-reason');
+    if (reason) reason.textContent = '';
     try {
       const fd = new FormData();
       fd.append('file', selectedFile);
@@ -259,7 +266,7 @@ export async function renderBillScanner(container) {
     } catch (err) {
       toast('OCR upload failed: ' + err.message, 'error');
       uploadBtn.disabled = false;
-      uploadBtn.innerHTML = `${icon('scan', 'sm')} Process Receipt`;
+      uploadBtn.innerHTML = `${icon('scan', 'sm')} Read receipt`;
     }
   };
 
@@ -272,7 +279,9 @@ export async function renderBillScanner(container) {
       showReview(detail.data);
     }
     uploadBtn.disabled = !selectedFile;
-    uploadBtn.innerHTML = `${icon('scan', 'sm')} Process Receipt`;
+    uploadBtn.innerHTML = `${icon('scan', 'sm')} Read receipt`;
+    const reason = document.getElementById('bs-reason');
+    if (reason) reason.textContent = selectedFile ? 'Ready to read.' : 'Choose a file first.';
   };
   window.addEventListener('ocr-completed', window._bsOcrListener);
 }

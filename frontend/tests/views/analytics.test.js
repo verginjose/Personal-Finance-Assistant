@@ -81,10 +81,8 @@ describe('renderAnalytics', () => {
     await renderAnalytics(container);
 
     await vi.waitFor(() => {
-      const labels = global.Chart.mock.calls
-        .map(c => c[1]?.data?.labels)
-        .filter(Boolean)
-        .flat();
+      // Categories are rendered as a readable bar list, not a doughnut.
+      const labels = [...container.querySelectorAll('.barlist-label')].map(el => el.textContent);
       expect(labels).toContain('Food Delivery');
       expect(labels).not.toContain('FOOD_DELIVERY');
 

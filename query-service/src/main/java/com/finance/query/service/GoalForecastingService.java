@@ -28,6 +28,10 @@ public class GoalForecastingService {
         private BigDecimal targetAmount;
         private BigDecimal savedAmount;
         private BigDecimal monthlyVelocity;
+        /** What the user must save each month to hit the deadline. */
+        private BigDecimal requiredMonthly;
+        /** False when the current velocity will miss the deadline. */
+        private Boolean onTrack;
         private Integer estimatedMonthsRemaining;
         private LocalDate estimatedCompletionDate;
         private String message;
@@ -77,11 +81,32 @@ public class GoalForecastingService {
 
         BigDecimal remaining = goal.getTargetAmount().subtract(goal.getSavedAmount());
         int monthsRemaining = remaining.divide(velocity, RoundingMode.CEILING).intValue();
-        
+
         forecast.setEstimatedMonthsRemaining(monthsRemaining);
         forecast.setEstimatedCompletionDate(LocalDate.now().plusMonths(monthsRemaining));
-        forecast.setMessage("On track to finish in " + monthsRemaining + " months.");
-        
+
+        // "On track" is a claim about the deadline, not about whether the
+        // balance went up. Compare what the goal needs each month with what
+        // the user is actually saving.
+        if (goal.getDeadline() != null) {
+            long monthsLeft = ChronoUnit.MONTHS.between(LocalDate.now(), goal.getDeadline());
+            if (monthsLeft < 1) monthsLeft = 1;
+            BigDecimal required = remaining.divide(BigDecimal.valueOf(monthsLeft), 2, RoundingMode.CEILING);
+            boolean onTrack = velocity.compareTo(required) >= 0;
+            forecast.setRequiredMonthly(required);
+            forecast.setOnTrack(onTrack);
+            forecast.setMessage((onTrack ? "On track: " : "Behind: ")
+                    + "needs " + money(required) + "/mo, saving " + money(velocity) + "/mo"
+                    + " for the deadline in " + monthsLeft + " month" + (monthsLeft == 1 ? "" : "s") + ".");
+        } else {
+            forecast.setMessage("At " + money(velocity) + "/mo, this finishes in "
+                    + monthsRemaining + " months.");
+        }
+
         return forecast;
+    }
+
+    private static String money(BigDecimal value) {
+        return "₹" + value.setScale(0, RoundingMode.HALF_UP).toPlainString();
     }
 }

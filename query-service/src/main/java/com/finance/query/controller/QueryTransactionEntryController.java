@@ -69,8 +69,11 @@ public class QueryTransactionEntryController {
     }
 
     @GetMapping("/summary")
-    public ResponseEntity<Map<String, Object>> getSummary(@RequestParam UUID userId) {
-        return ResponseEntity.ok(service.getSummary(userId));
+    public ResponseEntity<Map<String, Object>> getSummary(
+            @RequestParam UUID userId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return ResponseEntity.ok(service.getSummary(userId, startDate, endDate));
     }
 
     @GetMapping("/recurring")

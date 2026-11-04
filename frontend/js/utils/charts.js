@@ -3,9 +3,8 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const COLORS = [
-  '#14b8a6','#2dd4bf','#f97316','#22c993','#eab308',
-  '#38bdf8','#06b6d4','#fb923c','#34d399','#0d9488',
-  '#67e8f9','#5eead4'
+  '#8FA8FF','#4CC38A','#E0A23A','#F2766B','#A9BCFF',
+  '#6F7787','#7FD8AE','#F0BE6A','#F59B92','#C9D4FF',
 ];
 
 export function getColors(n) {
@@ -15,7 +14,7 @@ export function getColors(n) {
 }
 
 /* ── Global defaults ───────────────────────────────────────────────────── */
-Chart.defaults.color = '#8fa8a3';
+Chart.defaults.color = '#8B93A3';
 Chart.defaults.borderColor = 'rgba(255,255,255,.06)';
 Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
 Chart.defaults.font.size = 12;
@@ -98,46 +97,50 @@ export function createLine(ctx, labels, datasets, title = '') {
     data: {
       labels,
       datasets: datasets.map((ds, i) => {
-        let color = COLORS[i % COLORS.length];
-        if (ds.label && ds.label.toLowerCase() === 'income') color = '#10b981'; // Green
-        if (ds.label && ds.label.toLowerCase() === 'expense') color = '#f43f5e'; // Red
+        const isIncome = ds.label && ds.label.toLowerCase() === 'income';
+        const isExpense = ds.label && ds.label.toLowerCase() === 'expense';
+        // Money direction keeps one meaning everywhere: green in, red out.
+        const color = isIncome ? '#4CC38A' : isExpense ? '#F2766B' : COLORS[i % COLORS.length];
         return {
           ...ds,
           borderColor: color,
-          backgroundColor: color + '15',
-          fill: true,
-          tension: 0.45,
-          pointRadius: 4,
-          pointHoverRadius: 8,
+          backgroundColor: 'transparent',
+          fill: false,               // no invented area between sparse points
+          tension: 0,                // straight segments: never overshoot the data
+          pointRadius: 3,
+          pointHoverRadius: 6,
           pointBackgroundColor: color,
-          pointBorderColor: 'rgba(5,13,18,0.8)',
+          pointBorderColor: '#151922',
           pointBorderWidth: 2,
-          borderWidth: 2.5,
+          borderWidth: 2,
+          // A second cue besides hue, so the series survive colour-blindness.
+          borderDash: isExpense ? [5, 4] : [],
         };
       })
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      animation: { duration: 600, easing: 'easeInOutCubic' },
+      animation: { duration: 300 },
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: {
           position: 'bottom',
-          labels: { padding: 18, usePointStyle: true, color: '#8fa8a3' }
+          labels: { padding: 16, usePointStyle: true, color: '#8B93A3', boxWidth: 8 }
         },
-        title: { display: !!title, text: title, font: { size: 14, weight: '700' }, color: '#e8f4f2' },
+        title: { display: !!title, text: title, font: { size: 13, weight: '600' }, color: '#E7E9EE' },
         tooltip: { ...tooltipPlugin },
       },
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: '#5a726d', maxRotation: 0 },
+          ticks: { color: '#6F7787', maxRotation: 0, autoSkip: true },
         },
         y: {
           beginAtZero: true,
-          grid: { color: 'rgba(255,255,255,.04)' },
+          grid: { color: 'rgba(255,255,255,.05)' },
+          border: { display: false },
           ticks: {
-            color: '#5a726d',
+            color: '#6F7787',
             callback: (v) => '₹' + Number(v).toLocaleString('en-IN'),
           },
         }

@@ -112,12 +112,20 @@ jobs:
       - name: Install buildctl if missing
         run: |
           set -euo pipefail
-          mkdir -p "$HOME/.local/bin"
-          if ! command -v buildctl >/dev/null 2>&1; then
+          mkdir -p "$HOME/.local/bin" /opt/buildctl
+          # /opt/buildctl is a hostPath-backed cache (k8s/ci/runner.yaml), so
+          # the download happens once per node instead of once per job. The
+          # release asset takes ~2.5 minutes to fetch on this link.
+          if [ ! -x /opt/buildctl/buildctl ]; then
+            tmp="$(mktemp -d)"
             curl -fsSL "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz" \
-              | tar -xz -C "$HOME/.local/bin" --strip-components=1 bin/buildctl
+              | tar -xz -C "$tmp" --strip-components=1 bin/buildctl
+            install -m 0755 "$tmp/bin/buildctl" /opt/buildctl/buildctl
+            rm -rf "$tmp"
           fi
+          ln -sf /opt/buildctl/buildctl "$HOME/.local/bin/buildctl"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          buildctl --version
 
       - name: Build and push
         run: |

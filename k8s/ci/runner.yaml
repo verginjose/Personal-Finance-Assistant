@@ -63,6 +63,11 @@ spec:
           volumeMounts:
             - name: work
               mountPath: /tmp/runner
+            # buildctl is downloaded once per node, not once per job: the
+            # GitHub release download takes ~2.5 minutes on this link and used
+            # to dominate every OCR build.
+            - name: buildctl
+              mountPath: /opt/buildctl
           resources:
             requests:
               cpu: 50m
@@ -79,3 +84,7 @@ spec:
       volumes:
         - name: work
           emptyDir: {}
+        - name: buildctl
+          hostPath:
+            path: /var/lib/pfa-ci/buildctl
+            type: DirectoryOrCreate

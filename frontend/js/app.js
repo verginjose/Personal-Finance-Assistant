@@ -1,18 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    app.js — SPA Router + Shell
    ═══════════════════════════════════════════════════════════════════════════ */
-import { Auth, SseManager, api } from './utils/api.js?v=2026110309';
-import { icon } from './utils/icons.js?v=2026110309';
-import { renderAuth }          from './views/auth.js?v=2026110309';
-import { esc }                 from './utils/ui.js?v=2026110309';
-import { renderDashboard }     from './views/dashboard.js?v=2026110309';
-import { renderTransactions }  from './views/transactions.js?v=2026110309';
-import { renderBillScanner }   from './views/bill-scanner.js?v=2026110309';
-import { renderSplit }         from './views/split.js?v=2026110309';
-import { renderAnalytics }     from './views/analytics.js?v=2026110309';
-import { renderProfile }       from './views/profile.js?v=2026110309';
-import { renderSubscriptions } from './views/subscriptions.js?v=2026110309';
-import { renderGoals }         from './views/goals.js?v=2026110309';
+import { Auth, SseManager, api } from './utils/api.js?v=2026110417';
+import { icon } from './utils/icons.js?v=2026110417';
+import { renderAuth }          from './views/auth.js?v=2026110417';
+import { esc }                 from './utils/ui.js?v=2026110417';
+import { renderDashboard }     from './views/dashboard.js?v=2026110417';
+import { renderTransactions }  from './views/transactions.js?v=2026110417';
+import { renderBillScanner }   from './views/bill-scanner.js?v=2026110417';
+import { renderSplit }         from './views/split.js?v=2026110417';
+import { renderAnalytics }     from './views/analytics.js?v=2026110417';
+import { renderProfile }       from './views/profile.js?v=2026110417';
+import { renderSubscriptions } from './views/subscriptions.js?v=2026110417';
+import { renderGoals }         from './views/goals.js?v=2026110417';
 
 const NAV_ITEMS = [
   { id: 'dashboard',      icon: 'dashboard',      label: 'Dashboard' },
@@ -80,9 +80,7 @@ function renderShell() {
             <div class="sidebar-user-email">${esc(email)}</div>
           </div>
         </div>
-        <div class="sidebar-footer">
-          <span class="sidebar-online-dot"></span> PFA v2.0
-        </div>
+        <div class="sidebar-footer">PFA</div>
       </aside>
       <div class="main-content">
         <button type="button" class="sidebar-expand" id="sidebar-expand" aria-label="Show navigation" title="Show navigation">${icon('menu')}</button>

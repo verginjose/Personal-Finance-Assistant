@@ -31,7 +31,7 @@ describe('ui utilities', () => {
   });
 
   it('formats USD currency', () => {
-    expect(formatCurrency(99.5, 'USD')).toBe('$99.5');
+    expect(formatCurrency(99.5, 'USD')).toBe('$99.50');
   });
 
   it('formats category labels', () => {

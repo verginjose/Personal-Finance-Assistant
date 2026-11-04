@@ -59,9 +59,22 @@ public class QueryTransactionEntryService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "transactions", key = "#userId + ':summary'", sync = true)
-    public Map<String, Object> getSummary(UUID userId) {
-        List<TransactionEntry> all = repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
+    @Cacheable(value = "transactions",
+            key = "#userId + ':summary:' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX')",
+            sync = true)
+    public Map<String, Object> getSummary(UUID userId, LocalDate startDate, LocalDate endDate) {
+        LocalDateTime start = startDate != null ? startDate.atStartOfDay() : null;
+        LocalDateTime end   = endDate   != null ? endDate.atTime(23, 59, 59) : null;
+
+        List<TransactionEntry> all = repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId)
+                .stream()
+                .filter(e -> start == null || !e.getCreatedAt().isBefore(start))
+                .filter(e -> end == null || !e.getCreatedAt().isAfter(end))
+                // A settlement moves money between people; it is neither income
+                // nor spending, so it must not inflate either total.
+                .filter(e -> e.getCategory() != Category.SETTLEMENT)
+                .toList();
+
         BigDecimal income  = all.stream().filter(e -> e.getType() == TransactionType.INCOME)
                 .map(TransactionEntry::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal expense = all.stream().filter(e -> e.getType() == TransactionType.EXPENSE)
@@ -72,6 +85,11 @@ public class QueryTransactionEntryService {
         summary.put("netBalance",   income.subtract(expense));
         summary.put("totalCount",   all.size());
         return summary;
+    }
+
+    /** Backwards-compatible all-time summary. */
+    public Map<String, Object> getSummary(UUID userId) {
+        return getSummary(userId, null, null);
     }
 
     @Transactional(readOnly = true)

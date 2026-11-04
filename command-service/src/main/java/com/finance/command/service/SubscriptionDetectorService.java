@@ -116,6 +116,11 @@ public class SubscriptionDetectorService {
             RecurringPeriod period = entry.getRecurringPeriod() != null
                     ? entry.getRecurringPeriod() : RecurringPeriod.MONTHLY;
 
+            // A daily flag on a purchase (e.g. a juice) is a habit, not a
+            // recurring subscription; including it inflates the monthly total
+            // by the price of the item times thirty.
+            if (period == RecurringPeriod.DAILY) continue;
+
             upsertSubscription(entry.getUserId(), entry.getName(), entry.getAmount(),
                     entry.getCurrency(), period, entry.getCreatedAt().toLocalDate());
         }
@@ -132,7 +137,15 @@ public class SubscriptionDetectorService {
 
         for (Map.Entry<String, List<TransactionEntry>> entry : byName.entrySet()) {
             List<TransactionEntry> group = entry.getValue();
-            if (group.size() < 2) continue;
+            if (group.size() < 3) continue; // two charges can be a coincidence
+
+            // The amounts must agree; otherwise it is the same merchant, not
+            // the same subscription.
+            double avg = group.stream().mapToDouble(t -> t.getAmount().doubleValue()).average().orElse(0);
+            double maxDeviation = group.stream()
+                    .mapToDouble(t -> Math.abs(t.getAmount().doubleValue() - avg))
+                    .max().orElse(0);
+            if (avg <= 0 || maxDeviation / avg > 0.10) continue;
 
             // Sort by date, then compute gaps
             group.sort(Comparator.comparing(TransactionEntry::getCreatedAt));
@@ -158,7 +171,7 @@ public class SubscriptionDetectorService {
      */
     RecurringPeriod detectPeriodFromGaps(List<Long> gaps) {
         if (gaps.isEmpty()) return null;
-        if (allClose(gaps, 7, 0))   return RecurringPeriod.WEEKLY;
+        if (allClose(gaps, 7, 2))   return RecurringPeriod.WEEKLY;
         if (allClose(gaps, 30, 3))  return RecurringPeriod.MONTHLY;
         if (allClose(gaps, 365, 10)) return RecurringPeriod.YEARLY;
         return null;

@@ -1,15 +1,15 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110309';
-import { icon } from '../utils/icons.js?v=2026110309';
+import { api, Auth, toast } from '../utils/api.js?v=2026110417';
+import { icon } from '../utils/icons.js?v=2026110417';
 import {
-  esc, pageHeader, emptyState, formatCurrency, formatCategory, formatDate,
-  progressBar, budgetStatusColor, budgetStatusBadge, badge, openModal, confirmModal, modalActions,
+  esc, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
+  progressBar, budgetStatusColor, badge, openModal, confirmModal, modalActions,
   EXPENSE_CATS, categoryOptions, setupCategorySearch
-} from '../utils/ui.js?v=2026110309';
+} from '../utils/ui.js?v=2026110417';
 
 export async function renderGoals(container) {
   const userId = Auth.getUserId();
   container.innerHTML = `
-    ${pageHeader('Goals & Budgets', 'Set savings targets and category spending limits')}
+    ${pageHeader('Goals & Budgets', '')}
     <div class="goals-layout fade-up">
       <div>
         <div class="section-header">
@@ -35,13 +35,33 @@ async function loadGoals(uid) {
   const el = document.getElementById('goals-list');
   try {
     const goals = await api.get('/upsert/goals', { userId: uid });
-    el.innerHTML = goals.length ? goals.map(goalCard).join('') :
+    const forecasts = await Promise.allSettled(
+      goals.filter(g => !g.completed).map(g => api.get(`/analytics/goals/${g.id}/forecast`, { userId: uid }))
+    );
+    const forecastById = new Map();
+    goals.filter(g => !g.completed).forEach((g, i) => {
+      if (forecasts[i]?.status === 'fulfilled') forecastById.set(g.id, forecasts[i].value);
+    });
+
+    el.innerHTML = goals.length ? goals.map(g => goalCard(g, forecastById.get(g.id))).join('') :
       emptyState('target', 'No savings goals', 'Create a goal to start tracking progress.');
     goals.forEach(g => {
+      bindOverflow(`goal-menu-${g.id}`, `goal-actions-${g.id}`);
       document.getElementById(`del-goal-${g.id}`)?.addEventListener('click', (e) => deleteGoal(g.id, uid, e.target.closest('.card')));
       document.getElementById(`view-goal-${g.id}`)?.addEventListener('click', () => viewGoalDetails(g, uid));
     });
   } catch (e) { toast(e.message, 'error'); }
+}
+
+function bindOverflow(menuId, actionsId) {
+  const btn = document.getElementById(menuId);
+  const menu = document.getElementById(actionsId);
+  if (!btn || !menu) return;
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.overflow-menu').forEach(m => { if (m !== menu) m.hidden = true; });
+    menu.hidden = !menu.hidden;
+  };
 }
 
 async function loadBudgets(uid) {
@@ -51,45 +71,74 @@ async function loadBudgets(uid) {
     el.innerHTML = budgets.length ? budgets.map(budgetCard).join('') :
       emptyState('bar-chart', 'No budgets set', 'Set category limits to track spending.');
     budgets.forEach(b => {
+      bindOverflow(`budget-menu-${b.budgetId}`, `budget-actions-${b.budgetId}`);
       document.getElementById(`del-budget-${b.budgetId}`)?.addEventListener('click', (e) => deleteBudget(b.budgetId, uid, e.target.closest('.card')));
     });
   } catch (e) { toast(e.message, 'error'); }
 }
 
-function goalCard(g) {
+function monthsUntil(deadline) {
+  const end = new Date(deadline);
+  if (Number.isNaN(end.getTime())) return null;
+  const now = new Date();
+  const months = (end.getFullYear() - now.getFullYear()) * 12 + (end.getMonth() - now.getMonth());
+  return Math.max(1, months);
+}
+
+function goalCard(g, forecast) {
   const pct = Math.min(g.progressPercentage, 100);
   const color = g.completed ? 'var(--accent-g)' : pct >= 80 ? 'var(--accent-y)' : 'var(--primary)';
-  const PRIORITY_COLORS = {
-    CRITICAL: { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444',        label: 'Critical' },
-    HIGH:     { bg: 'rgba(249,115,22,0.12)', color: 'var(--accent)',   label: 'High' },
-    MEDIUM:   { bg: 'rgba(234,179,8,0.12)',  color: 'var(--accent-y)', label: 'Medium' },
-    LOW:      { bg: 'rgba(34,197,94,0.12)',  color: 'var(--accent-g)', label: 'Low' },
-  };
-  const pri = g.priority ? PRIORITY_COLORS[g.priority] : null;
-  const priorityBadge = pri
-    ? `<span class="badge" style="background:${pri.bg};color:${pri.color};font-size:0.68rem;">${pri.label}</span>`
-    : '';
+
+  let statusHtml = '';
+  let behind = false;
+  if (!g.completed && g.deadline) {
+    const months = monthsUntil(g.deadline);
+    const required = months ? Math.max(0, (Number(g.targetAmount) - Number(g.savedAmount)) / months) : null;
+    if (required != null && forecast) {
+      const actual = Number(forecast.monthlyVelocity) || 0;
+      behind = actual < required;
+      statusHtml = `
+        <div class="goal-status ${behind ? 'is-behind' : ''}">
+          <strong>${formatMoney(required, g.currency)}</strong>/mo needed · saving <strong>${formatMoney(actual, g.currency)}</strong>/mo
+        </div>`;
+    } else if (required != null) {
+      // The forecast request failed: state the requirement, not a made-up 0.
+      statusHtml = `
+        <div class="goal-status">
+          <strong>${formatMoney(required, g.currency)}</strong>/mo needed to hit the deadline.
+        </div>`;
+    }
+  } else if (!g.completed && forecast?.message) {
+    statusHtml = `<div class="goal-status">${esc(forecast.message)}</div>`;
+  }
+
   return `
     <div class="card goal-card">
       <div class="section-header" style="margin-bottom:10px">
         <div>
-          <h4 style="font-weight:700;margin-bottom:4px">${g.completed ? icon('check-circle','sm') + ' ' : ''}${esc(g.name)}</h4>
+          <h4 style="font-weight:600;margin-bottom:4px">${g.completed ? icon('check-circle','sm') + ' ' : ''}${esc(g.name)}</h4>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            ${behind ? '<span class="badge badge-warning">Behind</span>' : ''}
             ${g.completed ? '<span class="badge badge-income">Complete</span>' : ''}
-            ${priorityBadge}
-            ${g.deadline ? `<span style="font-size:0.75rem;color:var(--text-muted)">${icon('flag','xs')} ${formatDate(g.deadline)}</span>` : ''}
+            ${g.deadline ? `<span style="font-size:0.75rem;color:var(--text-muted)">${formatDate(g.deadline)}</span>` : ''}
           </div>
         </div>
-        <div style="display:flex;gap:6px">
-          <button id="view-goal-${g.id}" class="btn btn-secondary btn-sm">View Details</button>
-          <button id="del-goal-${g.id}" class="btn btn-danger btn-icon btn-sm" aria-label="Delete goal">${icon('trash', 'sm')}</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button id="view-goal-${g.id}" class="btn btn-secondary btn-sm">Details</button>
+          <span class="overflow-wrap">
+            <button id="goal-menu-${g.id}" class="btn btn-ghost btn-icon btn-sm" aria-label="Goal actions">${icon('more-vertical', 'sm')}</button>
+            <div class="overflow-menu" id="goal-actions-${g.id}" hidden>
+              <button id="del-goal-${g.id}">Delete goal</button>
+            </div>
+          </span>
         </div>
       </div>
       ${progressBar(pct, color, true)}
       <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-dim);margin-top:8px">
-        <span>${formatCurrency(g.savedAmount, g.currency)} saved</span>
-        <span>${formatCurrency(g.targetAmount - g.savedAmount, g.currency)} remaining</span>
+        <span>${formatMoney(g.savedAmount, g.currency)} saved</span>
+        <span>${formatMoney(g.targetAmount - g.savedAmount, g.currency)} remaining</span>
       </div>
+      ${statusHtml}
     </div>`;
 }
 
@@ -98,29 +147,46 @@ function budgetCard(b) {
   const pct = Math.min(b.utilizationPercentage, 100);
   const color = budgetStatusColor(b.status);
   const remaining = b.budgetAmount - b.spentAmount;
-  let periodText = esc(b.period);
+  let periodText = titleCase(b.period);
   if (b.period === 'CUSTOM' && b.customStartDate && b.customEndDate) {
-    periodText = `${formatDate(b.customStartDate)} → ${formatDate(b.customEndDate)}`;
+    periodText = `${formatDate(b.customStartDate)} – ${formatDate(b.customEndDate)}`;
   }
+
+  // A status is only worth showing when it needs action.
+  let statusText = '';
+  if (b.status === 'EXCEEDED') {
+    statusText = `Over by ${formatMoney(Math.abs(remaining), b.currency)}`;
+  } else if (b.status === 'WARNING') {
+    statusText = `${b.utilizationPercentage.toFixed(0)}% used · ${formatMoney(remaining, b.currency)} left`;
+  }
+
   return `
     <div class="card budget-card" style="--budget-color:${color}">
       <div class="section-header" style="margin-bottom:8px">
         <div>
-          <h4 style="font-weight:700">${esc(formatCategory(b.expenseCategory))}</h4>
+          <h4 style="font-weight:600">${esc(formatCategory(b.expenseCategory))}</h4>
           <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
             <span style="font-size:.75rem;color:var(--text-muted)">${periodText}</span>
-            ${budgetStatusBadge(b.status)}
-            ${b.carryForward ? `<span class="badge badge-recurring">${icon('repeat', 'xs')} Rollover</span>` : ''}
+            ${b.carryForward ? `<span class="txn-tag">${icon('repeat', 'xs')} Rollover</span>` : ''}
           </div>
         </div>
-        <button id="del-budget-${b.budgetId}" class="btn btn-danger btn-icon btn-sm" aria-label="Delete budget">${icon('trash', 'sm')}</button>
+        <span class="overflow-wrap">
+          <button id="budget-menu-${b.budgetId}" class="btn btn-ghost btn-icon btn-sm" aria-label="Budget actions">${icon('more-vertical', 'sm')}</button>
+          <div class="overflow-menu" id="budget-actions-${b.budgetId}" hidden>
+            <button id="del-budget-${b.budgetId}">Delete budget</button>
+          </div>
+        </span>
       </div>
       ${progressBar(pct, color, true)}
       <div style="display:flex;justify-content:space-between;font-size:.82rem;color:var(--text-dim);margin-top:8px">
-        <span style="color:${color};font-weight:600">${formatCurrency(b.spentAmount, b.currency)} spent</span>
-        <span>${remaining > 0 ? formatCurrency(remaining, b.currency) + ' left' : 'Limit reached'}</span>
+        <span>${formatMoney(b.spentAmount, b.currency)} of ${formatMoney(b.budgetAmount, b.currency)}</span>
+        ${statusText ? `<span style="color:${color};font-weight:600">${statusText}</span>` : ''}
       </div>
     </div>`;
+}
+
+function titleCase(value) {
+  return String(value || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
 
@@ -191,14 +257,14 @@ async function viewGoalDetails(goalParam, uid, reloadData = false) {
     <div style="margin-bottom:16px;">
       ${progressBar(Math.min(goal.progressPercentage, 100), goal.completed ? 'var(--accent-g)' : 'var(--primary)')}
       <div style="display:flex;justify-content:space-between;font-size:.85rem;color:var(--text-dim);margin-top:8px">
-        <span>${formatCurrency(goal.savedAmount, goal.currency)} saved</span>
-        <span>Target: ${formatCurrency(goal.targetAmount, goal.currency)}</span>
+        <span>${formatMoney(goal.savedAmount, goal.currency)} saved</span>
+        <span>Target: ${formatMoney(goal.targetAmount, goal.currency)}</span>
       </div>
     </div>
     
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
       <h4 style="margin:0; font-weight:600;">Contribution History</h4>
-      ${!goal.completed ? `<button class="btn btn-success btn-sm" id="btn-add-contrib">+ Add Contribution</button>` : ''}
+      ${!goal.completed ? `<button class="btn btn-secondary btn-sm" id="btn-add-contrib">+ Add Contribution</button>` : ''}
     </div>
     
     <div id="goal-txns-list" style="max-height:300px; overflow-y:auto;">
@@ -222,7 +288,7 @@ async function viewGoalDetails(goalParam, uid, reloadData = false) {
         txnsContainer.innerHTML = txns.map(t => `
           <div class="card" style="padding:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
              <div>
-               <div style="font-weight:600; font-size:0.95rem;">${formatCurrency(t.amount, t.currency)}</div>
+               <div style="font-weight:600; font-size:0.95rem;">${formatMoney(t.amount, t.currency)}</div>
                <div style="font-size:0.8rem; color:var(--text-dim);">${formatDate(t.createdAt)} • ${esc(t.description || 'Contribution')}</div>
              </div>
              <button class="btn btn-danger btn-icon btn-sm" onclick="window.deleteContribution(${t.id}, ${goal.id}, '${uid}')" title="Delete Contribution">

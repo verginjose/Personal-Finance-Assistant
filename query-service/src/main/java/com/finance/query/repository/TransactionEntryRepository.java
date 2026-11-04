@@ -146,7 +146,10 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                    SUM(t.amount) AS totalAmount,
                    COUNT(t) AS transactionCount
             FROM TransactionEntry t
-            WHERE t.userId = :userId AND t.deletedAt IS NULL
+            WHERE t.userId = :userId
+              AND t.deletedAt IS NULL
+              AND t.type = com.finance.query.model.TransactionType.EXPENSE
+              AND t.category <> com.finance.query.model.Category.SETTLEMENT
             GROUP BY t.category
             ORDER BY totalAmount DESC
             """)

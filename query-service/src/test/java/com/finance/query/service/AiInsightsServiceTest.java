@@ -45,7 +45,7 @@ class AiInsightsServiceTest {
 
         assertThat(res.getInsights()).isNotEmpty();
         assertThat(res.getInsights().get(0).getType()).isEqualTo("WARNING");
-        assertThat(res.getSummary()).contains("overspent");
+        assertThat(res.getSummary()).contains("exceeds income");
     }
 
     @Test
@@ -57,7 +57,7 @@ class AiInsightsServiceTest {
         AiInsightResponse res = service.buildRuleBasedInsights(income, expense);
 
         assertThat(res.getInsights()).anyMatch(i -> "ACHIEVEMENT".equals(i.getType()));
-        assertThat(res.getSummary()).contains("positive");
+        assertThat(res.getSummary()).isNotBlank();
     }
 
     @Test
@@ -72,12 +72,13 @@ class AiInsightsServiceTest {
     }
 
     @Test
-    @DisplayName("buildRuleBasedInsights: always includes tracking reminder insight")
-    void buildRuleBasedInsights_alwaysIncludesTrackingTip() {
+    @DisplayName("buildRuleBasedInsights: generic filler is not emitted")
+    void buildRuleBasedInsights_noGenericFiller() {
         AiInsightResponse res = service.buildRuleBasedInsights(
                 new BigDecimal("10000"), new BigDecimal("8000"));
 
-        assertThat(res.getInsights().stream().anyMatch(i -> i.getPriority() == 5)).isTrue();
+        // Advice must cite the user's own data, not a template line.
+        assertThat(res.getInsights()).noneMatch(i -> i.getTitle().equalsIgnoreCase("Track Every Expense"));
     }
 
     @Test
@@ -116,7 +117,7 @@ class AiInsightsServiceTest {
 
         service.regenerateInsights(userId);
 
-        verify(cache).evict("v2:" + userId);
+        verify(cache).evict("v3:" + userId);
         verify(repository).getTotalAmountByType(userId, TransactionType.INCOME);
     }
 

@@ -30,12 +30,47 @@ export function currencyOptionHtml(selected = 'INR') {
   return list.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
 }
 
-export function formatCurrency(n, currency = 'INR') {  const sym = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '';
-  const num = Number(n || 0);
-  if (sym) {
-    return sym + num.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+/**
+ * One money formatter for the whole app.
+ *
+ * Always two decimals (or none in `compact`), real minus sign *before* the
+ * currency symbol, and Indian digit grouping for INR:
+ *   formatMoney(-6327.59)       -> −₹6,327.59
+ *   formatMoney(648.6)          -> ₹648.60
+ *   formatMoney(2.5, 'USD')     -> $2.50
+ *   formatMoney(139022, 'INR', { compact: true }) -> ₹1,39,022
+ */
+export function formatMoney(amount, currency = 'INR', { compact = false } = {}) {
+  const num = Number(amount);
+  const value = Number.isFinite(num) ? num : 0;
+  const cur = String(currency || 'INR').toUpperCase();
+  const digits = compact ? 0 : 2;
+  let body;
+  try {
+    body = new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: cur,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(Math.abs(value));
+  } catch {
+    body = `${cur} ${Math.abs(value).toLocaleString('en-IN', {
+      minimumFractionDigits: digits, maximumFractionDigits: digits,
+    })}`;
   }
-  return `${currency} ${num.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  return value < 0 ? `−${body}` : body;
+}
+
+/** Backwards-compatible alias used across the views. */
+export function formatCurrency(n, currency = 'INR') {
+  return formatMoney(n, currency);
+}
+
+/** Signed amount for a ledger row: +income / −expense. */
+export function formatSigned(n, currency = 'INR', type = 'EXPENSE') {
+  const value = Math.abs(Number(n) || 0);
+  const money = formatMoney(type === 'INCOME' ? value : -value, currency);
+  return money;
 }
 
 export function formatCategory(cat) {
@@ -183,27 +218,15 @@ function dimensionColor(pct) {
 
 export function healthPanelHtml(prefix) {
   return `
-    <div class="card insight-card insight-card--health health-card fade-up">
-      <div class="insight-card-header">
-        <span class="insight-card-icon">${icon('shield')}</span>
-        <div class="insight-card-heading">
-          <h3>Financial Health</h3>
-          <p class="insight-card-sub">Your score out of 1,000</p>
+    <div class="health-panel" id="${prefix}-health">
+      <div class="health-compact">
+        <div class="attention-head">Financial health</div>
+        <div style="text-align:right">
+          <div class="health-compact-value"><span id="${prefix}-health-score">—</span> <span class="health-compact-sub">/1000</span></div>
+          <div class="health-compact-sub" id="${prefix}-health-grade">Grade —</div>
         </div>
       </div>
-      <div class="health-panel">
-        <div class="health-ring" id="${prefix}-health-ring">
-          <div class="health-ring-inner">
-            <span class="health-score" id="${prefix}-health-score">—</span>
-            <span class="health-score-max">out of 1000</span>
-            <span class="health-grade" id="${prefix}-health-grade">Grade —</span>
-          </div>
-        </div>
-        <div class="health-details">
-          <p id="${prefix}-health-summary" class="health-summary">Calculating your financial health…</p>
-          <div id="${prefix}-health-breakdown" class="health-breakdown"></div>
-        </div>
-      </div>
+      <div id="${prefix}-health-ring" hidden></div>
     </div>`;
 }
 
@@ -286,14 +309,9 @@ function relativeTime(iso) {
 }
 
 function aiInsightHtml(ins) {
-  const cfg = aiTypeConfig(ins.type);
+  const tone = ins.type === 'WARNING' ? 'is-warning' : ins.type === 'ACHIEVEMENT' ? 'is-good' : '';
   return `
-    <article class="advisor-insight" data-type="${ins.type}" data-priority="${ins.priority}"
-             style="--insight-color:${cfg.color};--insight-bg:${cfg.bg}">
-      <div class="advisor-insight-head">
-        <span class="advisor-badge">${icon(cfg.icon, 'xs')}${cfg.label}</span>
-        ${ins.priority <= 2 ? '<span class="advisor-priority">High priority</span>' : ''}
-      </div>
+    <article class="advisor-insight ${tone}" data-type="${ins.type}" data-priority="${ins.priority}">
       <strong class="advisor-insight-title">${esc(ins.title)}</strong>
       <p class="advisor-insight-message">${esc(ins.message)}</p>
     </article>`;
@@ -310,48 +328,10 @@ function aiNoticeHtml(iconName, title, message, tone = '') {
     </div>`;
 }
 
-function wireAiFilters({ insights, filtersEl, toolbarEl, countEl, listEl }) {
-  if (!filtersEl || !toolbarEl) return;
-  const counts = {};
-  insights.forEach(i => { counts[i.type] = (counts[i.type] || 0) + 1; });
-  const present = ['WARNING', 'TIP', 'ACHIEVEMENT', 'INFO'].filter(t => counts[t]);
-
-  const setCount = (n) => {
-    if (countEl) countEl.textContent = `${n} insight${n === 1 ? '' : 's'}`;
-  };
-
-  if (present.length < 2) {
-    toolbarEl.hidden = true;
-    setCount(insights.length);
-    return;
-  }
-
-  const labelFor = (t) => t === 'ACHIEVEMENT' ? 'Wins' : t === 'WARNING' ? 'Warnings' : t === 'TIP' ? 'Suggestions' : 'Insights';
-  filtersEl.innerHTML = [
-    `<button type="button" class="advisor-filter is-active" data-type="ALL">All <span>${insights.length}</span></button>`,
-    ...present.map(t => `
-      <button type="button" class="advisor-filter" data-type="${t}">
-        <i style="background:${aiTypeConfig(t).color}"></i>${labelFor(t)} <span>${counts[t]}</span>
-      </button>`),
-  ].join('');
-
-  toolbarEl.hidden = false;
-  setCount(insights.length);
-
-  filtersEl.querySelectorAll('.advisor-filter').forEach(btn => {
-    btn.onclick = () => {
-      filtersEl.querySelectorAll('.advisor-filter').forEach(b => b.classList.remove('is-active'));
-      btn.classList.add('is-active');
-      const type = btn.dataset.type;
-      let visible = 0;
-      listEl.querySelectorAll('.advisor-insight').forEach(card => {
-        const show = type === 'ALL' || card.dataset.type === type;
-        card.hidden = !show;
-        if (show) visible += 1;
-      });
-      setCount(visible);
-    };
-  });
+function wireAiFilters({ insights, toolbarEl, countEl }) {
+  // Filtering a list of three or four items is overhead; show the list.
+  if (toolbarEl) toolbarEl.hidden = true;
+  if (countEl) countEl.textContent = `${insights.length} insight${insights.length === 1 ? '' : 's'}`;
 }
 
 export function aiPanelHtml(prefix) {
@@ -362,14 +342,10 @@ export function aiPanelHtml(prefix) {
       <div class="skeleton advisor-skeleton-line"></div>
     </div>`).join('');
   return `
-    <div class="card advisor-card fade-up">
+    <div class="advisor-card fade-up">
       <div class="advisor-header">
-        <div class="insight-card-header">
-          <span class="insight-card-icon">${icon('sparkles')}</span>
-          <div class="insight-card-heading">
-            <h3>AI Financial Advisor</h3>
-            <p class="insight-card-sub" id="${prefix}-ai-meta">Analyzing your recent activity…</p>
-          </div>
+        <div class="insight-card-heading">
+          <h3 class="attention-head">Needs attention</h3>
         </div>
         <button type="button" class="btn btn-ghost btn-sm advisor-refresh" id="${prefix}-ai-refresh">
           ${icon('refresh', 'xs')}<span>Refresh</span>

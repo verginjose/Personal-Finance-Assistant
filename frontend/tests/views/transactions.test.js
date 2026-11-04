@@ -49,9 +49,11 @@ describe('renderTransactions', () => {
     await vi.waitFor(() => {
       expect(container.querySelector('#t-body')?.textContent).toContain('Groceries');
     });
-    expect(container.querySelector('.badge-expense')).toBeTruthy();
-    expect(container.querySelector('.badge-recurring')).toBeTruthy();
-    expect(container.querySelector('.badge-recurring .icon-svg')).toBeTruthy();
+    // Type is carried by the sign on the amount, not a badge.
+    expect(container.querySelector('.amount-cell')?.textContent).toContain('−₹450.00');
+    // Recurrence is a quiet tag on the row.
+    expect(container.querySelector('.txn-tag')?.textContent).toContain('Monthly');
+    expect(container.querySelector('.txn-tag .icon-svg')).toBeTruthy();
   });
 
   it('opens add transaction modal', async () => {

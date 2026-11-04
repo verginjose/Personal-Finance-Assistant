@@ -39,25 +39,25 @@ class SubscriptionDetectorServiceTest {
     @Test
     @DisplayName("calculateNextChargeDate: MONTHLY adds one month")
     void calculateNextChargeDate_monthly_returnsNextMonth() {
-        LocalDate base = LocalDate.of(2025, 6, 1);
+        LocalDate base = LocalDate.now().plusDays(1);
         assertThat(service.calculateNextChargeDate(base, RecurringPeriod.MONTHLY))
-                .isEqualTo(LocalDate.of(2025, 7, 1));
+                .isEqualTo(base.plusMonths(1));
     }
 
     @Test
     @DisplayName("calculateNextChargeDate: WEEKLY adds 7 days")
     void calculateNextChargeDate_weekly_returnsNextWeek() {
-        LocalDate base = LocalDate.of(2025, 6, 1);
+        LocalDate base = LocalDate.now().plusDays(1);
         assertThat(service.calculateNextChargeDate(base, RecurringPeriod.WEEKLY))
-                .isEqualTo(LocalDate.of(2025, 6, 8));
+                .isEqualTo(base.plusWeeks(1));
     }
 
     @Test
     @DisplayName("calculateNextChargeDate: YEARLY adds one year")
     void calculateNextChargeDate_yearly_returnsNextYear() {
-        LocalDate base = LocalDate.of(2025, 1, 15);
+        LocalDate base = LocalDate.now().plusDays(1);
         assertThat(service.calculateNextChargeDate(base, RecurringPeriod.YEARLY))
-                .isEqualTo(LocalDate.of(2026, 1, 15));
+                .isEqualTo(base.plusYears(1));
     }
 
     // ── detectPeriodFromGaps ──────────────────────────────────────────────────

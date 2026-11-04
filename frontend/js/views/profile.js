@@ -1,10 +1,9 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110309';
-import { icon } from '../utils/icons.js?v=2026110309';
-import { esc, pageHeader, openModal, currencyOptionHtml } from '../utils/ui.js?v=2026110309';
+import { api, Auth, toast } from '../utils/api.js?v=2026110417';
+import { icon } from '../utils/icons.js?v=2026110417';
+import { esc, pageHeader, openModal, currencyOptionHtml } from '../utils/ui.js?v=2026110417';
 export async function renderProfile(container) {
   const email = Auth.getEmail();
-  const userId = Auth.getUserId();
-  
+
   let profilePicture = '';
   let currentUsername = '';
   let defaultCurrency = Auth.getDefaultCurrency();
@@ -20,10 +19,9 @@ export async function renderProfile(container) {
 
   const displayName = currentUsername || (email ? email.split('@')[0] : 'User');
   const initial = (displayName || 'U')[0].toUpperCase();
-  const shortId = userId ? userId.substring(0, 12) : '—';
 
   container.innerHTML = `
-    ${pageHeader('Profile', 'Manage your account and security settings')}
+    ${pageHeader('Profile', '')}
     <div class="profile-layout fade-up">
       <div class="profile-main">
       <section class="profile-hero" aria-label="Account overview">
@@ -37,23 +35,17 @@ export async function renderProfile(container) {
             <input type="file" id="p-avatar-upload" accept="image/*" hidden>
           </div>
           <div class="profile-identity">
-            <span class="profile-eyebrow">${icon('sparkles', 'xs')} Personal account</span>
             <h2 class="profile-name">${esc(displayName)}</h2>
             <p class="profile-email">${icon('mail', 'xs')} ${esc(email || '—')}</p>
-            <div class="profile-chips">
-              <span class="profile-chip profile-chip--ok">${icon('shield', 'xs')} Secured</span>
-              <span class="profile-chip">${icon('wallet', 'xs')} ${esc(defaultCurrency)}</span>
-              <span class="profile-chip">${icon('at-sign', 'xs')} ID ${esc(shortId)}</span>
-            </div>
           </div>
         </div>
         <div class="profile-divider"></div>
         <form id="p-username-form" class="profile-form">
           <div class="profile-field">
             <label for="p-username">Display name</label>
-            <p class="profile-help">This is how you appear in groups and shared expenses.</p>
+            <p class="profile-help">This is how you appear in groups and shared expenses. Use your real name so people recognise you.</p>
             <div class="profile-inline-form">
-              <input class="form-input" id="p-username" type="text" value="${esc(currentUsername)}" placeholder="Choose a username" required minlength="3" maxlength="30" pattern="^[a-zA-Z0-9_]+$">
+              <input class="form-input" id="p-username" type="text" value="${esc(currentUsername)}" placeholder="e.g. Nandini Chandra" required minlength="3" maxlength="50">
               <button type="submit" class="btn btn-primary">Save</button>
             </div>
           </div>

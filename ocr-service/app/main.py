@@ -253,12 +253,12 @@ CEREBRAS_PROMPT_TEMPLATE = """Extract financial data from this receipt/document.
 
 Rules:
 - transactionType: "Expense" or "Income"
-- expenseCategory: Guess the closest category (e.g., GROCERIES, RESTAURANTS, FUEL, ELECTRICITY, DOCTOR_AND_CLINIC, CLOTHING, TRAVEL_VACATION) or use "OTHERS"
+- expenseCategory: classify from the vendor and the line items actually on the receipt. RENT is only for a rent bill; a food or drink purchase is never RENT. Use "OTHERS" when the receipt is ambiguous rather than guessing.
 - incomeCategory: Guess the closest (e.g., SALARY, FREELANCE, BUSINESS, REFUND) or use "OTHERS"
 - Set the unused category to null
 - currency: 3-letter ISO code (INR for ₹)
 - date: Date of the bill in "YYYY-MM-DD" format, or null if not found
-- recurring: true if it looks like a subscription/recurring bill, false otherwise
+- recurring: true only for a named subscription or recurring bill (e.g. Netflix, rent, internet). A one-off purchase, even a repeated everyday item, is false.
 
 JSON schema:
 {{"vendor":"string","amount":0.0,"transactionType":"string","expenseCategory":"string|null","incomeCategory":"string|null","currency":"string","description":"string","date":"string|null","recurring":false}}
@@ -288,10 +288,10 @@ Rules:
 - Output should be a JSON array: `[ {...}, {...} ]`
 - If no transactions are found, return `[]`.
 - transactionType: "Expense" or "Income"
-- expenseCategory/incomeCategory: Guess the closest category or use "OTHERS". Set unused to null.
+- expenseCategory/incomeCategory: classify from the vendor and line items; a food purchase is never RENT. Use "OTHERS" when ambiguous. Set the unused one to null.
 - currency: 3-letter ISO code (e.g., INR, USD)
 - date: Date of the bill in "YYYY-MM-DD" format, or null
-- recurring: true if it looks like a subscription, false otherwise
+- recurring: true only for a named subscription or recurring bill; a one-off purchase is false.
 - amount: Float number (e.g., 20.50)
 
 JSON schema:

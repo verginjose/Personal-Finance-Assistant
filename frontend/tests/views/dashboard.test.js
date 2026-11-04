@@ -51,7 +51,7 @@ describe('renderDashboard', () => {
     mockDashboardApis();
     await renderDashboard(container);
 
-    expect(container.querySelector('h1')?.textContent).toBe('Dashboard');
+    expect(container.querySelector('h1')?.textContent).toBe('November 2026');
     expect(container.querySelector('#d-health-score')).toBeTruthy();
     expect(container.querySelector('#d-ai-insights-list')).toBeTruthy();
     expect(container.querySelector('#d-kpis')).toBeTruthy();
@@ -64,7 +64,7 @@ describe('renderDashboard', () => {
 
     await vi.waitFor(() => {
       expect(container.querySelector('#d-health-score')?.textContent).toBe('720');
-      expect(container.querySelectorAll('#d-kpis .stat-card').length).toBe(4);
+      expect(container.querySelectorAll('#d-kpis .figure').length).toBe(4);
     });
     expect(container.querySelector('#d-health-grade')?.textContent).toBe('Grade A');
     // The dashboard now surfaces totals; Analytics keeps the breakdowns.

@@ -1,6 +1,6 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110309';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026110309';
-import { icon } from '../utils/icons.js?v=2026110309';
+import { api, Auth, toast } from '../utils/api.js?v=2026110417';
+import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026110417';
+import { icon } from '../utils/icons.js?v=2026110417';
 
 let currentGroupId = null;
 let expensesPage = 0, expensesTotal = 1;
@@ -38,7 +38,7 @@ export async function renderSplit(container) {
   activePanel = 'expenses';
   const userId = Auth.getUserId();
   container.innerHTML = `
-    ${pageHeader('Split Expenses', 'Manage shared expenses with groups', `
+    ${pageHeader('Split Expenses', '', `
       <button class="btn btn-secondary btn-sm" id="sp-back" style="display:none">Back to Groups</button>
       <button class="btn btn-primary btn-sm" id="sp-create">+ New Group</button>`)}
     <div id="sp-content" class="fade-up"></div>`;
@@ -272,6 +272,37 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
     const myNetBalance = myBalanceObj ? myBalanceObj.netBalance : 0;
     const eligibleMembers = members.filter(m => m.status === 'ACCEPTED');
 
+    // Per-person settlement lines for the group landing view: who you owe,
+    // who owes you. A single net number is too thin for the one screen that
+    // involves other people.
+    const myDebts = (balances?.simplifiedDebts || []).filter(d =>
+      d.fromUserId === userId || d.toUserId === userId);
+    const iOweTotal = myDebts.filter(d => d.fromUserId === userId)
+      .reduce((sum, d) => sum + Number(d.amount || 0), 0);
+    const owedToMeTotal = myDebts.filter(d => d.toUserId === userId)
+      .reduce((sum, d) => sum + Number(d.amount || 0), 0);
+    const debtLines = myDebts.map(d => {
+      const youOwe = d.fromUserId === userId;
+      const other = youOwe ? d.toUserName : d.fromUserName;
+      return `<div class="group-balance-line">
+        <span>${esc(other || 'Member')}</span>
+        <span class="amt">${youOwe ? 'you owe ' : 'owes you '}${formatCurrency(Math.abs(Number(d.amount) || 0))}</span>
+      </div>`;
+    }).join('');
+    const balanceSummary = (iOweTotal > 0 || owedToMeTotal > 0) ? `
+      <div class="group-balance-summary">
+        <div class="group-balance-total">
+          ${iOweTotal > 0 ? `You owe <strong>${formatCurrency(iOweTotal)}</strong> in total` : ''}
+          ${iOweTotal > 0 && owedToMeTotal > 0 ? ' · ' : ''}
+          ${owedToMeTotal > 0 ? `You are owed <strong>${formatCurrency(owedToMeTotal)}</strong>` : ''}
+        </div>
+        ${debtLines}
+        <div class="group-balance-actions">
+          <span class="group-compact-meta">${myDebts.length} open balance${myDebts.length === 1 ? '' : 's'}</span>
+          <button class="btn btn-primary btn-sm" id="sp-settle-up">Settle up</button>
+        </div>
+      </div>` : '';
+
     // Build balance pills for members
     const myBalancePill = myNetBalance !== 0
       ? `<span class="group-balance-pill" style="background:rgba(${myNetBalance > 0 ? '34,201,147' : '249,115,22'},0.12); color:${myNetBalance > 0 ? 'var(--accent-g)' : 'var(--accent)'}; border:1px solid ${myNetBalance > 0 ? 'rgba(34,201,147,0.3)' : 'rgba(249,115,22,0.3)'};">
@@ -300,6 +331,8 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
           </button>
         </div>
       </div>
+
+      ${balanceSummary}
 
       <!-- Group options dropdown (hidden by default) -->
       <div id="sp-group-menu" style="display:none; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); padding:6px; box-shadow:var(--shadow); margin-bottom:12px; animation: fadeIn 0.15s ease both;">
@@ -335,7 +368,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
           <!-- Balances panel -->
           <div class="split-pane-panel" id="panel-balances">
             <div style="margin-bottom:20px;">
-              <h4 style="margin-bottom:12px; color:var(--text-muted); text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em;">Net Balances</h4>
+              <h4 style="margin-bottom:12px; color:var(--text-muted); font-size:0.78rem; font-weight:600;">Net Balances</h4>
               <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap:10px;">
                 ${balances?.memberBalances?.length ? balances.memberBalances.map(b => `
                   <div style="background:var(--bg-card-h); padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px;">
@@ -351,7 +384,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
             </div>
 
             <div>
-              <h4 style="margin-bottom:12px; color:var(--text-muted); text-transform:uppercase; font-size:0.75rem; letter-spacing:0.05em;">Who Owes Who</h4>
+              <h4 style="margin-bottom:12px; color:var(--text-muted); font-size:0.78rem; font-weight:600;">Who Owes Who</h4>
               ${balances?.simplifiedDebts?.length ? balances.simplifiedDebts.map(s => {
                 let text = '', amountColor = 'var(--text)', amountSign = '';
                 if (s.fromUserId === userId) {
@@ -415,6 +448,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
     // Restore the tab from before a re-render (expenses is the HTML default).
     setPanel(activePanel);
 
+    document.getElementById('sp-settle-up')?.addEventListener('click', () => setPanel('balances'));
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, eligibleMembers, userId);
 
 

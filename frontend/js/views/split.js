@@ -1,15 +1,17 @@
 import { api, Auth, toast } from '../utils/api.js';
 import {
-  esc, pageHeader, emptyState, formatMoney, formatDate, formatCategory,
-  openModal, confirmModal, modalActions, avatar, displayName, chip,
-  EXPENSE_CATS, categoryOptions, currencyOptionHtml,
+  esc, emptyState, formatMoney, formatDate, formatCategory, dateTooltip,
+  openModal, confirmModal, modalActions, avatar, displayName, chip, displayAmountFor,
+  skeletonRows, EXPENSE_CATS, categoryOptions, currencyOptionHtml,
 } from '../utils/ui.js';
-import { icon } from '../utils/icons.js';
+import { icon, categoryIcon } from '../utils/icons.js';
 
 let currentGroupId = null;
 let expensesPage = 0, expensesTotal = 1;
 let activityPage = 0, activityTotal = 1;
 let activePanel = 'expenses';
+let feedFilter = 'all';
+let feedSearch = '';
 
 /* ── Global notifications ───────────────────────────────────────────────── */
 window.addEventListener('group-invite', () => {
@@ -39,16 +41,9 @@ export async function renderSplit(container) {
   const userId = Auth.getUserId();
 
   container.innerHTML = `
-    ${pageHeader('Split expenses', '', `
-      <button class="btn btn-secondary btn-sm" id="sp-back" hidden>Back to groups</button>
-      <button class="btn btn-primary" id="sp-create">${icon('plus', 'sm')} New group</button>`)}
+    <div id="sp-list-header">${splitListHeader(userId)}</div>
     <div id="sp-content"></div>`;
-
-  document.getElementById('sp-create').onclick = () => createGroupModal(userId);
-  document.getElementById('sp-back').onclick = () => {
-    currentGroupId = null;
-    loadGroups(userId);
-  };
+  wireListHeader(userId);
 
   const pendingScanRaw = localStorage.getItem('pfa_pending_scan');
   if (pendingScanRaw) {
@@ -68,8 +63,8 @@ export async function renderSplit(container) {
 async function loadGroups(userId) {
   const el = document.getElementById('sp-content');
   if (!el) return;
-  document.getElementById('sp-back').hidden = true;
-  document.getElementById('sp-create').hidden = false;
+  const listHeader = document.getElementById('sp-list-header');
+  if (listHeader) listHeader.hidden = false;
   el.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
 
   try {
@@ -102,40 +97,13 @@ async function loadGroups(userId) {
 
     let summary;
     if (owed > 0 && owes === 0) {
-      summary = `
-        <div class="split-summary">
-          <div>
-            <div class="split-summary-label">You are owed</div>
-            <div class="hero-number" style="color:var(--pos)">${formatMoney(owed, currency)}</div>
-          </div>
-          <div class="split-summary-sub">across ${owedGroups} group${owedGroups === 1 ? '' : 's'}</div>
-        </div>`;
+      summary = `<p class="split-summary-line">You are owed <strong class="is-pos">${formatMoney(owed, currency)}</strong> across ${owedGroups} group${owedGroups === 1 ? '' : 's'}</p>`;
     } else if (owes > 0 && owed === 0) {
-      summary = `
-        <div class="split-summary">
-          <div>
-            <div class="split-summary-label">You owe</div>
-            <div class="hero-number" style="color:var(--neg)">${formatMoney(owes, currency)}</div>
-          </div>
-          <div class="split-summary-sub">across ${oweGroups} group${oweGroups === 1 ? '' : 's'}</div>
-        </div>`;
+      summary = `<p class="split-summary-line">You owe <strong>${formatMoney(owes, currency)}</strong> across ${oweGroups} group${oweGroups === 1 ? '' : 's'}</p>`;
     } else if (owed > 0 && owes > 0) {
-      summary = `
-        <div class="split-summary">
-          <div>
-            <div class="split-summary-label">Net</div>
-            <div class="hero-number" style="color:${owed - owes >= 0 ? 'var(--pos)' : 'var(--neg)'}">${formatMoney(owed - owes, currency)}</div>
-          </div>
-          <div class="split-summary-sub">${formatMoney(owed, currency)} owed to you · ${formatMoney(owes, currency)} owed by you</div>
-        </div>`;
+      summary = `<p class="split-summary-line">Net <strong class="${owed - owes >= 0 ? 'is-pos' : ''}">${formatMoney(owed - owes, currency)}</strong> · ${formatMoney(owed, currency)} owed to you · ${formatMoney(owes, currency)} owed by you</p>`;
     } else {
-      summary = `
-        <div class="split-summary">
-          <div>
-            <div class="split-summary-label">Balances</div>
-            <div class="hero-number">All settled up</div>
-          </div>
-        </div>`;
+      summary = `<p class="split-summary-line">${icon('check-circle', 'sm')} All settled up</p>`;
     }
 
     let html = summary;
@@ -175,6 +143,21 @@ async function loadGroups(userId) {
   }
 }
 
+function splitListHeader(userId) {
+  return `
+    <div class="page-header">
+      <div class="page-header-text"><h1>Split expenses</h1></div>
+      <div class="page-header-actions">
+        <button class="btn btn-primary" id="sp-create">${icon('plus', 'sm')} New group</button>
+      </div>
+    </div>`;
+}
+
+function wireListHeader(userId) {
+  const create = document.getElementById('sp-create');
+  if (create) create.onclick = () => createGroupModal(userId);
+}
+
 function groupCard(g, members) {
   const isPending = g.currentUserStatus === 'PENDING';
   const isArchived = g.isArchived;
@@ -183,13 +166,13 @@ function groupCard(g, members) {
 
   let balanceHtml = '<div class="group-balance is-zero">Settled up</div>';
   if (balance > 0) balanceHtml = `<div class="group-balance is-pos">You get back ${formatMoney(balance, currency)}</div>`;
-  else if (balance < 0) balanceHtml = `<div class="group-balance is-neg">You owe ${formatMoney(Math.abs(balance), currency)}</div>`;
+  else if (balance < 0) balanceHtml = `<div class="group-balance is-owe">You owe ${formatMoney(Math.abs(balance), currency)}</div>`;
 
   const shown = members.slice(0, 4);
   const extra = Math.max(0, members.length - shown.length);
   const memberHtml = shown.length ? `
     <div class="group-members">
-      ${shown.map(m => avatar(m.name || m.userName, 26, m.profilePicture)).join('')}
+      ${shown.map(m => avatar(displayName(m.name || m.userName, 'Member'), 26, m.profilePicture)).join('')}
       ${extra ? `<span class="group-members-count">+${extra}</span>` : `<span class="group-members-count">${members.length} member${members.length === 1 ? '' : 's'}</span>`}
     </div>` : '';
 
@@ -266,13 +249,26 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
     expensesPage = 0;
     activityPage = 0;
     activePanel = 'expenses';
+    feedFilter = 'all';
+    feedSearch = '';
   }
   currentGroupId = groupId;
   const el = document.getElementById('sp-content');
   if (!el) return;
-  document.getElementById('sp-back').hidden = false;
-  document.getElementById('sp-create').hidden = true;
-  el.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
+  const listHeader = document.getElementById('sp-list-header');
+  if (listHeader) listHeader.hidden = true;
+  el.innerHTML = `
+    <div class="split-layout">
+      <div class="split-main">
+        <div class="skeleton skeleton-line" style="width:180px;height:14px"></div>
+        <div style="margin-top:var(--s4)">${skeletonRows(5)}</div>
+      </div>
+      <aside class="split-side" aria-hidden="true">
+        <div class="skeleton skeleton-label"></div>
+        <div class="skeleton skeleton-value" style="width:160px;margin-bottom:var(--s4)"></div>
+        ${skeletonRows(3)}
+      </aside>
+    </div>`;
 
   try {
     const activityPromise = api.get(`/upsert/groups/${groupId}/activity`, { page: activityPage, size: 8 });
@@ -317,63 +313,114 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
 
     const currency = group.currency || Auth.getDefaultCurrency();
     const debts = balances?.simplifiedDebts || [];
-    const myBalanceObj = balances?.memberBalances?.find(b => b.userId === userId);
-    const myNet = Number(myBalanceObj?.netBalance) || 0;
-
     const myDebts = debts.filter(d => d.fromUserId === userId || d.toUserId === userId);
     const iOwe = myDebts.filter(d => d.fromUserId === userId).reduce((s, d) => s + Number(d.amount || 0), 0);
     const owedToMe = myDebts.filter(d => d.toUserId === userId).reduce((s, d) => s + Number(d.amount || 0), 0);
 
-    // Compact per-person balance list: only direct debts, left aligned.
-    const balanceRows = members
+    /* ── Side panel: balances first, settled people folded away ─────────── */
+    const openBalances = members
       .filter(m => m.userId !== userId && m.status === 'ACCEPTED')
       .map(m => {
         const owesMe = myDebts.find(d => d.fromUserId === m.userId && d.toUserId === userId);
         const iOweThem = myDebts.find(d => d.fromUserId === userId && d.toUserId === m.userId);
-        let amountHtml = '<span class="balance-person-amount is-zero">Settled up</span>';
-        let settleBtn = '';
-        if (owesMe) {
-          const amt = Number(owesMe.amount) || 0;
-          amountHtml = `<span class="balance-person-amount is-pos">owes you ${formatMoney(amt, currency)}</span>`;
-          settleBtn = `<button type="button" class="btn btn-ghost btn-sm settle-btn" data-from="${m.userId}" data-to="${userId}" data-from-name="${esc(m.displayName)}" data-to-name="${esc(nameOf(userId))}">Settle up</button>`;
-        } else if (iOweThem) {
-          const amt = Number(iOweThem.amount) || 0;
-          amountHtml = `<span class="balance-person-amount is-neg">you owe ${formatMoney(amt, currency)}</span>`;
-          settleBtn = `<button type="button" class="btn btn-ghost btn-sm settle-btn" data-from="${userId}" data-to="${m.userId}" data-from-name="${esc(nameOf(userId))}" data-to-name="${esc(m.displayName)}">Settle up</button>`;
-        }
-        return `
-          <div class="balance-person-row">
-            ${avatar(m.displayName, 30, m.profilePicture)}
-            <span class="balance-person-name">${esc(m.displayName)}</span>
-            ${amountHtml}
-            ${settleBtn}
-          </div>`;
-      }).join('');
+        if (owesMe) return { member: m, amount: Number(owesMe.amount) || 0, direction: 'owed' };
+        if (iOweThem) return { member: m, amount: Number(iOweThem.amount) || 0, direction: 'owe' };
+        return null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.amount - a.amount);
+    const settledMembers = members
+      .filter(m => m.userId !== userId && m.status === 'ACCEPTED')
+      .filter(m => !openBalances.some(b => b.member.userId === m.userId));
 
-    const balancesBlock = balanceRows ? `
-      <section class="balances-block" aria-label="Balances in this group">
-        <div class="balances-block-head">
-          <span class="balances-block-title">${iOwe > 0 || owedToMe > 0
-            ? `${owedToMe > 0 ? `You are owed ${formatMoney(owedToMe, currency)}` : ''}${owedToMe > 0 && iOwe > 0 ? ' · ' : ''}${iOwe > 0 ? `you owe ${formatMoney(iOwe, currency)}` : ''}`
-            : 'All settled up'}</span>
-          ${myDebts.length ? `<button type="button" class="btn btn-secondary btn-sm" id="sp-settle-all">Settle all</button>` : ''}
+    const balanceRowHtml = ({ member, amount, direction }) => {
+      const owesMe = direction === 'owed';
+      return `
+        <div class="side-balance-row">
+          ${avatar(member.displayName, 30, member.profilePicture)}
+          <span class="side-balance-name">${esc(member.displayName)}</span>
+          <span class="side-balance-amount ${owesMe ? 'is-pos' : ''}">
+            ${formatMoney(amount, currency)}
+            ${owesMe ? '' : '<span class="side-balance-hint">you owe</span>'}
+          </span>
+          <button type="button" class="btn btn-ghost btn-sm settle-btn"
+            data-from="${owesMe ? member.userId : userId}" data-to="${owesMe ? userId : member.userId}"
+            data-from-name="${esc(owesMe ? member.displayName : nameOf(userId))}"
+            data-to-name="${esc(owesMe ? nameOf(userId) : member.displayName)}">Settle up</button>
+        </div>`;
+    };
+
+    const settledRowHtml = (member) => `
+      <div class="side-balance-row is-settled">
+        ${avatar(member.displayName, 26, member.profilePicture)}
+        <span class="side-balance-name">${esc(member.displayName)}</span>
+        <span class="side-balance-settled">Settled up</span>
+      </div>`;
+
+    const memberBalances = balances?.memberBalances || [];
+    const spendBy = memberBalances
+      .map(b => ({ name: nameOf(b.userId), amount: Number(b.totalPaid) || 0 }))
+      .filter(b => b.amount > 0)
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 6);
+    const spendByMax = spendBy.length ? spendBy[0].amount : 0;
+    const spentTotal = memberBalances.length
+      ? memberBalances.reduce((sum, b) => sum + (Number(b.totalPaid) || 0), 0)
+      : null;
+    // TODO(backend): return the group's total spend directly; summing the
+    // members' paid totals is a client-side approximation.
+    const spendByHtml = spendBy.length > 1 ? `
+      <div class="split-spendby">
+        <div class="split-spendby-title">Spending by member</div>
+        ${spendBy.map(b => `
+          <div class="spendby-row">
+            <span class="spendby-name">${esc(b.name)}</span>
+            <span class="spendby-track"><span class="spendby-fill" style="width:${spendByMax ? Math.max(2, (b.amount / spendByMax) * 100).toFixed(1) : 0}%"></span></span>
+            <span class="spendby-amount">${formatMoney(b.amount, currency)}</span>
+          </div>`).join('')}
+      </div>` : '';
+
+    const sideHero = owedToMe > 0 && iOwe === 0
+      ? `<div class="split-side-label">You are owed</div><div class="split-side-amount is-pos">${formatMoney(owedToMe, currency)}</div>`
+      : iOwe > 0 && owedToMe === 0
+        ? `<div class="split-side-label">You owe</div><div class="split-side-amount">${formatMoney(iOwe, currency)}</div>`
+        : owedToMe > 0 && iOwe > 0
+          ? `<div class="split-side-label">Net balance</div><div class="split-side-amount ${owedToMe - iOwe >= 0 ? 'is-pos' : ''}">${formatMoney(owedToMe - iOwe, currency)}</div>`
+          : `<div class="split-side-amount is-settled">${icon('check-circle', 'sm')} All settled up</div>`;
+
+    const sidePanel = `
+      <aside class="split-side" aria-label="Balances in this group">
+        <div class="split-side-hero">${sideHero}</div>
+        <div class="side-balance-list">
+          ${openBalances.map(balanceRowHtml).join('')}
         </div>
-        ${balanceRows}
-      </section>` : '';
+        ${settledMembers.length ? `
+          <button type="button" class="sp-settled-toggle" id="sp-settled-toggle" aria-expanded="false">
+            ${settledMembers.length} settled up ${icon('chevron-down', 'xs')}
+          </button>
+          <div class="side-balance-list" id="sp-settled-list" hidden>
+            ${settledMembers.map(settledRowHtml).join('')}
+          </div>` : ''}
+        ${myDebts.length > 1 ? `
+          <div class="split-side-foot">
+            <button type="button" class="btn btn-secondary btn-sm" id="sp-settle-all">Settle all</button>
+          </div>` : ''}
+        ${spendByHtml}
+      </aside>`;
 
     el.innerHTML = `
-      <div class="group-compact-header">
-        <div>
-          <div class="group-compact-title">${esc(group.name)}</div>
-          <div class="group-compact-meta">
-            <button type="button" class="group-compact-members" id="sp-view-members">${icon('users', 'sm')} ${members.length} member${members.length === 1 ? '' : 's'}</button>
-            ${myNet !== 0 ? `<span class="group-balance-pill">${myNet > 0 ? `You get back ${formatMoney(myNet, currency)}` : `You owe ${formatMoney(Math.abs(myNet), currency)}`}</span>` : ''}
-          </div>
-        </div>
-        <div class="group-compact-actions">
+      <div class="split-crumb">
+        <a href="#" class="split-crumb-link" id="sp-back">Split expenses</a>
+        <span class="split-crumb-sep" aria-hidden="true">/</span>
+        <h1 class="split-title">${esc(group.name)}</h1>
+        <div class="split-header-actions">
           <button class="btn-add-expense" id="sp-add-expense" ${eligibleMembers.length ? '' : 'disabled'}>${icon('plus', 'sm')} Add expense</button>
           <button class="btn-group-menu" id="sp-group-menu-btn" aria-label="Group options" aria-haspopup="menu">${icon('settings', 'sm')}</button>
         </div>
+      </div>
+      <div class="split-meta-line">
+        <button type="button" class="group-compact-members" id="sp-view-members">${icon('users', 'sm')} ${members.length} member${members.length === 1 ? '' : 's'}</button>
+        ${spentTotal != null ? `<span>·</span><span>${formatMoney(spentTotal, currency)} spent in total</span>` : ''}
       </div>
 
       <div id="sp-group-menu" class="overflow-menu" role="menu" hidden style="position:relative;right:auto;margin-bottom:var(--s3);max-width:220px;margin-left:auto">
@@ -383,45 +430,75 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
         <button type="button" role="menuitem" id="sp-delete-group" style="color:var(--neg)">${icon('trash', 'sm')} Delete group</button>
       </div>
 
-      ${balancesBlock}
+      <div class="split-layout">
+        <div class="split-main">
+          <div class="tabs" role="tablist" aria-label="Group sections">
+            <button type="button" class="tab ${activePanel === 'expenses' ? 'is-active' : ''}" role="tab" data-panel="expenses" aria-selected="${activePanel === 'expenses'}">Expenses</button>
+            <button type="button" class="tab ${activePanel === 'balances' ? 'is-active' : ''}" role="tab" data-panel="balances" aria-selected="${activePanel === 'balances'}">Balances</button>
+            <button type="button" class="tab ${activePanel === 'activity' ? 'is-active' : ''}" role="tab" data-panel="activity" aria-selected="${activePanel === 'activity'}">Activity</button>
+          </div>
 
-      <div class="tabs" role="tablist" aria-label="Group sections">
-        <button type="button" class="tab ${activePanel === 'expenses' ? 'is-active' : ''}" role="tab" data-panel="expenses" aria-selected="${activePanel === 'expenses'}">Expenses</button>
-        <button type="button" class="tab ${activePanel === 'balances' ? 'is-active' : ''}" role="tab" data-panel="balances" aria-selected="${activePanel === 'balances'}">Balances</button>
-        <button type="button" class="tab ${activePanel === 'activity' ? 'is-active' : ''}" role="tab" data-panel="activity" aria-selected="${activePanel === 'activity'}">Activity</button>
-      </div>
+          <div class="panel ${activePanel === 'expenses' ? 'is-active' : ''}" id="panel-expenses" role="tabpanel">
+            <div class="split-feed-tools">
+              <div class="split-filter-chips" role="group" aria-label="Filter the feed">
+                ${['all', 'expenses', 'settlements'].map(f => `
+                  <button type="button" class="chart-toggle ${feedFilter === f ? 'is-on' : ''}" data-sp-filter="${f}" aria-pressed="${feedFilter === f}">
+                    ${f === 'all' ? 'All' : f === 'expenses' ? 'Expenses' : 'Settlements'}
+                  </button>`).join('')}
+              </div>
+              <div class="search-box page-search split-search">
+                ${icon('search', 'sm')}
+                <input class="form-input" id="sp-feed-search" placeholder="Search expenses…" aria-label="Search expenses" value="${esc(feedSearch)}" autocomplete="off">
+              </div>
+            </div>
+            <div id="expenses-list" aria-live="polite"></div>
+            <div id="expenses-pagination" class="pagination"></div>
+          </div>
 
-      <div class="panel ${activePanel === 'expenses' ? 'is-active' : ''}" id="panel-expenses" role="tabpanel">
-        <div id="expenses-list"></div>
-        <div id="expenses-pagination" class="pagination"></div>
-      </div>
+          <div class="panel ${activePanel === 'balances' ? 'is-active' : ''}" id="panel-balances" role="tabpanel">
+            <div class="balances-block" style="max-width:none">
+              <div class="balances-block-head"><span class="balances-block-title">Who owes who</span></div>
+              ${debts.length ? debts.map(s => {
+                const from = s.fromUserId === userId ? 'You' : nameOf(s.fromUserId);
+                const to = s.toUserId === userId ? 'you' : nameOf(s.toUserId);
+                return `
+                  <div class="balance-person-row">
+                    ${avatar(nameOf(s.fromUserId), 28, avatarOf(s.fromUserId))}
+                    <span class="balance-person-name">${esc(from)} ${s.fromUserId === userId ? 'owe' : 'owes'} ${esc(to)}</span>
+                    <span class="balance-person-amount ${s.toUserId === userId ? 'is-pos' : ''}">${formatMoney(s.amount, currency)}</span>
+                    <button class="btn btn-secondary btn-sm settle-btn"
+                      data-from="${s.fromUserId}" data-to="${s.toUserId}"
+                      data-from-name="${esc(s.fromUserName || nameOf(s.fromUserId))}"
+                      data-to-name="${esc(s.toUserName || nameOf(s.toUserId))}">Record payment</button>
+                  </div>`;
+              }).join('') : `<p class="meta" style="padding:16px 0">${icon('check-circle', 'sm')} All balances are settled.</p>`}
+            </div>
+          </div>
 
-      <div class="panel ${activePanel === 'balances' ? 'is-active' : ''}" id="panel-balances" role="tabpanel">
-        <div class="balances-block" style="max-width:none">
-          <div class="balances-block-head"><span class="balances-block-title">Who owes who</span></div>
-          ${debts.length ? debts.map(s => {
-            const from = s.fromUserId === userId ? 'You' : nameOf(s.fromUserId);
-            const to = s.toUserId === userId ? 'you' : nameOf(s.toUserId);
-            return `
-              <div class="balance-person-row">
-                ${avatar(nameOf(s.fromUserId), 28, avatarOf(s.fromUserId))}
-                <span class="balance-person-name">${esc(from)} ${s.fromUserId === userId ? 'owe' : 'owes'} ${esc(to)}</span>
-                <span class="balance-person-amount ${s.toUserId === userId ? 'is-pos' : ''}">${formatMoney(s.amount, currency)}</span>
-                <button class="btn btn-secondary btn-sm settle-btn"
-                  data-from="${s.fromUserId}" data-to="${s.toUserId}"
-                  data-from-name="${esc(s.fromUserName || nameOf(s.fromUserId))}"
-                  data-to-name="${esc(s.toUserName || nameOf(s.toUserId))}">Record payment</button>
-              </div>`;
-          }).join('') : `<p class="meta" style="padding:16px 0">${icon('check-circle', 'sm')} All balances are settled.</p>`}
+          <div class="panel ${activePanel === 'activity' ? 'is-active' : ''}" id="panel-activity" role="tabpanel">
+            <div id="activity-list"></div>
+            <div id="activity-pagination" class="pagination"></div>
+          </div>
         </div>
-      </div>
-
-      <div class="panel ${activePanel === 'activity' ? 'is-active' : ''}" id="panel-activity" role="tabpanel">
-        <div id="activity-list"></div>
-        <div id="activity-pagination" class="pagination"></div>
+        ${sidePanel}
       </div>`;
 
+    document.getElementById('sp-back').onclick = (e) => {
+      e.preventDefault();
+      currentGroupId = null;
+      loadGroups(userId);
+    };
     document.getElementById('sp-view-members').onclick = () => viewMembersModal(members, groupId, userId);
+
+    const settledToggle = document.getElementById('sp-settled-toggle');
+    if (settledToggle) {
+      settledToggle.onclick = () => {
+        const list = document.getElementById('sp-settled-list');
+        const open = list.hidden;
+        list.hidden = !open;
+        settledToggle.setAttribute('aria-expanded', String(open));
+      };
+    }
 
     const menu = document.getElementById('sp-group-menu');
     document.getElementById('sp-group-menu-btn').onclick = (e) => {
@@ -451,59 +528,55 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
     const memberCount = Math.max(eligibleMembers.length, 1);
     const shareOf = (e) => {
       if (e.splitType === 'EQUAL') return Number(e.amount) / memberCount;
-      if (e.myShare != null) return Number(e.myShare); // supplied by a future API
+      if (e.myShare != null) return Number(e.myShare);
+      // TODO(backend): the expenses API does not return the current user's
+      // share for percentage/amount splits; show nothing rather than a guess.
       return null;
     };
+    const amInSplit = (e) => e.myShare != null || eligibleMembers.some(m => m.userId === userId);
 
+    let lastExpenses = [];
     const renderExpenses = (exps) => {
+      lastExpenses = exps || [];
       const list = document.getElementById('expenses-list');
       if (!list) return;
-      const settlements = exps.filter(e => String(e.splitType).toUpperCase() === 'SETTLEMENT');
-      const regular = exps.filter(e => String(e.splitType).toUpperCase() !== 'SETTLEMENT');
 
-      const expenseHtml = regular.map(e => {
-        const share = shareOf(e);
-        const mine = e.paidBy === userId ? `You paid` : `${nameOf(e.paidBy)} paid`;
-        return `
-          <div class="expense-row" data-exp='${esc(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
-            <span class="row-icon">${icon('receipt', 'sm')}</span>
-            <div class="expense-row-main">
-              <div class="expense-row-title">${esc(e.description || 'Expense')}</div>
-              <div class="expense-row-meta">
-                <span>${esc(mine)}</span>
-                ${chip(splitTypeLabel(e.splitType), 'neutral')}
-                ${e.receiptUrl ? `<button type="button" class="attach-btn" data-receipt="${esc(e.receiptUrl)}" aria-label="Receipt attached" title="Receipt attached">${icon('paperclip', 'xs')}</button>` : ''}
-              </div>
-            </div>
-            <div class="expense-row-amount">
-              <span class="expense-row-total">${formatMoney(e.amount, e.currency || currency)}</span>
-              ${share != null ? `<span class="expense-row-share">Your share ${formatMoney(share, e.currency || currency)}</span>` : ''}
-            </div>
-          </div>`;
-      }).join('');
+      const matchFilter = (e) => {
+        const isSettlement = String(e.splitType).toUpperCase() === 'SETTLEMENT';
+        if (feedFilter === 'expenses' && isSettlement) return false;
+        if (feedFilter === 'settlements' && !isSettlement) return false;
+        const q = feedSearch.trim().toLowerCase();
+        if (!q) return true;
+        return String(e.description || '').toLowerCase().includes(q);
+      };
+      const rows = lastExpenses.filter(matchFilter);
+      if (!rows.length) {
+        list.innerHTML = emptyState('receipt',
+          feedSearch ? 'No matching expenses' : 'No expenses yet',
+          feedSearch ? 'Try a different search term.' : 'Add the first shared cost for this group.');
+        renderExpensesPagination();
+        return;
+      }
 
-      const settlementHtml = settlements.length ? `
-        <div class="settlement-group">
-          <div class="settlement-group-title">Settlements</div>
-          ${settlements.map(e => `
-            <div class="expense-row payment-row" data-exp='${esc(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
-              <span class="row-icon">${icon('arrow-right', 'sm')}</span>
-              <div class="expense-row-main">
-                <div class="expense-row-title">${esc(e.description || 'Payment')}</div>
-                <div class="expense-row-meta">${esc(formatDate(e.createdAt || e.expenseDate))}</div>
-              </div>
-              <div class="expense-row-amount"><span class="expense-row-total">${formatMoney(e.amount, e.currency || currency)}</span></div>
-            </div>`).join('')}
-        </div>` : '';
+      // One chronological feed: expenses and settlements interleaved by date.
+      const sorted = [...rows].sort((a, b) =>
+        new Date(b.expenseDate || b.createdAt || 0) - new Date(a.expenseDate || a.createdAt || 0));
+      const groups = new Map();
+      for (const e of sorted) {
+        const day = String(e.expenseDate || e.createdAt || '').slice(0, 10) || 'unknown';
+        if (!groups.has(day)) groups.set(day, []);
+        groups.get(day).push(e);
+      }
 
-      list.innerHTML = regular.length || settlements.length
-        ? expenseHtml + settlementHtml
-        : emptyState('receipt', 'No expenses yet', 'Add the first shared cost for this group.');
+      list.innerHTML = [...groups.entries()].map(([day, items]) => `
+        <div class="split-day" title="${esc(dateTooltip(day === 'unknown' ? '' : `${day}T00:00:00`))}">${esc(day === 'unknown' ? 'Unknown date' : formatDate(`${day}T00:00:00`))}</div>
+        ${items.map(e => expenseRowHtml(e)).join('')}
+      `).join('');
 
       list.querySelectorAll('.expense-row').forEach(row => {
         const open = () => openExpenseDetailsModal(JSON.parse(row.dataset.exp), groupId, userId, eligibleMembers);
         row.onclick = (e) => { if (e.target.closest('[data-receipt]')) return; open(); };
-        row.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); open(); } };
+        row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
       });
       list.querySelectorAll('[data-receipt]').forEach(btn => {
         btn.onclick = (e) => { e.stopPropagation(); window.openReceiptLightbox(btn.dataset.receipt); };
@@ -511,6 +584,71 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
 
       renderExpensesPagination();
     };
+
+    /** The personal outcome of an expense, or nothing when it cannot be known. */
+    const outcomeFor = (e) => {
+      if (!amInSplit(e)) return { text: 'not involved', cls: 'is-muted' };
+      const share = shareOf(e);
+      const iPaid = e.paidBy === userId;
+      if (iPaid) {
+        if (share == null) return null;
+        const lent = Math.max(0, Number(e.amount) - share);
+        return { text: `you lent ${formatMoney(lent, e.currency || currency)}`, cls: 'is-pos' };
+      }
+      if (share == null) return null;
+      return { text: `you borrowed ${formatMoney(share, e.currency || currency)}`, cls: 'is-muted' };
+    };
+
+    function expenseRowHtml(e) {
+      const isSettlement = String(e.splitType).toUpperCase() === 'SETTLEMENT';
+      const shown = displayAmountFor(e, Auth.getDefaultCurrency());
+      if (isSettlement) {
+        return `
+          <div class="expense-row payment-row" data-exp='${esc(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
+            <span class="row-icon">${icon('arrow-right', 'sm')}</span>
+            <div class="expense-row-main">
+              <div class="expense-row-title">${esc(settlementRowTitle(e, userId, nameOf))}</div>
+            </div>
+            <div class="expense-row-amount"><span class="expense-row-total">${formatMoney(shown.amount, shown.currency)}</span></div>
+          </div>`;
+      }
+      const outcome = outcomeFor(e);
+      const mine = e.paidBy === userId ? 'You paid' : `${nameOf(e.paidBy)} paid`;
+      const metaSecondary = shown.secondary ? `<span>· ${esc(shown.secondary)}</span>` : '';
+      return `
+        <div class="expense-row" data-exp='${esc(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
+          <span class="row-icon">${icon(categoryIcon(e.expenseCategory || 'OTHERS'), 'sm')}</span>
+          <div class="expense-row-main">
+            <div class="expense-row-title">${esc(e.description || 'Expense')}</div>
+            <div class="expense-row-meta">
+              <span>${esc(mine)}</span>
+              ${chip(splitTypeLabel(e.splitType), 'neutral')}
+              ${metaSecondary}
+              ${e.receiptUrl ? `<button type="button" class="attach-btn" data-receipt="${esc(e.receiptUrl)}" aria-label="Receipt attached" title="Receipt attached">${icon('paperclip', 'xs')}</button>` : ''}
+            </div>
+          </div>
+          <div class="expense-row-amount">
+            <span class="expense-row-total">${formatMoney(shown.amount, shown.currency)}</span>
+            ${outcome ? `<span class="expense-row-share ${outcome.cls}">${esc(outcome.text)}</span>` : ''}
+          </div>
+        </div>`;
+    }
+
+    document.querySelectorAll('[data-sp-filter]').forEach(btn => {
+      btn.onclick = () => {
+        feedFilter = btn.dataset.spFilter;
+        document.querySelectorAll('[data-sp-filter]').forEach(b => {
+          const on = b === btn;
+          b.classList.toggle('is-on', on);
+          b.setAttribute('aria-pressed', String(on));
+        });
+        renderExpenses(lastExpenses);
+      };
+    });
+    document.getElementById('sp-feed-search')?.addEventListener('input', (e) => {
+      feedSearch = e.target.value;
+      renderExpenses(lastExpenses);
+    });
 
     const loadGroupExpenses = async () => {
       try {
@@ -614,6 +752,24 @@ function displayNameFromId(id) {
   return id ? `Member ${String(id).slice(0, 4)}` : 'Member';
 }
 
+/**
+ * A settlement row reads as a sentence about people, never as a system log.
+ * TODO(backend): the settlement expense does not expose its counterparty, so
+ * the name is parsed from the description when present.
+ */
+function settlementRowTitle(e, userId, nameOf) {
+  const desc = String(e.description || '');
+  const m = /payment from\s+(.+?)\s+to\s+(.+)$/i.exec(desc);
+  if (m) {
+    const from = displayName(m[1]);
+    const to = displayName(m[2]);
+    if (e.paidBy === userId) return `You paid ${to}`;
+    return `${from} paid ${to}`;
+  }
+  if (e.paidBy === userId) return 'You recorded a payment';
+  return `${nameOf(e.paidBy)} recorded a payment`;
+}
+
 function renderInvitation(el, group, groupId, userId) {
   el.innerHTML = `
     <div class="card" style="max-width:560px;text-align:center;padding:var(--s7)">
@@ -637,7 +793,8 @@ function renderInvitation(el, group, groupId, userId) {
     try {
       await api.post(`/upsert/groups/${groupId}/members/${userId}/reject`);
       toast('Invitation declined', 'info');
-      document.getElementById('sp-back').click();
+      currentGroupId = null;
+      loadGroups(userId);
     } catch (e) { toast(e.message, 'error'); }
   };
 }
@@ -649,7 +806,8 @@ async function recordSettlement(groupId, userId, btn) {
     await api.post(`/upsert/groups/${groupId}/settle`, null, {
       params: { fromUserId: btn.dataset.from, toUserId: btn.dataset.to },
     });
-    toast('Payment recorded', 'success');
+    const withWhom = btn.dataset.from === userId ? btn.dataset.toName : btn.dataset.fromName;
+    toast(`Settled with ${displayName(withWhom)}`, 'success');
     await loadGroupDetail(groupId, userId, { preserveView: true });
   } catch (e) { toast(e.message, 'error'); }
 }

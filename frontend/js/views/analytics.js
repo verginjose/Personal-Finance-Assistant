@@ -1,22 +1,50 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110417';
-import { icon } from '../utils/icons.js?v=2026110417';
-import { createLine, destroyChart } from '../utils/charts.js?v=2026110417';
+import { api, Auth, toast } from '../utils/api.js';
+import { icon } from '../utils/icons.js';
+import { createBarChart, destroyChart } from '../utils/charts.js';
 import {
-  pageHeader, skeletonChart, formatMoney, formatCategory, esc
-} from '../utils/ui.js?v=2026110417';
+  pageHeader, skeletonChart, formatMoney, formatCategory, formatCompact, formatMonth,
+  formatDate, esc,
+} from '../utils/ui.js';
 
 let charts = [];
 let loadToken = 0;
+let showIncome = true;
+let showExpense = true;
+let showNet = true;
+let expensesOnly = false;
+let lastTimeline = null;
+
+const DEFAULT_FILTERS = { preset: 'ALL', timeline: 'MONTHLY', range: '' };
 
 export async function renderAnalytics(container) {
   charts.forEach(c => destroyChart(c));
   charts = [];
+  showIncome = true; showExpense = true; showNet = true; expensesOnly = false;
+
   const userId = Auth.getUserId();
 
   container.innerHTML = `
-    ${pageHeader('Analytics', '', '<button class="btn btn-secondary btn-sm" id="a-export">Export CSV</button>')}
-    <div class="figures fade-up" id="a-kpis" aria-live="polite"></div>
-    <div class="analytics-toolbar fade-up" role="search" aria-label="Analytics filters">
+    ${pageHeader('Analytics', '', `<button class="btn btn-ghost btn-sm" id="a-export">${icon('download', 'sm')} Export CSV</button>`)}
+    <div class="figures" id="a-kpis" aria-live="polite">
+      <div class="figure">
+        <div class="figure-label">Net</div>
+        <div class="figure-value hero-number" id="a-net">—</div>
+      </div>
+      <div class="figure">
+        <div class="figure-label">Income</div>
+        <div class="figure-value" id="a-income">—</div>
+      </div>
+      <div class="figure">
+        <div class="figure-label">Expenses</div>
+        <div class="figure-value" id="a-expense">—</div>
+      </div>
+      <div class="figure">
+        <div class="figure-label">Transactions</div>
+        <div class="figure-value" id="a-count">—</div>
+      </div>
+    </div>
+
+    <div class="analytics-toolbar" role="search" aria-label="Analytics filters">
       <div>
         <label for="a-preset">Period</label>
         <select class="form-select" id="a-preset" aria-label="Date preset">
@@ -24,7 +52,7 @@ export async function renderAnalytics(container) {
           <option value="MONTH">This month</option>
           <option value="QUARTER">Last 3 months</option>
           <option value="YEAR">This year</option>
-          <option value="CUSTOM">Custom</option>
+          <option value="CUSTOM">Custom range</option>
         </select>
       </div>
       <div>
@@ -37,98 +65,89 @@ export async function renderAnalytics(container) {
         </select>
       </div>
       <div>
-        <label for="a-start">From</label>
-        <input class="form-input" id="a-start" type="date" aria-label="Start date">
+        <label for="a-range">Date range</label>
+        <input class="form-input" id="a-range" type="text" placeholder="All time" aria-label="Date range" autocomplete="off">
       </div>
-      <div>
-        <label for="a-end">To</label>
-        <input class="form-input" id="a-end" type="date" aria-label="End date">
-      </div>
-      <div class="analytics-actions">
-        <button class="btn btn-primary" id="a-apply">Apply</button>
-        <button class="btn btn-ghost" id="a-clear">Reset</button>
-      </div>
+      <button type="button" class="analytics-reset" id="a-clear" hidden>Reset</button>
     </div>
-    <div class="card-grid card-grid-2 fade-up">
-      <div class="card">
-        <div class="card-header"><h3>Where your money went</h3></div>
-        <div id="a-expense-wrap">${skeletonChart(220)}</div>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3>Where it came from</h3></div>
-        <div id="a-income-wrap">${skeletonChart(220)}</div>
-      </div>
+
+    <div class="card-grid card-grid-2">
+      <section class="section-card">
+        <div class="section-card-header"><h3>Where your money went</h3></div>
+        <div class="section-card-body" id="a-expense-wrap">${skeletonChart(220)}</div>
+      </section>
+      <section class="section-card">
+        <div class="section-card-header"><h3>Where it came from</h3></div>
+        <div class="section-card-body" id="a-income-wrap">${skeletonChart(220)}</div>
+      </section>
     </div>
-    <div class="card fade-up" style="margin-top:20px">
-      <div class="card-header">
+
+    <section class="section-card" style="margin-top:var(--s4)">
+      <div class="section-card-header">
         <h3>Income and expenses</h3>
         <span class="card-subtitle" id="a-timeline-caption"></span>
       </div>
-      <div class="chart-container chart-container--tall" id="a-timeline-wrap">${skeletonChart(320)}</div>
-    </div>`;
+      <div class="section-card-body">
+        <div class="chart-legend" id="a-legend">
+          <button type="button" class="chart-toggle is-on" data-series="income" aria-pressed="true"><span class="chart-toggle-swatch" style="color:var(--pos)"></span>Income</button>
+          <button type="button" class="chart-toggle is-on" data-series="expense" aria-pressed="true"><span class="chart-toggle-swatch" style="color:var(--text-2)"></span>Expenses</button>
+          <button type="button" class="chart-toggle is-on" data-series="net" aria-pressed="true"><span class="chart-toggle-swatch" style="color:var(--brand)"></span>Net line</button>
+          <button type="button" class="chart-toggle" data-series="expenses-only" aria-pressed="false">Expenses only</button>
+        </div>
+        <div class="chart-container chart-container--tall" id="a-timeline-wrap">${skeletonChart(320)}</div>
+      </div>
+    </section>`;
 
-  // Native <select> popups are painted by the OS/Chrome, which ignores the dark
-  // UI. Tom Select keeps the same control but renders a themed dropdown.
+  // Searchable selects, themed.
   if (window.TomSelect) {
-    new TomSelect('#a-timeline', { create: false, controlInput: null });
-    new TomSelect('#a-preset', { create: false, controlInput: null });
+    ['#a-timeline', '#a-preset'].forEach(sel => {
+      const el = document.querySelector(sel);
+      if (el && !el.tomselect) new TomSelect(sel, { create: false, controlInput: null });
+    });
   }
   if (window.flatpickr) {
-    flatpickr('#a-start', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true, theme: 'dark' });
-    flatpickr('#a-end', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true, theme: 'dark' });
+    flatpickr('#a-range', {
+      mode: 'range',
+      dateFormat: 'Y-m-d',
+      altInput: true,
+      altFormat: 'j M Y',
+      disableMobile: true,
+      onChange: () => {
+        const preset = document.getElementById('a-preset');
+        if (preset) {
+          if (preset.tomselect) preset.tomselect.setValue('CUSTOM', true);
+          else preset.value = 'CUSTOM';
+        }
+        scheduleLoad();
+      },
+    });
   }
-
-  const applyPreset = (value) => {
-    const startEl = document.getElementById('a-start');
-    const endEl = document.getElementById('a-end');
-    if (!startEl || !endEl) return;
-    const set = (el, val) => {
-      if (el._flatpickr) el._flatpickr.setDate(val, true);
-      else el.value = val;
-    };
-    const now = new Date();
-    const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    if (value === 'ALL') { set(startEl, ''); set(endEl, ''); }
-    if (value === 'MONTH') {
-      set(startEl, iso(new Date(now.getFullYear(), now.getMonth(), 1)));
-      set(endEl, iso(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
-    }
-    if (value === 'QUARTER') {
-      set(startEl, iso(new Date(now.getFullYear(), now.getMonth() - 2, 1)));
-      set(endEl, iso(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
-    }
-    if (value === 'YEAR') {
-      set(startEl, iso(new Date(now.getFullYear(), 0, 1)));
-      set(endEl, iso(new Date(now.getFullYear(), 11, 31)));
-    }
-  };
 
   const presetEl = document.getElementById('a-preset');
-  if (presetEl) {
-    presetEl.onchange = () => {
-      applyPreset(presetEl.value);
-      if (presetEl.value !== 'CUSTOM') { currentPageReset(); loadAnalytics(userId); }
-    };
-  }
+  const timelineEl = document.getElementById('a-timeline');
 
-  document.getElementById('a-apply').onclick = () => {
-    if (presetEl && presetEl.tomselect) presetEl.tomselect.setValue('CUSTOM', true);
-    loadAnalytics(userId);
+  const onFilterChange = () => {
+    updateResetVisibility();
+    scheduleLoad();
   };
+
+  presetEl?.addEventListener('change', () => {
+    applyPreset(presetEl.value);
+    onFilterChange();
+  });
+  timelineEl?.addEventListener('change', onFilterChange);
+  document.getElementById('a-range')?.addEventListener('change', () => {
+    if (presetEl) setSelect('a-preset', 'CUSTOM');
+    onFilterChange();
+  });
+
   document.getElementById('a-clear').onclick = () => {
-    const startEl = document.getElementById('a-start');
-    const endEl = document.getElementById('a-end');
-    if (startEl) { if (startEl._flatpickr) startEl._flatpickr.clear(); else startEl.value = ''; }
-    if (endEl) { if (endEl._flatpickr) endEl._flatpickr.clear(); else endEl.value = ''; }
-    const timelineEl = document.getElementById('a-timeline');
-    if (timelineEl) {
-      if (timelineEl.tomselect) timelineEl.tomselect.setValue('MONTHLY', true);
-      else timelineEl.value = 'MONTHLY';
-    }
-    if (presetEl) {
-      if (presetEl.tomselect) presetEl.tomselect.setValue('ALL', true);
-      else presetEl.value = 'ALL';
-    }
+    setSelect('a-preset', DEFAULT_FILTERS.preset);
+    setSelect('a-timeline', DEFAULT_FILTERS.timeline);
+    const range = document.getElementById('a-range');
+    if (range?._flatpickr) range._flatpickr.clear();
+    else if (range) range.value = '';
+    updateResetVisibility();
     loadAnalytics(userId);
   };
 
@@ -149,88 +168,120 @@ export async function renderAnalytics(container) {
       toast('Export failed: ' + err.message, 'error');
     }
   };
+
+  wireLegend(userId);
+  updateResetVisibility();
   loadAnalytics(userId);
 }
 
-function currentPageReset() { /* analytics has no pagination; kept for symmetry */ }
+let debounceTimer;
+function scheduleLoad() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => loadAnalytics(Auth.getUserId()), 300);
+}
 
-/**
- * The API stores timestamps in UTC but the user filters by their own calendar
- * days. `tzOffsetMinutes` tells the backend the browser offset so the range is
- * translated to the right instants and the timeline buckets follow the user's
- * calendar (IST = +330).
- */
+function setSelect(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.tomselect) el.tomselect.setValue(value, true);
+  else el.value = value;
+}
+
+function applyPreset(value) {
+  const range = document.getElementById('a-range');
+  if (!range) return;
+  const now = new Date();
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  let start = '', end = '';
+  if (value === 'MONTH') {
+    start = iso(new Date(now.getFullYear(), now.getMonth(), 1));
+    end = iso(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  } else if (value === 'QUARTER') {
+    start = iso(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+    end = iso(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  } else if (value === 'YEAR') {
+    start = iso(new Date(now.getFullYear(), 0, 1));
+    end = iso(new Date(now.getFullYear(), 11, 31));
+  }
+  const text = start && end ? `${start} to ${end}` : '';
+  if (range._flatpickr) {
+    if (text) range._flatpickr.setDate([start, end], true);
+    else range._flatpickr.clear();
+  } else {
+    range.value = text;
+  }
+}
+
+function readRange() {
+  const raw = document.getElementById('a-range')?.value || '';
+  const match = /^(\d{4}-\d{2}-\d{2})\s*(?:to|–|-)\s*(\d{4}-\d{2}-\d{2})$/.exec(raw.trim());
+  if (!match) return { start: '', end: '' };
+  return { start: match[1], end: match[2] };
+}
+
 function browserTzOffsetMinutes() {
   return -new Date().getTimezoneOffset();
 }
 
 function buildParams() {
   const timelineType = document.getElementById('a-timeline')?.value || 'MONTHLY';
-  const startDate = document.getElementById('a-start')?.value;
-  const endDate = document.getElementById('a-end')?.value;
+  const { start, end } = readRange();
   const params = { userId: Auth.getUserId(), timelineType, tzOffsetMinutes: browserTzOffsetMinutes() };
-  if (startDate) params.startDate = startDate + 'T00:00:00';
-  // Inclusive upper bound: keep the last moment of the selected local day.
-  if (endDate) params.endDate = endDate + 'T23:59:59.999';
+  if (start) params.startDate = start + 'T00:00:00';
+  if (end) params.endDate = end + 'T23:59:59.999';
   return params;
 }
 
 function describeRange() {
-  const start = document.getElementById('a-start')?.value;
-  const end = document.getElementById('a-end')?.value;
+  const { start, end } = readRange();
   if (!start && !end) return 'All time';
-  if (start && end) return `${formatShortDate(start)} – ${formatShortDate(end)}`;
-  return start ? `Since ${formatShortDate(start)}` : `Until ${formatShortDate(end)}`;
+  if (start && end) return `${formatDate(start + 'T00:00:00')} – ${formatDate(end + 'T00:00:00')}`;
+  return start ? `Since ${formatDate(start + 'T00:00:00')}` : `Until ${formatDate(end + 'T00:00:00')}`;
 }
 
-function formatShortDate(value) {
-  const d = new Date(value + 'T00:00:00');
-  return Number.isNaN(d.getTime())
-    ? value
-    : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+function updateResetVisibility() {
+  const clear = document.getElementById('a-clear');
+  if (!clear) return;
+  const differs = (document.getElementById('a-preset')?.value || 'ALL') !== DEFAULT_FILTERS.preset
+    || (document.getElementById('a-timeline')?.value || 'MONTHLY') !== DEFAULT_FILTERS.timeline
+    || !!document.getElementById('a-range')?.value;
+  clear.hidden = !differs;
 }
 
-function sumSeries(chart) {
-  return (chart?.datasets?.[0]?.data || []).reduce((total, value) => total + (Number(value) || 0), 0);
+function sum(values) {
+  return (values || []).reduce((total, value) => total + (Number(value) || 0), 0);
 }
 
-function renderKpis(income, expense, count) {
-  const wrap = document.getElementById('a-kpis');
-  if (!wrap) return;
-  const net = income - expense;
+function renderKpis(income, expense, count, netValue = null) {
   const currency = Auth.getDefaultCurrency();
-  const range = describeRange();
-
-  wrap.innerHTML = `
-    <div class="figure">
-      <div class="figure-label">Income</div>
-      <div class="figure-value ${income > 0 ? 'is-pos' : ''}">${formatMoney(income, currency, { compact: true })}</div>
-    </div>
-    <div class="figure">
-      <div class="figure-label">Expenses</div>
-      <div class="figure-value">${formatMoney(expense, currency, { compact: true })}</div>
-    </div>
-    <div class="figure">
-      <div class="figure-label">Net</div>
-      <div class="figure-value ${net < 0 ? 'is-neg' : 'is-pos'}">${formatMoney(net, currency, { compact: true })}</div>
-    </div>
-    <div class="figure">
-      <div class="figure-label">Transactions</div>
-      <div class="figure-value">${count ?? 0} <span class="figure-hint">${esc(range)}</span></div>
-    </div>`;
+  const net = netValue != null && Number.isFinite(netValue) ? netValue : income - expense;
+  const netEl = document.getElementById('a-net');
+  if (netEl) {
+    netEl.textContent = formatMoney(net, currency);
+    netEl.style.color = net < 0 ? 'var(--neg)' : 'var(--text)';
+  }
+  const incEl = document.getElementById('a-income');
+  if (incEl) {
+    incEl.textContent = formatMoney(income, currency);
+    incEl.style.color = income > 0 ? 'var(--pos)' : 'var(--text)';
+  }
+  const expEl = document.getElementById('a-expense');
+  if (expEl) expEl.textContent = formatMoney(expense, currency);
+  const countEl = document.getElementById('a-count');
+  if (countEl) {
+    countEl.innerHTML = `${count ?? 0}<span class="figure-hint">${esc(describeRange())}</span>`;
+  }
 }
 
 async function loadAnalytics(userId) {
   const token = ++loadToken;
-  const applyBtn = document.getElementById('a-apply');
-  if (applyBtn) { applyBtn.disabled = true; applyBtn.textContent = 'Applying…'; }
-
   charts.forEach(c => destroyChart(c));
   charts = [];
 
   const params = buildParams();
   const caption = document.getElementById('a-timeline-caption');
-  if (caption) caption.textContent = `${params.timelineType.charAt(0) + params.timelineType.slice(1).toLowerCase()} · ${describeRange()}`;
+  const granularity = params.timelineType.charAt(0) + params.timelineType.slice(1).toLowerCase();
+  if (caption) caption.textContent = `${granularity} · ${describeRange()}`;
 
   const summaryParams = { userId };
   if (params.startDate) summaryParams.startDate = params.startDate.slice(0, 10);
@@ -242,87 +293,111 @@ async function loadAnalytics(userId) {
     api.get('/upsert/summary', summaryParams),
   ]);
 
-  if (token !== loadToken) return; // A newer filter request superseded this one.
+  if (token !== loadToken) return; // superseded by a newer request
 
   const expPie = expResult.status === 'fulfilled' ? expResult.value : null;
   const incPie = incResult.status === 'fulfilled' ? incResult.value : null;
 
-  if (expPie) mountCategoryList('a-expense-wrap', expPie, 'Smaller categories');
+  if (expPie) mountCategoryList('a-expense-wrap', expPie, 'Smaller categories', 'EXPENSE');
   else showError('a-expense-wrap', expResult.reason?.message);
 
-  if (incPie) mountCategoryList('a-income-wrap', incPie);
+  if (incPie) mountCategoryList('a-income-wrap', incPie, null, 'INCOME');
   else showError('a-income-wrap', incResult.reason?.message);
 
-  const totalCount = summaryResult.status === 'fulfilled'
-    ? Number(summaryResult.value?.totalCount) || 0
-    : 0;
-  renderKpis(sumSeries(incPie), sumSeries(expPie), totalCount);
+  const summary = summaryResult.status === 'fulfilled' ? summaryResult.value : null;
+  const totalCount = Number(summary?.totalCount) || 0;
+  // The summary is the single source of truth, so the KPI strip and every
+  // other screen agree. Pie sums are only a fallback when it is unavailable.
+  const incomeTotal = summary?.totalIncome != null ? Number(summary.totalIncome) : sum(incPie?.datasets?.[0]?.data);
+  const expenseTotal = summary?.totalExpense != null ? Number(summary.totalExpense) : sum(expPie?.datasets?.[0]?.data);
+  const netTotal = summary?.netBalance != null ? Number(summary.netBalance) : incomeTotal - expenseTotal;
+  renderKpis(incomeTotal, expenseTotal, totalCount, netTotal);
 
   api.get('/analytics/timeline-chart', params)
     .then(timeline => { if (token === loadToken) mountTimeline('a-timeline-wrap', 'a-timeline-chart', timeline, params.timelineType); })
     .catch(err => { if (token === loadToken) showError('a-timeline-wrap', err.message); });
-
-  if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Apply'; }
 }
 
 function showError(wrapId, message) {
   const wrap = document.getElementById(wrapId);
-  if (wrap) wrap.innerHTML = `<p style="color:var(--accent)">${esc(message || 'Could not load this chart')}</p>`;
+  if (wrap) wrap.innerHTML = `<p style="color:var(--neg)">${esc(message || 'Could not load this chart.')}</p>`;
 }
 
 /**
- * Sorted horizontal bars, top 6 plus a folded remainder. One hue, values and
- * percentages printed on the row, so no legend is needed.
+ * A fixed grid of label / bar / amount / percent. Bar width is the share of the
+ * largest category; the percentage is the share of the total.
  */
-function mountCategoryList(wrapId, data, foldLabel) {
+function mountCategoryList(wrapId, data, foldLabel, kind) {
   const wrap = document.getElementById(wrapId);
   if (!wrap) return;
+  const currency = Auth.getDefaultCurrency();
   const labels = data?.labels || [];
   const values = data?.datasets?.[0]?.data || [];
-  if (!labels.length || !values.length) {
-    wrap.innerHTML = '<div class="empty-state" style="padding:30px"><p>No data for this period</p></div>';
-    return;
-  }
-  const currency = Auth.getDefaultCurrency();
+
   const rows = labels
-    .map((label, i) => ({ label: formatCategory(label), value: Number(values[i]) || 0 }))
+    .map((label, i) => ({ label: formatCategory(label), raw: label, value: Number(values[i]) || 0 }))
     .filter(r => r.value > 0)
     .sort((a, b) => b.value - a.value);
 
   const total = rows.reduce((sum, r) => sum + r.value, 0);
-  if (total <= 0) {
-    wrap.innerHTML = '<div class="empty-state" style="padding:30px"><p>No data for this period</p></div>';
+  if (!rows.length || total <= 0) {
+    wrap.innerHTML = `<div class="empty-state" style="padding:32px 0"><p>No activity in this period.</p></div>`;
     return;
   }
+
   const max = rows[0].value;
   const top = rows.slice(0, 6);
   const rest = rows.slice(6);
-  const list = [...top];
-  if (rest.length) {
-    list.push({ label: foldLabel || 'Other', value: rest.reduce((s, r) => s + r.value, 0), folded: true });
-  }
+  const isIncome = kind === 'INCOME';
+
+  const rowHtml = (r, { folded = false } = {}) => {
+    const pct = total > 0 ? (r.value / total) * 100 : 0;
+    const width = max > 0 ? Math.max(1, (r.value / max) * 100) : 0;
+    return `
+      <div class="barlist-row ${folded ? 'is-folded' : ''}" ${folded ? 'data-fold' : `data-category="${esc(r.raw)}"`} role="button" tabindex="0" aria-label="${esc(r.label)}, ${formatMoney(r.value, currency)}, ${pct.toFixed(0)}% of total">
+        <div class="barlist-label">${esc(r.label)}</div>
+        <div class="barlist-track"><div class="barlist-fill" style="width:${width.toFixed(1)}%${folded ? '' : `;background:${isIncome ? 'var(--pos)' : 'var(--text-2)'}`}"></div></div>
+        <div class="barlist-value">${formatCompact(r.value, currency)}<span>${pct.toFixed(0)}%</span></div>
+        <div></div>
+      </div>`;
+  };
 
   wrap.innerHTML = `
     <div class="barlist">
-      ${list.map(r => {
-        const pct = total > 0 ? (r.value / total) * 100 : 0;
-        const width = max > 0 ? Math.max(2, (r.value / max) * 100) : 0;
-        return `
-          <div class="barlist-row">
-            <div class="barlist-label">${esc(r.label)}</div>
-            <div class="barlist-track"><div class="barlist-fill" style="width:${width.toFixed(1)}%"></div></div>
-            <div class="barlist-value">${formatMoney(r.value, currency, { compact: true })}<span>${pct.toFixed(0)}%</span></div>
-          </div>`;
-      }).join('')}
+      ${top.map(r => rowHtml(r)).join('')}
+      ${rest.length ? rowHtml({ label: foldLabel || 'Other', value: rest.reduce((s, r) => s + r.value, 0) }, { folded: true }) : ''}
     </div>
-    <div class="barlist-total">Total ${formatMoney(total, currency, { compact: true })}</div>`;
+    <div class="barlist-total">Total ${formatMoney(total, currency)}</div>`;
+
+  wrap.querySelectorAll('[data-category]').forEach(row => {
+    const open = () => {
+      sessionStorage.setItem('pendingCategoryFilter', row.dataset.category);
+      window.navigateTo('transactions');
+    };
+    row.onclick = open;
+    row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+  });
+
+  const folded = wrap.querySelector('[data-fold]');
+  if (folded) {
+    let expanded = false;
+    folded.onclick = () => {
+      expanded = !expanded;
+      const existing = wrap.querySelector('.barlist-sublist');
+      if (existing) { existing.remove(); return; }
+      const sub = document.createElement('div');
+      sub.className = 'barlist-sublist';
+      sub.innerHTML = rest.map(r => `
+        <div class="barlist-subrow">
+          <span>${esc(r.label)}</span>
+          <span>${formatMoney(r.value, currency)}</span>
+        </div>`).join('');
+      folded.insertAdjacentElement('afterend', sub);
+    };
+    folded.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); folded.click(); } };
+  }
 }
 
-/**
- * Category axes only show the months that exist in the data; a month with no
- * rows is a real zero, not a gap. Expand the label list so the line never
- * jumps from 2016 to 2026.
- */
 function fillMonthlyGaps(labels, datasets) {
   const months = labels.map(l => /^\d{4}-\d{2}$/.test(String(l)) ? String(l) : null);
   if (months.some(m => m === null)) return { labels, datasets };
@@ -332,28 +407,90 @@ function fillMonthlyGaps(labels, datasets) {
   const points = labels.map((l, i) => ({ idx: parse(l), i })).sort((a, b) => a.idx - b.idx);
   const first = points[0].idx;
   const last = points[points.length - 1].idx;
-  if (last - first > 240) return { labels, datasets }; // do not fabricate two decades
+  if (last - first > 240) return { labels, datasets };
 
   const denseLabels = [];
   for (let n = first; n <= last; n++) denseLabels.push(format(n));
 
-  const filled = datasets.map(ds => ({ ...ds, data: denseLabels.map(label => {
-    const found = points.find(p => format(p.idx) === label);
-    return found ? ds.data[found.i] : 0;
-  }) }));
+  const filled = datasets.map(ds => ({
+    ...ds,
+    data: denseLabels.map(label => {
+      const found = points.find(p => format(p.idx) === label);
+      return found ? ds.data[found.i] : 0;
+    }),
+  }));
   return { labels: denseLabels, datasets: filled };
 }
 
-function mountTimeline(wrapId, canvasId, timeline, timelineType) {
+function seriesByName(datasets, name) {
+  const found = (datasets || []).find(ds => String(ds.label || '').toLowerCase().includes(name));
+  return found ? found.data.map(v => Number(v) || 0) : null;
+}
+
+function mountTimeline(wrapId, canvasId, timeline) {
   const wrap = document.getElementById(wrapId);
-  if (!wrap) return; // User navigated away
+  if (!wrap) return;
   if (!timeline?.labels?.length || !timeline.datasets) {
-    wrap.innerHTML = '<div class="empty-state" style="padding:40px"><p>No timeline data</p></div>';
+    wrap.innerHTML = `<div class="empty-state" style="padding:40px 0"><p>No timeline data for this period.</p></div>`;
     return;
   }
-  const series = timelineType === 'MONTHLY'
+
+  lastTimeline = timeline;
+  const timelineType = document.getElementById('a-timeline')?.value || 'MONTHLY';
+  const filled = timelineType === 'MONTHLY'
     ? fillMonthlyGaps(timeline.labels, timeline.datasets)
     : { labels: timeline.labels, datasets: timeline.datasets };
-  wrap.innerHTML = `<canvas id="${canvasId}"></canvas>`;
-  charts.push(createLine(document.getElementById(canvasId), series.labels, series.datasets));
+
+  const income = seriesByName(filled.datasets, 'income') || filled.labels.map(() => 0);
+  const expense = seriesByName(filled.datasets, 'expense') || filled.labels.map(() => 0);
+  const net = filled.labels.map((_, i) => (income[i] || 0) - (expense[i] || 0));
+  const labels = timelineType === 'MONTHLY' ? filled.labels.map(formatMonth) : filled.labels;
+
+  const summaryText = labels.map((label, i) =>
+    `${label}: income ${formatMoney(income[i] || 0, Auth.getDefaultCurrency())}, expenses ${formatMoney(expense[i] || 0, Auth.getDefaultCurrency())}, net ${formatMoney(net[i] || 0, Auth.getDefaultCurrency())}`
+  ).join('. ');
+  wrap.innerHTML = `
+    <canvas id="${canvasId}" role="img" aria-describedby="a-timeline-summary" aria-label="Grouped bars of income and expenses over time"></canvas>
+    <p class="sr-only" id="a-timeline-summary">${esc(summaryText)}</p>`;
+  const chart = createBarChart(document.getElementById(canvasId), {
+    labels, income, expense, net,
+    currency: Auth.getDefaultCurrency(),
+    showIncome: expensesOnly ? false : showIncome,
+    showExpense,
+    showNet: expensesOnly ? false : showNet,
+  });
+  charts.push(chart);
+}
+
+function wireLegend(userId) {
+  const legend = document.getElementById('a-legend');
+  if (!legend) return;
+  legend.querySelectorAll('[data-series]').forEach(btn => {
+    btn.onclick = () => {
+      const series = btn.dataset.series;
+      if (series === 'expenses-only') {
+        expensesOnly = !expensesOnly;
+        btn.classList.toggle('is-on', expensesOnly);
+        btn.setAttribute('aria-pressed', String(expensesOnly));
+        legend.querySelectorAll('[data-series="income"], [data-series="net"]').forEach(b => b.disabled = expensesOnly);
+      } else if (series === 'income') {
+        showIncome = !showIncome;
+        btn.classList.toggle('is-on', showIncome);
+        btn.setAttribute('aria-pressed', String(showIncome));
+      } else if (series === 'expense') {
+        showExpense = !showExpense;
+        btn.classList.toggle('is-on', showExpense);
+        btn.setAttribute('aria-pressed', String(showExpense));
+      } else if (series === 'net') {
+        showNet = !showNet;
+        btn.classList.toggle('is-on', showNet);
+        btn.setAttribute('aria-pressed', String(showNet));
+      }
+      // Redraw from the last payload without refetching.
+      charts.forEach(c => destroyChart(c));
+      charts = [];
+      if (lastTimeline) mountTimeline('a-timeline-wrap', 'a-timeline-chart', lastTimeline);
+      else loadAnalytics(userId);
+    };
+  });
 }

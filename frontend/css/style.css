@@ -390,6 +390,35 @@ h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
 
 .health-card { display: flex; flex-direction: column; }
 
+/* ── Dashboard recent activity ───────────────────────────────────────────── */
+.dash-recent-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--border-light);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.dash-recent-row:last-child { border-bottom: none; }
+.dash-recent-row:hover { background: rgba(255, 255, 255, 0.03); }
+.dash-recent-icon {
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+.dash-recent-icon.is-income  { color: var(--accent-g); background: rgba(34, 201, 147, 0.12); }
+.dash-recent-icon.is-expense { color: var(--accent);   background: rgba(249, 115, 22, 0.12); }
+.dash-recent-body { min-width: 0; flex: 1; }
+.dash-recent-name { font-size: 0.92rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-recent-meta { font-size: 0.74rem; color: var(--text-muted); margin-top: 2px; }
+.dash-recent-amount { font-size: 0.95rem; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dash-recent-amount.is-income  { color: var(--accent-g); }
+.dash-recent-amount.is-expense { color: var(--text); }
+
 .health-panel { display: flex; align-items: flex-start; gap: var(--space-5); flex-wrap: wrap; }
 .health-details { flex: 1 1 200px; min-width: 0; }
 
@@ -2053,6 +2082,12 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
   #view-root {
     padding: 16px;
   }
+  /* The authenticated view also sits inside .main-content, which already
+     applies the page gutter. Keep the padding only for the logged-out auth
+     screen (a bare #view-root), otherwise phones lose 16px per side twice. */
+  #app-shell #view-root {
+    padding: 0;
+  }
 
   /* Hide Desktop Sidebar and Mobile Header */
   .sidebar, .mobile-header {
@@ -3009,6 +3044,29 @@ body {
 .sidebar-user-avatar { box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.28); }
 .sidebar-user-name { font-weight: 600; letter-spacing: -0.01em; }
 
+/* Global quick-add. Desktop has no FAB, so this is the one-click path into
+   the transaction form from anywhere in the app. */
+.sidebar-quick-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 12px 10px;
+  padding: 11px 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(20, 184, 166, 0.32);
+  background: linear-gradient(135deg, rgba(15, 157, 144, 0.92), rgba(34, 211, 238, 0.78));
+  color: #04110f;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter var(--transition), transform var(--transition);
+}
+.sidebar-quick-add:hover { filter: brightness(1.07); }
+.sidebar-quick-add:active { transform: scale(0.99); }
+.sidebar-quick-add .icon-svg { width: 18px; height: 18px; flex-shrink: 0; }
+
 /* Collapsible navigation (desktop). The sidebar slides out and a small
    floating button brings it back; the choice survives reloads. */
 .sidebar-head {
@@ -3349,7 +3407,9 @@ tr:hover td { background: rgba(20, 184, 166, 0.045); }
 
 @media (max-width: 768px) {
   .main-content {
-    padding: 18px max(16px, env(safe-area-inset-right, 16px)) calc(100px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 16px));
+    /* No mobile header sits above the content anymore, so the page has to
+       clear the status bar / notch itself. */
+    padding: calc(18px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 16px)) calc(100px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 16px));
   }
   /* Mobile uses the drawer; the desktop collapse button has no meaning here. */
   .sidebar-collapse { display: none; }
@@ -3518,6 +3578,14 @@ button:focus-visible,
     -webkit-backdrop-filter: none;
     background: rgba(7, 13, 18, 0.98);
   }
+
+  /* The bar is z-index 9999. Full-screen modals and side panels were below it
+     (500 / 600), so the bar painted over every dialog — including the sticky
+     Save button at the bottom edge. Lift the overlays above the bar. */
+  .modal-overlay { z-index: 10005; }
+  .side-panel-overlay { z-index: 10004; }
+  .side-panel { z-index: 10005; }
+  .toast-container { z-index: 10010; }
 
   /* ── Edge-to-edge safe areas ─────────────────────────────────────────────
      index.html opts into viewport-fit=cover so Chrome on Android no longer

@@ -25,6 +25,12 @@ const NAV_ITEMS = [
   { id: 'profile',        icon: 'profile',        label: 'Profile' },
 ];
 
+// Views that live behind the bottom bar's "More" sheet. The bar itself only
+// has room for Home / Activity / Analytics / More, so the rest are grouped
+// here — and "More" has to light up whenever one of them is open, otherwise
+// the user has no indication of where they are.
+const MORE_VIEWS = ['bill-scanner', 'split', 'goals', 'subscriptions', 'profile'];
+
 let currentView = 'dashboard';
 
 function renderShell() {
@@ -53,7 +59,6 @@ function renderShell() {
 
   root.innerHTML = `
     <div id="app-shell" class="${sidebarCollapsed ? 'sidebar-collapsed' : ''}">
-      <div class="sidebar-overlay" id="sidebar-overlay"></div>
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-head">
           <div class="logo">${icon('logo', 'sm')} PFA</div>
@@ -65,6 +70,9 @@ function renderShell() {
               <span class="icon">${icon(n.icon, 'sm')}</span>${n.label}
             </a>`).join('')}
         </nav>
+        <button type="button" class="sidebar-quick-add" id="sidebar-add-txn">
+          ${icon('plus', 'sm')} Add transaction
+        </button>
         <div class="sidebar-user" id="sidebar-user" role="button" tabindex="0" aria-label="Open profile">
           ${profilePicHtml}
           <div class="sidebar-user-info">
@@ -78,14 +86,9 @@ function renderShell() {
       </aside>
       <div class="main-content">
         <button type="button" class="sidebar-expand" id="sidebar-expand" aria-label="Show navigation" title="Show navigation">${icon('menu')}</button>
-        <div class="mobile-header">
-          <button id="menu-toggle" aria-label="Open menu">${icon('menu')}</button>
-          <span class="mobile-logo">PFA</span>
-          <span></span>
-        </div>
         <div id="view-root"></div>
       </div>
-      
+
       <!-- Mobile Bottom Navigation -->
       <nav class="bottom-nav" id="bottom-nav">
         <a href="#" data-view="dashboard" class="bottom-nav-item ${currentView === 'dashboard' ? 'active' : ''}">
@@ -101,29 +104,30 @@ function renderShell() {
             ${icon('plus')}
           </button>
         </div>
-        <a href="#" data-view="split" class="bottom-nav-item ${currentView === 'split' ? 'active' : ''}">
-          ${icon('split')}
-          <span>Split</span>
+        <a href="#" data-view="analytics" class="bottom-nav-item ${currentView === 'analytics' ? 'active' : ''}">
+          ${icon('analytics')}
+          <span>Analytics</span>
         </a>
-        <a href="#" id="mobile-more-btn" class="bottom-nav-item">
+        <a href="#" id="mobile-more-btn" class="bottom-nav-item ${MORE_VIEWS.includes(currentView) ? 'active' : ''}" aria-label="More">
           ${icon('menu')}
           <span>More</span>
         </a>
       </nav>
-      
+
       <!-- Mobile More Menu (Bottom Sheet) -->
       <div class="bottom-sheet-overlay" id="more-menu-overlay"></div>
       <div class="bottom-sheet" id="more-menu-sheet">
         <div class="bottom-sheet-handle"></div>
         <h3 style="padding: 0 20px; margin-bottom: 10px;">More</h3>
         <div class="more-menu-list">
-          <a href="#" data-view="analytics" class="more-menu-item">${icon('analytics')} Analytics</a>
+          <a href="#" data-view="bill-scanner" class="more-menu-item">${icon('bill-scanner')} Bill Scanner</a>
+          <a href="#" data-view="split" class="more-menu-item">${icon('split')} Split Expenses</a>
           <a href="#" data-view="goals" class="more-menu-item">${icon('goals')} Goals & Budgets</a>
           <a href="#" data-view="subscriptions" class="more-menu-item">${icon('subscriptions')} Subscriptions</a>
           <a href="#" data-view="profile" class="more-menu-item">${icon('profile')} Profile</a>
         </div>
       </div>
-      
+
       <!-- Global Action Sheet (Bottom Sheet) -->
       <div class="bottom-sheet-overlay" id="action-sheet-overlay"></div>
       <div class="bottom-sheet" id="action-sheet">
@@ -157,14 +161,7 @@ function renderShell() {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigateTo('profile'); }
   };
 
-  document.getElementById('menu-toggle')?.addEventListener('click', () => {
-    document.getElementById('sidebar').classList.toggle('open');
-    document.getElementById('sidebar-overlay').classList.toggle('open');
-  });
-  document.getElementById('sidebar-overlay').onclick = () => {
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('sidebar-overlay').classList.remove('open');
-  };
+  document.getElementById('sidebar-add-txn').onclick = openAddTransaction;
 
   const shell = document.getElementById('app-shell');
   const setSidebarCollapsed = (collapsed) => {
@@ -205,13 +202,10 @@ function renderShell() {
   document.getElementById('action-add-expense').onclick = (e) => {
     e.preventDefault();
     closeBottomSheets();
-    navigateTo('transactions');
-    setTimeout(() => {
-        const addBtn = document.getElementById('t-add-btn');
-        if (addBtn) addBtn.click();
-    }, 100);
+    openAddTransaction();
   };
 
+  updateNavActive(currentView);
   renderView();
 
   // Load profile picture + preferences async
@@ -231,22 +225,43 @@ function renderShell() {
 
 export function navigateTo(view) {
   currentView = view;
+  updateNavActive(view);
+  renderView();
+}
 
-  // Update sidebar
+function updateNavActive(view) {
   document.querySelectorAll('#sidebar-nav a').forEach(a => {
     const active = a.dataset.view === view;
     a.classList.toggle('active', active);
     a.setAttribute('aria-current', active ? 'page' : 'false');
   });
 
-  // Update bottom nav
   document.querySelectorAll('#bottom-nav .bottom-nav-item[data-view]').forEach(a => {
     const active = a.dataset.view === view;
     a.classList.toggle('active', active);
+    if (active) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
   });
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebar-overlay').classList.remove('open');
-  renderView();
+
+  // "More" owns every view not represented by its own bar slot, so it must
+  // stay highlighted while one of them is open.
+  const moreBtn = document.getElementById('mobile-more-btn');
+  if (moreBtn) {
+    const active = MORE_VIEWS.includes(view);
+    moreBtn.classList.toggle('active', active);
+    if (active) moreBtn.setAttribute('aria-current', 'page');
+    else moreBtn.removeAttribute('aria-current');
+  }
+}
+
+function openAddTransaction() {
+  navigateTo('transactions');
+  // renderTransactions paints its header synchronously, so the button exists
+  // on the next tick. The id is `t-add` (not `t-add-btn`).
+  setTimeout(() => {
+    const addBtn = document.getElementById('t-add');
+    if (addBtn) addBtn.click();
+  }, 100);
 }
 
 // Template strings use inline handlers like onclick="navigateTo('transactions')".
@@ -254,6 +269,7 @@ export function navigateTo(view) {
 // not visible (this broke the dashboard's Add Transaction / Set a Goal buttons
 // for users with no data). Expose it explicitly.
 window.navigateTo = navigateTo;
+window.openAddTransaction = openAddTransaction;
 
 function renderView() {
   const root = document.getElementById('view-root');

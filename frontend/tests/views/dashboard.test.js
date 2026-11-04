@@ -47,25 +47,31 @@ describe('renderDashboard', () => {
     global.fetch.mockReset();
   });
 
-  it('renders page structure with KPI placeholders', async () => {
+  it('renders page structure with KPI and recent-activity containers', async () => {
     mockDashboardApis();
     await renderDashboard(container);
 
     expect(container.querySelector('h1')?.textContent).toBe('Dashboard');
     expect(container.querySelector('#d-health-score')).toBeTruthy();
     expect(container.querySelector('#d-ai-insights-list')).toBeTruthy();
+    expect(container.querySelector('#d-kpis')).toBeTruthy();
+    expect(container.querySelector('#d-recent')).toBeTruthy();
   });
 
-  it('renders health data without a duplicate KPI row', async () => {
+  it('renders the money overview alongside health data', async () => {
     mockDashboardApis();
     await renderDashboard(container);
 
     await vi.waitFor(() => {
       expect(container.querySelector('#d-health-score')?.textContent).toBe('720');
+      expect(container.querySelectorAll('#d-kpis .stat-card').length).toBe(4);
     });
     expect(container.querySelector('#d-health-grade')?.textContent).toBe('Grade A');
-    // Income, expense and transaction totals live on the Analytics page now.
-    expect(container.querySelector('.stat-card')).toBeNull();
+    // The dashboard now surfaces totals; Analytics keeps the breakdowns.
+    const kpis = container.querySelector('#d-kpis')?.textContent || '';
+    expect(kpis).toContain('₹20,000'); // net balance
+    expect(kpis).toContain('₹50,000'); // income
+    expect(kpis).toContain('₹30,000'); // expenses
   });
 
   it('does not hold the page for slow AI insights', async () => {

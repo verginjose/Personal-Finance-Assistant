@@ -431,7 +431,6 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
           </div>
           <div class="expense-row-actions" style="display:flex; align-items:center; gap: 12px;">
             <span style="font-weight:700;color:var(--text);font-size:1.1rem;">${formatCurrency(e.amount)}</span>
-            <button type="button" class="btn btn-danger btn-sm delete-expense-btn" data-id="${e.id}" title="Delete expense" style="padding:6px 10px;">×</button>
           </div>
         </div>`;
       }).join('') : emptyState('receipt', 'No expenses yet', 'Keep track of shared bills and tabs by adding your first expense.');
@@ -443,19 +442,6 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
         };
       });
 
-      elList.querySelectorAll('.delete-expense-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const expenseId = e.currentTarget.dataset.id;
-          if (await confirmModal('Delete Expense', 'Are you sure you want to delete this expense? This action cannot be undone.', 'Delete')) {
-            try {
-              await api.delete(`/upsert/groups/${groupId}/expenses/${expenseId}`, { userId });
-              toast('Expense deleted', 'success');
-              loadGroupDetail(groupId, userId, { preserveView: true });
-            } catch (err) { toast(err.message, 'error'); }
-          }
-        });
-      });
       renderExpensesPagination();
     };
 

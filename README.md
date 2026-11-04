@@ -83,7 +83,7 @@ flowchart LR
 - **Savings Goals**: Users can define target amounts and deadlines for specific goals (e.g., "Vacation Fund"). The platform tracks progress and calculates required monthly contributions.
 - **Category Budgets**: Set hard spending limits across different categories (e.g., "Food", "Entertainment"). Real-time analytics track your burn rate to prevent overspending.
 - **Group Split Bills**: Seamlessly share expenses among friends or roommates. The system automatically calculates complex debt relationships to determine exactly who owes whom.
-- **AI-Powered Financial Insights**: Aggregates your transaction history and feeds it securely into the Cerebras LLM API to generate personalized financial health scores and actionable insights.
+- **AI-Powered Financial Insights**: Aggregates your transaction history and feeds it securely into the Cerebras LLM API to generate personalized, actionable insights.
 - **OCR Receipt Parsing**: Upload an image of a receipt, and the backend uses PaddleOCR to instantly extract the merchant, total amount, and date for one-click ingestion.
 
 ---
@@ -389,6 +389,6 @@ This repository ships with a comprehensive Python-based End-to-End (E2E) test su
 - Full CRUD operations for transactions, goals, budgets, and split-bill groups.
 - End-to-end OCR bill ingestion using sample images.
 - AI-driven insight generation and cache eviction workflows via Kafka.
-- Analytics generation and complex health-score calculations.
+- Analytics generation and complex aggregation workflows.
 
 The suite can be executed locally using the commands outlined above. Continuous Integration pipelines are configured to execute this script on every push to ensure system integrity. Furthermore, each microservice contains a comprehensive suite of Unit and Integration tests leveraging JUnit and Spring Boot Test. These can be executed by running `mvn test` in each respective service directory.

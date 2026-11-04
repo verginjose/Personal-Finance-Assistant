@@ -23,9 +23,6 @@ function mockAnalyticsApis() {
         datasets: [{ label: 'Income', data: [50000] }, { label: 'Expense', data: [12000] }],
       }));
     }
-    if (path.endsWith('/analytics/health-score')) {
-      return Promise.resolve(jsonResponse({ totalScore: 720, grade: 'A', summary: 'Solid', breakdown: {} }));
-    }
     if (path.endsWith('/analytics/ai-insights')) {
       return Promise.resolve(jsonResponse({ summary: 'All good', insights: [] }));
     }

@@ -6,14 +6,12 @@ import {
   formatCompact,
   formatCategory,
   formatDate,
-  healthScoreColor,
   budgetStatusColor,
   pageHeader,
   emptyState,
   progressBar,
   typeBadge,
   categoryOptions,
-  renderHealthData,
   renderAiData,
   displayName,
   humanizeHandle,
@@ -64,12 +62,6 @@ describe('ui utilities', () => {
     expect(result).toMatch(/2025/);
   });
 
-  it('returns health score colors by threshold', () => {
-    expect(healthScoreColor(800)).toBe('var(--pos)');
-    expect(healthScoreColor(600)).toBe('var(--warn)');
-    expect(healthScoreColor(300)).toBe('var(--neg)');
-  });
-
   it('returns budget status colors', () => {
     expect(budgetStatusColor('EXCEEDED')).toBe('var(--neg)');
     expect(budgetStatusColor('WARNING')).toBe('var(--warn)');
@@ -103,27 +95,6 @@ describe('ui utilities', () => {
     const html = categoryOptions(['RENT', 'RESTAURANTS'], 'RESTAURANTS');
     expect(html).toContain('value="RESTAURANTS"');
     expect(html).toContain('selected');
-  });
-
-  it('renders health data into DOM', () => {
-    document.body.innerHTML = `
-      <span id="h-health-score"></span>
-      <span id="h-health-grade"></span>
-      <p id="h-health-summary"></p>
-      <div id="h-health-breakdown"></div>
-      <div id="h-health-ring"></div>`;
-
-    renderHealthData('h', {
-      totalScore: 750,
-      grade: 'A',
-      summary: 'Great job',
-      breakdown: { savings: 80, spending: 70 },
-    });
-
-    expect(document.getElementById('h-health-score').textContent).toBe('750');
-    expect(document.getElementById('h-health-grade').textContent).toBe('Grade A');
-    expect(document.getElementById('h-health-summary').textContent).toBe('Great job');
-    expect(document.getElementById('h-health-breakdown').children.length).toBe(2);
   });
 
   it('renders AI insights into DOM', () => {

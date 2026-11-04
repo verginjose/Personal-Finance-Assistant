@@ -415,19 +415,20 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
         <h1 class="split-title">${esc(group.name)}</h1>
         <div class="split-header-actions">
           <button class="btn-add-expense" id="sp-add-expense" ${eligibleMembers.length ? '' : 'disabled'}>${icon('plus', 'sm')} Add expense</button>
-          <button class="btn-group-menu" id="sp-group-menu-btn" aria-label="Group options" aria-haspopup="menu">${icon('settings', 'sm')}</button>
+          <div class="overflow-wrap">
+            <button class="btn-group-menu" id="sp-group-menu-btn" aria-label="Group options" aria-haspopup="menu" aria-expanded="false">${icon('settings', 'sm')}</button>
+            <div id="sp-group-menu" class="overflow-menu" role="menu" hidden>
+              <button type="button" role="menuitem" id="sp-edit-group">${icon('edit', 'sm')} Edit group</button>
+              <button type="button" role="menuitem" id="sp-archive-group">${group.isArchived ? icon('arrow-up', 'sm') + ' Unarchive' : icon('arrow-down', 'sm') + ' Archive'}</button>
+              <button type="button" role="menuitem" id="sp-leave-group">${icon('log-out', 'sm')} Leave group</button>
+              <button type="button" role="menuitem" id="sp-delete-group" style="color:var(--neg)">${icon('trash', 'sm')} Delete group</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="split-meta-line">
         <button type="button" class="group-compact-members" id="sp-view-members">${icon('users', 'sm')} ${members.length} member${members.length === 1 ? '' : 's'}</button>
         ${spentTotal != null ? `<span>·</span><span>${formatMoney(spentTotal, currency)} spent in total</span>` : ''}
-      </div>
-
-      <div id="sp-group-menu" class="overflow-menu" role="menu" hidden style="position:relative;right:auto;margin-bottom:var(--s3);max-width:220px;margin-left:auto">
-        <button type="button" role="menuitem" id="sp-edit-group">${icon('edit', 'sm')} Edit group</button>
-        <button type="button" role="menuitem" id="sp-archive-group">${group.isArchived ? icon('arrow-up', 'sm') + ' Unarchive' : icon('arrow-down', 'sm') + ' Archive'}</button>
-        <button type="button" role="menuitem" id="sp-leave-group">${icon('log-out', 'sm')} Leave group</button>
-        <button type="button" role="menuitem" id="sp-delete-group" style="color:var(--neg)">${icon('trash', 'sm')} Delete group</button>
       </div>
 
       <div class="split-layout">
@@ -501,12 +502,20 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
     }
 
     const menu = document.getElementById('sp-group-menu');
-    document.getElementById('sp-group-menu-btn').onclick = (e) => {
+    const groupMenuBtn = document.getElementById('sp-group-menu-btn');
+    groupMenuBtn.onclick = (e) => {
       e.stopPropagation();
       menu.hidden = !menu.hidden;
+      groupMenuBtn.setAttribute('aria-expanded', String(!menu.hidden));
+      if (!menu.hidden) menu.querySelector('[role="menuitem"]')?.focus();
     };
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('#sp-group-menu') && !e.target.closest('#sp-group-menu-btn')) menu.hidden = true;
+      if (!e.target.closest('#sp-group-menu') && !e.target.closest('#sp-group-menu-btn')) {
+        if (!menu.hidden) {
+          menu.hidden = true;
+          groupMenuBtn.setAttribute('aria-expanded', 'false');
+        }
+      }
     });
 
     const setPanel = (panel) => {

@@ -7,7 +7,7 @@ import {
   displayAmountFor, displayName, openModal, humanizeNamesIn,
 } from '../utils/ui.js';
 import {
-  PERIODS, periodRange, previousRange, periodHeading,
+  PERIODS, periodRange, previousRange, periodHeading, periodScopeLabel,
   comparisonLabel, getTotals,
 } from '../utils/totals.js';
 
@@ -88,12 +88,16 @@ export async function renderDashboard(container) {
       </aside>
     </div>`;
 
+  let currentCapLabel = '';
+
   wireSegmented(container, (period) => {
     currentPeriod = period;
     const label = document.getElementById('d-period-label');
     if (label) label.textContent = periodHeading(currentPeriod);
     loadSummary();
     renderPendingInsights();
+    loadInsights();
+    loadHealth(currentCapLabel);
   });
 
   container.querySelectorAll('[data-nav]').forEach(btn => {
@@ -123,27 +127,35 @@ export async function renderDashboard(container) {
 
   // AI insights can take seconds; never block the rest of the page on it.
   const loadInsights = () => {
-    api.get('/analytics/ai-insights', { userId })
+    const range = periodRange(currentPeriod);
+    api.get('/analytics/ai-insights', { userId, ...range })
       .then((ai) => {
-        if (document.getElementById('d-ai-insights-list')) renderAiData('d', ai, refreshAdvisor, { scopeLabel: 'all time' });
+        if (document.getElementById('d-ai-insights-list')) renderAiData('d', ai, refreshAdvisor, { scopeLabel: periodScopeLabel(currentPeriod) });
       })
       .catch((e) => {
-        if (document.getElementById('d-ai-insights-list')) renderAiData('d', { error: e.message }, refreshAdvisor, { scopeLabel: 'all time' });
+        if (document.getElementById('d-ai-insights-list')) renderAiData('d', { error: e.message }, refreshAdvisor, { scopeLabel: periodScopeLabel(currentPeriod) });
       });
   };
   const renderPendingInsights = () => {
     const meta = document.getElementById('d-ai-meta');
     const summary = document.getElementById('d-ai-summary');
-    if (summary) summary.textContent = 'Based on all time';
+    if (summary) summary.textContent = `Based on ${periodScopeLabel(currentPeriod)}`;
     if (meta) meta.textContent = '';
   };
   loadInsights();
 
+  // The score follows the period control now that the endpoint accepts dates.
+  const loadHealth = async (capLabel = '') => {
+    const range = periodRange(currentPeriod);
+    const health = await api.get('/analytics/health-score', { userId, ...range }).catch(() => null);
+    if (!document.getElementById('d-health-score')) return;
+    renderHealthData('d', health, { capLabel, scopeLabel: periodScopeLabel(currentPeriod) });
+  };
+
   const subscriptionsPromise = api.get('/upsert/subscriptions', { userId }).catch(() => []);
 
   try {
-    const [health, budgets, goals, subscriptions] = await Promise.all([
-      api.get('/analytics/health-score', { userId }).catch(() => null),
+    const [budgets, goals, subscriptions] = await Promise.all([
       api.get('/upsert/budgets', { userId }).catch(() => []),
       api.get('/upsert/goals', { userId }).catch(() => []),
       subscriptionsPromise,
@@ -153,12 +165,8 @@ export async function renderDashboard(container) {
 
     renderBudgets(budgets);
     renderComingUp(subscriptions);
-    const capped = await renderGoalsSummary(goals, userId);
-    // The score endpoint is all-time; label it rather than pretend it follows
-    // the period control.
-    // TODO(backend): return a period-aware health score and insights so both
-    // follow the segmented control.
-    renderHealthData('d', health, { capLabel: capped, scopeLabel: 'all time' });
+    currentCapLabel = await renderGoalsSummary(goals, userId);
+    await loadHealth(currentCapLabel);
   } catch (err) {
     toast('Failed to load dashboard: ' + err.message, 'error');
   }
@@ -516,11 +524,12 @@ async function refreshAdvisor() {
   const btn = document.getElementById('d-ai-refresh');
   if (btn) btn.disabled = true;
   try {
-    const ai = await api.get('/analytics/ai-insights', { userId: Auth.getUserId(), refresh: true });
-    renderAiData('d', ai, refreshAdvisor, { scopeLabel: 'all time' });
+    const range = periodRange(currentPeriod);
+    const ai = await api.get('/analytics/ai-insights', { userId: Auth.getUserId(), refresh: true, ...range });
+    renderAiData('d', ai, refreshAdvisor, { scopeLabel: periodScopeLabel(currentPeriod) });
     toast('Insights refreshed', 'success');
   } catch (err) {
-    renderAiData('d', { error: err.message }, refreshAdvisor, { scopeLabel: 'all time' });
+    renderAiData('d', { error: err.message }, refreshAdvisor, { scopeLabel: periodScopeLabel(currentPeriod) });
     toast('Could not refresh insights: ' + err.message, 'error');
   } finally {
     const current = document.getElementById('d-ai-refresh');

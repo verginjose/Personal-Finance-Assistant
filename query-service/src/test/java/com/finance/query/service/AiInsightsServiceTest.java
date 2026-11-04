@@ -117,8 +117,28 @@ class AiInsightsServiceTest {
 
         service.regenerateInsights(userId);
 
-        verify(cache).evict("v4:" + userId);
+        verify(cache).evict("v5:" + userId + ":MIN:MAX");
         verify(repository).getTotalAmountByType(userId, TransactionType.INCOME);
+    }
+
+    @Test
+    @DisplayName("generateInsights: a date range uses the ranged totals")
+    void generateInsights_dateRange_usesRangedQueries() {
+        java.time.LocalDate start = java.time.LocalDate.of(2026, 11, 1);
+        java.time.LocalDate end = java.time.LocalDate.of(2026, 11, 30);
+        when(repository.getTotalAmountByTypeAndDateRange(eq(userId), eq(TransactionType.INCOME), any(), any()))
+                .thenReturn(BigDecimal.ZERO);
+        when(repository.getTotalAmountByTypeAndDateRange(eq(userId), eq(TransactionType.EXPENSE), any(), any()))
+                .thenReturn(BigDecimal.ZERO);
+        when(repository.getExpenseCategoryAnalyticsByDateRange(eq(userId), any(), any()))
+                .thenReturn(List.of());
+
+        AiInsightResponse res = service.generateInsights(userId, start, end);
+
+        assertThat(res.getInsights()).hasSize(1);
+        verify(repository).getTotalAmountByTypeAndDateRange(eq(userId), eq(TransactionType.INCOME), any(), any());
+        verify(repository).getTotalAmountByTypeAndDateRange(eq(userId), eq(TransactionType.EXPENSE), any(), any());
+        verify(repository, never()).getTotalAmountByType(any(), any());
     }
 
     // ── buildPrompt ───────────────────────────────────────────────────────────

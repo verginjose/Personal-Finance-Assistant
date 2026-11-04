@@ -125,6 +125,30 @@ public class TransactionEntry implements Serializable {
     @Getter
     @Setter
     private String receiptUrl;
+
+    /*
+     * Group context for rows that came from a shared expense. Resolved per
+     * request from expense_transaction_links and never persisted here.
+     */
+    @Transient
+    @Getter
+    @Setter
+    private Long groupId;
+
+    @Transient
+    @Getter
+    @Setter
+    private String groupName;
+
+    @Transient
+    @Getter
+    @Setter
+    private BigDecimal totalAmount;
+
+    @Transient
+    @Getter
+    @Setter
+    private BigDecimal myShare;
     // Constructors
     public TransactionEntry() {}
 

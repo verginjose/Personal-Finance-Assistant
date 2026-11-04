@@ -87,7 +87,7 @@ public class AnalyticsControllerTest {
         UUID userId = UUID.randomUUID();
         HealthScoreResponse response = new HealthScoreResponse(750, "B", Map.of("Savings", 80), "Good financial health", "2026-06-09T10:00:00");
 
-        when(healthScoreService.calculateScore(userId)).thenReturn(response);
+        when(healthScoreService.calculateScore(userId, null, null)).thenReturn(response);
 
         mockMvc.perform(get("/analytics/health-score")
                         .header("X-User-Id", userId.toString())
@@ -116,7 +116,7 @@ public class AnalyticsControllerTest {
         AiInsightResponse.Insight insight = new AiInsightResponse.Insight("Netflix cost", "Watch out for Netflix cost.", "WARNING", 2);
         AiInsightResponse response = new AiInsightResponse(List.of(insight), "Summary text", "2026-06-09T10:00:00");
 
-        when(aiInsightsService.generateInsights(userId)).thenReturn(response);
+        when(aiInsightsService.generateInsights(userId, null, null)).thenReturn(response);
 
         mockMvc.perform(get("/analytics/ai-insights")
                         .header("X-User-Id", userId.toString())

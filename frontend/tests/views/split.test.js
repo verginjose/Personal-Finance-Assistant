@@ -120,6 +120,52 @@ describe('renderSplit', () => {
     });
   });
 
+  it('keeps expense JSON intact when the description contains an apostrophe', async () => {
+    const memberA = 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff';
+    const memberB = 'cccccccc-dddd-eeee-ffff-000000000000';
+    const expense = {
+      id: 42,
+      description: "Dinner at Jo's",
+      amount: 300,
+      paidBy: memberA,
+      splitType: 'EQUAL',
+      expenseDate: '2026-11-01',
+      myShare: 150,
+      currency: 'INR',
+      expenseCategory: 'FOOD',
+    };
+
+    global.fetch.mockImplementation(async (url, opts = {}) => {
+      const p = new URL(url).pathname;
+      const json = (data, status = 200) => ({ status, ok: status < 400, text: async () => JSON.stringify(data) });
+      if (p.endsWith('/auth/users/bulk')) return json([
+        { userId: memberA, name: 'alice' },
+        { userId: memberB, name: 'bob' },
+      ]);
+      if (p.endsWith('/activity')) return json({ content: [], totalPages: 1 });
+      if (p.endsWith('/members')) return json([
+        { id: 1, name: 'alice', userId: memberA, status: 'ACCEPTED' },
+        { id: 2, name: 'bob', userId: memberB, status: 'ACCEPTED' },
+      ]);
+      if (p.endsWith('/expenses')) return json({ content: [expense], totalPages: 1 });
+      if (p.endsWith('/balances')) return json({ memberBalances: [], simplifiedDebts: [] });
+      if (p.endsWith('/groups/5')) return json({ id: 5, name: 'Trip' });
+      if (p.endsWith('/groups')) return json([{ id: 5, name: 'Trip', description: '' }]);
+      return json({});
+    });
+
+    await renderSplit(container);
+    await vi.waitFor(() => expect(container.querySelector('.group-card')).toBeTruthy());
+    container.querySelector('.group-card').click();
+
+    await vi.waitFor(() => expect(document.querySelector('.expense-row')).toBeTruthy());
+    const row = document.querySelector('.expense-row');
+    // An unescaped apostrophe used to truncate the single-quoted attribute,
+    // making this throw "unterminated string".
+    expect(JSON.parse(row.dataset.exp).description).toBe("Dinner at Jo's");
+    expect(() => row.click()).not.toThrow();
+  });
+
   it('sends paidBy UUID when adding a shared expense', async () => {
     const memberUserId = 'bbbbbbbb-cccc-dddd-eeee-ffffffffffff';
     mockGroupDetailApi([{ id: 1, name: 'Me', userId: memberUserId, status: 'ACCEPTED' }]);

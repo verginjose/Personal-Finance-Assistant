@@ -9,6 +9,16 @@ export function esc(s) {
   return d.innerHTML;
 }
 
+/**
+ * Escape a value for use inside an HTML attribute (single- or double-quoted).
+ * `esc` covers &, < and > but leaves quotes alone, so an apostrophe in a
+ * description would otherwise close a single-quoted attribute early and
+ * truncate any JSON stored in it.
+ */
+export function escAttr(s) {
+  return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 /* ── Names ──────────────────────────────────────────────────────────────── */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NAME_ACRONYMS = new Set(['OTT', 'EMI', 'SIP', 'GST', 'PDF', 'UPI', 'ATM', 'US', 'UK', 'AI', 'SME']);

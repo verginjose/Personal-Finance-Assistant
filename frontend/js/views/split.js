@@ -1,6 +1,6 @@
 import { api, Auth, toast } from '../utils/api.js';
 import {
-  esc, emptyState, formatMoney, formatDate, formatCategory, dateTooltip,
+  esc, escAttr, emptyState, formatMoney, formatDate, formatCategory, dateTooltip,
   openModal, confirmModal, modalActions, avatar, displayName, chip, displayAmountFor,
   skeletonRows, EXPENSE_CATS, categoryOptions, currencyOptionHtml,
 } from '../utils/ui.js';
@@ -616,7 +616,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       const shown = displayAmountFor(e, Auth.getDefaultCurrency());
       if (isSettlement) {
         return `
-          <div class="expense-row payment-row" data-exp='${esc(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
+          <div class="expense-row payment-row" data-exp='${escAttr(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
             <span class="row-icon">${icon('arrow-right', 'sm')}</span>
             <div class="expense-row-main">
               <div class="expense-row-title">${esc(settlementRowTitle(e, userId, nameOf))}</div>
@@ -631,7 +631,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
         ? `<span class="expense-meta-badge">${esc(shown.secondary)}</span>`
         : '';
       return `
-        <div class="expense-row" data-exp='${esc(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
+        <div class="expense-row" data-exp='${escAttr(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
           <span class="row-icon">${icon(categoryIcon(e.expenseCategory || 'OTHERS'), 'sm')}</span>
           <div class="expense-row-main">
             <div class="expense-row-title">${esc(e.description || 'Expense')}</div>

@@ -1,7 +1,7 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon, categoryIcon } from '../utils/icons.js';
 import {
-  esc, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
+  esc, escAttr, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
   openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions,
   setupCategorySearch, currencyOptionHtml, formatDayLabel, skeletonRows,
   displayAmountFor, displayName, dateTooltip, humanizeNamesIn, humanizeSystemText,
@@ -497,7 +497,7 @@ async function loadTransactions(userId) {
                 ${esc(formatCategory(cat))}${icon('chevron-down', 'xs')}
               </button>`;
 
-          return `<tr data-txn='${esc(JSON.stringify(t))}' tabindex="0" class="txn-row ${settlement ? 'is-settlement' : ''}" style="cursor:pointer">
+          return `<tr data-txn='${escAttr(JSON.stringify(t))}' tabindex="0" class="txn-row ${settlement ? 'is-settlement' : ''}" style="cursor:pointer">
             <td>
               <div class="txn-row-main">
                 <span class="row-icon">${icon(settlement ? 'arrow-right' : categoryIcon(cat), 'sm')}</span>

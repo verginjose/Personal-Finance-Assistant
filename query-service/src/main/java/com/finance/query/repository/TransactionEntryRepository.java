@@ -123,11 +123,16 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             @Param("end") LocalDateTime end);
 
     // ── Analytics Queries ──────────────────────────────────────────────────────
+    // SETTLEMENT entries are excluded from every aggregate below: a settlement
+    // moves money between people, so it is neither income nor spending. The
+    // same exclusion is applied by QueryTransactionEntryService.getSummary so
+    // the dashboard and the analytics page report identical numbers.
 
     @Query("""
             SELECT COALESCE(SUM(t.amount), 0)
             FROM TransactionEntry t
             WHERE t.userId = :userId AND t.type = :type AND t.deletedAt IS NULL
+              AND t.category <> com.finance.query.model.Category.SETTLEMENT
             """)
     BigDecimal getTotalAmountByType(@Param("userId") UUID userId, @Param("type") TransactionType type);
 
@@ -135,6 +140,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             SELECT COALESCE(SUM(t.amount), 0)
             FROM TransactionEntry t
             WHERE t.userId = :userId AND t.type = :type AND t.deletedAt IS NULL
+              AND t.category <> com.finance.query.model.Category.SETTLEMENT
               AND t.createdAt BETWEEN :start AND :end
             """)
     BigDecimal getTotalAmountByTypeAndDateRange(
@@ -178,6 +184,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                    COUNT(t) AS transactionCount
             FROM TransactionEntry t
             WHERE t.userId = :userId AND t.type = :type AND t.deletedAt IS NULL
+              AND t.category <> com.finance.query.model.Category.SETTLEMENT
             GROUP BY t.category
             ORDER BY totalAmount DESC
             """)
@@ -190,6 +197,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                    COUNT(t) AS transactionCount
             FROM TransactionEntry t
             WHERE t.userId = :userId AND t.deletedAt IS NULL
+              AND t.category <> com.finance.query.model.Category.SETTLEMENT
               AND t.createdAt BETWEEN :start AND :end
             GROUP BY t.category
             ORDER BY totalAmount DESC
@@ -204,6 +212,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                    COUNT(t) AS transactionCount
             FROM TransactionEntry t
             WHERE t.userId = :userId AND t.type = :type AND t.deletedAt IS NULL
+              AND t.category <> com.finance.query.model.Category.SETTLEMENT
               AND t.createdAt BETWEEN :start AND :end
             GROUP BY t.category
             ORDER BY totalAmount DESC
@@ -219,6 +228,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                    COUNT(*) AS transactionCount
             FROM transaction_entries t
             WHERE t.user_id = :userId AND t.deleted_at IS NULL
+              AND t.category <> 'SETTLEMENT'
               AND (CAST(:start AS timestamp) IS NULL OR t.created_at >= CAST(:start AS timestamp))
               AND (CAST(:end AS timestamp) IS NULL OR t.created_at <= CAST(:end AS timestamp))
             GROUP BY day
@@ -242,6 +252,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                        t.created_at + (COALESCE(CAST(:tzOffset AS integer), 0) * INTERVAL '1 minute') AS local_time
                 FROM transaction_entries t
                 WHERE t.user_id = :userId AND t.deleted_at IS NULL
+                  AND t.category <> 'SETTLEMENT'
                   AND (CAST(:start AS timestamp) IS NULL OR t.created_at >= CAST(:start AS timestamp))
                   AND (CAST(:end AS timestamp) IS NULL OR t.created_at <= CAST(:end AS timestamp))
             ) s
@@ -265,6 +276,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                        t.created_at + (COALESCE(CAST(:tzOffset AS integer), 0) * INTERVAL '1 minute') AS local_time
                 FROM transaction_entries t
                 WHERE t.user_id = :userId AND t.deleted_at IS NULL
+                  AND t.category <> 'SETTLEMENT'
                   AND (CAST(:start AS timestamp) IS NULL OR t.created_at >= CAST(:start AS timestamp))
                   AND (CAST(:end AS timestamp) IS NULL OR t.created_at <= CAST(:end AS timestamp))
             ) s

@@ -54,7 +54,7 @@ public class AnalyticsService {
 
     @Cacheable(
             value = "comprehensive-analytics",
-            key = "#request.userId + ':' + #request.timelineType + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
+            key = "'v2:' + #request.userId + ':' + #request.timelineType + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
     )
     public Map<String, Object> getComprehensiveAnalytics(AnalyticsRequest request) {
         Map<String, Object> analytics = new LinkedHashMap<>();
@@ -94,7 +94,7 @@ public class AnalyticsService {
 
     @Cacheable(
             value = "category-analytics",
-            key = "#request.userId + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
+            key = "'v2:' + #request.userId + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
     )
     public ChartData getCategoryAnalytics(AnalyticsRequest request) {
         List<CategoryRow> rows = fetchCategoryRows(request);
@@ -157,7 +157,7 @@ public class AnalyticsService {
 
     @Cacheable(
             value = "timeline-analytics",
-            key = "#request.userId + ':' + #request.timelineType + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
+            key = "'v2:' + #request.userId + ':' + #request.timelineType + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
     )
     public ChartData getTimelineAnalytics(AnalyticsRequest request) {
         String timelineType = request.getTimelineType() != null

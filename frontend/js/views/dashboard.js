@@ -48,7 +48,7 @@ export async function renderDashboard(container) {
             <button type="button" class="btn btn-ghost btn-sm" data-nav="transactions">View all</button>
           </div>
           <div id="d-recent" aria-live="polite">
-            ${skeletonRows(6)}
+            ${skeletonRows(3)}
           </div>
         </section>
 
@@ -96,7 +96,8 @@ export async function renderDashboard(container) {
       })
       .catch(() => renderFigures(null, null));
 
-    api.get('/upsert/entries', { userId, page: 0, size: 6, ...range })
+    // Three rows keep "Coming up" visible without scrolling on a laptop.
+    api.get('/upsert/entries', { userId, page: 0, size: 3, ...range })
       .then(renderRecent)
       .catch(() => renderRecent(null));
   };

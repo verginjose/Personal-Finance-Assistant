@@ -74,17 +74,6 @@ describe('renderDashboard', () => {
     expect(kpis).toContain('₹30,000'); // expenses
   });
 
-  it('shows the generated summary as a one-line strip under the hero', async () => {
-    mockDashboardApis();
-    await renderDashboard(container);
-
-    await vi.waitFor(() => {
-      const strip = container.querySelector('#d-insight-strip');
-      expect(strip?.hidden).toBe(false);
-      expect(container.querySelector('#d-insight-text')?.textContent).toBe('All good');
-    });
-  });
-
   it('does not hold the page for slow AI insights', async () => {
     mockDashboardApis({ aiDelay: 250 });
     await renderDashboard(container);

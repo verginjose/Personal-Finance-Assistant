@@ -2049,6 +2049,44 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
 .dash-pace { font-size: 13px; color: var(--text-2); margin-top: 6px; }
 .dash-comingup-foot { font-size: 13px; color: var(--text-2); margin-top: var(--s3); }
 
+/* One-line insight headline under the hero; the full panel stays in the rail. */
+.dash-insight-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  margin-top: var(--s4);
+  padding: 10px var(--s4);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+.dash-insight-strip:hover { background: var(--raised); border-color: var(--border-strong); }
+.dash-insight-strip:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.dash-insight-icon { display: inline-flex; flex: none; color: var(--brand); }
+.dash-insight-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.dash-insight-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
 .comingup-row {
   display: flex;
   align-items: center;

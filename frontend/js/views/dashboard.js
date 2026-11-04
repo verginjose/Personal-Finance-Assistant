@@ -40,6 +40,12 @@ export async function renderDashboard(container) {
       </div>
     </section>
 
+    <button type="button" class="dash-insight-strip" id="d-insight-strip" aria-controls="d-ai-insights-list" hidden>
+      <span class="dash-insight-icon">${icon('sparkles', 'sm')}</span>
+      <span class="dash-insight-text" id="d-insight-text"></span>
+      <span class="dash-insight-cta">Insights ${icon('chevron-down', 'xs')}</span>
+    </button>
+
     <div class="dash-columns">
       <div class="dash-col dash-col--main">
         <section aria-labelledby="d-recent-title">
@@ -48,7 +54,7 @@ export async function renderDashboard(container) {
             <button type="button" class="btn btn-ghost btn-sm" data-nav="transactions">View all</button>
           </div>
           <div id="d-recent" aria-live="polite">
-            ${skeletonRows(6)}
+            ${skeletonRows(3)}
           </div>
         </section>
 
@@ -82,6 +88,19 @@ export async function renderDashboard(container) {
     btn.onclick = () => window.navigateTo(btn.dataset.nav);
   });
 
+  // The strip is a headline for the panel, not a second copy of it: it shows
+  // the generated summary sentence and scrolls to the full insights card.
+  const insightStrip = document.getElementById('d-insight-strip');
+  if (insightStrip) {
+    insightStrip.onclick = () => {
+      const list = document.getElementById('d-ai-insights-list');
+      if (!list) return;
+      list.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      list.setAttribute('tabindex', '-1');
+      list.focus({ preventScroll: true });
+    };
+  }
+
   const loadSummary = () => {
     const range = periodRange(currentPeriod);
     const prev = previousRange(currentPeriod);
@@ -96,7 +115,8 @@ export async function renderDashboard(container) {
       })
       .catch(() => renderFigures(null, null));
 
-    api.get('/upsert/entries', { userId, page: 0, size: 6, ...range })
+    // Three rows keep "Coming up" visible without scrolling on a laptop.
+    api.get('/upsert/entries', { userId, page: 0, size: 3, ...range })
       .then(renderRecent)
       .catch(() => renderRecent(null));
   };
@@ -106,12 +126,15 @@ export async function renderDashboard(container) {
   // AI insights can take seconds; never block the rest of the page on it.
   const loadInsights = () => {
     const range = periodRange(currentPeriod);
+    renderInsightStrip(null); // the previous period's headline is not this one's
     api.get('/analytics/ai-insights', { userId, ...range })
       .then((ai) => {
         if (document.getElementById('d-ai-insights-list')) renderAiData('d', ai, refreshAdvisor, { scopeLabel: periodScopeLabel(currentPeriod) });
+        renderInsightStrip(ai);
       })
       .catch((e) => {
         if (document.getElementById('d-ai-insights-list')) renderAiData('d', { error: e.message }, refreshAdvisor, { scopeLabel: periodScopeLabel(currentPeriod) });
+        renderInsightStrip(null);
       });
   };
   const renderPendingInsights = () => {
@@ -138,6 +161,27 @@ export async function renderDashboard(container) {
   } catch (err) {
     toast('Failed to load dashboard: ' + err.message, 'error');
   }
+}
+
+/**
+ * One-line version of the insight summary under the hero. It carries the
+ * generated headline (the panel keeps the period scope line), and stays hidden
+ * whenever there is nothing trustworthy to show.
+ */
+function renderInsightStrip(ai) {
+  const strip = document.getElementById('d-insight-strip');
+  const text = document.getElementById('d-insight-text');
+  if (!strip || !text) return;
+  const insights = Array.isArray(ai?.insights) ? ai.insights.filter(Boolean) : [];
+  const first = insights.find(i => i.message) || insights.find(i => i.title);
+  const headline = String(ai?.summary || first?.message || first?.title || '').trim();
+  if (!ai || ai.error || !headline) {
+    strip.hidden = true;
+    text.textContent = '';
+    return;
+  }
+  text.textContent = headline;
+  strip.hidden = false;
 }
 
 function renderFigures(totals, previous) {
@@ -360,9 +404,11 @@ async function refreshAdvisor() {
     const range = periodRange(currentPeriod);
     const ai = await api.get('/analytics/ai-insights', { userId: Auth.getUserId(), refresh: true, ...range });
     renderAiData('d', ai, refreshAdvisor, { scopeLabel: periodScopeLabel(currentPeriod) });
+    renderInsightStrip(ai);
     toast('Insights refreshed', 'success');
   } catch (err) {
     renderAiData('d', { error: err.message }, refreshAdvisor, { scopeLabel: periodScopeLabel(currentPeriod) });
+    renderInsightStrip(null);
     toast('Could not refresh insights: ' + err.message, 'error');
   } finally {
     const current = document.getElementById('d-ai-refresh');

@@ -364,11 +364,11 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 6);
     const spendByMax = spendBy.length ? spendBy[0].amount : 0;
-    const spentTotal = memberBalances.length
-      ? memberBalances.reduce((sum, b) => sum + (Number(b.totalPaid) || 0), 0)
-      : null;
-    // TODO(backend): return the group's total spend directly; summing the
-    // members' paid totals is a client-side approximation.
+    const spentTotal = balances?.totalSpend != null
+      ? Number(balances.totalSpend)
+      : (memberBalances.length
+        ? memberBalances.reduce((sum, b) => sum + (Number(b.totalPaid) || 0), 0)
+        : null);
     const spendByHtml = spendBy.length > 1 ? `
       <div class="split-spendby">
         <div class="split-spendby-title">Spending by member</div>
@@ -527,10 +527,10 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
 
     const memberCount = Math.max(eligibleMembers.length, 1);
     const shareOf = (e) => {
-      if (e.splitType === 'EQUAL') return Number(e.amount) / memberCount;
+      // The API now resolves the requesting user's share for every split type.
       if (e.myShare != null) return Number(e.myShare);
-      // TODO(backend): the expenses API does not return the current user's
-      // share for percentage/amount splits; show nothing rather than a guess.
+      if (e.splitType === 'EQUAL') return Number(e.amount) / memberCount;
+      // Older responses may omit myShare; show nothing rather than a guess.
       return null;
     };
     const amInSplit = (e) => e.myShare != null || eligibleMembers.some(m => m.userId === userId);

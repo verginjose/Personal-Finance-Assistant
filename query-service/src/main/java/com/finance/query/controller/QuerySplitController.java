@@ -55,10 +55,12 @@ public class QuerySplitController {
     @GetMapping("/{groupId}/expenses")
     @Operation(summary = "Get expenses in a group")
     public ResponseEntity<org.springframework.data.domain.Page<SharedExpense>> getGroupExpenses(
+            @RequestHeader(value = "X-User-Id", required = false) String xUserId,
             @PathVariable Long groupId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(splitService.getGroupExpenses(groupId, page, size));
+        UUID userId = xUserId == null ? null : requireUserId(xUserId);
+        return ResponseEntity.ok(splitService.getGroupExpenses(groupId, page, size, userId));
     }
 
     @GetMapping("/{groupId}/activity")

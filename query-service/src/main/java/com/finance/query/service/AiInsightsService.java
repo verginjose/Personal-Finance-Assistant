@@ -55,10 +55,10 @@ public class AiInsightsService {
      * advice cached under the old rules (e.g. "Goal 1122") is not served for
      * the full 24-hour TTL after a deploy.
      */
-    private static final String CACHE_KEY_VERSION = "v3:";
+    private static final String CACHE_KEY_VERSION = "v4:";
 
     // Cache AI insights for 24 hours per user (avoid repeated LLM calls)
-    @Cacheable(value = "ai-insights", key = "'v3:' + #userId")
+    @Cacheable(value = "ai-insights", key = "'v4:' + #userId")
     public AiInsightResponse generateInsights(UUID userId) {
         BigDecimal income  = safeAmount(repository.getTotalAmountByType(userId, TransactionType.valueOf("INCOME")));
         BigDecimal expense = safeAmount(repository.getTotalAmountByType(userId, TransactionType.valueOf("EXPENSE")));
@@ -110,8 +110,10 @@ public class AiInsightsService {
                        List<BudgetTrendService.BudgetTrend> budgetTrends) {
         StringBuilder sb = new StringBuilder();
         sb.append("You are a calm, precise personal-finance editor. Write plainly, in sentence case, with no hype and no gamification. ");
-        sb.append("Every insight must cite a concrete number or category from the data below. Never invent a figure, never say 'all your goals' when there is one, ");
+        sb.append("Every insight must cite a concrete category, count or percentage from the data below. Never invent a figure, never say 'all your goals' when there is one, ");
         sb.append("and never give generic advice that would fit any user. If there is nothing specific to say, return fewer insights. ");
+        sb.append("Write titles and messages in sentence case. Write category names as normal words (for example 'electronics', 'restaurants'), never in ALL CAPS or Title Case. ");
+        sb.append("Never write a currency amount (₹, $, € or £) in a title, message or summary: the app displays amounts from its own totals. Percentages and counts are fine. ");
         sb.append("The category list contains expense categories only. Do NOT use any emojis.\n\n");
         sb.append("Overall Summary:\n");
         sb.append("- Total Income: ₹").append(income).append("\n");
@@ -153,8 +155,9 @@ public class AiInsightsService {
         sb.append("""
 
 Priority must be 1 (most urgent) to 5 (nice to have). Return 3-5 insights, ordered by priority.
-Each title must be short (max 6 words); each message 1-2 sentences and reference a concrete number or category.
-For a goal with a deadline, say what it needs per month and what is actually being saved.
+Each title must be short (max 6 words, sentence case); each message 1-2 sentences and reference a concrete category, count or percentage — never a currency amount.
+For a goal with a deadline, say whether the required monthly transfer is above or below what is actually being saved, without printing the amounts.
+The summary must be one sentence in sentence case with no currency amounts.
 Return ONLY valid JSON in this format (no markdown, no explanation):
 {"insights":[{"title":"string","message":"string","type":"WARNING|TIP|ACHIEVEMENT","priority":1}],"summary":"string"}
 """);
@@ -243,19 +246,19 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
 
         if (net.compareTo(BigDecimal.ZERO) < 0) {
             insights.add(new AiInsightResponse.Insight(
-                    "Spending Exceeds Income",
-                    "You've spent ₹" + expense.subtract(income).toPlainString() + " more than you earned overall. Consider reviewing your biggest expense categories.",
+                    "Spending exceeds income",
+                    "You've spent more than you earned overall. Consider reviewing your biggest expense categories.",
                     "WARNING", 1));
         } else if (income.compareTo(BigDecimal.ZERO) > 0) {
             double savingsRate = net.doubleValue() / income.doubleValue() * 100;
             if (savingsRate >= 20) {
                 insights.add(new AiInsightResponse.Insight(
-                        "Great Savings Rate!",
+                        "Great savings rate",
                         "You're saving " + String.format("%.1f", savingsRate) + "% of your income overall. Keep it up!",
                         "ACHIEVEMENT", 2));
             } else {
                 insights.add(new AiInsightResponse.Insight(
-                        "Boost Your Savings",
+                        "Boost your savings",
                         "Your overall savings rate is " + String.format("%.1f", savingsRate) + "%. Financial advisors recommend saving at least 20% of income.",
                         "TIP", 2));
             }
@@ -269,7 +272,7 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
                 if (share >= 25) {
                     String category = prettyCategory(top.getCategory());
                     insights.add(new AiInsightResponse.Insight(
-                            "Watch " + category,
+                            category + " is a large share",
                             category + " accounts for " + String.format("%.0f", share)
                                     + "% of your spending. Trimming it is the fastest way to free up cash.",
                             "TIP", 2));
@@ -287,14 +290,14 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
 
                 if ("INCREASED".equalsIgnoreCase(trend.getTrend()) && change >= 20 && increases < 2) {
                     insights.add(new AiInsightResponse.Insight(
-                            category + " Spending Jumped",
+                            category + " spending jumped",
                             category + " spending is up " + String.format("%.0f", change)
                                     + "% versus last month. Check whether this is a one-off or a new habit.",
                             "WARNING", 2));
                     increases++;
                 } else if ("DECREASED".equalsIgnoreCase(trend.getTrend()) && change >= 10 && decreases < 2) {
                     insights.add(new AiInsightResponse.Insight(
-                            category + " Spending Down",
+                            category + " spending down",
                             category + " spending fell " + String.format("%.0f", change)
                                     + "% versus last month. Consider moving the difference into savings.",
                             "ACHIEVEMENT", 3));
@@ -321,8 +324,9 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
                     boolean behind = Boolean.FALSE.equals(g.getOnTrack());
                     insights.add(new AiInsightResponse.Insight(
                             name + (behind ? " is behind" : " is on track"),
-                            name + " needs " + money(g.getRequiredMonthly())
-                                    + "/mo; you're saving " + money(velocity) + "/mo.",
+                            name + (behind
+                            ? " needs a larger monthly transfer than you are making now."
+                            : " is on track: your monthly transfer covers what the deadline needs."),
                             behind ? "WARNING" : "ACHIEVEMENT", behind ? 1 : 3));
                     added++;
                 }
@@ -341,17 +345,13 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
             summary = "Most of your spending went to " + prettyCategory(top.getCategory())
                     + " (" + String.format("%.0f", share) + "%).";
         } else if (net.compareTo(BigDecimal.ZERO) < 0) {
-            summary = "Spending exceeds income by ₹" + net.abs().toPlainString() + ".";
+            summary = "Spending exceeds income.";
         } else {
             summary = "No spending to break down yet.";
         }
 
         return new AiInsightResponse(insights, summary,
                 LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-    }
-
-    private static String money(BigDecimal value) {
-        return "₹" + value.setScale(0, java.math.RoundingMode.HALF_UP).toPlainString();
     }
 
     /** Goal names are the only thing the user (and the LLM) should ever see. */
@@ -378,8 +378,8 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
     private AiInsightResponse buildDefaultResponse() {
         return new AiInsightResponse(
                 List.of(new AiInsightResponse.Insight(
-                        "No Transactions Yet",
-                        "Start logging your income and expenses to receive personalized financial insights!",
+                        "No transactions yet",
+                        "Start logging your income and expenses to receive personalized financial insights.",
                         "TIP", 1)),
                 "Add your first transaction to unlock AI-powered insights.",
                 LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));

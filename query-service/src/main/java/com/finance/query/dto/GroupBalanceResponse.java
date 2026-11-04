@@ -18,6 +18,15 @@ public class GroupBalanceResponse {
     private String groupName;
     private List<MemberBalance> memberBalances;
     private List<SettlementSuggestion> simplifiedDebts;
+    /** Sum of real shared expenses (settlement payments excluded). */
+    private BigDecimal totalSpend;
+
+    /** Backwards-compatible constructor for callers without a spend total. */
+    public GroupBalanceResponse(Long groupId, String groupName,
+                                List<MemberBalance> memberBalances,
+                                List<SettlementSuggestion> simplifiedDebts) {
+        this(groupId, groupName, memberBalances, simplifiedDebts, BigDecimal.ZERO);
+    }
 
     @Data
     @NoArgsConstructor

@@ -25,19 +25,32 @@ function isSettlementRow(t) {
 
 /** A settlement reads as a sentence about people, not as a system log. */
 function settlementTitle(t, userId) {
-  const myName = displayName(Auth.getName() || Auth.getEmail() || '');
-  const m = /payment from\s+(.+?)\s+to\s+(.+)$/i.exec(String(t.name || t.description || ''));
+  const raw = String(t.name || t.description || '').trim();
+  // Settlement entries are written per person: "Paid <name>" on the payer's
+  // ledger and "Received from <name>" on the receiver's.
+  let m = /^paid\s+(.+)$/i.exec(raw);
+  if (m) return `You paid ${displayName(m[1])}`;
+  m = /^received from\s+(.+)$/i.exec(raw);
+  if (m) return `${displayName(m[1])} paid you`;
+  m = /payment from\s+(.+?)\s+to\s+(.+)$/i.exec(raw);
   if (m) {
     const from = displayName(m[1]);
     const to = displayName(m[2]);
-    if (from === myName || userId && String(t.userId || '') === String(userId) && /payment from/i.test(String(t.name || ''))) {
-      return `You paid ${to}`;
-    }
-    return `${from} paid ${to}`;
+    const myName = displayName(Auth.getName() || Auth.getEmail() || '');
+    return from === myName ? `You paid ${to}` : `${from} paid ${to}`;
   }
-  // TODO(backend): expose the settlement counterparty so the row can always
-  // name the person instead of a generic "Payment recorded".
-  return 'Payment recorded';
+  if (belongsToUser(t, userId)) return 'You recorded a settlement';
+  return 'Settlement recorded';
+}
+
+function belongsToUser(t, userId) {
+  return userId && String(t.userId || '') === String(userId);
+}
+
+/** Group name from a settlement note ("Settlement · Office lunch crew"). */
+function settlementGroup(t) {
+  const m = /^settlement\s*[·:-]\s*(.+)$/i.exec(String(t.description || ''));
+  return m ? m[1].trim() : '';
 }
 
 /** Sync the page into the URL so refresh and Back both work. */
@@ -464,7 +477,7 @@ async function loadTransactions(userId) {
           const isSplit = !!(t.groupName || t.groupId);
           const total = t.totalAmount != null ? Number(t.totalAmount) : null;
           const subParts = [];
-          if (settlement) subParts.push('Settlement');
+          if (settlement) subParts.push(esc(settlementGroup(t) || 'Settlement'));
           else if (isSplit) subParts.push(`Your share${total != null ? ` of ${formatMoney(total, currency)}` : ''}`);
           else if (t.description) subParts.push(esc(humanizeSystemText(t.description)));
           if (isSplit && t.groupName) {
@@ -574,7 +587,7 @@ function renderMobileTransactions(items, currency, userId) {
       const amount = formatMoney(isIncome ? shown.amount : -shown.amount, shown.currency);
       const title = settlement ? settlementTitle(t, userId) : humanizeNamesIn(t.name || 'Transaction');
       const sub = settlement
-        ? 'Settlement'
+        ? esc(settlementGroup(t) || 'Settlement')
         : `${esc(formatCategory(cat))}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}`;
       return `
         <div class="ledger-row ${settlement ? 'is-settlement' : ''}" role="button" tabindex="0" data-txn-id="${esc(String(t.id || ''))}">

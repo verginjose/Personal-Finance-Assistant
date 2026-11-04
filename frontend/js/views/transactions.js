@@ -512,7 +512,7 @@ async function loadTransactions(userId) {
           </tr>`;
         }).join('');
         return `
-          <tr class="ledger-day-row"><td colspan="3"><span title="${esc(dateTooltip(`${key}T00:00:00`))}">${esc(formatDayLabel(key))}</span><span class="day-total" title="${mixed ? 'Excludes amounts in another currency' : ''}">${formatMoney(dayTotal, currency)}${mixed ? ' *' : ''}</span></td></tr>
+          <tr class="ledger-day-row"><td colspan="3"><span title="${esc(dateTooltip(`${key}T00:00:00`))}">${esc(formatDayLabel(key))}</span><span class="day-total" title="${mixed ? 'Excludes amounts in another currency' : ''}">${formatMoney(dayTotal, currency)}${mixed ? ' <span class="day-total-mark" aria-label="Excludes amounts in another currency">*</span>' : ''}</span></td></tr>
           ${dayRows}`;
       }).join('');
 
@@ -571,13 +571,15 @@ function renderMobileTransactions(items, currency, userId) {
     groups.get(key).push(t);
   }
 
-  el.innerHTML = [...groups.entries()].map(([key, rows]) => {
+  let anyMixed = false;
+  const html = [...groups.entries()].map(([key, rows]) => {
     let mixed = false;
     const dayTotal = rows.reduce((sum, t) => {
       const shown = displayAmountFor(t, currency);
       if (shown.currency !== currency) { mixed = true; return sum; }
       return sum + (t.type === 'INCOME' ? Number(shown.amount) : -Number(shown.amount));
     }, 0);
+    if (mixed) anyMixed = true;
     const rowHtml = rows.map(t => {
       const isIncome = t.type === 'INCOME';
       const cat = txCategory(t);
@@ -592,15 +594,18 @@ function renderMobileTransactions(items, currency, userId) {
         <div class="ledger-row ${settlement ? 'is-settlement' : ''}" role="button" tabindex="0" data-txn-id="${esc(String(t.id || ''))}">
           <span class="row-icon">${icon(settlement ? 'arrow-right' : categoryIcon(cat), 'sm')}</span>
           <div class="ledger-name">
-            ${esc(title)}
+            <span class="txn-title">${esc(title)}</span>
             <div class="txn-sub">${sub}</div>
           </div>
           <span class="ledger-amount ${isIncome ? 'is-pos' : ''}">${amount}</span>
         </div>`;
     }).join('');
 
-    return `<div class="ledger-day"><span title="${esc(dateTooltip(`${key}T00:00:00`))}">${esc(formatDayLabel(key))}</span><span class="day-total" title="${mixed ? 'Excludes amounts in another currency' : ''}">${formatMoney(dayTotal, currency)}${mixed ? ' *' : ''}</span></div>${rowHtml}`;
+    return `<div class="ledger-day"><span title="${esc(dateTooltip(`${key}T00:00:00`))}">${esc(formatDayLabel(key))}</span><span class="day-total" title="${mixed ? 'Excludes amounts in another currency' : ''}">${formatMoney(dayTotal, currency)}${mixed ? ' <span class="day-total-mark" aria-label="Excludes amounts in another currency">*</span>' : ''}</span></div>${rowHtml}`;
   }).join('');
+  el.innerHTML = html + (anyMixed
+    ? '<p class="day-total-footnote">* Excludes amounts in another currency.</p>'
+    : '');
 
   el.querySelectorAll('[data-txn-id]').forEach(row => {
     const open = () => {

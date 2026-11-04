@@ -136,9 +136,9 @@ function renderShell() {
 
       <!-- Mobile More sheet -->
       <div class="bottom-sheet-overlay" id="more-menu-overlay"></div>
-      <div class="bottom-sheet" id="more-menu-sheet" role="menu" aria-label="More destinations" hidden>
+      <div class="bottom-sheet" id="more-menu-sheet" role="dialog" aria-modal="true" aria-label="More destinations" hidden>
         <div class="bottom-sheet-handle" aria-hidden="true"></div>
-        <div class="more-menu-list">
+        <div class="more-menu-list" role="menu">
           ${NAV_ITEMS.filter(n => MORE_VIEWS.includes(n.id)).map(n => `
             <a href="${n.path}" data-view="${n.id}" class="more-menu-item" role="menuitem">${icon(n.icon)} ${esc(n.label)}</a>`).join('')}
         </div>
@@ -192,18 +192,49 @@ function wireShell() {
 
   const moreOverlay = document.getElementById('more-menu-overlay');
   const moreSheet = document.getElementById('more-menu-sheet');
+  const moreBtn = document.getElementById('mobile-more-btn');
+  const sheetItems = () => [...moreSheet.querySelectorAll('.more-menu-item')];
+
   const closeMore = () => {
     moreOverlay.classList.remove('open');
     moreSheet.classList.remove('open');
     moreSheet.hidden = true;
+    document.body.classList.remove('sheet-open');
   };
-  document.getElementById('mobile-more-btn').onclick = () => {
-    const open = !moreSheet.classList.contains('open');
-    moreOverlay.classList.toggle('open', open);
-    moreSheet.classList.toggle('open', open);
-    moreSheet.hidden = !open;
+  const openMore = () => {
+    moreOverlay.classList.add('open');
+    moreSheet.classList.add('open');
+    moreSheet.hidden = false;
+    document.body.classList.add('sheet-open');
+    sheetItems()[0]?.focus();
+  };
+  moreBtn.onclick = () => {
+    if (moreSheet.classList.contains('open')) closeMore();
+    else openMore();
   };
   moreOverlay.onclick = closeMore;
+
+  // Trap focus in the sheet and let Escape dismiss it.
+  moreSheet.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeMore();
+      moreBtn.focus();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const items = sheetItems();
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
 }
 
 function wireUserMenu() {
@@ -264,6 +295,7 @@ function closeBottomSheets() {
   const sheet = document.getElementById('more-menu-sheet');
   if (overlay) overlay.classList.remove('open');
   if (sheet) { sheet.classList.remove('open'); sheet.hidden = true; }
+  document.body.classList.remove('sheet-open');
 }
 
 /** Navigate to a top-level view and reflect it in the URL. */

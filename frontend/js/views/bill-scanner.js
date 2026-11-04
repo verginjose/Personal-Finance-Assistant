@@ -5,6 +5,11 @@ import {
   formatMoney, formatCategory, openReceiptLightbox,
 } from '../utils/ui.js';
 
+/** Same breakpoint as the mobile shell in style.css. */
+const isMobileViewport = () => typeof window !== 'undefined'
+  && typeof window.matchMedia === 'function'
+  && window.matchMedia('(max-width: 767px)').matches;
+
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
   const defaultCurrency = Auth.getDefaultCurrency();
@@ -169,6 +174,8 @@ export async function renderBillScanner(container) {
     const wasConverted = currency !== originalCurrency;
 
     const form = document.getElementById('bs-preview-form');
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const dateDisplay = result.date
       ? new Date(`${result.date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
       : 'No date detected';
@@ -200,7 +207,7 @@ export async function renderBillScanner(container) {
         </div>
         <div class="ocr-field has-fill" style="animation-delay:80ms">
           <label for="bs-date">Date</label>
-          <input class="form-input" id="bs-date" type="date" value="${escapeAttr(result.date || '')}">
+          <input class="form-input" id="bs-date" type="date" value="${escapeAttr(result.date || todayIso)}">
           ${confidenceHtml('date', result)}
         </div>
         <div class="ocr-field has-fill" style="animation-delay:120ms">
@@ -256,14 +263,17 @@ export async function renderBillScanner(container) {
     typeSelect.onchange = fillCategories;
     fillCategories();
 
-    if (window.TomSelect) {
+    // On phones use the native controls: a native select opens the OS picker
+    // instead of the keyboard, and a native date input shows the date and its
+    // picker icon. TomSelect and flatpickr are desktop-only here.
+    if (window.TomSelect && !isMobileViewport()) {
       ['#bs-category', '#bs-type', '#bs-dest'].forEach(sel => {
         const el = document.querySelector(sel);
         if (el && !el.tomselect) new TomSelect(sel, { create: false, maxOptions: 200 });
       });
     }
-    if (window.flatpickr) {
-      flatpickr('#bs-date', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'j M Y', disableMobile: true });
+    if (window.flatpickr && !isMobileViewport()) {
+      flatpickr('#bs-date', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'j M Y' });
     }
 
     const syncSummary = () => {

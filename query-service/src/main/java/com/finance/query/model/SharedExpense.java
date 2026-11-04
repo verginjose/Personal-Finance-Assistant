@@ -74,6 +74,10 @@ public class SharedExpense {
     @Transient
     private String paidByName;
 
+    /** Receiver of a SETTLEMENT payment, resolved per request (not persisted). */
+    @Transient
+    private String settlementToName;
+
     public enum SplitType {
         EQUAL, PERCENTAGE, EXACT, SETTLEMENT
     }

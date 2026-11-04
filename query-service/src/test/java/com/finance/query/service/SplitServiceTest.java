@@ -98,6 +98,23 @@ class SplitServiceTest {
     }
 
     @Test
+    @DisplayName("getGroupExpenses names the receiver of a settlement")
+    void getGroupExpenses_resolvesSettlementCounterparty() {
+        SharedExpense settlement = expense(20L, new BigDecimal("300.00"), SharedExpense.SplitType.SETTLEMENT, me);
+        when(expenseRepo.findByGroupIdOrderByCreatedAtDesc(eq(5L), eq(PageRequest.of(0, 20))))
+                .thenReturn(new PageImpl<>(List.of(settlement)));
+
+        ExpenseSplit receiver = split(20L, friend, new BigDecimal("300.00"));
+        receiver.setUserName("Deepika");
+        when(splitRepo.findBySharedExpenseIdIn(List.of(20L))).thenReturn(List.of(receiver));
+        when(memberRepo.findByGroupId(5L)).thenReturn(List.of(member(me, "Aarav"), member(friend, "Deepika")));
+
+        var page = service.getGroupExpenses(5L, 0, 20, me);
+
+        assertThat(page.getContent().get(0).getSettlementToName()).isEqualTo("Deepika");
+    }
+
+    @Test
     @DisplayName("getGroupBalances reports total spend excluding settlements")
     void getGroupBalances_totalSpendExcludesSettlements() {
         ExpenseGroup group = new ExpenseGroup();

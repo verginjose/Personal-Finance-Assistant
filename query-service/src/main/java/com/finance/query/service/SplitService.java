@@ -157,7 +157,8 @@ public class SplitService {
 
         List<SharedExpense> content = result.getContent();
         List<Long> expenseIds = content.stream().map(SharedExpense::getId).toList();
-        Map<Long, BigDecimal> myShares = splitRepo.findBySharedExpenseIdIn(expenseIds).stream()
+        List<ExpenseSplit> splits = splitRepo.findBySharedExpenseIdIn(expenseIds);
+        Map<Long, BigDecimal> myShares = splits.stream()
                 .filter(s -> userId.equals(s.getUserId()))
                 .collect(Collectors.groupingBy(ExpenseSplit::getSharedExpenseId, LinkedHashMap::new,
                         Collectors.reducing(BigDecimal.ZERO, ExpenseSplit::getAmount, BigDecimal::add)));
@@ -167,9 +168,25 @@ public class SplitService {
             names.put(member.getUserId(), member.getName());
         }
 
+        Map<Long, SharedExpense> byId = new HashMap<>();
+        for (SharedExpense expense : content) byId.put(expense.getId(), expense);
+
+        // A settlement's receiver is the person in the split who did not pay.
+        Map<Long, String> settlementReceivers = new HashMap<>();
+        for (ExpenseSplit split : splits) {
+            SharedExpense expense = byId.get(split.getSharedExpenseId());
+            if (expense != null
+                    && expense.getSplitType() == SharedExpense.SplitType.SETTLEMENT
+                    && !split.getUserId().equals(expense.getPaidBy())) {
+                String receiver = split.getUserName() != null ? split.getUserName() : names.get(split.getUserId());
+                settlementReceivers.put(expense.getId(), receiver);
+            }
+        }
+
         for (SharedExpense expense : content) {
             expense.setMyShare(myShares.get(expense.getId()));
             expense.setPaidByName(names.get(expense.getPaidBy()));
+            expense.setSettlementToName(settlementReceivers.get(expense.getId()));
         }
         return result;
     }

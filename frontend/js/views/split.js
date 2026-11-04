@@ -753,11 +753,14 @@ function displayNameFromId(id) {
 }
 
 /**
- * A settlement row reads as a sentence about people, never as a system log.
- * TODO(backend): the settlement expense does not expose its counterparty, so
- * the name is parsed from the description when present.
+ * A settlement row reads as a sentence about people. The API resolves the
+ * counterparty; the description is only a fallback for older responses.
  */
 function settlementRowTitle(e, userId, nameOf) {
+  if (e.settlementToName) {
+    const to = displayName(e.settlementToName);
+    return e.paidBy === userId ? `You paid ${to}` : `${nameOf(e.paidBy)} paid ${to}`;
+  }
   const desc = String(e.description || '');
   const m = /payment from\s+(.+?)\s+to\s+(.+)$/i.exec(desc);
   if (m) {

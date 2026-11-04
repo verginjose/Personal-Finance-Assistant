@@ -743,9 +743,9 @@ function aiInsightHtml(ins) {
   // keep figures out of it so they cannot contradict the totals selector.
   const title = toSentenceCase(ins.title);
   const rawMessage = humanizeSystemText(ins.message);
-  // If the supporting line carries a currency figure, drop the line: the hero
-  // and every list already show the figure from the shared selector.
-  // TODO(backend): generate insight copy without embedded amounts.
+  // If a supporting line carries a currency figure, drop the line: the hero
+  // and every list already show the figure from the shared selector. The
+  // backend prompt avoids amounts now; this guards cached or older copy.
   const message = /(?:₹|Rs\.?|\$|€|£)\s?-?\d/i.test(ins.message || '') ? '' : stripAmounts(rawMessage);
   return `
     <article class="advisor-insight ${cfg.tone}" data-type="${ins.type}" data-priority="${ins.priority}">

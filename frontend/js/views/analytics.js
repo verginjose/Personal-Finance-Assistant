@@ -36,8 +36,9 @@ export async function renderAnalytics(container) {
         <div class="figure-value" id="a-income">—</div>
       </div>
       <div class="figure">
-        <div class="figure-label">Expenses <span class="figure-note" title="Payments between group members are not counted as spending.">Settlements excluded</span></div>
+        <div class="figure-label">Expenses <span class="figure-note figure-note--inline" title="Payments between group members are not counted as spending.">Settlements excluded</span></div>
         <div class="figure-value" id="a-expense">—</div>
+        <div class="figure-note figure-note--caption" title="Payments between group members are not counted as spending.">Settlements excluded</div>
       </div>
       <div class="figure">
         <div class="figure-label">Transactions <span class="figure-hint-inline" id="a-count-scope"></span></div>
@@ -57,7 +58,7 @@ export async function renderAnalytics(container) {
           <button type="button" class="chart-toggle" data-preset="ALL">All time</button>
         </div>
       </div>
-      <div>
+      <div class="analytics-field analytics-field--period">
         <label for="a-preset">Period</label>
         <select class="form-select" id="a-preset" aria-label="Date preset">
           <option value="ALL">All time</option>

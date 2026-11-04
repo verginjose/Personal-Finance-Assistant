@@ -1,0 +1,15 @@
+# Keep the build context tiny: the CI runner uploads it to BuildKit on every
+# build, and a local .venv is ~900 MB. None of this is needed to build the
+# image (deps are installed inside the image from the pip indexes).
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.iml
+.idea/
+.git/
+README.md

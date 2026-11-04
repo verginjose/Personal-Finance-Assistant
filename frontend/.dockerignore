@@ -1,0 +1,7 @@
+# Static site: only nginx.conf, index.html, css/ and js/ are copied into the
+# image. node_modules/ (and any local tooling) must not be uploaded per build.
+node_modules/
+*.iml
+.idea/
+.git/
+README.md

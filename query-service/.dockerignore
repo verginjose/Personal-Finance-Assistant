@@ -1,0 +1,7 @@
+# The image compiles from pom.xml + src only; target/ is a local build artifact
+# and is uploaded to BuildKit with the rest of the context otherwise.
+target/
+*.iml
+.idea/
+.git/
+README.md

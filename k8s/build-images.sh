@@ -22,7 +22,16 @@ images=()
 for svc in "${SERVICES[@]}"; do
   img="${PREFIX}/${svc}:${TAG}"
   echo "==> Building ${img}"
-  docker build -t "${img}" "${ROOT_DIR}/${svc}"
+  if [[ "${svc}" == "ocr-service" ]]; then
+    # OCR builds FROM the prebuilt dependency base (see ocr-service/Dockerfile.full);
+    # the in-cluster registry name is not resolvable from the host, so use the
+    # NodePort address instead.
+    docker build \
+      --build-arg "OCR_BASE=${OCR_BASE:-127.0.0.1:30500/finance/ocr-base:cu126-py311-v1}" \
+      -t "${img}" "${ROOT_DIR}/${svc}"
+  else
+    docker build -t "${img}" "${ROOT_DIR}/${svc}"
+  fi
   images+=("${img}")
 done
 

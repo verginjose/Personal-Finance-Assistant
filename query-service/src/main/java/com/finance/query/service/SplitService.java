@@ -133,10 +133,45 @@ public class SplitService {
 
     /* ─── SHARED EXPENSES ─── */
 
+    /* ─── SHARED EXPENSES ─── */
+
+    /** Kept for callers that do not identify a user (no per-user fields). */
     @Transactional(readOnly = true)
-    @Cacheable(value = "group-expenses", key = "#groupId + '-' + #page + '-' + #size", sync = true)
     public org.springframework.data.domain.Page<SharedExpense> getGroupExpenses(Long groupId, int page, int size) {
-        return expenseRepo.findByGroupIdOrderByCreatedAtDesc(groupId, org.springframework.data.domain.PageRequest.of(page, size));
+        return getGroupExpenses(groupId, page, size, null);
+    }
+
+    /**
+     * Expenses for a group, enriched with the requesting user's own share and
+     * the payer's display name so the client never has to divide a total to
+     * infer a personal outcome. Cached per user because those fields differ.
+     */
+    @Transactional(readOnly = true)
+    @Cacheable(value = "group-expenses",
+            key = "#groupId + '-' + #page + '-' + #size + '-' + (#userId != null ? #userId : 'anon')",
+            sync = true)
+    public org.springframework.data.domain.Page<SharedExpense> getGroupExpenses(Long groupId, int page, int size, UUID userId) {
+        org.springframework.data.domain.Page<SharedExpense> result =
+                expenseRepo.findByGroupIdOrderByCreatedAtDesc(groupId, org.springframework.data.domain.PageRequest.of(page, size));
+        if (userId == null || !result.hasContent()) return result;
+
+        List<SharedExpense> content = result.getContent();
+        List<Long> expenseIds = content.stream().map(SharedExpense::getId).toList();
+        Map<Long, BigDecimal> myShares = splitRepo.findBySharedExpenseIdIn(expenseIds).stream()
+                .filter(s -> userId.equals(s.getUserId()))
+                .collect(Collectors.groupingBy(ExpenseSplit::getSharedExpenseId, LinkedHashMap::new,
+                        Collectors.reducing(BigDecimal.ZERO, ExpenseSplit::getAmount, BigDecimal::add)));
+
+        Map<UUID, String> names = new HashMap<>();
+        for (GroupMember member : memberRepo.findByGroupId(groupId)) {
+            names.put(member.getUserId(), member.getName());
+        }
+
+        for (SharedExpense expense : content) {
+            expense.setMyShare(myShares.get(expense.getId()));
+            expense.setPaidByName(names.get(expense.getPaidBy()));
+        }
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -185,7 +220,14 @@ public class SplitService {
         List<GroupBalanceResponse.SettlementSuggestion> suggestions = minimizeDebts(memberBalances, nameMap,
                 group.getCurrency());
 
-        return new GroupBalanceResponse(groupId, group.getName(), memberBalances, suggestions);
+        // Settlement payments move money between members; they are not spend.
+        BigDecimal totalSpend = expenses.stream()
+                .filter(e -> e.getSplitType() != SharedExpense.SplitType.SETTLEMENT)
+                .map(SharedExpense::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        return new GroupBalanceResponse(groupId, group.getName(), memberBalances, suggestions, totalSpend);
     }
 
     // SYNC-WITH-COMMAND-SERVICE: minimizeDebts and computeNetBalancesForUser are duplicated

@@ -249,15 +249,24 @@ function renderFigures(totals, previous) {
 function settlementTitle(t, userId) {
   const cat = String(t.expenseCategory || t.incomeCategory || t.category || '').toUpperCase();
   if (cat !== 'SETTLEMENT') return humanizeNamesIn(t.name || 'Transaction');
-  const m = /payment from\s+(.+?)\s+to\s+(.+)$/i.exec(String(t.name || t.description || ''));
+  const raw = String(t.name || t.description || '').trim();
+  let m = /^paid\s+(.+)$/i.exec(raw);
+  if (m) return `You paid ${displayName(m[1])}`;
+  m = /^received from\s+(.+)$/i.exec(raw);
+  if (m) return `${displayName(m[1])} paid you`;
+  m = /payment from\s+(.+?)\s+to\s+(.+)$/i.exec(raw);
   if (m) {
     const from = displayName(m[1]);
     const to = displayName(m[2]);
-    return from === displayName(Auth.getName() || '') ? `You paid ${to}` : `${from} paid ${to}`;
+    return from === displayName(Auth.getName() || Auth.getEmail() || '') ? `You paid ${to}` : `${from} paid ${to}`;
   }
-  // TODO(backend): expose the settlement counterparty so the row can always
-  // read "You paid <name>" instead of a generic payment label.
-  return 'Payment recorded';
+  return 'Settlement recorded';
+}
+
+/** Group name from a settlement note ("Settlement · Office lunch crew"). */
+function settlementGroup(t) {
+  const m = /^settlement\s*[·:-]\s*(.+)$/i.exec(String(t.description || ''));
+  return m ? m[1].trim() : '';
 }
 
 function renderRecent(result) {
@@ -301,7 +310,7 @@ function renderRecent(result) {
           <span class="dash-recent-icon">${icon(isSettlement ? 'arrow-right' : categoryIcon(cat), 'sm')}</span>
           <div class="ledger-name">
             ${esc(settlementTitle(t))}
-            <div class="txn-sub">${esc(formatCategory(cat))}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}${tags}</div>
+            <div class="txn-sub">${esc(isSettlement ? (settlementGroup(t) || formatCategory(cat)) : formatCategory(cat))}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}${tags}</div>
           </div>
           ${receipt}
           <span class="ledger-amount ${isIncome ? 'is-pos' : ''}">${amount}</span>

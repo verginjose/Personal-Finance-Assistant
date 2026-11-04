@@ -66,6 +66,14 @@ public class SharedExpense {
     @Column(name = "receipt_url", length = 500)
     private String receiptUrl;
 
+    /** The requesting user's share, resolved per request (not persisted). */
+    @Transient
+    private BigDecimal myShare;
+
+    /** Display name of the payer, resolved per request (not persisted). */
+    @Transient
+    private String paidByName;
+
     public enum SplitType {
         EQUAL, PERCENTAGE, EXACT, SETTLEMENT
     }

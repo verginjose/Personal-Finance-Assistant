@@ -15,6 +15,12 @@ import {
   categoryOptions,
   renderHealthData,
   renderAiData,
+  displayName,
+  humanizeHandle,
+  toSentenceCase,
+  humanizeSystemText,
+  displayAmountFor,
+  formatDue,
 } from '../js/utils/ui.js';
 
 describe('ui utilities', () => {
@@ -133,5 +139,41 @@ describe('ui utilities', () => {
     expect(document.getElementById('i-ai-summary').textContent).toBe('3 insights found');
     expect(document.getElementById('i-ai-insights-list').children.length).toBe(1);
     expect(document.getElementById('i-ai-insights-list').textContent).toContain('High spending');
+  });
+
+  it('humanises handles into display names', () => {
+    expect(humanizeHandle('aarav.menon.db241')).toBe('Aarav Menon');
+    expect(displayName('aarav.menon.db241')).toBe('Aarav Menon');
+    expect(displayName({ username: 'deepika.shah' })).toBe('Deepika Shah');
+    // A real display name is trusted verbatim.
+    expect(displayName({ name: 'Deepika Shah' })).toBe('Deepika Shah');
+    expect(displayName('')).toBe('Member');
+  });
+
+  it('converts generated Title Case and shouting to sentence case', () => {
+    expect(toSentenceCase('Emergency Fund Is Behind')).toBe('Emergency fund is behind');
+    expect(toSentenceCase('Cut Electronics Spending')).toBe('Cut electronics spending');
+    expect(humanizeSystemText('Auto-generated: monthly subscription')).toBe('Monthly subscription');
+    expect(humanizeSystemText('Auto-generated (Aggregated 2 missed periods): monthly subscription'))
+      .toBe('Monthly subscription · 2 charges caught up');
+    expect(humanizeSystemText('RESTAURANTS changed by -77.7%')).toBe('Restaurants changed by -77.7%');
+  });
+
+  it('keeps amounts in the default currency when no conversion exists', () => {
+    expect(displayAmountFor({ amount: 100, currency: 'INR' }, 'INR'))
+      .toEqual({ amount: 100, currency: 'INR', secondary: '' });
+    const foreign = displayAmountFor({ amount: 2.5, currency: 'USD' }, 'INR');
+    expect(foreign.currency).toBe('USD');
+    expect(foreign.secondary).toBe('not converted');
+    const converted = displayAmountFor({ amount: 2.5, currency: 'USD', amountDefault: 210 }, 'INR');
+    expect(converted.amount).toBe(210);
+    expect(converted.currency).toBe('INR');
+    expect(converted.secondary).toContain('originally');
+  });
+
+  it('puts the relative date first for upcoming charges', () => {
+    const iso = new Date();
+    iso.setDate(iso.getDate() + 1);
+    expect(formatDue(iso.toISOString(), 1)).toMatch(/^Tomorrow · /);
   });
 });

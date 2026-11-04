@@ -6,7 +6,7 @@ import { icon } from './utils/icons.js';
 import { renderAuth }          from './views/auth.js';
 import {
   esc, avatar, applyTheme, getThemePreference, setThemePreference,
-  openModal,
+  openModal, displayName,
 } from './utils/ui.js';
 import { renderDashboard }     from './views/dashboard.js';
 import { renderTransactions }  from './views/transactions.js';
@@ -61,7 +61,7 @@ function renderShell() {
   const email = Auth.getEmail() || 'User';
   let savedName = Auth.getName();
   if (savedName === 'undefined') savedName = '';
-  const name = savedName || email.split('@')[0];
+  const name = displayName(savedName || email.split('@')[0], 'User');
   const initial = avatar(name, 32);
 
   // Sidebar collapse is a desktop preference; remembered across reloads.
@@ -92,8 +92,8 @@ function renderShell() {
           <button type="button" class="sidebar-user" id="sidebar-user" aria-haspopup="menu" aria-expanded="false" aria-label="Open account menu">
             <span id="shell-avatar">${initial}</span>
             <span class="sidebar-user-info">
-              <span class="sidebar-user-name">${esc(name)}</span>
-              <span class="sidebar-user-email">${esc(email)}</span>
+              <span class="sidebar-user-name" title="${esc(name)}">${esc(name)}</span>
+              <span class="sidebar-user-email" title="${esc(email)}">${esc(email)}</span>
             </span>
           </button>
           <div class="user-menu" id="user-menu" role="menu" hidden>
@@ -267,12 +267,12 @@ function closeBottomSheets() {
 }
 
 /** Navigate to a top-level view and reflect it in the URL. */
-export function navigateTo(view, { replace = false } = {}) {
+export function navigateTo(view, { replace = false, query = '' } = {}) {
   if (!PATH_BY_VIEW[view]) view = 'dashboard';
   currentView = view;
 
-  const path = PATH_BY_VIEW[view];
-  if (location.pathname !== path) {
+  const path = PATH_BY_VIEW[view] + (query || '');
+  if (`${location.pathname}${location.search}` !== path) {
     if (replace) history.replaceState({ view }, '', path);
     else history.pushState({ view }, '', path);
   }

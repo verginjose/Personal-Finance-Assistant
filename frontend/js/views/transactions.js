@@ -4,6 +4,7 @@ import {
   esc, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
   openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions,
   setupCategorySearch, currencyOptionHtml, formatDayLabel, skeletonRows,
+  displayAmountFor, displayName, dateTooltip, humanizeNamesIn, humanizeSystemText,
 } from '../utils/ui.js';
 
 let currentPage = 0, totalPages = 0;
@@ -12,6 +13,41 @@ function isoDay(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return 'unknown';
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function txCategory(t) {
+  return t.expenseCategory || t.incomeCategory || t.category || '';
+}
+
+function isSettlementRow(t) {
+  return String(txCategory(t)).toUpperCase() === 'SETTLEMENT';
+}
+
+/** A settlement reads as a sentence about people, not as a system log. */
+function settlementTitle(t, userId) {
+  const myName = displayName(Auth.getName() || Auth.getEmail() || '');
+  const m = /payment from\s+(.+?)\s+to\s+(.+)$/i.exec(String(t.name || t.description || ''));
+  if (m) {
+    const from = displayName(m[1]);
+    const to = displayName(m[2]);
+    if (from === myName || userId && String(t.userId || '') === String(userId) && /payment from/i.test(String(t.name || ''))) {
+      return `You paid ${to}`;
+    }
+    return `${from} paid ${to}`;
+  }
+  // TODO(backend): expose the settlement counterparty so the row can always
+  // name the person instead of a generic "Payment recorded".
+  return 'Payment recorded';
+}
+
+/** Sync the page into the URL so refresh and Back both work. */
+function setPageInUrl(page) {
+  try {
+    const url = new URL(location.href);
+    if (page > 0) url.searchParams.set('page', String(page + 1));
+    else url.searchParams.delete('page');
+    history.replaceState(history.state || {}, '', `${url.pathname}${url.search}`);
+  } catch { /* jsdom or file URLs */ }
 }
 
 function titleCase(value) {
@@ -69,6 +105,11 @@ function startCategoryEdit(btn, userId) {
 
 export async function renderTransactions(container) {
   const userId = Auth.getUserId();
+  // Keep the active page (and any category deep-link) in the URL.
+  const urlParams = new URLSearchParams(location.search);
+  const pageParam = Number(urlParams.get('page'));
+  currentPage = Number.isInteger(pageParam) && pageParam > 0 ? pageParam - 1 : 0;
+  const urlCategory = urlParams.get('category');
   container.innerHTML = `
     ${pageHeader('Transactions', '', '<button class="btn btn-primary" id="t-add">Add transaction</button>')}
     <div class="toolbar">
@@ -178,7 +219,7 @@ export async function renderTransactions(container) {
     debounce = setTimeout(() => { currentPage = 0; load(); }, 350);
   };
 
-  const pendingCategory = sessionStorage.getItem('pendingCategoryFilter');
+  const pendingCategory = urlCategory || sessionStorage.getItem('pendingCategoryFilter');
   if (pendingCategory) {
     sessionStorage.removeItem('pendingCategoryFilter');
     const catEl = document.getElementById('t-category');
@@ -373,6 +414,7 @@ async function loadTransactions(userId) {
   const end = document.getElementById('t-end')?.value;
   const tbody = document.getElementById('t-body');
   if (!tbody) return;
+  setPageInUrl(currentPage);
 
   try {
     const params = { userId, page: currentPage, size: 8 };
@@ -402,27 +444,33 @@ async function loadTransactions(userId) {
       }
 
       tbody.innerHTML = [...groups.entries()].map(([key, rows]) => {
-        const dayTotal = rows.reduce((sum, t) =>
-          sum + (t.type === 'INCOME' ? Number(t.amount) : -Number(t.amount)), 0);
+        // A day total only adds rows in one currency; never mix currencies.
+        let mixed = false;
+        const dayTotal = rows.reduce((sum, t) => {
+          const shown = displayAmountFor(t, currency);
+          if (shown.currency !== currency) { mixed = true; return sum; }
+          return sum + (t.type === 'INCOME' ? Number(shown.amount) : -Number(shown.amount));
+        }, 0);
         const dayRows = rows.map(t => {
           const isIncome = t.type === 'INCOME';
-          const itemCurrency = t.currency || currency;
-          // TODO(backend): entries expose only the original currency. Once the
-          // API returns a converted amount in the user's default currency,
-          // show that here and the original in `amount-secondary`.
-          const amount = formatMoney(isIncome ? Number(t.amount) : -Number(t.amount), itemCurrency);
-          const cat = t.expenseCategory || t.incomeCategory || t.category || '';
+          const shown = displayAmountFor(t, currency);
+          const amount = formatMoney(isIncome ? shown.amount : -shown.amount, shown.currency);
+          const cat = txCategory(t);
+          const settlement = isSettlementRow(t);
 
           // A split row names the group and what the number means.
-          // TODO(backend): the entries API does not return a group link or the
-          // user's share; show it when the fields arrive.
+          // TODO(backend): the entries API does not return a group id, the
+          // user's share or a converted amount; show them when the fields arrive.
           const isSplit = !!(t.groupName || t.groupId);
-          const share = t.myShare != null ? Number(t.myShare) : Number(t.amount);
           const total = t.totalAmount != null ? Number(t.totalAmount) : null;
-          const metaParts = [];
-          if (isSplit) metaParts.push(`Your share${t.groupName ? ` · ${esc(t.groupName)}` : ''}`);
-          else if (t.description) metaParts.push(esc(t.description));
-          const secondary = isSplit && total != null ? `of ${formatMoney(total, itemCurrency)}` : '';
+          const subParts = [];
+          if (settlement) subParts.push('Settlement');
+          else if (isSplit) subParts.push(`Your share${total != null ? ` of ${formatMoney(total, currency)}` : ''}`);
+          else if (t.description) subParts.push(esc(humanizeSystemText(t.description)));
+          if (isSplit && t.groupName) {
+            subParts.push(`<a href="#" class="txn-group-link" data-group="${esc(String(t.groupId || ''))}">${esc(t.groupName)}</a>`);
+          }
+          if (shown.secondary) subParts.push(`<span class="amount-hint">${esc(shown.secondary)}</span>`);
 
           const receipt = t.receiptUrl
             ? `<button type="button" class="attach-btn" data-receipt="${esc(t.receiptUrl)}" aria-label="Receipt attached" title="Receipt attached">${icon('paperclip', 'sm')}</button>`
@@ -430,29 +478,39 @@ async function loadTransactions(userId) {
           const recurring = t.recurring
             ? `<span class="txn-tag" title="Recurring">${icon('repeat', 'xs')} ${esc(titleCase(t.recurringPeriod || 'Recurring'))}</span>`
             : '';
+          const title = settlement ? settlementTitle(t, userId) : humanizeNamesIn(t.name || 'Transaction');
+          const categoryCell = settlement
+            ? `<span class="chip chip--neutral">Settlement</span>`
+            : `<button type="button" class="cat-edit-btn" data-cat-id="${esc(String(t.id))}" title="Change category" aria-label="Change category: ${esc(formatCategory(cat))}">
+                ${esc(formatCategory(cat))}${icon('chevron-down', 'xs')}
+              </button>`;
 
-          return `<tr data-txn='${esc(JSON.stringify(t))}' tabindex="0" style="cursor:pointer">
+          return `<tr data-txn='${esc(JSON.stringify(t))}' tabindex="0" class="txn-row ${settlement ? 'is-settlement' : ''}" style="cursor:pointer">
             <td>
               <div class="txn-row-main">
-                <span class="row-icon">${icon(categoryIcon(cat), 'sm')}</span>
+                <span class="row-icon">${icon(settlement ? 'arrow-right' : categoryIcon(cat), 'sm')}</span>
                 <div class="txn-row-text">
-                  <div class="txn-name">${esc(t.name || 'Transaction')}${receipt}${recurring}</div>
-                  ${metaParts.length ? `<div class="txn-sub">${metaParts.join('')}</div>` : ''}
+                  <div class="txn-name">${esc(title)}${receipt}${recurring}</div>
+                  ${subParts.length ? `<div class="txn-sub">${subParts.join(' · ')}</div>` : ''}
                 </div>
               </div>
             </td>
-            <td>
-              <button type="button" class="cat-edit-btn" data-cat-id="${esc(String(t.id))}" title="Change category" aria-label="Change category: ${esc(formatCategory(cat))}">
-                ${esc(formatCategory(cat))}${icon('chevron-down', 'xs')}
-              </button>
-            </td>
-            <td class="amount-cell"><span class="amount ${isIncome ? 'amount--pos' : ''}" style="display:inline-flex">${amount}${secondary ? `<span class="amount-secondary">${secondary}</span>` : ''}</span></td>
+            <td>${categoryCell}</td>
+            <td class="amount-cell"><span class="amount ${isIncome ? 'amount--pos' : ''}" style="display:inline-flex">${amount}</span></td>
           </tr>`;
         }).join('');
         return `
-          <tr class="ledger-day-row"><td colspan="3"><span>${esc(formatDayLabel(key))}</span><span class="day-total">${formatMoney(dayTotal, currency)}</span></td></tr>
+          <tr class="ledger-day-row"><td colspan="3"><span title="${esc(dateTooltip(`${key}T00:00:00`))}">${esc(formatDayLabel(key))}</span><span class="day-total" title="${mixed ? 'Excludes amounts in another currency' : ''}">${formatMoney(dayTotal, currency)}${mixed ? ' *' : ''}</span></td></tr>
           ${dayRows}`;
       }).join('');
+
+      tbody.querySelectorAll('.txn-group-link').forEach(a => {
+        a.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.navigateTo('split');
+        };
+      });
 
       tbody.querySelectorAll('tr[data-txn]').forEach(tr => {
         tr.onclick = (e) => {
@@ -502,24 +560,34 @@ function renderMobileTransactions(items, currency, userId) {
   }
 
   el.innerHTML = [...groups.entries()].map(([key, rows]) => {
-    const dayTotal = rows.reduce((sum, t) =>
-      sum + (t.type === 'INCOME' ? Number(t.amount) : -Number(t.amount)), 0);
+    let mixed = false;
+    const dayTotal = rows.reduce((sum, t) => {
+      const shown = displayAmountFor(t, currency);
+      if (shown.currency !== currency) { mixed = true; return sum; }
+      return sum + (t.type === 'INCOME' ? Number(shown.amount) : -Number(shown.amount));
+    }, 0);
     const rowHtml = rows.map(t => {
       const isIncome = t.type === 'INCOME';
-      const cat = t.expenseCategory || t.incomeCategory || t.category || '';
-      const amount = formatMoney(isIncome ? Number(t.amount) : -Number(t.amount), t.currency || currency);
+      const cat = txCategory(t);
+      const settlement = isSettlementRow(t);
+      const shown = displayAmountFor(t, currency);
+      const amount = formatMoney(isIncome ? shown.amount : -shown.amount, shown.currency);
+      const title = settlement ? settlementTitle(t, userId) : humanizeNamesIn(t.name || 'Transaction');
+      const sub = settlement
+        ? 'Settlement'
+        : `${esc(formatCategory(cat))}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}`;
       return `
-        <div class="ledger-row" role="button" tabindex="0" data-txn-id="${esc(String(t.id || ''))}">
-          <span class="row-icon">${icon(categoryIcon(cat), 'sm')}</span>
+        <div class="ledger-row ${settlement ? 'is-settlement' : ''}" role="button" tabindex="0" data-txn-id="${esc(String(t.id || ''))}">
+          <span class="row-icon">${icon(settlement ? 'arrow-right' : categoryIcon(cat), 'sm')}</span>
           <div class="ledger-name">
-            ${esc(t.name || 'Transaction')}
-            <div class="txn-sub">${esc(formatCategory(cat))}</div>
+            ${esc(title)}
+            <div class="txn-sub">${sub}</div>
           </div>
           <span class="ledger-amount ${isIncome ? 'is-pos' : ''}">${amount}</span>
         </div>`;
     }).join('');
 
-    return `<div class="ledger-day"><span>${esc(formatDayLabel(key))}</span><span class="day-total">${formatMoney(dayTotal, currency)}</span></div>${rowHtml}`;
+    return `<div class="ledger-day"><span title="${esc(dateTooltip(`${key}T00:00:00`))}">${esc(formatDayLabel(key))}</span><span class="day-total" title="${mixed ? 'Excludes amounts in another currency' : ''}">${formatMoney(dayTotal, currency)}${mixed ? ' *' : ''}</span></div>${rowHtml}`;
   }).join('');
 
   el.querySelectorAll('[data-txn-id]').forEach(row => {
@@ -536,8 +604,10 @@ function renderPagination() {
   const el = document.getElementById('t-pagination');
   if (!el || totalPages <= 1) { if (el) el.innerHTML = ''; return; }
   const userId = Auth.getUserId();
+  const goPage = (page) => { currentPage = page; loadTransactions(userId); };
 
-  let html = `<button class="btn-icon" id="t-prev" ${currentPage === 0 ? 'disabled' : ''} aria-label="Previous page">${icon('chevron-left', 'sm')}</button>`;
+  let html = `<span class="pagination-info">Page ${currentPage + 1} of ${totalPages}</span>`;
+  html += `<button class="btn-icon" id="t-prev" ${currentPage === 0 ? 'disabled' : ''} aria-label="Previous page">${icon('chevron-left', 'sm')}</button>`;
 
   let startPage = Math.max(0, currentPage - 2);
   let endPage = Math.min(totalPages - 1, startPage + 4);
@@ -551,10 +621,10 @@ function renderPagination() {
 
   el.innerHTML = html;
 
-  if (currentPage > 0) document.getElementById('t-prev').onclick = () => { currentPage--; loadTransactions(userId); };
-  if (currentPage < totalPages - 1) document.getElementById('t-next').onclick = () => { currentPage++; loadTransactions(userId); };
+  if (currentPage > 0) document.getElementById('t-prev').onclick = () => goPage(currentPage - 1);
+  if (currentPage < totalPages - 1) document.getElementById('t-next').onclick = () => goPage(currentPage + 1);
   el.querySelectorAll('button[data-p]').forEach(b => {
-    b.onclick = () => { currentPage = +b.dataset.p; loadTransactions(userId); };
+    b.onclick = () => goPage(+b.dataset.p);
   });
 }
 
@@ -788,13 +858,15 @@ async function openTransactionDetailsModal(t, userId) {
   }
 
   const isIncome = t.type === 'INCOME';
-  const currency = t.currency || Auth.getDefaultCurrency();
+  const shown = displayAmountFor(t, Auth.getDefaultCurrency());
+  const currency = shown.currency;
   const cat = t.expenseCategory || t.incomeCategory || t.category || '';
 
   openModal('Transaction', `
     <div class="modal-amount-hero">
-      <div class="amount-value ${isIncome ? 'amount--pos' : ''}">${formatMoney(isIncome ? Number(t.amount) : -Number(t.amount), currency)}</div>
-      <div class="amount-name">${esc(t.name)}</div>
+      <div class="amount-value ${isIncome ? 'amount--pos' : ''}">${formatMoney(isIncome ? shown.amount : -shown.amount, currency)}</div>
+      ${shown.secondary ? `<div class="amount-secondary">${esc(shown.secondary)}</div>` : ''}
+      <div class="amount-name">${esc(humanizeNamesIn(t.name))}</div>
       <div class="amount-date">${esc(formatDate(t.createdAt))}</div>
     </div>
 
@@ -803,7 +875,7 @@ async function openTransactionDetailsModal(t, userId) {
       <div class="modal-detail-row"><span class="detail-label">Category</span><span class="detail-value">${esc(formatCategory(cat))}</span></div>
       <div class="modal-detail-row"><span class="detail-label">Currency</span><span class="detail-value">${esc(currency)}</span></div>
       ${t.recurring ? `<div class="modal-detail-row"><span class="detail-label">Recurring</span><span class="detail-value">${esc(titleCase(t.recurringPeriod || 'Yes'))}</span></div>` : ''}
-      ${t.description ? `<div class="modal-detail-row detail-block"><span class="detail-label">Note</span><span class="detail-value">${esc(t.description)}</span></div>` : ''}
+      ${t.description ? `<div class="modal-detail-row detail-block"><span class="detail-label">Note</span><span class="detail-value">${esc(humanizeSystemText(t.description))}</span></div>` : ''}
       ${t.receiptUrl ? `
         <div class="modal-detail-row detail-block">
           <span class="detail-label">Receipt</span>

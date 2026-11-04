@@ -10,17 +10,82 @@ export function esc(s) {
 }
 
 /* ── Names ──────────────────────────────────────────────────────────────── */
-/** Display name for a person. Never surfaces handles or raw IDs. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NAME_ACRONYMS = new Set(['OTT', 'EMI', 'SIP', 'GST', 'PDF', 'UPI', 'ATM', 'US', 'UK', 'AI', 'SME']);
+
+/**
+ * Turn a login handle into a human name: `aarav.menon.db241` → `Aarav Menon`.
+ * Numeric or generated suffixes (`.db241`) are dropped rather than shown.
+ */
+export function humanizeHandle(value) {
+  let s = String(value || '').trim().replace(/^@/, '');
+  if (!s) return '';
+  s = s.split('@')[0];
+  const raw = s.split(/[._\-+\s]+/).filter(Boolean);
+  const useful = raw.filter(p => !/^\d+$/.test(p) && !/\d/.test(p));
+  const parts = useful.length ? useful : raw.slice(0, 1);
+  return parts
+    .map(p => (NAME_ACRONYMS.has(p.toUpperCase())
+      ? p.toUpperCase()
+      : p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()))
+    .join(' ');
+}
+
+function looksLikeHandle(value) {
+  return /[@._-]/.test(value) || /\d/.test(value);
+}
+
+/**
+ * Display name for a person. Never surfaces handles or raw IDs.
+ * A real `name` / `displayName` is trusted verbatim; a username/handle is
+ * humanised (`aarav.menon.db241` → `Aarav Menon`).
+ */
 export function displayName(person, fallback = 'Member') {
   if (!person) return fallback;
-  const raw = typeof person === 'string'
-    ? person
-    : (person.name || person.displayName || person.username || person.userName || '');
-  const clean = String(raw).replace(/^@/, '').trim();
+  let raw = '';
+  let fromHandle = false;
+  if (typeof person === 'string') {
+    raw = person;
+    fromHandle = true;
+  } else {
+    raw = person.name || person.displayName || '';
+    if (!raw) {
+      raw = person.username || person.userName || person.handle || '';
+      fromHandle = true;
+    }
+  }
+  let clean = String(raw || '').replace(/^@/, '').trim();
   if (!clean) return fallback;
   // A raw UUID is not a name.
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) return fallback;
+  if (UUID_RE.test(clean)) return fallback;
+  if (clean.includes('@')) { clean = clean.split('@')[0]; fromHandle = true; }
+  if (fromHandle || looksLikeHandle(clean)) {
+    const human = humanizeHandle(clean);
+    return human || fallback;
+  }
   return clean;
+}
+
+/** The current user is always "You" in activity sentences. */
+export function isMe(person, userId) {
+  if (!person || !userId) return false;
+  if (typeof person === 'string') return person === userId;
+  return person.userId === userId || person.id === userId;
+}
+
+/**
+ * Replace handle-shaped words inside generated transaction titles
+ * ("Paid aarav.menon.db241") with human names. A lowercase dotted token is a
+ * login handle, not a brand; title-casing it reads better either way.
+ */
+export function humanizeNamesIn(value) {
+  return String(value || '').replace(/[@a-z0-9][a-z0-9._-]*[._@][a-z0-9._-]+/gi, (token) => {
+    if (!/[._@]/.test(token)) return token;
+    if (!/^[a-z0-9@._-]+$/i.test(token)) return token;
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(token)) return token; // an email, not a handle
+    const human = humanizeHandle(token);
+    return human || token;
+  });
 }
 
 export function initials(name) {
@@ -86,11 +151,11 @@ export function currencyOptionHtml(selected = 'INR') {
  * a true minus sign before the symbol.
  *   formatMoney(-6327.59) -> −₹6,327.59
  */
-export function formatMoney(amount, currency = 'INR', { compact = false } = {}) {
+export function formatMoney(amount, currency = 'INR', { compact = false, decimals = null } = {}) {
   const num = Number(amount);
   const value = Number.isFinite(num) ? num : 0;
   const cur = String(currency || 'INR').toUpperCase();
-  const digits = compact ? 0 : 2;
+  const digits = compact ? 0 : (decimals != null ? decimals : 2);
   let body;
   try {
     body = new Intl.NumberFormat('en-IN', {
@@ -149,6 +214,32 @@ export function amountHtml(value, {
     </span>`;
 }
 
+/**
+ * Show an amount in the user's default currency.
+ * The entries API only returns the amount in its original currency, so the
+ * original amount is shown with a muted hint rather than a guessed conversion.
+ * TODO(backend): return a converted amount (`amountDefault`) from the entries
+ * API so every list can show the default currency and the original as a
+ * secondary line.
+ */
+export function displayAmountFor(record, defaultCurrency = 'INR') {
+  const target = String(defaultCurrency || 'INR').toUpperCase();
+  const cur = String(record?.currency || target).toUpperCase();
+  const original = Math.abs(Number(record?.amount) || 0);
+  const converted = record?.amountDefault != null
+    ? Number(record.amountDefault)
+    : (record?.convertedAmount != null ? Number(record.convertedAmount) : null);
+  if (cur === target) return { amount: original, currency: cur, secondary: '' };
+  if (Number.isFinite(converted)) {
+    return {
+      amount: converted,
+      currency: target,
+      secondary: `${formatMoney(original, cur)} originally`,
+    };
+  }
+  return { amount: original, currency: cur, secondary: 'not converted' };
+}
+
 /* ── Categories ─────────────────────────────────────────────────────────── */
 const CATEGORY_ACRONYMS = new Set(['OTT', 'EMI', 'SIP', 'GST', 'PDF', 'UPI', 'ATM', 'US', 'UK']);
 export function formatCategory(cat) {
@@ -156,6 +247,65 @@ export function formatCategory(cat) {
   const words = String(cat).replace(/_/g, ' ').toLowerCase().split(/\s+/).filter(Boolean);
   const label = words.map(w => (CATEGORY_ACRONYMS.has(w.toUpperCase()) ? w.toUpperCase() : w)).join(' ');
   return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/**
+ * Generated text arrives in Title Case. Headings in the UI are sentence case:
+ * "Emergency Fund Is Behind" → "Emergency fund is behind".
+ * Acronyms and all-caps words are left alone.
+ */
+export function toSentenceCase(value) {
+  const s = String(value || '').trim();
+  if (!s) return s;
+  const lowered = s.replace(/\b([A-Z][a-z]+)\b/g, w => {
+    if (NAME_ACRONYMS.has(w.toUpperCase())) return w.toUpperCase();
+    return w.toLowerCase();
+  });
+  return lowered.charAt(0).toUpperCase() + lowered.slice(1);
+}
+
+let _categoryTokenSet = null;
+function knownCategoryToken(token) {
+  const t = String(token || '').toUpperCase();
+  if (!_categoryTokenSet) _categoryTokenSet = new Set([...EXPENSE_CATS, ...INCOME_CATS]);
+  if (_categoryTokenSet.has(t)) return true;
+  // Underscored ALL-CAPS tokens are category-shaped even if not in our list.
+  return /^[A-Z][A-Z_]{2,}$/.test(t) && !NAME_ACRONYMS.has(t) && t.includes('_');
+}
+
+/**
+ * Strip system-speak and shouting from generated copy, in the UI layer:
+ *   "Auto-generated: monthly subscription"            → "Monthly subscription"
+ *   "Auto-generated (Aggregated 2 missed periods): …"  → "… · 2 charges caught up"
+ *   "RESTAURANTS changed by -77.7%"                    → "restaurants changed by -77.7%"
+ */
+export function humanizeSystemText(value) {
+  let s = String(value || '');
+  let caughtUp = null;
+  s = s.replace(/Auto-generated\s*\(Aggregated\s+(\d+)\s+missed\s+periods?\)\s*:\s*/gi, (_, n) => {
+    caughtUp = n;
+    return '';
+  });
+  s = s.replace(/Auto-generated\s*:\s*/gi, '');
+  // ALL-CAPS category names inside generated sentences become normal words.
+  s = s.replace(/\b[A-Z][A-Z_]{2,}\b/g, (token) => {
+    if (!knownCategoryToken(token)) return token;
+    const label = formatCategory(token);
+    return label.charAt(0).toLowerCase() + label.slice(1);
+  });
+  s = s.replace(/\s{2,}/g, ' ').trim();
+  if (caughtUp) s += ` · ${caughtUp} charges caught up`;
+  return toSentenceCase(s);
+}
+
+/** Remove currency amounts from generated text so they cannot contradict our selector. */
+export function stripAmounts(value) {
+  return String(value || '')
+    .replace(/(?:₹|Rs\.?|\$|€|£)\s?-?[\d,]+(?:\.\d+)?(?:\s?(?:K|L|Cr|lakh|crore))?/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,;:!?])/g, '$1')
+    .replace(/^[\s,;:–-]+|[\s,;:–-]+$/g, '')
+    .trim();
 }
 
 /* ── Dates ──────────────────────────────────────────────────────────────── */
@@ -206,6 +356,23 @@ export function formatUpcoming(iso, daysUntil) {
   if (days === 0) return `${day} · today`;
   if (days === 1) return `${day} · tomorrow`;
   return `${day} · in ${days} days`;
+}
+
+/** Relative first, absolute second: "Tomorrow · Thu 5 Nov". */
+export function formatDue(iso, daysUntil) {
+  const d = asDate(iso);
+  if (!d) return '—';
+  const days = daysUntil != null ? Number(daysUntil) : Math.round((d.getTime() - Date.now()) / 86400000);
+  const absolute = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (days < 0) return `Overdue · ${absolute}`;
+  if (days === 0) return `Today · ${absolute}`;
+  if (days === 1) return `Tomorrow · ${absolute}`;
+  return `In ${days} days · ${absolute}`;
+}
+
+/** Absolute date for a tooltip on any relative date label. */
+export function dateTooltip(iso) {
+  return formatDate(iso);
 }
 
 /** Month name only, adding the year when it is not the current one. */
@@ -427,19 +594,24 @@ export function healthPanelHtml(prefix) {
   return `
     <section class="health-panel" id="${prefix}-health" aria-label="Financial health">
       <div class="health-head">
-        <h3 class="section-title">Financial health</h3>
+        <button type="button" class="health-toggle" id="${prefix}-health-toggle"
+          aria-expanded="false" aria-controls="${prefix}-health-breakdown">
+          <span class="section-title">Financial health</span>
+          <span class="health-inline">
+            <span class="health-inline-score"><span id="${prefix}-health-score">—</span><span class="health-compact-sub">/1000</span></span>
+            <span class="health-caret" aria-hidden="true">${icon('chevron-down', 'sm')}</span>
+          </span>
+        </button>
         <button type="button" class="btn btn-icon btn-ghost btn-sm" id="${prefix}-health-info" aria-label="How is this calculated?" title="How is this calculated?">${icon('info', 'sm')}</button>
       </div>
-      <div class="health-compact">
-        <div class="health-score"><span id="${prefix}-health-score">—</span><span class="health-compact-sub">/1000</span></div>
-        <div class="health-compact-sub" id="${prefix}-health-grade">Grade —</div>
-      </div>
-      <div id="${prefix}-health-breakdown" class="health-breakdown"></div>
-      <p class="health-summary" id="${prefix}-health-summary"></p>
+      <p class="health-compact-sub health-grade-line" id="${prefix}-health-grade">Grade —</p>
+      <p class="health-scope" id="${prefix}-health-scope" hidden></p>
+      <div id="${prefix}-health-breakdown" class="health-breakdown" hidden></div>
+      <p class="health-summary" id="${prefix}-health-summary" hidden></p>
     </section>`;
 }
 
-export function renderHealthData(prefix, health, { capLabel = '' } = {}) {
+export function renderHealthData(prefix, health, { capLabel = '', scopeLabel = '' } = {}) {
   const panel = document.getElementById(`${prefix}-health`);
   if (!health || Array.isArray(health) || (health.totalScore == null && health.grade == null)) {
     if (panel) panel.hidden = true;
@@ -451,6 +623,8 @@ export function renderHealthData(prefix, health, { capLabel = '' } = {}) {
   const elBreakdown = document.getElementById(`${prefix}-health-breakdown`);
   const elSummary = document.getElementById(`${prefix}-health-summary`);
   const elInfo = document.getElementById(`${prefix}-health-info`);
+  const elScope = document.getElementById(`${prefix}-health-scope`);
+  const elToggle = document.getElementById(`${prefix}-health-toggle`);
 
   const isNew = health.grade === 'N/A';
   if (elScore) elScore.textContent = isNew ? '—' : health.totalScore;
@@ -459,13 +633,23 @@ export function renderHealthData(prefix, health, { capLabel = '' } = {}) {
     else if (capLabel) elGrade.textContent = `Grade withheld · ${capLabel}`;
     else elGrade.textContent = `Grade ${health.grade}`;
   }
+  if (elScope) {
+    elScope.textContent = scopeLabel ? `Based on ${scopeLabel}` : '';
+    elScope.hidden = !scopeLabel;
+  }
 
   if (elBreakdown && health.breakdown) {
-    elBreakdown.innerHTML = Object.entries(health.breakdown).map(([key, raw]) => {
+    const entries = Object.entries(health.breakdown).map(([key, raw]) => {
       const value = Number(raw) || 0;
       const max = HEALTH_DIMENSION_MAX[key] || 100;
       const pct = max > 0 ? Math.min(Math.max(value / max, 0), 1) : 0;
-      return `
+      return { key, value, max, pct };
+    });
+    const full = entries.filter(e => e.pct >= 1);
+    const below = entries.filter(e => e.pct < 1);
+    elBreakdown.innerHTML = `
+      ${full.length ? `<p class="health-full-line">${full.length} of ${entries.length} at full score</p>` : ''}
+      ${below.map(({ key, value, max, pct }) => `
         <div class="health-metric">
           <div class="health-metric-head">
             <span>${esc(healthLabel(key))}</span>
@@ -474,10 +658,25 @@ export function renderHealthData(prefix, health, { capLabel = '' } = {}) {
           <div class="health-metric-track" role="progressbar" aria-valuenow="${value}" aria-valuemin="0" aria-valuemax="${max}" aria-label="${esc(healthLabel(key))}">
             <div class="health-metric-fill" style="width:${(pct * 100).toFixed(0)}%;background:${dimensionColor(pct)}"></div>
           </div>
-        </div>`;
-    }).join('');
+        </div>`).join('')}`;
   }
-  if (elSummary) elSummary.textContent = health.summary || '';
+  if (elSummary) {
+    // Generated summaries sometimes embed figures that disagree with the
+    // totals selector. Keep prose that has no amounts; otherwise leave it out.
+    const raw = health.summary || '';
+    const hasMoney = /(?:₹|Rs\.?|\$|€|£)\s?-?\d/i.test(raw);
+    elSummary.textContent = hasMoney ? '' : humanizeSystemText(raw);
+  }
+  if (elToggle && elBreakdown && elSummary) {
+    const setExpanded = (open) => {
+      elToggle.setAttribute('aria-expanded', String(open));
+      elBreakdown.hidden = !open;
+      elSummary.hidden = !open || !elSummary.textContent;
+      panel?.classList.toggle('is-expanded', open);
+    };
+    elToggle.onclick = () => setExpanded(elToggle.getAttribute('aria-expanded') !== 'true');
+    setExpanded(false);
+  }
   if (elInfo) {
     elInfo.onclick = () => openModal('How financial health is calculated', `
       <p class="modal-lead">The score adds up five components, each measured against its own maximum.</p>
@@ -540,12 +739,20 @@ function aiInsightHtml(ins) {
     : ins.type === 'ACHIEVEMENT'
       ? { target: 'goals', label: 'Open goals' }
       : { target: 'analytics', label: 'Open analytics' };
+  // Generated text is Title Case and shouts category names; fix that here and
+  // keep figures out of it so they cannot contradict the totals selector.
+  const title = toSentenceCase(ins.title);
+  const rawMessage = humanizeSystemText(ins.message);
+  // If the supporting line carries a currency figure, drop the line: the hero
+  // and every list already show the figure from the shared selector.
+  // TODO(backend): generate insight copy without embedded amounts.
+  const message = /(?:₹|Rs\.?|\$|€|£)\s?-?\d/i.test(ins.message || '') ? '' : stripAmounts(rawMessage);
   return `
     <article class="advisor-insight ${cfg.tone}" data-type="${ins.type}" data-priority="${ins.priority}">
       <span class="advisor-insight-icon">${icon(cfg.icon, 'sm')}</span>
       <div class="advisor-insight-body">
-        <strong class="advisor-insight-title">${esc(ins.title)}</strong>
-        <p class="advisor-insight-message">${esc(ins.message)}</p>
+        <strong class="advisor-insight-title">${esc(title)}</strong>
+        ${message ? `<p class="advisor-insight-message">${esc(message)}</p>` : ''}
         <button type="button" class="insight-action" onclick="window.navigateTo('${action.target}')">${esc(action.label)}</button>
       </div>
     </article>`;
@@ -587,7 +794,7 @@ export function aiPanelHtml(prefix) {
     </section>`;
 }
 
-export function renderAiData(prefix, ai, onRefresh) {
+export function renderAiData(prefix, ai, onRefresh, { scopeLabel = '' } = {}) {
   const elSummary = document.getElementById(`${prefix}-ai-summary`);
   const elMeta = document.getElementById(`${prefix}-ai-meta`);
   const elList = document.getElementById(`${prefix}-ai-insights-list`);
@@ -611,15 +818,28 @@ export function renderAiData(prefix, ai, onRefresh) {
     return;
   }
 
-  const insights = dedupeInsights((ai.insights || [])
+  const TYPE_ORDER = { WARNING: 0, INFO: 1, TIP: 1, ACHIEVEMENT: 2 };
+  const sorted = dedupeInsights((ai.insights || [])
     .map(normalizeInsight)
     .filter(Boolean)
-    .sort((a, b) => a.priority - b.priority))
-    .slice(0, 3);
+    .sort((a, b) => {
+      const order = (TYPE_ORDER[a.type] ?? 1) - (TYPE_ORDER[b.type] ?? 1);
+      return order !== 0 ? order : a.priority - b.priority;
+    }));
+  // Keep at most three, but never drop every piece of good news for a filler
+  // neutral item: warnings first, then neutral, then a win if one exists.
+  let picked = sorted.slice(0, 3);
+  if (sorted.length > picked.length && !picked.some(i => i.type === 'ACHIEVEMENT')) {
+    const win = sorted.find(i => i.type === 'ACHIEVEMENT');
+    if (win) picked = [...picked.slice(0, 2), win];
+  }
+  const insights = picked;
 
   if (elSummary) {
-    elSummary.textContent = ai.summary || 'Here is what your recent activity suggests.';
-    elSummary.hidden = insights.length === 0;
+    // Show the scope instead of a generated paragraph that repeats the hero
+    // totals (and may disagree with the selector).
+    elSummary.textContent = scopeLabel ? `Based on ${scopeLabel}` : (ai.summary || 'Here is what your recent activity suggests.');
+    elSummary.hidden = insights.length === 0 && !scopeLabel;
   }
   if (elMeta) {
     const when = ai.generatedAt ? relativeTime(ai.generatedAt) : '';
@@ -627,9 +847,8 @@ export function renderAiData(prefix, ai, onRefresh) {
   }
   if (elTitle) {
     const warnings = insights.filter(i => i.type === 'WARNING').length;
-    elTitle.textContent = warnings > 0 ? 'Needs attention' : 'Insights';
     elTitle.innerHTML = warnings > 0
-      ? `Needs attention <span class="chip chip--warn chip--inline">${warnings}</span>`
+      ? `Insights <span class="chip chip--warn chip--inline" title="${warnings} warning${warnings === 1 ? '' : 's'}">${warnings}</span>`
       : 'Insights';
   }
 

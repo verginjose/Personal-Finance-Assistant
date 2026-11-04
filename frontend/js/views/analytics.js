@@ -1,8 +1,9 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import { createBarChart, destroyChart } from '../utils/charts.js';
+import { getTotals } from '../utils/totals.js';
 import {
-  pageHeader, skeletonChart, formatMoney, formatCategory, formatCompact, formatMonth,
+  pageHeader, skeletonChart, formatMoney, formatCategory, formatMonth,
   formatDate, esc,
 } from '../utils/ui.js';
 
@@ -25,26 +26,37 @@ export async function renderAnalytics(container) {
 
   container.innerHTML = `
     ${pageHeader('Analytics', '', `<button class="btn btn-ghost btn-sm" id="a-export">${icon('download', 'sm')} Export CSV</button>`)}
-    <div class="figures" id="a-kpis" aria-live="polite">
-      <div class="figure">
+    <div class="figures figures--kpi" id="a-kpis" aria-live="polite">
+      <div class="figure figure--net">
         <div class="figure-label">Net</div>
-        <div class="figure-value hero-number" id="a-net">—</div>
+        <div class="figure-value figure-value--net" id="a-net">—</div>
       </div>
       <div class="figure">
         <div class="figure-label">Income</div>
         <div class="figure-value" id="a-income">—</div>
       </div>
       <div class="figure">
-        <div class="figure-label">Expenses</div>
+        <div class="figure-label">Expenses <span class="figure-note" title="Payments between group members are not counted as spending.">Settlements excluded</span></div>
         <div class="figure-value" id="a-expense">—</div>
       </div>
       <div class="figure">
-        <div class="figure-label">Transactions</div>
+        <div class="figure-label">Transactions <span class="figure-hint-inline" id="a-count-scope"></span></div>
         <div class="figure-value" id="a-count">—</div>
       </div>
     </div>
 
     <div class="analytics-toolbar" role="search" aria-label="Analytics filters">
+      <div class="analytics-presets-wrap">
+        <span class="analytics-toolbar-label">Quick range</span>
+        <div class="preset-chips" id="a-presets" role="group" aria-label="Quick date ranges">
+          <button type="button" class="chart-toggle" data-preset="LAST7">Last 7 days</button>
+          <button type="button" class="chart-toggle" data-preset="MONTH">This month</button>
+          <button type="button" class="chart-toggle" data-preset="LASTMONTH">Last month</button>
+          <button type="button" class="chart-toggle" data-preset="QUARTER">Last 3 months</button>
+          <button type="button" class="chart-toggle" data-preset="YEAR">This year</button>
+          <button type="button" class="chart-toggle" data-preset="ALL">All time</button>
+        </div>
+      </div>
       <div>
         <label for="a-preset">Period</label>
         <select class="form-select" id="a-preset" aria-label="Date preset">
@@ -112,15 +124,29 @@ export async function renderAnalytics(container) {
       altInput: true,
       altFormat: 'j M Y',
       disableMobile: true,
+      position: 'below',
       onChange: () => {
-        const preset = document.getElementById('a-preset');
-        if (preset) {
-          if (preset.tomselect) preset.tomselect.setValue('CUSTOM', true);
-          else preset.value = 'CUSTOM';
+        const { start, end } = readRange();
+        if (start || end) {
+          const preset = document.getElementById('a-preset');
+          if (preset) {
+            if (preset.tomselect) preset.tomselect.setValue('CUSTOM', true);
+            else preset.value = 'CUSTOM';
+          }
         }
+        syncPresetChips();
         scheduleLoad();
       },
+      onReady: (_, __, fp) => {
+        if (fp) {
+          fp.clear();
+          if (fp.element) fp.element.value = '';
+          if (fp.altInput) fp.altInput.value = 'All time';
+        }
+      },
     });
+  } else {
+    setRangeDisplayEmpty();
   }
 
   const presetEl = document.getElementById('a-preset');
@@ -138,15 +164,26 @@ export async function renderAnalytics(container) {
   timelineEl?.addEventListener('change', onFilterChange);
   document.getElementById('a-range')?.addEventListener('change', () => {
     if (presetEl) setSelect('a-preset', 'CUSTOM');
+    syncPresetChips();
     onFilterChange();
+  });
+
+  document.querySelectorAll('#a-presets [data-preset]').forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.preset;
+      applyPreset(id);
+      const map = { MONTH: 'MONTH', QUARTER: 'QUARTER', YEAR: 'YEAR', ALL: 'ALL' };
+      setSelect('a-preset', map[id] || 'CUSTOM');
+      syncPresetChips();
+      onFilterChange();
+    };
   });
 
   document.getElementById('a-clear').onclick = () => {
     setSelect('a-preset', DEFAULT_FILTERS.preset);
     setSelect('a-timeline', DEFAULT_FILTERS.timeline);
-    const range = document.getElementById('a-range');
-    if (range?._flatpickr) range._flatpickr.clear();
-    else if (range) range.value = '';
+    setRangeDisplayEmpty();
+    syncPresetChips();
     updateResetVisibility();
     loadAnalytics(userId);
   };
@@ -171,6 +208,7 @@ export async function renderAnalytics(container) {
 
   wireLegend(userId);
   updateResetVisibility();
+  syncPresetChips();
   loadAnalytics(userId);
 }
 
@@ -193,9 +231,15 @@ function applyPreset(value) {
   const now = new Date();
   const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   let start = '', end = '';
-  if (value === 'MONTH') {
+  if (value === 'LAST7') {
+    start = iso(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6));
+    end = iso(now);
+  } else if (value === 'MONTH') {
     start = iso(new Date(now.getFullYear(), now.getMonth(), 1));
     end = iso(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  } else if (value === 'LASTMONTH') {
+    start = iso(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    end = iso(new Date(now.getFullYear(), now.getMonth(), 0));
   } else if (value === 'QUARTER') {
     start = iso(new Date(now.getFullYear(), now.getMonth() - 2, 1));
     end = iso(new Date(now.getFullYear(), now.getMonth() + 1, 0));
@@ -203,13 +247,51 @@ function applyPreset(value) {
     start = iso(new Date(now.getFullYear(), 0, 1));
     end = iso(new Date(now.getFullYear(), 11, 31));
   }
-  const text = start && end ? `${start} to ${end}` : '';
+
   if (range._flatpickr) {
-    if (text) range._flatpickr.setDate([start, end], true);
-    else range._flatpickr.clear();
+    if (start && end) range._flatpickr.setDate([start, end], true);
+    else setRangeDisplayEmpty();
   } else {
-    range.value = text;
+    range.value = start && end ? `${start} to ${end}` : '';
+    if (!start || !end) setRangeDisplayEmpty();
   }
+}
+
+/** The empty range control says "All time"; it is a value, not a placeholder. */
+function setRangeDisplayEmpty() {
+  const range = document.getElementById('a-range');
+  if (!range) return;
+  const fp = range._flatpickr;
+  if (fp) {
+    fp.clear();
+    range.value = '';
+    if (fp.altInput) fp.altInput.value = 'All time';
+  } else {
+    // Before flatpickr attaches: the control reads "All time", not a placeholder.
+    range.value = 'All time';
+  }
+}
+
+function syncPresetChips() {
+  const range = document.getElementById('a-range');
+  const { start, end } = readRange();
+  const now = new Date();
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const matches = {
+    LAST7: start === iso(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)) && end === iso(now),
+    MONTH: start === iso(new Date(now.getFullYear(), now.getMonth(), 1)) && end === iso(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+    LASTMONTH: start === iso(new Date(now.getFullYear(), now.getMonth() - 1, 1)) && end === iso(new Date(now.getFullYear(), now.getMonth(), 0)),
+    QUARTER: start === iso(new Date(now.getFullYear(), now.getMonth() - 2, 1)) && end === iso(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+    YEAR: start === iso(new Date(now.getFullYear(), 0, 1)) && end === iso(new Date(now.getFullYear(), 11, 31)),
+  };
+  const allTime = !start && !end;
+  document.querySelectorAll('#a-presets [data-preset]').forEach(btn => {
+    const id = btn.dataset.preset;
+    const on = id === 'ALL' ? allTime : !!matches[id];
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-pressed', String(on));
+  });
+  if (allTime && range?._flatpickr?.altInput) range._flatpickr.altInput.value = 'All time';
 }
 
 function readRange() {
@@ -258,7 +340,7 @@ function renderKpis(income, expense, count, netValue = null) {
   const netEl = document.getElementById('a-net');
   if (netEl) {
     netEl.textContent = formatMoney(net, currency);
-    netEl.style.color = net < 0 ? 'var(--neg)' : 'var(--text)';
+    netEl.style.color = net >= 0 ? 'var(--pos)' : 'var(--neg)';
   }
   const incEl = document.getElementById('a-income');
   if (incEl) {
@@ -268,9 +350,9 @@ function renderKpis(income, expense, count, netValue = null) {
   const expEl = document.getElementById('a-expense');
   if (expEl) expEl.textContent = formatMoney(expense, currency);
   const countEl = document.getElementById('a-count');
-  if (countEl) {
-    countEl.innerHTML = `${count ?? 0}<span class="figure-hint">${esc(describeRange())}</span>`;
-  }
+  if (countEl) countEl.textContent = String(count ?? 0);
+  const scopeEl = document.getElementById('a-count-scope');
+  if (scopeEl) scopeEl.textContent = describeRange();
 }
 
 async function loadAnalytics(userId) {
@@ -283,14 +365,15 @@ async function loadAnalytics(userId) {
   const granularity = params.timelineType.charAt(0) + params.timelineType.slice(1).toLowerCase();
   if (caption) caption.textContent = `${granularity} · ${describeRange()}`;
 
-  const summaryParams = { userId };
-  if (params.startDate) summaryParams.startDate = params.startDate.slice(0, 10);
-  if (params.endDate) summaryParams.endDate = params.endDate.slice(0, 10);
+  const rangeForTotals = {
+    startDate: params.startDate ? params.startDate.slice(0, 10) : null,
+    endDate: params.endDate ? params.endDate.slice(0, 10) : null,
+  };
 
-  const [expResult, incResult, summaryResult] = await Promise.allSettled([
+  const [expResult, incResult, totalsResult] = await Promise.allSettled([
     api.get('/analytics/category-pie-chart', { ...params, transactionFilter: 'EXPENSE' }),
     api.get('/analytics/category-pie-chart', { ...params, transactionFilter: 'INCOME' }),
-    api.get('/upsert/summary', summaryParams),
+    getTotals(rangeForTotals),
   ]);
 
   if (token !== loadToken) return; // superseded by a newer request
@@ -304,13 +387,14 @@ async function loadAnalytics(userId) {
   if (incPie) mountCategoryList('a-income-wrap', incPie, null, 'INCOME');
   else showError('a-income-wrap', incResult.reason?.message);
 
-  const summary = summaryResult.status === 'fulfilled' ? summaryResult.value : null;
-  const totalCount = Number(summary?.totalCount) || 0;
-  // The summary is the single source of truth, so the KPI strip and every
-  // other screen agree. Pie sums are only a fallback when it is unavailable.
-  const incomeTotal = summary?.totalIncome != null ? Number(summary.totalIncome) : sum(incPie?.datasets?.[0]?.data);
-  const expenseTotal = summary?.totalExpense != null ? Number(summary.totalExpense) : sum(expPie?.datasets?.[0]?.data);
-  const netTotal = summary?.netBalance != null ? Number(summary.netBalance) : incomeTotal - expenseTotal;
+  // The shared totals selector is the single source of truth, so the KPI strip
+  // and the Dashboard agree. Pie sums are only a fallback when it is unavailable.
+  const totals = totalsResult.status === 'fulfilled' ? totalsResult.value : null;
+  const available = !!totals?.available;
+  const incomeTotal = available ? totals.income : sum(incPie?.datasets?.[0]?.data);
+  const expenseTotal = available ? totals.expense : sum(expPie?.datasets?.[0]?.data);
+  const netTotal = available ? totals.net : incomeTotal - expenseTotal;
+  const totalCount = available ? totals.count : 0;
   renderKpis(incomeTotal, expenseTotal, totalCount, netTotal);
 
   api.get('/analytics/timeline-chart', params)
@@ -357,8 +441,8 @@ function mountCategoryList(wrapId, data, foldLabel, kind) {
       <div class="barlist-row ${folded ? 'is-folded' : ''}" ${folded ? 'data-fold' : `data-category="${esc(r.raw)}"`} role="button" tabindex="0" aria-label="${esc(r.label)}, ${formatMoney(r.value, currency)}, ${pct.toFixed(0)}% of total">
         <div class="barlist-label">${esc(r.label)}</div>
         <div class="barlist-track"><div class="barlist-fill" style="width:${width.toFixed(1)}%${folded ? '' : `;background:${isIncome ? 'var(--pos)' : 'var(--text-2)'}`}"></div></div>
-        <div class="barlist-value">${formatCompact(r.value, currency)}<span>${pct.toFixed(0)}%</span></div>
-        <div></div>
+        <div class="barlist-value">${formatMoney(r.value, currency, { decimals: 0 })}</div>
+        <div class="barlist-pct">${pct.toFixed(0)}%</div>
       </div>`;
   };
 
@@ -367,12 +451,13 @@ function mountCategoryList(wrapId, data, foldLabel, kind) {
       ${top.map(r => rowHtml(r)).join('')}
       ${rest.length ? rowHtml({ label: foldLabel || 'Other', value: rest.reduce((s, r) => s + r.value, 0) }, { folded: true }) : ''}
     </div>
-    <div class="barlist-total">Total ${formatMoney(total, currency)}</div>`;
+    <div class="barlist-total">Total ${formatMoney(total, currency, { decimals: 0 })}</div>`;
 
   wrap.querySelectorAll('[data-category]').forEach(row => {
     const open = () => {
+      // Deep-link the ledger at the chosen category.
       sessionStorage.setItem('pendingCategoryFilter', row.dataset.category);
-      window.navigateTo('transactions');
+      window.navigateTo('transactions', { query: `?category=${encodeURIComponent(row.dataset.category)}` });
     };
     row.onclick = open;
     row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };

@@ -358,8 +358,11 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       </div>`;
 
     const memberBalances = balances?.memberBalances || [];
+    // totalSpent excludes settlement payments; totalPaid includes them (they
+    // are needed for the net balance) and would overstate real spending.
+    const spentOf = (b) => Number(b.totalSpent != null ? b.totalSpent : b.totalPaid) || 0;
     const spendBy = memberBalances
-      .map(b => ({ name: nameOf(b.userId), amount: Number(b.totalPaid) || 0 }))
+      .map(b => ({ name: b.userId === userId ? 'You' : nameOf(b.userId), amount: spentOf(b) }))
       .filter(b => b.amount > 0)
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 6);
@@ -367,7 +370,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
     const spentTotal = balances?.totalSpend != null
       ? Number(balances.totalSpend)
       : (memberBalances.length
-        ? memberBalances.reduce((sum, b) => sum + (Number(b.totalPaid) || 0), 0)
+        ? memberBalances.reduce((sum, b) => sum + spentOf(b), 0)
         : null);
     const spendByHtml = spendBy.length > 1 ? `
       <div class="split-spendby">
@@ -623,7 +626,10 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       }
       const outcome = outcomeFor(e);
       const mine = e.paidBy === userId ? 'You paid' : `${nameOf(e.paidBy)} paid`;
-      const metaSecondary = shown.secondary ? `<span>· ${esc(shown.secondary)}</span>` : '';
+      // A badge, not inline text with a separator that can orphan on wrapping.
+      const metaSecondary = shown.secondary
+        ? `<span class="expense-meta-badge">${esc(shown.secondary)}</span>`
+        : '';
       return `
         <div class="expense-row" data-exp='${esc(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
           <span class="row-icon">${icon(categoryIcon(e.expenseCategory || 'OTHERS'), 'sm')}</span>

@@ -39,13 +39,60 @@ function axisMoney(value, currency) {
   return formatCompact(value, currency);
 }
 
+function nearestRank(sorted, p) {
+  if (!sorted.length) return null;
+  const idx = Math.min(sorted.length - 1, Math.ceil(p * (sorted.length - 1)));
+  return sorted[idx];
+}
+
+/**
+ * On a phone the axis is capped near the 90th percentile when one value towers
+ * over the rest, so a single outlier month does not flatten the chart.
+ */
+function clipLimits({ income, expense, net, showIncome, showExpense, showNet }) {
+  const values = [];
+  if (showIncome) values.push(...income);
+  if (showExpense) values.push(...expense);
+  const nonzero = values.map(Number).filter(v => Number.isFinite(v) && v !== 0).map(Math.abs).sort((a, b) => a - b);
+
+  let max;
+  if (nonzero.length > 4) {
+    const p90 = nearestRank(nonzero, 0.9);
+    const top = nonzero[nonzero.length - 1];
+    if (p90 > 0 && top > p90 * 1.8) max = p90 * 1.15;
+  }
+
+  let min;
+  if (showNet && net) {
+    const sorted = net.map(Number).filter(v => Number.isFinite(v) && v !== 0).sort((a, b) => a - b);
+    if (sorted.length > 4) {
+      const p10 = nearestRank(sorted, 0.1);
+      const lowest = sorted[0];
+      if (p10 < 0 && lowest < p10 * 1.8) min = p10 * 1.15;
+    }
+  }
+
+  return { max, min, clipped: max != null || min != null };
+}
+
+/** A tap elsewhere should not leave a crosshair pinned to the last column. */
+function clearActive(chart) {
+  if (!chart) return;
+  try {
+    chart.setActiveElements([]);
+    if (chart.tooltip) chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+    chart.update('none');
+  } catch { /* chart already destroyed */ }
+}
+
 /**
  * Grouped income/expense bars with an optional net line.
  * External legend buttons live in the view.
  */
-export function createBarChart(ctx, { labels, income, expense, net, currency = 'INR', showIncome = true, showExpense = true, showNet = false }) {
+export function createBarChart(ctx, { labels, income, expense, net, currency = 'INR', mobile = false, showIncome = true, showExpense = true, showNet = false }) {
   const p = applyDefaults();
   if (typeof Chart === 'undefined' || !ctx) return null;
+  const clip = mobile ? clipLimits({ income, expense, net, showIncome, showExpense, showNet }) : null;
 
   const datasets = [];
   if (showIncome) {
@@ -88,7 +135,7 @@ export function createBarChart(ctx, { labels, income, expense, net, currency = '
     });
   }
 
-  return new Chart(ctx, {
+  const chart = new Chart(ctx, {
     type: 'bar',
     data: { labels, datasets },
     options: {
@@ -130,24 +177,54 @@ export function createBarChart(ctx, { labels, income, expense, net, currency = '
         x: {
           grid: { display: false },
           border: { color: p.line },
-          ticks: { color: p.text2, maxRotation: 0, autoSkip: true },
+          ticks: {
+            color: p.text2,
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: mobile ? 4 : 11,
+          },
         },
         y: {
           beginAtZero: true,
+          ...(clip?.max != null ? { max: clip.max } : {}),
+          ...(clip?.min != null ? { min: clip.min } : {}),
           grid: { color: p.line, drawTicks: false },
           border: { display: true, color: p.line },
           ticks: {
             color: p.text2,
-            padding: 8,
+            padding: mobile ? 4 : 8,
+            maxTicksLimit: mobile ? 5 : 11,
             callback: (value) => axisMoney(value, currency),
           },
+          // Give the plot area more of a narrow phone screen.
+          afterFit: mobile ? (scale) => { scale.width = Math.min(scale.width, 56); } : undefined,
         },
       },
     },
   });
+
+  if (chart) {
+    chart.$pfaClipped = !!clip?.clipped;
+    const canvas = chart.canvas;
+    if (canvas && typeof canvas.addEventListener === 'function') {
+      const onPointerLeave = (e) => { if (e.pointerType !== 'touch') clearActive(chart); };
+      const onDocumentDown = (e) => { if (!canvas.contains(e.target)) clearActive(chart); };
+      canvas.addEventListener('pointerleave', onPointerLeave);
+      canvas.addEventListener('mouseleave', onPointerLeave);
+      document.addEventListener('pointerdown', onDocumentDown);
+      chart.$pfaCleanup = () => {
+        canvas.removeEventListener('pointerleave', onPointerLeave);
+        canvas.removeEventListener('mouseleave', onPointerLeave);
+        document.removeEventListener('pointerdown', onDocumentDown);
+      };
+    }
+  }
+  return chart;
 }
 
 export function destroyChart(chart) {
-  if (chart) chart.destroy();
+  if (!chart) return null;
+  try { chart.$pfaCleanup?.(); } catch { /* already detached */ }
+  chart.destroy();
   return null;
 }

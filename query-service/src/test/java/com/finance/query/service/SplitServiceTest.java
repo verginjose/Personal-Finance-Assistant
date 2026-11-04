@@ -137,5 +137,14 @@ class SplitServiceTest {
 
         assertThat(balances.getTotalSpend()).isEqualByComparingTo("100.00");
         assertThat(balances.getMemberBalances()).hasSize(2);
+        // totalPaid keeps the settlement for the net balance; totalSpent is the
+        // figure "Spending by member" must show.
+        assertThat(balances.getMemberBalances())
+                .filteredOn(b -> me.equals(b.getUserId()))
+                .singleElement()
+                .satisfies(b -> {
+                    assertThat(b.getTotalPaid()).isEqualByComparingTo("400.00");
+                    assertThat(b.getTotalSpent()).isEqualByComparingTo("100.00");
+                });
     }
 }

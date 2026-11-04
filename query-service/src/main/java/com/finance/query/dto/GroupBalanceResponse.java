@@ -36,7 +36,10 @@ public class GroupBalanceResponse {
         private String userName;
         /** positive = is owed money, negative = owes money */
         private BigDecimal netBalance;
+        /** Everything this member paid, including settlement transfers (used for net). */
         private BigDecimal totalPaid;
+        /** Real shared expenses this member paid; settlement payments excluded. */
+        private BigDecimal totalSpent;
         private BigDecimal totalOwed;
     }
 

@@ -3,7 +3,7 @@ import { icon } from '../utils/icons.js';
 import { createBarChart, destroyChart } from '../utils/charts.js';
 import { getTotals } from '../utils/totals.js';
 import {
-  pageHeader, skeletonChart, formatMoney, formatCategory, formatMonth,
+  pageHeader, skeletonChart, formatMoney, formatCompact, formatCategory, formatMonth,
   formatDate, esc,
 } from '../utils/ui.js';
 
@@ -77,9 +77,12 @@ export async function renderAnalytics(container) {
           <option value="YEARLY">Yearly</option>
         </select>
       </div>
-      <div>
+      <div class="analytics-field analytics-field--range">
         <label for="a-range">Date range</label>
-        <input class="form-input" id="a-range" type="text" placeholder="All time" aria-label="Date range" autocomplete="off">
+        <div class="analytics-range-wrap">
+          <input class="form-input" id="a-range" type="text" placeholder="All time" aria-label="Date range" autocomplete="off">
+          <span class="analytics-range-icon" aria-hidden="true">${icon('calendar', 'sm')}</span>
+        </div>
       </div>
       <button type="button" class="analytics-reset" id="a-clear" hidden>Reset</button>
     </div>
@@ -105,7 +108,7 @@ export async function renderAnalytics(container) {
           <button type="button" class="chart-toggle is-on" data-series="income" aria-pressed="true"><span class="chart-toggle-swatch" style="color:var(--pos)"></span>Income</button>
           <button type="button" class="chart-toggle is-on" data-series="expense" aria-pressed="true"><span class="chart-toggle-swatch" style="color:var(--text-2)"></span>Expenses</button>
           <button type="button" class="chart-toggle is-on" data-series="net" aria-pressed="true"><span class="chart-toggle-swatch" style="color:var(--brand)"></span>Net line</button>
-          <button type="button" class="chart-toggle" data-series="expenses-only" aria-pressed="false">Expenses only</button>
+          <button type="button" class="chart-toggle chart-toggle--mode" data-series="expenses-only" aria-pressed="false" aria-label="View mode: expenses only">Expenses only</button>
         </div>
         <div class="chart-container chart-container--tall" id="a-timeline-wrap">${skeletonChart(320)}</div>
       </div>
@@ -124,6 +127,7 @@ export async function renderAnalytics(container) {
       dateFormat: 'Y-m-d',
       altInput: true,
       altFormat: 'j M Y',
+      altInputClass: 'form-input analytics-range-input',
       disableMobile: true,
       position: 'below',
       onChange: () => {
@@ -210,6 +214,13 @@ export async function renderAnalytics(container) {
   wireLegend(userId);
   updateResetVisibility();
   syncPresetChips();
+  // The range control must not look focused before the user touches it.
+  requestAnimationFrame(() => {
+    const range = document.getElementById('a-range');
+    if (!range) return;
+    range.blur();
+    range._flatpickr?.altInput?.blur();
+  });
   loadAnalytics(userId);
 }
 
@@ -293,6 +304,18 @@ function syncPresetChips() {
     btn.setAttribute('aria-pressed', String(on));
   });
   if (allTime && range?._flatpickr?.altInput) range._flatpickr.altInput.value = 'All time';
+  scrollActivePresetIntoView();
+}
+
+/** Centre the selected quick range without ever scrolling the page itself. */
+function scrollActivePresetIntoView() {
+  const scroller = document.getElementById('a-presets');
+  if (!scroller || scroller.scrollWidth <= scroller.clientWidth) return;
+  const active = scroller.querySelector('.is-on');
+  if (!active) return;
+  const left = active.getBoundingClientRect().left - scroller.getBoundingClientRect().left + scroller.scrollLeft;
+  const target = left - (scroller.clientWidth - active.offsetWidth) / 2;
+  scroller.scrollLeft = Math.max(0, target);
 }
 
 function readRange() {
@@ -335,21 +358,39 @@ function sum(values) {
   return (values || []).reduce((total, value) => total + (Number(value) || 0), 0);
 }
 
+/**
+ * Set a KPI figure, falling back to compact notation (₹9.5L) when the full
+ * amount cannot fit its column at phone widths. The full figure stays in the
+ * tooltip and aria-label.
+ */
+function setFigureValue(el, value, currency) {
+  if (!el) return;
+  const full = formatMoney(value, currency);
+  el.textContent = full;
+  el.title = '';
+  el.removeAttribute('aria-label');
+  if (el.scrollWidth > el.clientWidth + 1) {
+    el.textContent = formatCompact(value, currency);
+    el.title = full;
+    el.setAttribute('aria-label', full);
+  }
+}
+
 function renderKpis(income, expense, count, netValue = null) {
   const currency = Auth.getDefaultCurrency();
   const net = netValue != null && Number.isFinite(netValue) ? netValue : income - expense;
   const netEl = document.getElementById('a-net');
   if (netEl) {
-    netEl.textContent = formatMoney(net, currency);
+    setFigureValue(netEl, net, currency);
     netEl.style.color = net >= 0 ? 'var(--pos)' : 'var(--neg)';
   }
   const incEl = document.getElementById('a-income');
   if (incEl) {
-    incEl.textContent = formatMoney(income, currency);
+    setFigureValue(incEl, income, currency);
     incEl.style.color = income > 0 ? 'var(--pos)' : 'var(--text)';
   }
   const expEl = document.getElementById('a-expense');
-  if (expEl) expEl.textContent = formatMoney(expense, currency);
+  if (expEl) setFigureValue(expEl, expense, currency);
   const countEl = document.getElementById('a-count');
   if (countEl) countEl.textContent = String(count ?? 0);
   const scopeEl = document.getElementById('a-count-scope');
@@ -433,17 +474,21 @@ function mountCategoryList(wrapId, data, foldLabel, kind) {
   const max = rows[0].value;
   const top = rows.slice(0, 6);
   const rest = rows.slice(6);
+  // Phones show the first five and reveal the rest through "Show all".
+  const mobileExtra = rows.slice(5);
   const isIncome = kind === 'INCOME';
+
+  const pctLabel = (pct) => (pct > 0 && pct < 1 ? '<1%' : `${Math.round(pct)}%`);
 
   const rowHtml = (r, { folded = false } = {}) => {
     const pct = total > 0 ? (r.value / total) * 100 : 0;
     const width = max > 0 ? Math.max(1, (r.value / max) * 100) : 0;
     return `
-      <div class="barlist-row ${folded ? 'is-folded' : ''}" ${folded ? 'data-fold' : `data-category="${esc(r.raw)}"`} role="button" tabindex="0" aria-label="${esc(r.label)}, ${formatMoney(r.value, currency)}, ${pct.toFixed(0)}% of total">
+      <div class="barlist-row ${folded ? 'is-folded' : ''}" ${folded ? 'data-fold' : `data-category="${esc(r.raw)}"`} role="button" tabindex="0" aria-label="${esc(r.label)}, ${formatMoney(r.value, currency)}, ${pctLabel(pct)} of total">
         <div class="barlist-label">${esc(r.label)}</div>
         <div class="barlist-track"><div class="barlist-fill" style="width:${width.toFixed(1)}%${folded ? '' : `;background:${isIncome ? 'var(--pos)' : 'var(--text-2)'}`}"></div></div>
         <div class="barlist-value">${formatMoney(r.value, currency, { decimals: 0 })}</div>
-        <div class="barlist-pct">${pct.toFixed(0)}%</div>
+        <div class="barlist-pct">${pctLabel(pct)}</div>
       </div>`;
   };
 
@@ -452,7 +497,19 @@ function mountCategoryList(wrapId, data, foldLabel, kind) {
       ${top.map(r => rowHtml(r)).join('')}
       ${rest.length ? rowHtml({ label: foldLabel || 'Other', value: rest.reduce((s, r) => s + r.value, 0) }, { folded: true }) : ''}
     </div>
-    <div class="barlist-total">Total ${formatMoney(total, currency, { decimals: 0 })}</div>`;
+    <button type="button" class="barlist-showall" ${rows.length > 5 ? '' : 'hidden'}>Show all ${rows.length} categories</button>
+    <div class="barlist-extra" hidden>${mobileExtra.map(r => rowHtml(r)).join('')}</div>
+    <div class="barlist-total">Total ${formatMoney(total, currency)}</div>`;
+
+  const moreBtn = wrap.querySelector('.barlist-showall');
+  const extra = wrap.querySelector('.barlist-extra');
+  if (moreBtn && extra) {
+    moreBtn.onclick = () => {
+      const open = extra.hidden;
+      extra.hidden = !open;
+      moreBtn.textContent = open ? 'Show less' : `Show all ${rows.length} categories`;
+    };
+  }
 
   wrap.querySelectorAll('[data-category]').forEach(row => {
     const open = () => {
@@ -527,10 +584,32 @@ function mountTimeline(wrapId, canvasId, timeline) {
     ? fillMonthlyGaps(timeline.labels, timeline.datasets)
     : { labels: timeline.labels, datasets: timeline.datasets };
 
-  const income = seriesByName(filled.datasets, 'income') || filled.labels.map(() => 0);
-  const expense = seriesByName(filled.datasets, 'expense') || filled.labels.map(() => 0);
-  const net = filled.labels.map((_, i) => (income[i] || 0) - (expense[i] || 0));
-  const labels = timelineType === 'MONTHLY' ? filled.labels.map(formatMonth) : filled.labels;
+  let rawLabels = filled.labels.slice();
+  let income = (seriesByName(filled.datasets, 'income') || filled.labels.map(() => 0)).slice();
+  let expense = (seriesByName(filled.datasets, 'expense') || filled.labels.map(() => 0)).slice();
+  const mobile = isMobileAnalytics();
+  let aggregated = false;
+
+  if (mobile && timelineType === 'MONTHLY') {
+    // A decade of empty months squeezes the real data into a few pixels.
+    const yearly = aggregateMonthlyToYearly(rawLabels, income, expense);
+    if (yearly) {
+      rawLabels = yearly.labels;
+      income = yearly.income;
+      expense = yearly.expense;
+      aggregated = true;
+    }
+  }
+
+  if (mobile) {
+    const trimmed = trimEmptyBuckets(rawLabels, income, expense);
+    rawLabels = trimmed.labels;
+    income = trimmed.income;
+    expense = trimmed.expense;
+  }
+
+  const net = rawLabels.map((_, i) => (income[i] || 0) - (expense[i] || 0));
+  const labels = timelineType === 'MONTHLY' && !aggregated ? rawLabels.map(formatMonth) : rawLabels;
 
   const summaryText = labels.map((label, i) =>
     `${label}: income ${formatMoney(income[i] || 0, Auth.getDefaultCurrency())}, expenses ${formatMoney(expense[i] || 0, Auth.getDefaultCurrency())}, net ${formatMoney(net[i] || 0, Auth.getDefaultCurrency())}`
@@ -541,11 +620,67 @@ function mountTimeline(wrapId, canvasId, timeline) {
   const chart = createBarChart(document.getElementById(canvasId), {
     labels, income, expense, net,
     currency: Auth.getDefaultCurrency(),
+    mobile,
     showIncome: expensesOnly ? false : showIncome,
     showExpense,
     showNet: expensesOnly ? false : showNet,
   });
+  // The phone axis is capped at a percentile so one huge month cannot flatten
+  // every other bar; say so rather than leaving an unexplained cut.
+  if (chart?.$pfaClipped) {
+    const note = document.createElement('p');
+    note.className = 'chart-clip-note';
+    note.textContent = 'Tall bars are clipped so smaller months stay readable.';
+    wrap.appendChild(note);
+  }
   charts.push(chart);
+}
+
+function isMobileAnalytics() {
+  try {
+    return typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(max-width: 767px)').matches;
+  } catch { return false; }
+}
+
+/** Over long histories, monthly bars are too dense to read: roll them into years. */
+function aggregateMonthlyToYearly(labels, income, expense) {
+  if (labels.length <= 36) return null;
+  if (!labels.every(l => /^\d{4}-\d{2}$/.test(String(l)))) return null;
+  const order = [];
+  const byYear = new Map();
+  labels.forEach((label, i) => {
+    const year = String(label).slice(0, 4);
+    if (!byYear.has(year)) { byYear.set(year, { income: 0, expense: 0 }); order.push(year); }
+    const bucket = byYear.get(year);
+    bucket.income += Number(income[i]) || 0;
+    bucket.expense += Number(expense[i]) || 0;
+  });
+  return {
+    labels: order,
+    income: order.map(y => byYear.get(y).income),
+    expense: order.map(y => byYear.get(y).expense),
+  };
+}
+
+/** Drop leading and trailing all-zero buckets (keep one neighbour for context). */
+function trimEmptyBuckets(labels, income, expense) {
+  const hasData = labels.map((_, i) => (Number(income[i]) || 0) !== 0 || (Number(expense[i]) || 0) !== 0);
+  let first = hasData.indexOf(true);
+  let last = hasData.lastIndexOf(true);
+  if (first === -1) {
+    first = Math.max(0, labels.length - 12);
+    last = labels.length - 1;
+  } else {
+    first = Math.max(0, first - 1);
+    last = Math.min(labels.length - 1, last + 1);
+  }
+  return {
+    labels: labels.slice(first, last + 1),
+    income: income.slice(first, last + 1),
+    expense: expense.slice(first, last + 1),
+  };
 }
 
 function wireLegend(userId) {

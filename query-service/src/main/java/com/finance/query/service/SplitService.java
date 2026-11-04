@@ -215,8 +215,14 @@ public class SplitService {
                 .collect(Collectors.toMap(GroupMember::getUserId, GroupMember::getName));
 
         Map<UUID, BigDecimal> totalPaid = new HashMap<>();
+        Map<UUID, BigDecimal> totalSpent = new HashMap<>();
         for (SharedExpense e : expenses) {
             totalPaid.merge(e.getPaidBy(), e.getAmount(), BigDecimal::add);
+            // Settlement transfers are kept in totalPaid for the net balance but
+            // are not spending, and must not inflate "Spending by member".
+            if (e.getSplitType() != SharedExpense.SplitType.SETTLEMENT) {
+                totalSpent.merge(e.getPaidBy(), e.getAmount(), BigDecimal::add);
+            }
         }
 
         Map<UUID, BigDecimal> totalOwed = new HashMap<>();
@@ -227,10 +233,12 @@ public class SplitService {
         List<GroupBalanceResponse.MemberBalance> memberBalances = members.stream().map(m -> {
             UUID uid = m.getUserId();
             BigDecimal paid = totalPaid.getOrDefault(uid, BigDecimal.ZERO);
+            BigDecimal spent = totalSpent.getOrDefault(uid, BigDecimal.ZERO);
             BigDecimal owed = totalOwed.getOrDefault(uid, BigDecimal.ZERO);
             return new GroupBalanceResponse.MemberBalance(uid, m.getName(),
                     paid.subtract(owed).setScale(2, RoundingMode.HALF_UP),
                     paid.setScale(2, RoundingMode.HALF_UP),
+                    spent.setScale(2, RoundingMode.HALF_UP),
                     owed.setScale(2, RoundingMode.HALF_UP));
         }).collect(Collectors.toList());
 

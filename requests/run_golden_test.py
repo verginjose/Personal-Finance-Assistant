@@ -788,7 +788,6 @@ def stage_complex(client, member, checks, args, rng):
         ("timeline chart", f"/analytics/timeline-chart?userId={uid}"),
         ("comprehensive analytics", f"/analytics/comprehensive?userId={uid}"),
         ("analytics entries page", f"/analytics/transaction-entries?userId={uid}&page=0&size=20"),
-        ("health score", f"/analytics/health-score?userId={uid}"),
         ("income by category",
          f"/analytics/transactions/income-by-category?userId={uid}"
          f"&categoryName=SALARY&startDate={start_d}&endDate={end_d}"),
@@ -1398,7 +1397,6 @@ def verify_member(client, member, checks, args):
     for path, label in (
         (f"/analytics/category-pie-chart?userId={uid}", "category pie chart"),
         (f"/analytics/timeline-chart?userId={uid}", "timeline chart"),
-        (f"/analytics/health-score?userId={uid}", "health score"),
     ):
         status, _, _ = client.request("analytics", path, "GET", headers=member.headers())
         checks.status(200, status, label)

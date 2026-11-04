@@ -43,6 +43,5 @@
 | **Analytics** | GET | /analytics/transaction-entries | `Authorization: Bearer <jwt>`, `userId` query, pagination | – | `TransactionEntryPage` |
 | **Analytics** | GET | /analytics/transactions/income-by-category | `Authorization: Bearer <jwt>`, `userId` query, `categoryName` query (Category), required `startDate`/`endDate` (ISO date), pagination | – | `TransactionEntryPage` |
 | **Analytics** | GET | /analytics/transactions/by-type | `Authorization: Bearer <jwt>`, `userId` query, `transactionType` query (INCOME\|EXPENSE), required `startDate`/`endDate` (ISO date), pagination | – | `TransactionEntryPage` |
-| **Analytics** | GET | /analytics/health-score | `Authorization: Bearer <jwt>`, `userId` query | – | `HealthScoreResponse` |
 | **Analytics** | GET | /analytics/ai-insights | `Authorization: Bearer <jwt>`, `userId` query | – | `AiInsightResponse` |
 | **Analytics** | GET | /analytics/health | – | – | `{ status:"UP", service:"analytics-service" }` |

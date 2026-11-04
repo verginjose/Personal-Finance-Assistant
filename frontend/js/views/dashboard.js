@@ -1,7 +1,7 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon, categoryIcon } from '../utils/icons.js';
 import {
-  healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData,
+  aiPanelHtml, renderAiData,
   formatMoney, formatCategory, formatDayLabel, formatDue, dateTooltip, esc,
   segmentedControl, wireSegmented, progressBar, skeletonRows,
   displayAmountFor, displayName, humanizeNamesIn,
@@ -64,7 +64,6 @@ export async function renderDashboard(container) {
 
       <aside class="dash-col dash-col--side">
         ${aiPanelHtml('d')}
-        ${healthPanelHtml('d')}
       </aside>
     </div>`;
 
@@ -123,19 +122,10 @@ export async function renderDashboard(container) {
   };
   loadInsights();
 
-  // The score follows the period control now that the endpoint accepts dates.
-  const loadHealth = async (capLabel = '') => {
-    const range = periodRange(currentPeriod);
-    const health = await api.get('/analytics/health-score', { userId, ...range }).catch(() => null);
-    if (!document.getElementById('d-health-score')) return;
-    renderHealthData('d', health, { capLabel, scopeLabel: periodScopeLabel(currentPeriod) });
-  };
-
   try {
     const subscriptions = await api.get('/upsert/subscriptions', { userId }).catch(() => []);
-    if (!document.getElementById('d-health-score')) return; // navigated away
+    if (!document.getElementById('d-comingup')) return; // navigated away
     renderComingUp(subscriptions);
-    await loadHealth();
   } catch (err) {
     toast('Failed to load dashboard: ' + err.message, 'error');
   }

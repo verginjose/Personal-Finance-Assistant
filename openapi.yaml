@@ -1065,25 +1065,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionEntryPage'
-  /analytics/health-score:
-    get:
-      summary: Compute user's financial health score
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: userId
-          in: query
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Health score payload
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthScoreResponse'
   /analytics/ai-insights:
     get:
       summary: Generate AI‑driven financial insights (cached)
@@ -1381,6 +1362,4 @@ components:
           type: string
           format: date-time
     AiInsightResponse:
-      type: object
-    HealthScoreResponse:
       type: object

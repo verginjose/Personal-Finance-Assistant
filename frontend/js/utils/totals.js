@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    totals.js — One source of truth for Earned / Spent / Net.
    Every screen that shows a total asks this module, so the Dashboard,
-   Analytics, Insights and health copy cannot drift apart. The backend summary
+   Analytics and Insights copy cannot drift apart. The backend summary
    already excludes settlements (payments between group members are not income
    or spending), so the rule lives in one place.
    ═══════════════════════════════════════════════════════════════════════════ */

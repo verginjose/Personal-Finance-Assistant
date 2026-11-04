@@ -1163,26 +1163,6 @@ tbody tr:hover { background: var(--hover); }
 .advisor-goal-name { font-size: 14px; font-weight: 500; color: var(--text); }
 .advisor-goal-msg { font-size: 12px; color: var(--text-2); margin-top: 1px; }
 
-/* Health */
-.health-panel {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-  padding: var(--s5);
-  margin-top: var(--s4);
-}
-.health-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
-.health-compact { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); margin-top: var(--s3); }
-.health-score { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
-.health-compact-sub { font-size: 13px; color: var(--text-2); }
-.health-breakdown { display: flex; flex-direction: column; gap: var(--s3); margin-top: var(--s4); }
-.health-metric-head { display: flex; justify-content: space-between; gap: var(--s2); font-size: 13px; color: var(--text-2); margin-bottom: 5px; }
-.health-metric-head strong { color: var(--text); font-weight: 500; }
-.health-metric-head strong span { color: var(--text-2); font-weight: 400; }
-.health-metric-track { height: 5px; border-radius: 99px; background: var(--line); overflow: hidden; }
-.health-metric-fill { height: 100%; border-radius: 99px; }
-.health-summary { font-size: 13px; color: var(--text-2); margin-top: var(--s3); }
-
 /* Goals summary on the dashboard */
 .goal-summary { margin-top: var(--s4); }
 .goal-summary-row { display: flex; align-items: center; gap: var(--s3); padding: 10px 0; border-bottom: 1px solid var(--line); }
@@ -1809,7 +1789,7 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
 
   .page-header { margin-bottom: var(--s4); }
   .page-header-text h1, .period-header h1 { font-size: 22px; }
-  .card, .advisor-card, .health-panel, .goal-card, .budget-card, .group-card { padding: var(--s4); }
+  .card, .advisor-card, .goal-card, .budget-card, .group-card { padding: var(--s4); }
   .figures { gap: var(--s5); }
   .figure-value { font-size: 20px; }
   .hero-number, .amount--hero { font-size: 32px; }
@@ -2063,29 +2043,6 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
 .comingup-when { font-size: 12px; color: var(--text-2); margin-top: 1px; }
 .comingup-amount { font-size: 14px; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-/* Compact, expandable financial health */
-.health-head { align-items: center; }
-.health-toggle {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
-  min-width: 0;
-  min-height: 32px;
-  text-align: left;
-  color: var(--text);
-}
-.health-inline { display: inline-flex; align-items: baseline; gap: 8px; }
-.health-inline-score { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
-.health-caret { display: inline-flex; color: var(--text-2); transition: transform 160ms ease-out; }
-.health-panel.is-expanded .health-caret { transform: rotate(180deg); }
-.health-grade-line { margin-top: 4px; }
-.health-scope { font-size: 12px; color: var(--text-2); margin-top: 2px; }
-.health-full-line { font-size: 13px; color: var(--text-2); }
-.health-summary { margin-top: var(--s3); }
-.health-panel:not(.is-expanded) .health-summary { display: none; }
-
 /* ── Split group page: feed first, balances beside it ───────────────────── */
 .split-summary-line {
   font-size: 14px;
@@ -2263,13 +2220,12 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
 @media (max-width: 1199px) {
   .dash-columns { display: flex; flex-direction: column; gap: var(--s5); align-items: stretch; }
   .dash-col { display: contents; }
-  /* Hero → Goals → Budgets → Insights → Recent → Coming up → Health */
+  /* Hero → Goals → Budgets → Insights → Recent → Coming up */
   #d-goals-summary { order: 1; }
   #d-budgets-summary { order: 2; }
   .dash-columns .advisor-card { order: 3; }
   .dash-col--main > section[aria-labelledby="d-recent-title"] { order: 4; }
   #d-comingup-section { order: 5; }
-  #d-health { order: 6; }
 }
 
 @media (max-width: 1100px) {

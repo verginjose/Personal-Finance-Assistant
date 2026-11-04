@@ -2,10 +2,8 @@ package com.finance.query.controller;
 
 import com.finance.query.dto.AiInsightResponse;
 import com.finance.query.dto.ChartData;
-import com.finance.query.dto.HealthScoreResponse;
 import com.finance.query.service.AiInsightsService;
 import com.finance.query.service.AnalyticsService;
-import com.finance.query.service.HealthScoreService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +21,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(
-    controllers = {AnalyticsController.class, HealthScoreController.class, AiInsightsController.class},
+    controllers = {AnalyticsController.class, AiInsightsController.class},
     excludeAutoConfiguration = SecurityAutoConfiguration.class
 )
 @DisplayName("Analytics controllers — Unit Tests")
@@ -34,9 +32,6 @@ public class AnalyticsControllerTest {
 
     @MockitoBean
     private AnalyticsService analyticsService;
-
-    @MockitoBean
-    private HealthScoreService healthScoreService;
 
     @MockitoBean
     private AiInsightsService aiInsightsService;
@@ -79,34 +74,6 @@ public class AnalyticsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalSpent").value(1250.0))
                 .andExpect(jsonPath("$.totalSaved").value(300.0));
-    }
-
-    @Test
-    @DisplayName("GET /analytics/health-score: returns score & status 200 with X-User-Id header matching userId")
-    void getHealthScore_matchingHeader_returnsScore() throws Exception {
-        UUID userId = UUID.randomUUID();
-        HealthScoreResponse response = new HealthScoreResponse(750, "B", Map.of("Savings", 80), "Good financial health", "2026-06-09T10:00:00");
-
-        when(healthScoreService.calculateScore(userId, null, null)).thenReturn(response);
-
-        mockMvc.perform(get("/analytics/health-score")
-                        .header("X-User-Id", userId.toString())
-                        .param("userId", userId.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalScore").value(750))
-                .andExpect(jsonPath("$.grade").value("B"));
-    }
-
-    @Test
-    @DisplayName("GET /analytics/health-score: returns status 403 when X-User-Id header is mismatched")
-    void getHealthScore_mismatchedHeader_returns403() throws Exception {
-        UUID userId = UUID.randomUUID();
-        UUID differentId = UUID.randomUUID();
-
-        mockMvc.perform(get("/analytics/health-score")
-                        .header("X-User-Id", differentId.toString())
-                        .param("userId", userId.toString()))
-                .andExpect(status().isForbidden());
     }
 
     @Test

@@ -471,9 +471,9 @@ async function loadTransactions(userId) {
           const cat = txCategory(t);
           const settlement = isSettlementRow(t);
 
-          // A split row names the group and what the number means.
-          // TODO(backend): the entries API does not return a group id, the
-          // user's share or a converted amount; show them when the fields arrive.
+          // A split row names the group and what the number means. The API
+          // resolves groupName/groupId/totalAmount/myShare from the link table.
+          // TODO(backend): a converted amount (amountDefault) is still missing.
           const isSplit = !!(t.groupName || t.groupId);
           const total = t.totalAmount != null ? Number(t.totalAmount) : null;
           const subParts = [];

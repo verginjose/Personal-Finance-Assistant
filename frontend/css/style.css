@@ -43,7 +43,17 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { font-size: 15px; scroll-behavior: smooth; }
+html {
+  font-size: 15px;
+  scroll-behavior: smooth;
+  /* viewport-fit=cover lets the app paint edge-to-edge; paint anything the
+     system bars expose (rubber-band overscroll, safe-area gutters) in the
+     app background instead of the browser's default white. */
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+a, button { -webkit-tap-highlight-color: transparent; }
 
 body {
   font-family: var(--font-body);
@@ -1993,6 +2003,7 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
   .modal {
     max-width: 100%;
     max-height: 100vh;
+    max-height: 100dvh;
     border-radius: 0;
     margin: 0;
     animation: slideUp 0.3s ease;
@@ -2010,6 +2021,7 @@ tr:hover td { background: rgba(20, 184, 166, 0.04); }
   .modal-body {
     padding: 20px 16px;
     max-height: calc(100vh - 140px);
+    max-height: calc(100dvh - 140px);
     overflow-y: auto;
   }
   .modal-actions {
@@ -3265,7 +3277,9 @@ tr:hover td { background: rgba(20, 184, 166, 0.045); }
 }
 
 @media (max-width: 768px) {
-  .main-content { padding: 18px 16px 100px; }
+  .main-content {
+    padding: 18px max(16px, env(safe-area-inset-right, 16px)) calc(100px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 16px));
+  }
   /* Mobile uses the drawer; the desktop collapse button has no meaning here. */
   .sidebar-collapse { display: none; }
   #app-shell.sidebar-collapsed .sidebar-expand { display: none; }
@@ -3402,7 +3416,7 @@ button:focus-visible,
 
 @media (max-width: 768px) {
   .advisor-goals-row { grid-template-columns: 1fr; }
-  .modal-body:has(.ocr-form) { max-height: 82vh; }
+  .modal-body:has(.ocr-form) { max-height: 82vh; max-height: 82dvh; }
 }
 
 /* ── Mobile shell: keep the bottom nav pinned ──────────────────────────────
@@ -3433,4 +3447,24 @@ button:focus-visible,
     -webkit-backdrop-filter: none;
     background: rgba(7, 13, 18, 0.98);
   }
+
+  /* ── Edge-to-edge safe areas ─────────────────────────────────────────────
+     index.html opts into viewport-fit=cover so Chrome on Android no longer
+     draws its retractable "chin" in the strip above the system navigation
+     bar (that chin never retracts here because only .main-content scrolls,
+     which is what left a gap between the bottom nav and the nav bar).
+     Cover means the app now paints under the status bar and system bars, so
+     everything pinned to an edge has to inset itself. The bottom nav already
+     pads by env(safe-area-inset-bottom); these handle the other edges. */
+  .mobile-header {
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    padding-left: max(18px, env(safe-area-inset-left, 18px));
+    padding-right: max(18px, env(safe-area-inset-right, 18px));
+  }
+  .sidebar {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .modal-header { padding-top: calc(20px + env(safe-area-inset-top, 0px)); }
+  .modal-actions { padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
 }

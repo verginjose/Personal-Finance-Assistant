@@ -109,21 +109,21 @@ Correctness is unchanged — all assertions still run and the verdict is still
 - **Seeded recurring rows must not be deleted.** The random delete step
   sampled every created row, so ~25% of users lost the daily/monthly fixtures
   the recurrence checks assert on. Deletes now skip `recurring_ids`.
-- **Groq allows 30 OCR-completion requests/minute.** The OCR service now
+- **Cerebras rate-limits OCR completions.** The OCR service now
   spaces calls and retries 429s; see the section above.
 - The user-level cache paths (`summary`, single-entry, search) converge in
   ~0.5–2.5 s and pass consistently; the daily/monthly recurring seeds are
   detected and replicated to the read model on every run.
 
-## Groq OCR rate limit
+## Cerebras OCR rate limit
 
-The OCR service calls Groq once per unique receipt text. This account allows
-**30 requests/minute**. The extractor now spaces calls by `60 / GROQ_RPM`
-(default 30) and retries `429`s with `Retry-After` (or a 2 s floor) up to
-`GROQ_MAX_ATTEMPTS` (default 5) instead of acking the job as failed. The
-200-image fixture therefore needs ~7 minutes to fill the OCR/LLM caches the
+The OCR service calls Cerebras once per unique receipt text. The extractor
+spaces calls by `60 / CEREBRAS_RPM` (default 450, the account's limit) and
+retries `429`s with `Retry-After` (or a 2 s floor) up to `CEREBRAS_MAX_ATTEMPTS`
+(default 5) instead of acking the job as failed. At 450 RPM the
+200-image fixture fills the OCR/LLM caches in roughly half a minute the
 first time a pod starts; afterwards both caches are hit and the queue drains
-immediately. The golden test itself never asserts Groq-derived rows — uploads
+immediately. The golden test itself never asserts Cerebras-derived rows — uploads
 assert `202` + `receiptId` — so the limit cannot turn the run red; the
 OCR→transaction half of the stage is created synchronously by the test.
 

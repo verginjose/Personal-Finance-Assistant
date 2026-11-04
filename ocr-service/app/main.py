@@ -20,9 +20,10 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 # ── Config from env ──────────────────────────────────────────────────────────
-GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL     = os.getenv("GROQ_MODEL", "llama3-8b-8192")
-GROQ_URL       = os.getenv("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "")
+CEREBRAS_MODEL   = os.getenv("CEREBRAS_MODEL", "qwen-3.8-27b")
+CEREBRAS_URL     = os.getenv("CEREBRAS_URL", "https://api.cerebras.ai/v1/chat/completions")
+
 UPSERT_URL     = os.getenv("UPSERT_SERVICE_URL", "http://command-service:8081")
 CURRENCY_URL   = "https://api.frankfurter.dev/v1/latest?from=USD"
 
@@ -37,26 +38,26 @@ ocr_cache: TTLCache   = TTLCache(maxsize=500, ttl=86400)  # 24h
 llm_cache: TTLCache   = TTLCache(maxsize=200, ttl=86400)  # 24h
 rate_cache: dict      = {}   # {"rates": {...}, "date": "..."}
 
-# ── Groq rate limit ──────────────────────────────────────────────────────────
-# Groq allows 30 OCR-completion requests per minute on this account. The
-# consumer is sequential, so a single spacing gate between calls is enough;
-# 429s are retried with the server's Retry-After (or exponential backoff).
-GROQ_RPM = float(os.getenv("GROQ_RPM", "30"))
-GROQ_MIN_INTERVAL = 60.0 / GROQ_RPM if GROQ_RPM > 0 else 0.0
-GROQ_MAX_ATTEMPTS = int(os.getenv("GROQ_MAX_ATTEMPTS", "5"))
-_groq_next_at = 0.0
-_groq_gate = None  # asyncio.Lock, created lazily on the running loop
+# ── Cerebras rate limit ─────────────────────────────────────────────────────
+# This account allows 450 requests/minute. The consumer is sequential, so a
+# single spacing gate between calls is enough; 429s are retried with the
+# server's Retry-After (or a fixed spacing delay).
+CEREBRAS_RPM = float(os.getenv("CEREBRAS_RPM", "450"))
+CEREBRAS_MIN_INTERVAL = 60.0 / CEREBRAS_RPM if CEREBRAS_RPM > 0 else 0.0
+CEREBRAS_MAX_ATTEMPTS = int(os.getenv("CEREBRAS_MAX_ATTEMPTS", "5"))
+_cerebras_next_at = 0.0
+_cerebras_gate = None  # asyncio.Lock, created lazily on the running loop
 
 
-async def _groq_wait_turn():
-    """Reserve the next Groq slot and sleep until it arrives."""
-    global _groq_next_at, _groq_gate
-    if _groq_gate is None:
-        _groq_gate = asyncio.Lock()
-    async with _groq_gate:
+async def _cerebras_wait_turn():
+    """Reserve the next Cerebras slot and sleep until it arrives."""
+    global _cerebras_next_at, _cerebras_gate
+    if _cerebras_gate is None:
+        _cerebras_gate = asyncio.Lock()
+    async with _cerebras_gate:
         now = time.monotonic()
-        slot = max(now, _groq_next_at)
-        _groq_next_at = slot + GROQ_MIN_INTERVAL
+        slot = max(now, _cerebras_next_at)
+        _cerebras_next_at = slot + CEREBRAS_MIN_INTERVAL
     delay = slot - time.monotonic()
     if delay > 0:
         await asyncio.sleep(delay)
@@ -245,7 +246,7 @@ def _convert_currency(amount: float, currency: str, target_currency: str = "INR"
     }
 
 
-GROQ_PROMPT_TEMPLATE = """Extract financial data from this receipt/document. Return ONLY valid JSON.
+CEREBRAS_PROMPT_TEMPLATE = """Extract financial data from this receipt/document. Return ONLY valid JSON.
 
 Rules:
 - transactionType: "Expense" or "Income"
@@ -263,7 +264,7 @@ Receipt:
 {text}
 """
 
-GROQ_ADVISOR_PROMPT_TEMPLATE = """You are an expert AI Financial Advisor. Analyze the user's transaction history for the past period and provide actionable insights. Return ONLY valid JSON.
+CEREBRAS_ADVISOR_PROMPT_TEMPLATE = """You are an expert AI Financial Advisor. Analyze the user's transaction history for the past period and provide actionable insights. Return ONLY valid JSON.
 
 Rules:
 - Be concise but helpful.
@@ -278,7 +279,7 @@ Transactions:
 {text}
 """
 
-GROQ_BATCH_PROMPT_TEMPLATE = """Extract all financial transactions from this bank statement/document. Return ONLY valid JSON containing an array of transactions.
+CEREBRAS_BATCH_PROMPT_TEMPLATE = """Extract all financial transactions from this bank statement/document. Return ONLY valid JSON containing an array of transactions.
 
 Rules:
 - Output should be a JSON array: `[ {...}, {...} ]`
@@ -297,16 +298,16 @@ Document:
 {text}
 """
 
-async def _call_groq_generic(prompt: str) -> dict | list:
+async def _call_cerebras_generic(prompt: str) -> dict | list:
     text_hash = hashlib.sha256(prompt.encode()).hexdigest()
     if text_hash in llm_cache:
         return llm_cache[text_hash]
 
-    if not GROQ_API_KEY:
-        raise RuntimeError("GROQ_API_KEY not configured")
+    if not CEREBRAS_API_KEY:
+        raise RuntimeError("CEREBRAS_API_KEY not configured")
 
     payload = {
-        "model": GROQ_MODEL,
+        "model": CEREBRAS_MODEL,
         "temperature": 0.2,
         "response_format": {"type": "json_object"},
         "messages": [{"role": "user", "content": prompt}],
@@ -315,26 +316,26 @@ async def _call_groq_generic(prompt: str) -> dict | list:
     client = http_client if http_client else httpx.AsyncClient()
     attempt = 0
     while True:
-        await _groq_wait_turn()
+        await _cerebras_wait_turn()
         r = await client.post(
-            GROQ_URL,
+            CEREBRAS_URL,
             json=payload,
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            headers={"Authorization": f"Bearer {CEREBRAS_API_KEY}", "Content-Type": "application/json"},
             timeout=40.0
         )
         if r.status_code == 200:
             break
         attempt += 1
-        if r.status_code != 429 or attempt >= GROQ_MAX_ATTEMPTS:
-            raise RuntimeError(f"Groq HTTP {r.status_code}: {r.text}")
+        if r.status_code != 429 or attempt >= CEREBRAS_MAX_ATTEMPTS:
+            raise RuntimeError(f"Cerebras HTTP {r.status_code}: {r.text}")
         retry_after = r.headers.get("Retry-After")
         try:
-            delay = max(float(retry_after), GROQ_MIN_INTERVAL) if retry_after else GROQ_MIN_INTERVAL
+            delay = max(float(retry_after), CEREBRAS_MIN_INTERVAL) if retry_after else CEREBRAS_MIN_INTERVAL
         except ValueError:
-            delay = GROQ_MIN_INTERVAL
+            delay = CEREBRAS_MIN_INTERVAL
         delay = min(max(delay, 1.0), 30.0)
-        log.warning("Groq rate limited (attempt %d/%d); retrying in %.1fs",
-                    attempt, GROQ_MAX_ATTEMPTS, delay)
+        log.warning("Cerebras rate limited (attempt %d/%d); retrying in %.1fs",
+                    attempt, CEREBRAS_MAX_ATTEMPTS, delay)
         await asyncio.sleep(delay)
 
     content = r.json()["choices"][0]["message"]["content"]
@@ -342,10 +343,10 @@ async def _call_groq_generic(prompt: str) -> dict | list:
     llm_cache[text_hash] = result
     return result
 
-async def _call_groq(text: str, is_batch: bool = False) -> dict | list:
+async def _call_cerebras(text: str, is_batch: bool = False) -> dict | list:
     if is_batch:
-        return await _call_groq_generic(GROQ_BATCH_PROMPT_TEMPLATE.format(text=text))
-    return await _call_groq_generic(GROQ_PROMPT_TEMPLATE.format(text=text))
+        return await _call_cerebras_generic(CEREBRAS_BATCH_PROMPT_TEMPLATE.format(text=text))
+    return await _call_cerebras_generic(CEREBRAS_PROMPT_TEMPLATE.format(text=text))
 
 
 
@@ -365,7 +366,7 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
     if len(clean_text) < 10:
         return [] if is_batch else {}
 
-    doc = await _call_groq(clean_text, is_batch)
+    doc = await _call_cerebras(clean_text, is_batch)
     
     if is_batch:
         results = []
@@ -442,7 +443,7 @@ async def analyze_transactions(payload: dict):
     text_repr = json.dumps(txns, separators=(',', ':'))
     
     try:
-        res = await _call_groq_generic(GROQ_ADVISOR_PROMPT_TEMPLATE.format(text=text_repr))
+        res = await _call_cerebras_generic(CEREBRAS_ADVISOR_PROMPT_TEMPLATE.format(text=text_repr))
         return res
     except Exception as e:
         log.error("Failed to analyze: %s", e)

@@ -9,7 +9,7 @@
 [![Redis](https://img.shields.io/badge/redis-7-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
 [![RabbitMQ](https://img.shields.io/badge/rabbitmq-3-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white)](https://www.rabbitmq.com/)
 [![MinIO](https://img.shields.io/badge/minio-RELEASE-C7202C?style=for-the-badge&logo=minio&logoColor=white)](https://minio.io/)
-[![Groq](https://img.shields.io/badge/groq-LLM-000000?style=for-the-badge)](https://groq.com/)
+[![Cerebras](https://img.shields.io/badge/cerebras-LLM-F15A22?style=for-the-badge)](https://cerebras.ai/)
 [![ClickHouse](https://img.shields.io/badge/clickhouse-24.8-FFCC01?style=for-the-badge&logo=clickhouse&logoColor=white)](https://clickhouse.com/)
 [![Vector](https://img.shields.io/badge/vector-0.41.1-000000?style=for-the-badge&logo=vector&logoColor=white)](https://vector.dev/)
 [![Grafana](https://img.shields.io/badge/grafana-11.1.4-F46800?style=for-the-badge&logo=grafana)](https://grafana.com/)
@@ -40,7 +40,7 @@ flowchart LR
         Redis[Redis Cache]
         RMQ[RabbitMQ]
         MinIO[MinIO Storage]
-        Groq[Groq LLM API]
+        Cerebras[Cerebras LLM API]
     end
     subgraph Observability
         Vector[Vector Log Aggregator]
@@ -64,8 +64,8 @@ flowchart LR
     Query -.-> RMQ
     OCR -.-> RMQ
     OCR --> MinIO
-    Query --> Groq
-    OCR --> Groq
+    Query --> Cerebras
+    OCR --> Cerebras
     Services -.-> Vector
     Services -.-> Prometheus
     GW -.-> Prometheus
@@ -83,7 +83,7 @@ flowchart LR
 - **Savings Goals**: Users can define target amounts and deadlines for specific goals (e.g., "Vacation Fund"). The platform tracks progress and calculates required monthly contributions.
 - **Category Budgets**: Set hard spending limits across different categories (e.g., "Food", "Entertainment"). Real-time analytics track your burn rate to prevent overspending.
 - **Group Split Bills**: Seamlessly share expenses among friends or roommates. The system automatically calculates complex debt relationships to determine exactly who owes whom.
-- **AI-Powered Financial Insights**: Aggregates your transaction history and feeds it securely into the Groq LLM API to generate personalized financial health scores and actionable insights.
+- **AI-Powered Financial Insights**: Aggregates your transaction history and feeds it securely into the Cerebras LLM API to generate personalized financial health scores and actionable insights.
 - **OCR Receipt Parsing**: Upload an image of a receipt, and the backend uses PaddleOCR to instantly extract the merchant, total amount, and date for one-click ingestion.
 
 ---
@@ -114,13 +114,13 @@ does *only* proxy work; credentials are handled by a separate service.
 - **Auth Service**: See §2 — a reactive service of its own (`auth-service:8082`)
   with its own database schema and the same JWT secret as the gateway.
 - **Command Service**: The primary operational engine. It executes all core mutations (CRUD operations) for transactions, budgets, goals, and shared group bills. It persists canonical state directly to its isolated schema in **PostgreSQL**.
-- **Query Service**: Optimized for ultra-fast reads, aggregations, and dashboard analytics. It maintains a highly optimized cache layer in **Redis** and provides AI-powered financial insights using the **Groq LLM**.
-- **OCR Service**: A Python/FastAPI ML worker. It leverages **PaddleOCR** and **Groq** to perform Optical Character Recognition and semantic parsing on receipt images and batch bank statements. 
+- **Query Service**: Optimized for ultra-fast reads, aggregations, and dashboard analytics. It maintains a highly optimized cache layer in **Redis** and provides AI-powered financial insights using the **Cerebras LLM**.
+- **OCR Service**: A Python/FastAPI ML worker. It leverages **PaddleOCR** and **Cerebras** to perform Optical Character Recognition and semantic parsing on receipt images and batch bank statements. 
 
 ### 4. Event-Driven Architecture (Asynchronous Flow)
 To ensure high performance and loose coupling, the system leverages **RabbitMQ** and **Redis** for state propagation.
 - **Cache Invalidation & Outbox**: When the Command Service modifies data, it publishes a `transaction-cache-evict` event to RabbitMQ. The Query Service consumes this and instantly invalidates stale pre-computed aggregations in Redis.
-- **Batch AI Processing**: When a user uploads a multi-page Bank Statement PDF, the API Gateway drops the file in MinIO and sends an `ocr.job` event to RabbitMQ. The OCR Service consumes the job, processes it using Groq, and posts the results back to an internal webhook. The Command Service then broadcasts this via SSE so the user's UI updates in real-time.
+- **Batch AI Processing**: When a user uploads a multi-page Bank Statement PDF, the API Gateway drops the file in MinIO and sends an `ocr.job` event to RabbitMQ. The OCR Service consumes the job, processes it using Cerebras, and posts the results back to an internal webhook. The Command Service then broadcasts this via SSE so the user's UI updates in real-time.
 
 ### 5. Telemetry & Observability Pipeline
 A robust, enterprise-grade observability stack monitors the entire cluster.

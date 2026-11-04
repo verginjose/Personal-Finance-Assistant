@@ -34,8 +34,8 @@ data:
   RABBITMQ_HOST: rabbitmq
   SPRING_RABBITMQ_HOST: rabbitmq
   SPRING_RABBITMQ_USERNAME: guest
-  GROQ_MODEL: openai/gpt-oss-120b
-  GROQ_URL: https://api.groq.com/openai/v1/chat/completions
+  CEREBRAS_MODEL: qwen-3.8-27b
+  CEREBRAS_URL: https://api.cerebras.ai/v1/chat/completions
   JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
 ---
 apiVersion: apps/v1

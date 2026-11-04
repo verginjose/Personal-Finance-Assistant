@@ -9,7 +9,7 @@
 #   sudo ./k8s/sync-env.sh --apps-only      # skip postgres/redis/clickhouse/...
 #   ./k8s/sync-env.sh --dry-run             # show what would happen, change nothing
 #   sudo ./k8s/sync-env.sh --no-restart     # only update the Secrets
-#   sudo ./k8s/sync-env.sh --check GROQ_MODEL   # print that var from each restarted pod
+#   sudo ./k8s/sync-env.sh --check CEREBRAS_MODEL   # print that var from each restarted pod
 #   sudo ./k8s/sync-env.sh -n pfa -f .env
 #
 # Restarting infrastructure is included by default because a changed

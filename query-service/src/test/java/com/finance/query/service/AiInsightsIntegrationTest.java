@@ -26,22 +26,22 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration"
 })
 @Testcontainers
-@DisplayName("AiInsightsService — Integration Test with Real Groq API")
+@DisplayName("AiInsightsService — Integration Test with Real Cerebras API")
 public class AiInsightsIntegrationTest {
 
     static {
         System.setProperty("docker.api.version", "1.40");
         System.setProperty("DOCKER_API_VERSION", "1.40");
 
-        // Load the actual GROQ_API_KEY from the root .env file
+        // Load the actual CEREBRAS_API_KEY from the root .env file
         try {
             java.nio.file.Path envPath = java.nio.file.Paths.get("../.env");
             if (java.nio.file.Files.exists(envPath)) {
                 java.util.List<String> lines = java.nio.file.Files.readAllLines(envPath);
                 for (String line : lines) {
-                    if (line.startsWith("GROQ_API_KEY=")) {
-                        String key = line.substring("GROQ_API_KEY=".length()).trim();
-                        System.setProperty("GROQ_API_KEY", key);
+                    if (line.startsWith("CEREBRAS_API_KEY=")) {
+                        String key = line.substring("CEREBRAS_API_KEY=".length()).trim();
+                        System.setProperty("CEREBRAS_API_KEY", key);
                     }
                     if (line.startsWith("REDIS_PASSWORD=")) {
                         String rPass = line.substring("REDIS_PASSWORD=".length()).trim();
@@ -74,7 +74,7 @@ public class AiInsightsIntegrationTest {
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "update");
         registry.add("spring.jpa.properties.hibernate.default_schema", () -> "finance");
-        registry.add("groq.api.key", () -> System.getProperty("GROQ_API_KEY", ""));
+        registry.add("cerebras.api.key", () -> System.getProperty("CEREBRAS_API_KEY", ""));
     }
 
     @Autowired
@@ -89,8 +89,8 @@ public class AiInsightsIntegrationTest {
     }
 
     @Test
-    @DisplayName("Verify that generateInsights calls Groq LLM successfully and parses output JSON")
-    void testGroqApiCall() {
+    @DisplayName("Verify that generateInsights calls Cerebras LLM successfully and parses output JSON")
+    void testCerebrasApiCall() {
         UUID userId = UUID.randomUUID();
 
         // Save some dummy transaction entries for the current month
@@ -106,12 +106,12 @@ public class AiInsightsIntegrationTest {
         food.setCategory(Category.RESTAURANTS);
         repository.save(food);
 
-        System.out.println("Calling generateInsights using Groq API key: " + System.getProperty("GROQ_API_KEY"));
+        System.out.println("Calling generateInsights with the Cerebras API key from .env");
         
         // Execute the call
         AiInsightResponse response = aiInsightsService.generateInsights(userId);
 
-        System.out.println("====== GROQ AI RESPONSE SUMMARY ======");
+        System.out.println("====== CEREBRAS AI RESPONSE SUMMARY ======");
         System.out.println(response.getSummary());
         System.out.println("====== INSIGHTS GENERATED ======");
         response.getInsights().forEach(insight -> {

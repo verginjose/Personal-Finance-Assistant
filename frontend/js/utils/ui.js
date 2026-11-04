@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   ui.js — Shared UI helpers, formatters, and component builders
+   ui.js — Shared formatting, theme, and component builders
    ═══════════════════════════════════════════════════════════════════════════ */
-import { icon } from './icons.js';
+import { icon, categoryIcon } from './icons.js';
 
 export function esc(s) {
   const d = document.createElement('div');
@@ -9,36 +9,82 @@ export function esc(s) {
   return d.innerHTML;
 }
 
-export function avatar(name, size = 32, profilePicUrl = null) {
-  if (profilePicUrl) {
-    return `<img src="${profilePicUrl}" alt="${esc(name)}" class="avatar" style="width:${size}px; height:${size}px; border-radius:50%; vertical-align:middle; object-fit:cover;">`;
-  }
-  const encoded = encodeURIComponent(name || 'User');
-  const url = `https://ui-avatars.com/api/?name=${encoded}&background=random&color=fff&rounded=true&size=${size}&bold=true`;
-  return `<img src="${url}" alt="${esc(name)}" class="avatar" style="width:${size}px; height:${size}px; border-radius:50%; vertical-align:middle; object-fit:cover;">`;
+/* ── Names ──────────────────────────────────────────────────────────────── */
+/** Display name for a person. Never surfaces handles or raw IDs. */
+export function displayName(person, fallback = 'Member') {
+  if (!person) return fallback;
+  const raw = typeof person === 'string'
+    ? person
+    : (person.name || person.displayName || person.username || person.userName || '');
+  const clean = String(raw).replace(/^@/, '').trim();
+  if (!clean) return fallback;
+  // A raw UUID is not a name.
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) return fallback;
+  return clean;
 }
 
-/** Currencies the backend exchange-rate feed (ECB/Frankfurter) supports. */
+export function initials(name) {
+  const parts = displayName(name, 'U').split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'U';
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+const AVATAR_TONES = 6;
+function toneFor(name) {
+  const s = String(name || '');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  return (hash % AVATAR_TONES) + 1;
+}
+
+export function avatar(name, size = 32, profilePicUrl = null) {
+  const label = displayName(name, 'User');
+  if (profilePicUrl) {
+    return `<img src="${esc(profilePicUrl)}" alt="${esc(label)}" class="avatar" style="width:${size}px;height:${size}px;border-radius:999px;vertical-align:middle;object-fit:cover;">`;
+  }
+  return `<span class="avatar avatar--tone-${toneFor(label)}" style="width:${size}px;height:${size}px;font-size:${Math.max(11, Math.round(size * 0.38))}px" aria-hidden="true">${esc(initials(label))}</span>`;
+}
+
+/* ── Currencies ─────────────────────────────────────────────────────────── */
 export const CURRENCY_OPTIONS = [
   'INR', 'USD', 'EUR', 'GBP', 'AED', 'AUD', 'CAD', 'CHF', 'CNY', 'JPY',
   'SGD', 'HKD', 'NZD', 'SEK', 'ZAR', 'BRL', 'MXN', 'THB', 'MYR', 'PHP',
 ];
 
+const CURRENCY_NAMES = {
+  INR: 'Indian rupee', USD: 'US dollar', EUR: 'Euro', GBP: 'British pound',
+  AED: 'UAE dirham', AUD: 'Australian dollar', CAD: 'Canadian dollar',
+  CHF: 'Swiss franc', CNY: 'Chinese yuan', JPY: 'Japanese yen',
+  SGD: 'Singapore dollar', HKD: 'Hong Kong dollar', NZD: 'New Zealand dollar',
+  SEK: 'Swedish krona', ZAR: 'South African rand', BRL: 'Brazilian real',
+  MXN: 'Mexican peso', THB: 'Thai baht', MYR: 'Malaysian ringgit',
+  PHP: 'Philippine peso',
+};
+
+export function currencySymbol(code) {
+  try {
+    return (0).toLocaleString('en-IN', { style: 'currency', currency: code, maximumFractionDigits: 0 })
+      .replace(/[\d\s.,]/g, '') || code;
+  } catch { return code; }
+}
+
+export function currencyLabel(code) {
+  const c = String(code || 'INR').toUpperCase();
+  return `${currencySymbol(c)} ${c} · ${CURRENCY_NAMES[c] || c}`;
+}
+
 export function currencyOptionHtml(selected = 'INR') {
   const current = String(selected || 'INR').toUpperCase();
   const list = CURRENCY_OPTIONS.includes(current) ? CURRENCY_OPTIONS : [current, ...CURRENCY_OPTIONS];
-  return list.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
+  return list.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${esc(currencyLabel(c))}</option>`).join('');
 }
 
+/* ── Money ──────────────────────────────────────────────────────────────── */
 /**
- * One money formatter for the whole app.
- *
- * Always two decimals (or none in `compact`), real minus sign *before* the
- * currency symbol, and Indian digit grouping for INR:
- *   formatMoney(-6327.59)       -> −₹6,327.59
- *   formatMoney(648.6)          -> ₹648.60
- *   formatMoney(2.5, 'USD')     -> $2.50
- *   formatMoney(139022, 'INR', { compact: true }) -> ₹1,39,022
+ * One money formatter for the whole app: Indian grouping, two decimals,
+ * a true minus sign before the symbol.
+ *   formatMoney(-6327.59) -> −₹6,327.59
  */
 export function formatMoney(amount, currency = 'INR', { compact = false } = {}) {
   const num = Number(amount);
@@ -66,38 +112,160 @@ export function formatCurrency(n, currency = 'INR') {
   return formatMoney(n, currency);
 }
 
+/** Axis/annotation format: ₹0, ₹50K, ₹1.2L, ₹1.1Cr. */
+export function formatCompact(amount, currency = 'INR') {
+  const num = Number(amount);
+  if (!Number.isFinite(num)) return formatMoney(0, currency, { compact: true });
+  const abs = Math.abs(num);
+  const sign = num < 0 ? '−' : '';
+  const sym = currencySymbol(currency);
+  const trim = (n) => String(Number(n.toFixed(n >= 100 ? 0 : 1)));
+  if (abs >= 1e7) return `${sign}${sym}${trim(abs / 1e7)}Cr`;
+  if (abs >= 1e5) return `${sign}${sym}${trim(abs / 1e5)}L`;
+  if (abs >= 1e3) return `${sign}${sym}${trim(abs / 1e3)}K`;
+  return `${sign}${sym}${Math.round(abs)}`;
+}
+
 /** Signed amount for a ledger row: +income / −expense. */
 export function formatSigned(n, currency = 'INR', type = 'EXPENSE') {
   const value = Math.abs(Number(n) || 0);
-  const money = formatMoney(type === 'INCOME' ? value : -value, currency);
-  return money;
+  return formatMoney(type === 'INCOME' ? value : -value, currency);
 }
 
+/** Amount markup: right-aligned, tabular, with an optional secondary line. */
+export function amountHtml(value, {
+  currency = 'INR', type = 'EXPENSE', size = '', secondary = '', signed = true,
+} = {}) {
+  const n = Number(value) || 0;
+  const isIncome = type === 'INCOME';
+  const shown = signed
+    ? formatMoney(isIncome ? Math.abs(n) : -Math.abs(n), currency)
+    : formatMoney(n, currency);
+  const cls = ['amount', isIncome ? 'amount--pos' : '', size ? `amount--${size}` : ''].filter(Boolean).join(' ');
+  return `
+    <span class="${cls}">
+      <span class="amount-value">${esc(shown)}</span>
+      ${secondary ? `<span class="amount-secondary">${esc(secondary)}</span>` : ''}
+    </span>`;
+}
+
+/* ── Categories ─────────────────────────────────────────────────────────── */
+const CATEGORY_ACRONYMS = new Set(['OTT', 'EMI', 'SIP', 'GST', 'PDF', 'UPI', 'ATM', 'US', 'UK']);
 export function formatCategory(cat) {
   if (!cat) return '—';
-  return cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  const words = String(cat).replace(/_/g, ' ').toLowerCase().split(/\s+/).filter(Boolean);
+  const label = words.map(w => (CATEGORY_ACRONYMS.has(w.toUpperCase()) ? w.toUpperCase() : w)).join(' ');
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+/* ── Dates ──────────────────────────────────────────────────────────────── */
+function asDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const s = String(value);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00`) : new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function isoDayDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** 2 Nov 2026 */
 export function formatDate(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const d = asDate(iso);
+  if (!d) return '—';
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-export function healthScoreColor(score) {
-  if (score >= 700) return 'var(--accent-g)';
-  if (score >= 500) return 'var(--accent-y)';
-  return 'var(--accent)';
+/** Mon 2 Nov */
+export function formatDay(iso) {
+  const d = asDate(iso);
+  if (!d) return '—';
+  return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-export function budgetStatusColor(status) {
-  if (status === 'EXCEEDED') return 'var(--accent)';
-  if (status === 'WARNING') return 'var(--accent-y)';
-  return 'var(--accent-g)';
+/** Today / Yesterday / Mon 2 Nov */
+export function formatDayLabel(iso) {
+  const d = asDate(iso);
+  if (!d) return 'Unknown';
+  const key = isoDayDate(d);
+  const today = new Date();
+  if (key === isoDayDate(today)) return 'Today';
+  if (key === isoDayDate(new Date(today.getTime() - 86400000))) return 'Yesterday';
+  return formatDay(d);
 }
 
+/** Fri 5 Dec · in 26 days */
+export function formatUpcoming(iso, daysUntil) {
+  const d = asDate(iso);
+  if (!d) return '—';
+  const days = daysUntil != null ? Number(daysUntil) : Math.round((d.getTime() - Date.now()) / 86400000);
+  const day = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (days < 0) return `${day} · overdue`;
+  if (days === 0) return `${day} · today`;
+  if (days === 1) return `${day} · tomorrow`;
+  return `${day} · in ${days} days`;
+}
+
+/** Month name only, adding the year when it is not the current one. */
+export function formatMonth(label) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(label || ''));
+  if (!m) return String(label || '');
+  const date = new Date(Number(m[1]), Number(m[2]) - 1, 1);
+  const month = date.toLocaleDateString('en-IN', { month: 'short' });
+  return date.getFullYear() === new Date().getFullYear() ? month : `${month} ${date.getFullYear()}`;
+}
+
+export function relativeTime(iso) {
+  const date = asDate(iso);
+  if (!date) return '';
+  const minutes = Math.round((Date.now() - date.getTime()) / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1440) return `${Math.round(minutes / 60)} hr ago`;
+  return formatDate(date);
+}
+
+/* ── Theme ──────────────────────────────────────────────────────────────── */
+const THEME_KEY = 'pfa_theme';
+const DARK_QUERY = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+export function getThemePreference() {
+  try { return localStorage.getItem(THEME_KEY) || 'system'; } catch { return 'system'; }
+}
+
+export function resolvedTheme(pref = getThemePreference()) {
+  if (pref === 'dark' || pref === 'light') return pref;
+  return DARK_QUERY && DARK_QUERY.matches ? 'dark' : 'light';
+}
+
+export function applyTheme(pref = getThemePreference()) {
+  const resolved = resolvedTheme(pref);
+  document.documentElement.setAttribute('data-theme', resolved);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0D1412' : '#F4F5F3');
+  return resolved;
+}
+
+export function setThemePreference(pref) {
+  const value = ['system', 'dark', 'light'].includes(pref) ? pref : 'system';
+  try { localStorage.setItem(THEME_KEY, value); } catch { /* storage unavailable */ }
+  applyTheme(value);
+  window.dispatchEvent(new CustomEvent('theme-change', { detail: { preference: value } }));
+  return value;
+}
+
+if (DARK_QUERY && DARK_QUERY.addEventListener) {
+  DARK_QUERY.addEventListener('change', () => {
+    if (getThemePreference() === 'system') applyTheme('system');
+  });
+}
+
+/* ── Layout helpers ─────────────────────────────────────────────────────── */
 export function pageHeader(title, subtitle, actionsHtml = '') {
   return `
-    <div class="page-header fade-up">
+    <div class="page-header">
       <div class="page-header-text">
         <h1>${esc(title)}</h1>
         ${subtitle ? `<p>${esc(subtitle)}</p>` : ''}
@@ -112,172 +280,221 @@ export function emptyState(iconName, title, subtitle = '', actionHtml = '') {
       <div class="empty-icon">${icon(iconName, 'lg')}</div>
       <h3>${esc(title)}</h3>
       ${subtitle ? `<p>${esc(subtitle)}</p>` : ''}
-      ${actionHtml ? `<div style="margin-top:16px">${actionHtml}</div>` : ''}
+      ${actionHtml ? `<div class="empty-action">${actionHtml}</div>` : ''}
     </div>`;
 }
 
-/** Renders a coloured alert banner strip.
- *  @param {string} message
- *  @param {'error'|'warning'|'info'|'success'} level
- */
 export function alertBanner(message, level = 'warning', iconName = null) {
-  const cfg = {
-    error:   { bg: 'rgba(239,68,68,0.10)',  border: 'rgba(239,68,68,0.30)',   color: 'var(--accent)',   defaultIcon: 'alert-circle' },
-    warning: { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.30)',  color: 'var(--accent-y)', defaultIcon: 'alert-triangle' },
-    info:    { bg: 'rgba(56,189,248,0.10)',  border: 'rgba(56,189,248,0.30)',  color: 'var(--accent-b)', defaultIcon: 'info' },
-    success: { bg: 'rgba(34,197,94,0.10)',   border: 'rgba(34,197,94,0.30)',   color: 'var(--accent-g)', defaultIcon: 'check-circle' },
+  const map = {
+    error: ['neg', 'alert-circle'],
+    warning: ['warn', 'alert-triangle'],
+    info: ['brand', 'info'],
+    success: ['pos', 'check-circle'],
   };
-  const { bg, border, color, defaultIcon } = cfg[level] || cfg.info;
-  const ic = icon(iconName || defaultIcon, 'sm');
+  const [tone, defaultIcon] = map[level] || map.info;
   return `
-    <div class="alert-banner" style="background:${bg};border:1px solid ${border};color:${color};" role="alert">
-      <span class="alert-banner-icon" style="color:${color}">${ic}</span>
+    <div class="alert-banner alert-banner--${tone}" role="alert">
+      <span class="alert-banner-icon">${icon(iconName || defaultIcon, 'sm')}</span>
       <span>${message}</span>
     </div>`;
 }
 
-/** Renders a KPI delta indicator e.g. ▲ 12.3% vs last month.
- *  @param {number} pct  positive = up, negative = down
- *  @param {string} [label]
- */
-export function kpiDelta(pct, label = 'vs last month') {
-  if (pct == null || isNaN(pct)) return '';
-  const up = pct >= 0;
-  const color = up ? 'var(--accent-g)' : 'var(--accent)';
-  const arrow = up ? 'arrow-up' : 'arrow-down';
-  return `
-    <div class="kpi-delta" style="color:${color}">
-      ${icon(arrow, 'xs')}
-      <span>${Math.abs(pct).toFixed(1)}%</span>
-      <span class="kpi-delta-label">${esc(label)}</span>
-    </div>`;
+/* ── Components ─────────────────────────────────────────────────────────── */
+export function chip(text, variant = 'neutral') {
+  return `<span class="chip chip--${variant}">${esc(text)}</span>`;
 }
 
-export function skeletonKpiRow(count = 4) {
-  return `<div class="card-grid card-grid-4">${Array.from({ length: count }, () =>
-    `<div class="card stat-card skeleton-card"><div class="skeleton skeleton-icon"></div><div class="skeleton skeleton-value"></div><div class="skeleton skeleton-label"></div></div>`
-  ).join('')}</div>`;
-}
-
-export function skeletonChart(height = 280) {
-  return `<div class="skeleton skeleton-chart" style="height:${height}px"></div>`;
-}
-
-export function progressBar(pct, color = 'var(--primary)', showLabel = false) {
-  const width = Math.min(Math.max(pct, 0), 100);
-  return `
-    <div class="progress-wrap">
-      <div class="progress-track" role="progressbar" aria-valuenow="${width}" aria-valuemin="0" aria-valuemax="100">
-        <div class="progress-fill" style="width:${width}%;background:${color}"></div>
-      </div>
-      ${showLabel ? `<span class="progress-label" style="color:${color}">${width.toFixed(0)}%</span>` : ''}
-    </div>`;
-}
-
-export function badge(text, variant = 'info') {
-  return `<span class="badge badge-${variant}">${esc(text)}</span>`;
+export function badge(text, variant = 'neutral') {
+  const map = { income: 'pos', expense: 'neg', success: 'pos', warning: 'warn', info: 'neutral' };
+  return chip(text, map[variant] || 'neutral');
 }
 
 export function typeBadge(type) {
-  return badge(type, type === 'INCOME' ? 'income' : 'expense');
-}
-
-export function insightIcon(type) {
-  if (type === 'WARNING') return icon('warning', 'sm');
-  if (type === 'ACHIEVEMENT') return icon('award', 'sm');
-  return icon('info', 'sm');
+  return `<span class="badge badge-${type === 'INCOME' ? 'income' : 'expense'}">${esc(type === 'INCOME' ? 'Income' : 'Expense')}</span>`;
 }
 
 export function budgetStatusBadge(status) {
-  if (status === 'EXCEEDED') return badge('Exceeded', 'expense');
-  if (status === 'WARNING') return badge('Warning', 'warning');
-  return badge('On track', 'income');
+  if (status === 'EXCEEDED') return chip('Over budget', 'neg');
+  if (status === 'WARNING') return chip('Close to limit', 'warn');
+  return chip('On track', 'pos');
 }
 
-export function insightColor(type) {
-  if (type === 'WARNING') return 'var(--accent)';
-  if (type === 'ACHIEVEMENT') return 'var(--accent-g)';
-  return 'var(--accent-b)';
+/** Segmented control. Keyboard: arrow keys move the selection. */
+export function segmentedControl(name, options, selected, ariaLabel = '') {
+  const id = `seg-${name}`;
+  return `
+    <div class="segmented" id="${id}" role="tablist" aria-label="${esc(ariaLabel || name)}">
+      ${options.map(o => `
+        <button type="button" role="tab" class="segmented-item ${o.id === selected ? 'is-active' : ''}"
+          data-value="${esc(o.id)}" aria-selected="${o.id === selected ? 'true' : 'false'}"
+          tabindex="${o.id === selected ? '0' : '-1'}">${esc(o.label)}</button>`).join('')}
+    </div>`;
 }
 
-/* ── Financial Health panel ──────────────────────────────────────────────── */
+export function wireSegmented(root, onChange) {
+  const seg = root.querySelector('.segmented');
+  if (!seg) return;
+  const items = [...seg.querySelectorAll('.segmented-item')];
+  const select = (btn, focus = false) => {
+    items.forEach(b => {
+      const active = b === btn;
+      b.classList.toggle('is-active', active);
+      b.setAttribute('aria-selected', active ? 'true' : 'false');
+      b.tabIndex = active ? 0 : -1;
+    });
+    if (focus) btn.focus();
+    onChange(btn.dataset.value);
+  };
+  items.forEach((btn, i) => {
+    btn.onclick = () => select(btn);
+    btn.onkeydown = (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault(); select(items[(i + 1) % items.length], true);
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault(); select(items[(i - 1 + items.length) % items.length], true);
+      }
+    };
+  });
+}
 
+export function progressBar(pct, color = 'var(--pos)', showLabel = false, { expected = null } = {}) {
+  const width = Math.min(Math.max(Number(pct) || 0, 0), 100);
+  return `
+    <div class="progress-wrap">
+      <div class="progress-track" role="progressbar" aria-valuenow="${width.toFixed(0)}" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-fill" style="width:${width}%;background:${color}"></div>
+        ${expected != null ? `<span class="progress-tick" style="left:${Math.min(Math.max(Number(expected) || 0, 0), 100)}%" title="Expected by today"></span>` : ''}
+      </div>
+      ${showLabel ? `<span class="progress-label">${width.toFixed(0)}%</span>` : ''}
+    </div>`;
+}
+
+export function budgetStatusColor(status) {
+  if (status === 'EXCEEDED') return 'var(--neg)';
+  if (status === 'WARNING') return 'var(--warn)';
+  return 'var(--pos)';
+}
+
+export function healthScoreColor(score) {
+  if (score >= 700) return 'var(--pos)';
+  if (score >= 500) return 'var(--warn)';
+  return 'var(--neg)';
+}
+
+export function dataField(label, value) {
+  return `
+    <div class="data-field">
+      <span class="data-field-label">${esc(label)}</span>
+      <span class="data-field-value">${esc(value ?? '—')}</span>
+    </div>`;
+}
+
+/* ── Financial health ───────────────────────────────────────────────────── */
 const HEALTH_DIMENSION_MAX = {
   'Savings Rate': 300,
   'Diversification': 200,
   'Consistency': 200,
   'Income vs Expense': 200,
   'Tracking Habit': 100,
+  savings: 300,
+  spending: 200,
+  consistency: 200,
+  diversification: 200,
+  tracking: 100,
+  budget: 200,
+  goals: 200,
+  stability: 200,
 };
 
+const HEALTH_LABELS = {
+  'Savings Rate': 'Savings rate', Savings: 'Savings rate', savings: 'Savings rate',
+  'Diversification': 'Diversification', diversification: 'Diversification',
+  'Consistency': 'Consistency', consistency: 'Consistency',
+  'Income vs Expense': 'Budget adherence', spending: 'Budget adherence', budget: 'Budget adherence',
+  'Tracking Habit': 'Tracking habit', tracking: 'Tracking habit',
+  goals: 'Goal progress', stability: 'Spending stability',
+};
+
+function healthLabel(key) { return HEALTH_LABELS[key] || formatCategory(key); }
+
 function dimensionColor(pct) {
-  if (pct >= 0.7) return 'var(--accent-g)';
-  if (pct >= 0.4) return 'var(--accent-y)';
-  return 'var(--accent)';
+  if (pct >= 0.7) return 'var(--pos)';
+  if (pct >= 0.4) return 'var(--warn)';
+  return 'var(--neg)';
 }
 
 export function healthPanelHtml(prefix) {
   return `
-    <div class="health-panel" id="${prefix}-health">
-      <div class="health-compact">
-        <div class="attention-head">Financial health</div>
-        <div style="text-align:right">
-          <div class="health-compact-value"><span id="${prefix}-health-score">—</span> <span class="health-compact-sub">/1000</span></div>
-          <div class="health-compact-sub" id="${prefix}-health-grade">Grade —</div>
-        </div>
+    <section class="health-panel" id="${prefix}-health" aria-label="Financial health">
+      <div class="health-head">
+        <h3 class="section-title">Financial health</h3>
+        <button type="button" class="btn btn-icon btn-ghost btn-sm" id="${prefix}-health-info" aria-label="How is this calculated?" title="How is this calculated?">${icon('info', 'sm')}</button>
       </div>
-      <div id="${prefix}-health-ring" hidden></div>
-    </div>`;
+      <div class="health-compact">
+        <div class="health-score"><span id="${prefix}-health-score">—</span><span class="health-compact-sub">/1000</span></div>
+        <div class="health-compact-sub" id="${prefix}-health-grade">Grade —</div>
+      </div>
+      <div id="${prefix}-health-breakdown" class="health-breakdown"></div>
+      <p class="health-summary" id="${prefix}-health-summary"></p>
+    </section>`;
 }
 
-export function renderHealthData(prefix, health) {
-  if (!health) return;
+export function renderHealthData(prefix, health, { capLabel = '' } = {}) {
+  const panel = document.getElementById(`${prefix}-health`);
+  if (!health || Array.isArray(health) || (health.totalScore == null && health.grade == null)) {
+    if (panel) panel.hidden = true;
+    return;
+  }
+  if (panel) panel.hidden = false;
   const elScore = document.getElementById(`${prefix}-health-score`);
-  const elRing = document.getElementById(`${prefix}-health-ring`);
+  const elGrade = document.getElementById(`${prefix}-health-grade`);
+  const elBreakdown = document.getElementById(`${prefix}-health-breakdown`);
+  const elSummary = document.getElementById(`${prefix}-health-summary`);
+  const elInfo = document.getElementById(`${prefix}-health-info`);
 
   const isNew = health.grade === 'N/A';
+  if (elScore) elScore.textContent = isNew ? '—' : health.totalScore;
+  if (elGrade) {
+    if (isNew) elGrade.textContent = 'Not enough data';
+    else if (capLabel) elGrade.textContent = `Grade withheld · ${capLabel}`;
+    else elGrade.textContent = `Grade ${health.grade}`;
+  }
 
-  if (elScore) {
-    elScore.textContent = isNew ? '—' : health.totalScore;
-    elScore.style.color = isNew ? 'var(--text-muted)' : healthScoreColor(health.totalScore);
-  }
-  if (elRing) {
-    const pct = isNew ? 0 : Math.min(health.totalScore / 10, 100);
-    elRing.style.setProperty('--ring-pct', pct);
-    elRing.style.setProperty('--ring-color', isNew ? 'var(--bg-lighter)' : healthScoreColor(health.totalScore));
-  }
-  const elGrade = document.getElementById(`${prefix}-health-grade`);
-  if (elGrade) elGrade.textContent = isNew ? 'Unranked' : `Grade ${health.grade}`;
-  const elSummary = document.getElementById(`${prefix}-health-summary`);
-  if (elSummary) elSummary.textContent = health.summary;
-  const elBreakdown = document.getElementById(`${prefix}-health-breakdown`);
   if (elBreakdown && health.breakdown) {
     elBreakdown.innerHTML = Object.entries(health.breakdown).map(([key, raw]) => {
       const value = Number(raw) || 0;
       const max = HEALTH_DIMENSION_MAX[key] || 100;
       const pct = max > 0 ? Math.min(Math.max(value / max, 0), 1) : 0;
-      const color = dimensionColor(pct);
       return `
         <div class="health-metric">
           <div class="health-metric-head">
-            <span>${esc(key)}</span>
-            <strong>${esc(String(value))}<span> / ${max}</span></strong>
+            <span>${esc(healthLabel(key))}</span>
+            <strong>${value}<span> / ${max}</span></strong>
           </div>
-          <div class="health-metric-track" role="progressbar" aria-valuenow="${value}" aria-valuemin="0" aria-valuemax="${max}" aria-label="${esc(key)}">
-            <div class="health-metric-fill" style="width:${(pct * 100).toFixed(0)}%;background:${color}"></div>
+          <div class="health-metric-track" role="progressbar" aria-valuenow="${value}" aria-valuemin="0" aria-valuemax="${max}" aria-label="${esc(healthLabel(key))}">
+            <div class="health-metric-fill" style="width:${(pct * 100).toFixed(0)}%;background:${dimensionColor(pct)}"></div>
           </div>
         </div>`;
     }).join('');
   }
+  if (elSummary) elSummary.textContent = health.summary || '';
+  if (elInfo) {
+    elInfo.onclick = () => openModal('How financial health is calculated', `
+      <p class="modal-lead">The score adds up five components, each measured against its own maximum.</p>
+      <div class="modal-detail-panel">
+        ${Object.entries(HEALTH_DIMENSION_MAX).filter(([k]) => /^[A-Z]/.test(k)).map(([k, max]) =>
+          `<div class="modal-detail-row"><span class="detail-label">${esc(healthLabel(k))}</span><span class="detail-value">${max} points</span></div>`).join('')}
+      </div>
+      <p class="modal-help">A grade is only shown when every component has enough data. A goal that is behind lowers the grade instead of being hidden.</p>`);
+  }
 }
 
-/* ── AI Advisor panel ────────────────────────────────────────────────────── */
-
+/* ── Insights panel ─────────────────────────────────────────────────────── */
 const AI_TYPE_CONFIG = {
-  WARNING:     { label: 'Attention',       icon: 'warning',  color: 'var(--accent)',   bg: 'rgba(249, 115, 22, 0.09)' },
-  ACHIEVEMENT: { label: 'Win',             icon: 'award',    color: 'var(--accent-g)', bg: 'rgba(34, 201, 147, 0.09)' },
-  TIP:         { label: 'Suggestion',      icon: 'sparkles', color: 'var(--accent-b)', bg: 'rgba(56, 189, 248, 0.09)' },
-  INFO:        { label: 'Insight',         icon: 'info',     color: 'var(--accent-b)', bg: 'rgba(56, 189, 248, 0.09)' },
+  WARNING:     { label: 'Attention',   icon: 'warning',  tone: 'is-warning' },
+  ACHIEVEMENT: { label: 'Win',         icon: 'award',    tone: 'is-good' },
+  TIP:         { label: 'Suggestion',  icon: 'sparkles', tone: '' },
+  INFO:        { label: 'Insight',     icon: 'info',     tone: '' },
 };
 
 function aiTypeConfig(type) {
@@ -298,22 +515,39 @@ function normalizeInsight(ins) {
   };
 }
 
-function relativeTime(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  const minutes = Math.round((Date.now() - date.getTime()) / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes} min ago`;
-  if (minutes < 1440) return `${Math.round(minutes / 60)} hr ago`;
-  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+/**
+ * Merge insights that repeat the same subject. Comparing the first two
+ * meaningful words catches "Emergency fund is behind" and "Emergency fund
+ * needs a higher transfer" without merging unrelated advice.
+ */
+function dedupeInsights(insights) {
+  const seen = new Map();
+  for (const ins of insights) {
+    const words = ins.title.toLowerCase().replace(/[^a-z0-9% ]/g, '').split(/\s+/)
+      .filter(w => w.length > 3 || /^\d/.test(w));
+    const key = words.slice(0, 2).join(' ') || ins.title.toLowerCase().slice(0, 40);
+    const existing = seen.get(key);
+    if (!existing) seen.set(key, ins);
+    else if (ins.priority < existing.priority) seen.set(key, ins);
+  }
+  return [...seen.values()];
 }
 
 function aiInsightHtml(ins) {
-  const tone = ins.type === 'WARNING' ? 'is-warning' : ins.type === 'ACHIEVEMENT' ? 'is-good' : '';
+  const cfg = aiTypeConfig(ins.type);
+  const action = ins.type === 'WARNING'
+    ? { target: 'goals', label: 'Review goals and budgets' }
+    : ins.type === 'ACHIEVEMENT'
+      ? { target: 'goals', label: 'Open goals' }
+      : { target: 'analytics', label: 'Open analytics' };
   return `
-    <article class="advisor-insight ${tone}" data-type="${ins.type}" data-priority="${ins.priority}">
-      <strong class="advisor-insight-title">${esc(ins.title)}</strong>
-      <p class="advisor-insight-message">${esc(ins.message)}</p>
+    <article class="advisor-insight ${cfg.tone}" data-type="${ins.type}" data-priority="${ins.priority}">
+      <span class="advisor-insight-icon">${icon(cfg.icon, 'sm')}</span>
+      <div class="advisor-insight-body">
+        <strong class="advisor-insight-title">${esc(ins.title)}</strong>
+        <p class="advisor-insight-message">${esc(ins.message)}</p>
+        <button type="button" class="insight-action" onclick="window.navigateTo('${action.target}')">${esc(action.label)}</button>
+      </div>
     </article>`;
 }
 
@@ -328,98 +562,91 @@ function aiNoticeHtml(iconName, title, message, tone = '') {
     </div>`;
 }
 
-function wireAiFilters({ insights, toolbarEl, countEl }) {
-  // Filtering a list of three or four items is overhead; show the list.
-  if (toolbarEl) toolbarEl.hidden = true;
-  if (countEl) countEl.textContent = `${insights.length} insight${insights.length === 1 ? '' : 's'}`;
-}
-
 export function aiPanelHtml(prefix) {
-  const skeleton = Array.from({ length: 4 }, () => `
+  const skeleton = Array.from({ length: 3 }, () => `
     <div class="advisor-insight advisor-skeleton" aria-hidden="true">
       <div class="skeleton advisor-skeleton-line advisor-skeleton-line--short"></div>
       <div class="skeleton advisor-skeleton-line"></div>
-      <div class="skeleton advisor-skeleton-line"></div>
     </div>`).join('');
   return `
-    <div class="advisor-card fade-up">
+    <section class="advisor-card" aria-labelledby="${prefix}-ai-title">
       <div class="advisor-header">
-        <div class="insight-card-heading">
-          <h3 class="attention-head">Needs attention</h3>
+        <h3 class="section-title attention-head" id="${prefix}-ai-title">Insights</h3>
+        <div class="advisor-header-meta">
+          <span class="advisor-updated" id="${prefix}-ai-meta"></span>
+          <button type="button" class="btn btn-icon btn-ghost btn-sm advisor-refresh" id="${prefix}-ai-refresh" title="Refresh insights" aria-label="Refresh insights">
+            ${icon('refresh', 'sm')}
+          </button>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm advisor-refresh" id="${prefix}-ai-refresh">
-          ${icon('refresh', 'xs')}<span>Refresh</span>
-        </button>
       </div>
       <p id="${prefix}-ai-summary" class="ai-summary">Analyzing your transactions…</p>
-      <div class="advisor-toolbar" id="${prefix}-ai-toolbar" hidden>
-        <div class="advisor-filters" id="${prefix}-ai-filters" role="group" aria-label="Filter advice"></div>
-        <span class="advisor-count" id="${prefix}-ai-count"></span>
-      </div>
       <div id="${prefix}-ai-insights-list" class="advisor-grid" aria-live="polite" aria-busy="true">
         ${skeleton}
       </div>
       <div id="${prefix}-ai-goals" class="advisor-goals" hidden></div>
-    </div>`;
+    </section>`;
 }
 
-/**
- * Renders AI insights into an advisor panel created by {@link aiPanelHtml}.
- * @param {string} prefix
- * @param {{summary?:string, insights?:Array, generatedAt?:string, error?:string}|null} ai
- * @param {Function} [onRefresh] clicked refresh handler
- */
 export function renderAiData(prefix, ai, onRefresh) {
   const elSummary = document.getElementById(`${prefix}-ai-summary`);
   const elMeta = document.getElementById(`${prefix}-ai-meta`);
   const elList = document.getElementById(`${prefix}-ai-insights-list`);
-  const elToolbar = document.getElementById(`${prefix}-ai-toolbar`);
-  const elFilters = document.getElementById(`${prefix}-ai-filters`);
-  const elCount = document.getElementById(`${prefix}-ai-count`);
   const elRefresh = document.getElementById(`${prefix}-ai-refresh`);
+  const elTitle = document.getElementById(`${prefix}-ai-title`);
 
   if (elRefresh && typeof onRefresh === 'function') elRefresh.onclick = () => onRefresh();
   if (!elList) return;
   elList.setAttribute('aria-busy', 'false');
 
   if (!ai) {
-    if (elSummary) elSummary.textContent = 'Advice is unavailable right now.';
-    if (elToolbar) elToolbar.hidden = true;
-    elList.innerHTML = aiNoticeHtml('info', 'No advice available', 'Try refreshing in a moment.');
+    if (elSummary) elSummary.textContent = 'Insights are unavailable right now.';
+    elList.innerHTML = aiNoticeHtml('info', 'No insights available', 'Try refreshing in a moment.');
     return;
   }
 
   if (ai.error) {
     if (elSummary) elSummary.textContent = 'The advisor could not load your insights.';
-    if (elMeta) elMeta.textContent = 'Something went wrong';
-    if (elToolbar) elToolbar.hidden = true;
-    elList.innerHTML = aiNoticeHtml('alert-triangle', 'Could not load advice', ai.error, 'advisor-notice--error');
+    if (elMeta) elMeta.textContent = 'Not updated';
+    elList.innerHTML = aiNoticeHtml('alert-triangle', 'Could not load insights', ai.error, 'advisor-notice--error');
     return;
   }
 
-  const insights = (ai.insights || [])
+  const insights = dedupeInsights((ai.insights || [])
     .map(normalizeInsight)
     .filter(Boolean)
-    .sort((a, b) => a.priority - b.priority);
+    .sort((a, b) => a.priority - b.priority))
+    .slice(0, 3);
 
-  if (elSummary) elSummary.textContent = ai.summary || 'Here is what your recent activity suggests.';
+  if (elSummary) {
+    elSummary.textContent = ai.summary || 'Here is what your recent activity suggests.';
+    elSummary.hidden = insights.length === 0;
+  }
   if (elMeta) {
     const when = ai.generatedAt ? relativeTime(ai.generatedAt) : '';
-    elMeta.textContent = when ? `Updated ${when}` : 'Personalized from your recent activity';
+    elMeta.textContent = when ? `Updated ${when}` : '';
+  }
+  if (elTitle) {
+    const warnings = insights.filter(i => i.type === 'WARNING').length;
+    elTitle.textContent = warnings > 0 ? 'Needs attention' : 'Insights';
+    elTitle.innerHTML = warnings > 0
+      ? `Needs attention <span class="chip chip--warn chip--inline">${warnings}</span>`
+      : 'Insights';
   }
 
   if (!insights.length) {
-    if (elToolbar) elToolbar.hidden = true;
     elList.innerHTML = aiNoticeHtml('check-circle', 'All clear',
-      'No concerns found in your recent activity. Add more transactions for deeper advice.');
+      'No concerns found in your recent activity.');
     return;
   }
 
   elList.innerHTML = insights.map(aiInsightHtml).join('');
-  wireAiFilters({ insights, filtersEl: elFilters, toolbarEl: elToolbar, countEl: elCount, listEl: elList });
 }
 
+/* ── Modals ─────────────────────────────────────────────────────────────── */
+let lastFocused = null;
+
 export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', size = '' } = {}) {
+  lastFocused = document.activeElement;
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
@@ -432,7 +659,26 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
     </div>`;
   document.body.appendChild(overlay);
 
-  const close = () => overlay.remove();
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener('keydown', onKeydown);
+    if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus();
+  };
+  const focusables = () => [...overlay.querySelectorAll(
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )].filter(el => el.offsetParent !== null || el === document.activeElement);
+
+  const onKeydown = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+    if (e.key !== 'Tab') return;
+    const list = focusables();
+    if (!list.length) return;
+    const first = list[0], last = list[list.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+  document.addEventListener('keydown', onKeydown);
+
   overlay.querySelector('.modal-close').onclick = close;
   overlay.onclick = (e) => { if (e.target === overlay) close(); };
 
@@ -463,17 +709,27 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
     };
   }
 
-  // Initialize Flatpickr for industrial grade date pickers
   if (window.flatpickr) {
     flatpickr(overlay.querySelectorAll('input[type="date"]'), {
-      dateFormat: "Y-m-d",
+      dateFormat: 'Y-m-d',
       allowInput: true,
       altInput: true,
-      altFormat: "F j, Y",
+      altFormat: 'j M Y',
       disableMobile: true,
-      theme: "dark"
     });
   }
+
+  if (window.TomSelect) {
+    overlay.querySelectorAll('select.form-select').forEach(sel => {
+      if (sel.tomselect) return;
+      new TomSelect(sel, { create: false, controlInput: null, maxOptions: 200 });
+    });
+  }
+
+  setTimeout(() => {
+    const firstField = overlay.querySelector('input:not([type="hidden"]), textarea, select');
+    (firstField || overlay.querySelector('.modal-close'))?.focus();
+  }, 20);
 
   return { overlay, close };
 }
@@ -481,35 +737,18 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
 export function confirmModal(title, message, confirmText = 'Confirm', cancelText = 'Cancel') {
   return new Promise((resolve) => {
     const { overlay, close } = openModal(title, `
-      <p style="margin-bottom: 24px; color: var(--text-dim);">${esc(message)}</p>
+      <p class="modal-lead">${esc(message)}</p>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" id="confirm-cancel-btn">${esc(cancelText)}</button>
-        <button type="button" class="btn" style="background: var(--accent-g); color: #000;" id="confirm-ok-btn">${esc(confirmText)}</button>
+        <button type="button" class="btn btn-primary" id="confirm-ok-btn">${esc(confirmText)}</button>
       </div>
     `);
 
-    overlay.querySelector('#confirm-cancel-btn').onclick = () => {
-      close();
-      resolve(false);
-    };
-
-    overlay.querySelector('#confirm-ok-btn').onclick = () => {
-      close();
-      resolve(true);
-    };
-
-    // Override the default close behavior to resolve false
-    const originalClose = overlay.querySelector('.modal-close').onclick;
-    overlay.querySelector('.modal-close').onclick = (e) => {
-      originalClose(e);
-      resolve(false);
-    };
-    overlay.onclick = (e) => {
-      if (e.target === overlay) {
-        close();
-        resolve(false);
-      }
-    };
+    const done = (value) => { close(); resolve(value); };
+    overlay.querySelector('#confirm-cancel-btn').onclick = () => done(false);
+    overlay.querySelector('#confirm-ok-btn').onclick = () => done(true);
+    overlay.querySelector('.modal-close').onclick = () => done(false);
+    overlay.onclick = (e) => { if (e.target === overlay) done(false); };
   });
 }
 
@@ -521,14 +760,7 @@ export function modalActions(cancelLabel = 'Cancel', submitLabel = 'Save') {
     </div>`;
 }
 
-export function dataField(label, value) {
-  return `
-    <div class="data-field">
-      <span class="data-field-label">${esc(label)}</span>
-      <span class="data-field-value">${esc(value ?? '—')}</span>
-    </div>`;
-}
-
+/* ── Category options ───────────────────────────────────────────────────── */
 export const EXPENSE_CATS = [
   'RENT', 'HOME_LOAN_EMI', 'HOME_MAINTENANCE', 'PROPERTY_TAX', 'ELECTRICITY', 'WATER', 'GAS', 'INTERNET', 'MOBILE_PHONE', 'OTT_SUBSCRIPTIONS',
   'GROCERIES', 'RESTAURANTS', 'FOOD_DELIVERY', 'COFFEE_AND_SNACKS',
@@ -551,45 +783,54 @@ export function categoryOptions(cats, selected) {
   ).join('');
 }
 
+export function categoryIconHtml(cat, size = 'sm') {
+  return `<span class="row-icon">${icon(categoryIcon(cat), size)}</span>`;
+}
+
 export function setupCategorySearch(inputId, selectId) {
   const input = document.getElementById(inputId);
   const selectElement = document.getElementById(selectId);
   if (!selectElement) return;
-
-  // Hide our manual search input since Tom Select has its own
-  if (input) {
-    input.style.display = 'none';
-  }
-
-  // If Tom Select is loaded, initialize it
-  if (window.TomSelect) {
-    // Check if it's already initialized to avoid errors on re-renders
-    if (selectElement.tomselect) {
-      selectElement.tomselect.destroy();
-    }
-    
+  if (input) input.style.display = 'none';
+  if (window.TomSelect && !selectElement.tomselect) {
     new TomSelect(selectElement, {
       create: false,
-      sortField: {
-        field: "text",
-        direction: "asc"
-      },
-      placeholder: 'Search category...',
-      maxOptions: 100
+      sortField: { field: 'text', direction: 'asc' },
+      placeholder: 'Search category…',
+      maxOptions: 100,
     });
   }
 }
 
 export function openReceiptLightbox(url) {
-  const isPdf = url.toLowerCase().endsWith('.pdf');
-  
+  const isPdf = String(url).toLowerCase().endsWith('.pdf');
   if (isPdf) {
-    // Open PDFs in a new tab to avoid iframe security restrictions
     window.open(url, '_blank');
   } else {
-    // Show images in the lightbox modal
-    const content = `<div style="text-align:center; padding: 10px;"><img src="${url}" style="max-width:100%; max-height: 80vh; object-fit: contain; border-radius: 8px;"></div>`;
-    openModal('Receipt', content, { size: 'lg' });
+    openModal('Receipt', `<div class="receipt-lightbox"><img src="${esc(url)}" alt="Receipt"></div>`, { size: 'lg' });
   }
 }
 window.openReceiptLightbox = openReceiptLightbox;
+
+/* ── Skeletons ──────────────────────────────────────────────────────────── */
+export function skeletonKpiRow(count = 4) {
+  return `<div class="figures">${Array.from({ length: count }, () =>
+    `<div class="figure"><div class="skeleton skeleton-label"></div><div class="skeleton skeleton-value"></div></div>`
+  ).join('')}</div>`;
+}
+
+export function skeletonChart(height = 280) {
+  return `<div class="skeleton skeleton-chart" style="height:${height}px"></div>`;
+}
+
+export function skeletonRows(count = 5) {
+  return Array.from({ length: count }, () => `
+    <div class="skeleton-row">
+      <div class="skeleton skeleton-avatar"></div>
+      <div class="skeleton-row-text">
+        <div class="skeleton skeleton-line"></div>
+        <div class="skeleton skeleton-line skeleton-line--short"></div>
+      </div>
+      <div class="skeleton skeleton-amount"></div>
+    </div>`).join('');
+}

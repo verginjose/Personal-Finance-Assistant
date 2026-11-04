@@ -23,28 +23,28 @@ export function renderAuth(container) {
     container.innerHTML = `
     <div class="auth-page">
       <div class="auth-brand">
-        <h1>${icon('logo')} Personal Finance Assistant</h1>
-        <p>Enterprise-grade money management with AI insights, bill scanning, split expenses, and real-time analytics.</p>
+        <h1><span class="logo-mark">P</span> Personal Finance Assistant</h1>
+        <p>Every account, receipt and shared bill in one calm ledger.</p>
         <div class="auth-features">
           <div class="auth-feature">
             <div class="auth-feature-icon">${icon('analytics')}</div>
-            <div><strong>Smart Analytics</strong><br>Health scores, charts, and AI-powered insights</div>
+            <div><strong>Clear numbers</strong><br>Spending, income and what is left, without the noise.</div>
           </div>
           <div class="auth-feature">
             <div class="auth-feature-icon">${icon('bill-scanner')}</div>
-            <div><strong>Bill Scanner</strong><br>OCR extraction from receipts and invoices</div>
+            <div><strong>Receipt reading</strong><br>Photograph a bill and check the extracted details.</div>
           </div>
           <div class="auth-feature">
             <div class="auth-feature-icon">${icon('goals')}</div>
-            <div><strong>Goals & Budgets</strong><br>Track savings targets and spending limits</div>
+            <div><strong>Goals and budgets</strong><br>Save toward something specific, with an honest pace.</div>
           </div>
         </div>
       </div>
       <div class="auth-panel">
         <div class="auth-card card fade-up">
           <div class="auth-tabs" role="tablist">
-            <button type="button" id="tab-login" role="tab" aria-selected="${mode === 'login'}" class="${mode === 'login' ? 'active' : ''}">Sign In</button>
-            <button type="button" id="tab-register" role="tab" aria-selected="${mode === 'register'}" class="${mode === 'register' ? 'active' : ''}">Sign Up</button>
+            <button type="button" id="tab-login" role="tab" aria-selected="${mode === 'login'}" class="${mode === 'login' ? 'active' : ''}">Sign in</button>
+            <button type="button" id="tab-register" role="tab" aria-selected="${mode === 'register'}" class="${mode === 'register' ? 'active' : ''}">Create account</button>
           </div>
           <form id="auth-form" novalidate>
             <div class="form-group">
@@ -55,25 +55,25 @@ export function renderAuth(container) {
             <div class="form-group">
               <label for="auth-username">Username</label>
               <input class="form-input" id="auth-username" type="text" placeholder="johndoe" required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]+" autocomplete="username">
-              <p style="font-size:.78rem;color:var(--text-muted);margin-top:6px">Letters, numbers, and underscores only</p>
+              <p class="form-help">Letters, numbers and underscores only.</p>
             </div>
             <div class="form-group">
               <label for="auth-currency">Default currency</label>
               <select class="form-select" id="auth-currency" required>
                 ${currencyOptionHtml(localCurrencyGuess())}
               </select>
-              <p style="font-size:.78rem;color:var(--text-muted);margin-top:6px">Receipts and reports are converted to this currency.</p>
+              <p class="form-help">Receipts and reports are converted to this currency.</p>
             </div>` : ''}
             <div class="form-group">
               <label for="auth-pass">Password</label>
               <input class="form-input" id="auth-pass" type="password" placeholder="Min 8 characters" required minlength="8" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}">
             </div>
-            <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px" id="auth-submit">
-              ${mode === 'login' ? 'Sign In' : 'Create Account'}
+            <button type="submit" class="btn btn-primary btn-block" style="margin-top:8px" id="auth-submit">
+              ${mode === 'login' ? 'Sign in' : 'Create account'}
             </button>
           </form>
           <p class="auth-footer">
-            ${mode === 'login' ? "Don't have an account? Click Sign Up above." : 'Already registered? Click Sign In above.'}
+            ${mode === 'login' ? 'No account yet? Choose Create account above.' : 'Already registered? Choose Sign in above.'}
           </p>
         </div>
       </div>
@@ -106,7 +106,7 @@ export function renderAuth(container) {
     } catch (err) {
       toast(err.message, 'error');
       btn.disabled = false;
-      btn.textContent = mode === 'login' ? 'Sign In' : 'Create Account';
+      btn.textContent = mode === 'login' ? 'Sign in' : 'Create account';
     }
   }
 

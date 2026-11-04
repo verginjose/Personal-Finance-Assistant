@@ -237,15 +237,48 @@ export const api = {
 
 /* ── Toast helper ──────────────────────────────────────────────────────── */
 let toastContainer;
-export function toast(message, type = 'info', duration = 3500) {
+/**
+ * Bottom-centre toast. Pass `{ undo: fn }` for a reversible action; the undo
+ * label reuses the action's verb by default ("Undo").
+ */
+export function toast(message, type = 'info', opts = {}) {
+  const options = typeof opts === 'number' ? { duration: opts } : (opts || {});
+  const duration = options.duration ?? 4000;
+
   if (!toastContainer) {
     toastContainer = document.createElement('div');
     toastContainer.className = 'toast-container';
+    toastContainer.setAttribute('role', 'status');
+    toastContainer.setAttribute('aria-live', 'polite');
     document.body.appendChild(toastContainer);
   }
   const el = document.createElement('div');
   el.className = `toast toast-${type}`;
-  el.textContent = message;
+  const label = document.createElement('span');
+  label.className = 'toast-message';
+  label.textContent = message;
+  el.appendChild(label);
+
+  let timer;
+  const dismiss = () => {
+    clearTimeout(timer);
+    el.classList.add('toast--leaving');
+    setTimeout(() => el.remove(), 200);
+  };
+
+  if (typeof options.undo === 'function') {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-action';
+    btn.textContent = options.undoLabel || 'Undo';
+    btn.onclick = async () => {
+      dismiss();
+      try { await options.undo(); } catch (err) { toast(err.message || 'Could not undo', 'error'); }
+    };
+    el.appendChild(btn);
+  }
+
   toastContainer.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, duration);
+  timer = setTimeout(dismiss, duration);
+  return dismiss;
 }

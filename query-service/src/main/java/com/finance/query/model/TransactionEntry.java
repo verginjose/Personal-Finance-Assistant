@@ -149,6 +149,17 @@ public class TransactionEntry implements Serializable {
     @Getter
     @Setter
     private BigDecimal myShare;
+
+    /*
+     * The amount in the user's default currency, resolved per request from the
+     * cached FX rates and never persisted. Null means "not converted" — either
+     * the row is already in the default currency's peer set or no rate was
+     * available — so the client shows the original amount.
+     */
+    @Transient
+    @Getter
+    @Setter
+    private BigDecimal amountDefault;
     // Constructors
     public TransactionEntry() {}
 

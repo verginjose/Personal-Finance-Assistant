@@ -30,4 +30,6 @@ public class CreateEntryResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private String receiptUrl;
+    /** The amount in the user's default currency; null when not converted. */
+    private BigDecimal amountDefault;
 }

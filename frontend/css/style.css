@@ -2047,8 +2047,6 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
   padding: var(--s4) var(--s5);
 }
 .dash-pace { font-size: 13px; color: var(--text-2); margin-top: 6px; }
-.dash-empty { padding: 4px 0 2px; }
-.dash-empty p { font-size: 13px; margin-bottom: var(--s3); }
 .dash-comingup-foot { font-size: 13px; color: var(--text-2); margin-top: var(--s3); }
 
 .comingup-row {
@@ -2063,27 +2061,6 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
 .comingup-name { font-size: 14px; font-weight: 500; color: var(--text); }
 .comingup-when { font-size: 12px; color: var(--text-2); margin-top: 1px; }
 .comingup-amount { font-size: 14px; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
-
-/* Goals as compact dashboard cards */
-.goal-mini {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line);
-}
-.goal-mini:last-of-type { border-bottom: 0; padding-bottom: 2px; }
-.goal-mini-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-bottom: 9px; }
-.goal-mini-name { font-size: 14px; font-weight: 600; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.goal-mini .progress-track { height: 6px; }
-.goal-mini-figures { display: flex; justify-content: space-between; gap: var(--s2); font-size: 12px; color: var(--text-2); margin-top: 7px; }
-.goal-mini-figures strong { color: var(--text); font-weight: 600; }
-.goal-mini .goal-reco { margin-top: var(--s3); padding-top: var(--s2); }
-.goal-mini-add { margin-top: var(--s3); }
-
-/* Budgets as one-line rows */
-.budget-mini { padding: 10px 0; border-bottom: 1px solid var(--line); }
-.budget-mini:last-child { border-bottom: 0; }
-.budget-mini-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); margin-bottom: 7px; }
-.budget-mini-name { font-size: 13px; color: var(--text); font-weight: 500; }
-.budget-mini-figures { font-size: 12px; color: var(--text-2); white-space: nowrap; }
 
 /* Compact, expandable financial health */
 .health-head { align-items: center; }

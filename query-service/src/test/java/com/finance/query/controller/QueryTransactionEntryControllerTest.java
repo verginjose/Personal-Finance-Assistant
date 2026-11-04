@@ -1,5 +1,6 @@
 package com.finance.query.controller;
 
+import com.finance.query.service.CurrencyConversionService;
 import com.finance.query.service.QueryTransactionEntryService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,9 @@ public class QueryTransactionEntryControllerTest {
 
     @MockitoBean
     private QueryTransactionEntryService service;
+
+    @MockitoBean
+    private CurrencyConversionService currencyConversion;
 
     @Test
     @DisplayName("GET /upsert/entries/{id}: an id that is not the caller's is a 404, not a 400")

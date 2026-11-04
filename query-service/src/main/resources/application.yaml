@@ -55,6 +55,17 @@ cerebras:
   model: ${CEREBRAS_MODEL:qwen-3.8-27b}
   url: ${CEREBRAS_URL:https://api.cerebras.ai/v1/chat/completions}
 
+# ── FX rates (amountDefault) ────────────────────────────────────────────────
+# ECB reference rates via Frankfurter; no key. Rates are cached in memory for
+# the TTL and the last good snapshot is reused if a refresh fails. When no rate
+# is known the entry's amountDefault stays null and the UI shows the original.
+fx:
+  rates:
+    url: ${FX_RATES_URL:https://api.frankfurter.app/latest}
+    ttl-minutes: ${FX_RATES_TTL_MINUTES:360}
+    failure-backoff-seconds: ${FX_RATES_FAILURE_BACKOFF_SECONDS:60}
+    timeout-seconds: ${FX_RATES_TIMEOUT_SECONDS:5}
+
 # ── Actuator & Metrics ────────────────────────────────────────────────────────
 management:
   endpoints:

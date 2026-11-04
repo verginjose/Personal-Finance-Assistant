@@ -216,11 +216,10 @@ export function amountHtml(value, {
 
 /**
  * Show an amount in the user's default currency.
- * The entries API only returns the amount in its original currency, so the
- * original amount is shown with a muted hint rather than a guessed conversion.
- * TODO(backend): return a converted amount (`amountDefault`) from the entries
- * API so every list can show the default currency and the original as a
- * secondary line.
+ * The entries API returns `amountDefault` (converted server-side from cached
+ * ECB rates) when the row's currency differs from the user's default, so the
+ * converted figure is primary and the original is a muted secondary line.
+ * When the backend could not convert, the original amount is shown as-is.
  */
 export function displayAmountFor(record, defaultCurrency = 'INR') {
   const target = String(defaultCurrency || 'INR').toUpperCase();

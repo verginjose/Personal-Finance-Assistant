@@ -473,7 +473,6 @@ async function loadTransactions(userId) {
 
           // A split row names the group and what the number means. The API
           // resolves groupName/groupId/totalAmount/myShare from the link table.
-          // TODO(backend): a converted amount (amountDefault) is still missing.
           const isSplit = !!(t.groupName || t.groupId);
           const total = t.totalAmount != null ? Number(t.totalAmount) : null;
           const subParts = [];

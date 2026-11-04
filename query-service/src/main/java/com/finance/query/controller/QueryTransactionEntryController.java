@@ -4,6 +4,7 @@ import com.finance.query.dto.CreateEntryResponse;
 import com.finance.query.model.Category;
 import com.finance.query.model.TransactionEntry;
 import com.finance.query.model.TransactionType;
+import com.finance.query.service.CurrencyConversionService;
 import com.finance.query.service.QueryTransactionEntryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,12 +27,17 @@ import java.util.UUID;
 public class QueryTransactionEntryController {
 
     private final QueryTransactionEntryService service;
+    private final CurrencyConversionService currencyConversion;
 
     @GetMapping("/entries/{id}")
     public ResponseEntity<CreateEntryResponse> getEntryById(
             @PathVariable Long id,
-            @RequestParam UUID userId) {
-        return ResponseEntity.ok(service.getEntryById(id, userId));
+            @RequestParam UUID userId,
+            @RequestParam(required = false) String targetCurrency) {
+        CreateEntryResponse entry = service.getEntryById(id, userId);
+        entry.setAmountDefault(currencyConversion.amountDefaultFor(
+                entry.getAmount(), entry.getCurrency(), userId, targetCurrency));
+        return ResponseEntity.ok(entry);
     }
 
     @GetMapping("/goals/{id}/transactions")
@@ -55,8 +61,11 @@ public class QueryTransactionEntryController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(defaultValue = "0")  int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(service.getEntriesByUserId(userId, type, category, startDate, endDate, page, size));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String targetCurrency) {
+        Page<TransactionEntry> result = service.getEntriesByUserId(userId, type, category, startDate, endDate, page, size);
+        currencyConversion.decorate(result.getContent(), userId, targetCurrency);
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/search")
@@ -64,8 +73,11 @@ public class QueryTransactionEntryController {
             @RequestParam UUID userId,
             @RequestParam String q,
             @RequestParam(defaultValue = "0")  int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(service.searchEntries(userId, q, page, size));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String targetCurrency) {
+        Page<TransactionEntry> result = service.searchEntries(userId, q, page, size);
+        currencyConversion.decorate(result.getContent(), userId, targetCurrency);
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/summary")
@@ -77,8 +89,12 @@ public class QueryTransactionEntryController {
     }
 
     @GetMapping("/recurring")
-    public ResponseEntity<List<TransactionEntry>> getRecurringEntries(@RequestParam UUID userId) {
-        return ResponseEntity.ok(service.getRecurringEntries(userId));
+    public ResponseEntity<List<TransactionEntry>> getRecurringEntries(
+            @RequestParam UUID userId,
+            @RequestParam(required = false) String targetCurrency) {
+        List<TransactionEntry> entries = service.getRecurringEntries(userId);
+        currencyConversion.decorate(entries, userId, targetCurrency);
+        return ResponseEntity.ok(entries);
     }
 
     @GetMapping("/entries/export")

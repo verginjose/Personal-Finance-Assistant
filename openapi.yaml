@@ -282,6 +282,16 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: targetCurrency
+          in: query
+          required: false
+          description: >-
+            Convert `amountDefault` into this ISO currency instead of the
+            user's stored default.
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 3
       responses:
         '200':
           description: Entry data
@@ -328,6 +338,16 @@ paths:
           schema:
             type: integer
             default: 20
+        - name: targetCurrency
+          in: query
+          required: false
+          description: >-
+            Convert `amountDefault` into this ISO currency instead of the
+            user's stored default.
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 3
       responses:
         '200':
           description: Page of `TransactionEntry`
@@ -1195,6 +1215,14 @@ components:
           $ref: '#/components/schemas/IncomeCategory'
         currency:
           type: string
+        amountDefault:
+          type: number
+          nullable: true
+          description: >-
+            The amount in the user's default currency, converted from the
+            cached ECB rates. Null when the row is already in the default
+            currency or no rate was available; the client then shows the
+            original amount.
         description:
           type: string
         createdAt:

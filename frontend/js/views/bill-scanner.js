@@ -1,57 +1,55 @@
-import {api, Auth, toast} from '../utils/api.js?v=2026110417';
-import { icon } from '../utils/icons.js?v=2026110417';
-import {esc, EXPENSE_CATS, INCOME_CATS, pageHeader, setupCategorySearch} from '../utils/ui.js?v=2026110417';
-import {navigateTo} from '../app.js?v=2026110417';
+import { api, Auth, toast } from '../utils/api.js';
+import { icon, categoryIcon } from '../utils/icons.js';
+import {
+  esc, pageHeader, EXPENSE_CATS, INCOME_CATS, categoryOptions, currencyOptionHtml,
+  formatMoney, formatCategory, openReceiptLightbox,
+} from '../utils/ui.js';
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
+  const defaultCurrency = Auth.getDefaultCurrency();
+
   container.innerHTML = `
-    ${pageHeader('Bill Scanner', '')}
-    <div class="scanner-grid fade-up">
-      <div class="scanner-pane">
-        <h2>Read a receipt</h2>
-        <p class="pane-sub">Drop a photo or PDF. We'll read the merchant, amount, date and category, then convert it to ${esc(Auth.getDefaultCurrency())}.</p>
-        <div class="drop-zone" id="bs-drop" role="button" tabindex="0" aria-label="Upload receipt">
-          <div class="drop-icon">${icon('document', 'lg')}</div>
-          <p>Drop a receipt here, or click to choose a file</p>
-          <p style="margin-top:6px;font-size:.78rem;color:var(--text-muted)">JPEG, PNG or PDF · max 10 MB</p>
+    ${pageHeader('Bill scanner', '')}
+    <div id="bs-stage">
+      <section class="scanner-single" id="bs-upload-stage" aria-labelledby="bs-scan-title">
+        <h2 id="bs-scan-title" class="section-title">Scan a receipt</h2>
+        <p class="pane-sub">We read the merchant, amount, date and category, then convert it to ${esc(defaultCurrency)}.</p>
+        <div class="drop-zone" id="bs-drop" role="button" tabindex="0" aria-label="Upload a receipt">
+          <div class="drop-icon">${icon('camera', 'lg')}</div>
+          <p>Drop a receipt, or choose a file</p>
+          <p class="drop-help">JPEG, PNG or PDF, up to 10 MB</p>
           <div class="file-name" id="bs-fname"></div>
         </div>
         <input type="file" id="bs-file" accept="image/*,application/pdf" hidden>
-        <button class="btn btn-primary" id="bs-upload" style="width:100%;margin-top:14px" disabled>
-          ${icon('scan', 'sm')} Read receipt
-        </button>
-        <div class="read-reason" id="bs-reason">Choose a file first.</div>
-      </div>
+        <p class="read-reason" id="bs-reason">Reading starts as soon as you pick a file.</p>
+      </section>
 
-      <div class="scanner-pane">
-        <div class="scanner-placeholder" id="bs-placeholder">
-          No receipt yet.<br>Drop a photo or PDF on the left to add one.
-        </div>
-        <section id="bs-result" hidden>
+      <div class="scanner-grid" id="bs-result" hidden>
+        <section class="scanner-pane">
+          <div class="scanner-preview" id="bs-preview"></div>
+        </section>
+        <section class="scanner-pane">
           <div class="ocr-result-head">
-            <div>
-              <h2>Check the details</h2>
-              <p class="pane-sub">Edit anything the scan got wrong, then save.</p>
-            </div>
+            <h2>Check the details</h2>
+            <p class="pane-sub">Anything the scan got wrong is editable before you save.</p>
           </div>
           <form id="bs-preview-form" class="ocr-form"></form>
         </section>
       </div>
     </div>`;
-  const defaultCurrency = Auth.getDefaultCurrency();
 
   let groupsCache = [];
   try {
     groupsCache = await api.get('/upsert/groups', { userId });
-  } catch (e) { console.error('Failed to load groups', e); }
+  } catch { /* groups are optional */ }
 
   const dropZone = document.getElementById('bs-drop');
   if (!dropZone) return;
-  
+
   const fileInput = document.getElementById('bs-file');
-  const uploadBtn = document.getElementById('bs-upload');
   let selectedFile = null;
+  let previewUrl = null;
 
   dropZone.onclick = () => fileInput.click();
   dropZone.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } };
@@ -62,17 +60,95 @@ export async function renderBillScanner(container) {
 
   function pickFile(f) {
     if (!f) return;
-    if (f.size > 10 * 1024 * 1024) { toast('File exceeds 10 MB limit', 'error'); return; }
+    if (f.size > 10 * 1024 * 1024) {
+      toast('That file is over 10 MB. Choose a smaller photo or a PDF.', 'error');
+      return;
+    }
     selectedFile = f;
     document.getElementById('bs-fname').textContent = f.name;
-    uploadBtn.disabled = false;
     const reason = document.getElementById('bs-reason');
-    if (reason) reason.textContent = 'Ready to read.';
+    if (reason) reason.textContent = 'Reading…';
+    readReceipt();
+  }
+
+  function renderPreview(file) {
+    const preview = document.getElementById('bs-preview');
+    if (!preview) return;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    const isPdf = file.type === 'application/pdf';
+    if (isPdf) {
+      previewUrl = null;
+      preview.innerHTML = `<div class="preview-pdf">${icon('document', 'lg')}<span>${esc(file.name)}</span><small>PDF document</small></div>`;
+      return;
+    }
+    previewUrl = URL.createObjectURL(file);
+    preview.innerHTML = `<button type="button" style="padding:0;border:0;background:none;width:100%" id="bs-zoom" aria-label="Zoom receipt"><img src="${previewUrl}" alt="Receipt preview"></button>`;
+    document.getElementById('bs-zoom').onclick = () => openReceiptLightbox(previewUrl);
+  }
+
+  async function readReceipt() {
+    if (!selectedFile) return;
+    const drop = document.getElementById('bs-drop');
+    if (drop) drop.classList.add('drag-over');
+    const reason = document.getElementById('bs-reason');
+    if (reason) reason.textContent = 'Reading the receipt…';
+
+    try {
+      const fd = new FormData();
+      fd.append('file', selectedFile);
+      const target = encodeURIComponent(Auth.getDefaultCurrency());
+      const res = await api.upload(`/bill/process/${userId}?targetCurrency=${target}`, fd);
+      if (res && res.url) window._bsReceiptUrl = res.url;
+      // Move to the review layout immediately so the receipt is visible while
+      // the extractor works; the fields fill in when the event arrives.
+      const uploadStage = document.getElementById('bs-upload-stage');
+      const resultStage = document.getElementById('bs-result');
+      if (uploadStage && resultStage) {
+        uploadStage.hidden = true;
+        resultStage.hidden = false;
+        resultStage.className = 'scanner-grid';
+      }
+      renderPreview(selectedFile);
+      const form = document.getElementById('bs-preview-form');
+      if (form) {
+        form.innerHTML = `
+          <div class="ocr-summary"><div class="ocr-summary-main">
+            <span class="ocr-summary-label">Reading</span>
+            <div class="ocr-amount" style="color:var(--text-2)">…</div>
+            <div class="ocr-summary-name">${esc(selectedFile.name)}</div>
+          </div></div>
+          <div class="advisor-skeleton">
+            <div class="skeleton advisor-skeleton-line advisor-skeleton-line--short"></div>
+            <div class="skeleton advisor-skeleton-line"></div>
+            <div class="skeleton advisor-skeleton-line"></div>
+          </div>
+          <p class="ocr-save-hint">${icon('sparkles', 'xs')} Reading the merchant, amount, date and category.</p>`;
+      }
+      if (reason) reason.textContent = 'Extracting the details…';
+      toast('Receipt uploaded. Reading it now…', 'info');
+    } catch (err) {
+      if (drop) drop.classList.remove('drag-over');
+      if (reason) reason.textContent = 'That file could not be read. Try a clearer photo or a PDF.';
+      toast('Could not read that receipt: ' + err.message, 'error');
+    }
+  }
+
+  function confidenceFor(field, result) {
+    const c = result?.confidence;
+    if (c && typeof c === 'object' && c[field] != null) return Number(c[field]);
+    if (result?.[`${field}Confidence`] != null) return Number(result[`${field}Confidence`]);
+    return null;
+  }
+
+  function confidenceHtml(field, result) {
+    const value = confidenceFor(field, result);
+    if (value == null || Number.isNaN(value)) return '';
+    const high = value >= 0.8;
+    return `<span class="confidence ${high ? 'is-high' : 'is-low'}" title="${high ? 'High confidence' : 'Check this value'}">${high ? icon('check', 'xs') + ' High confidence' : icon('alert-triangle', 'xs') + ' Check this'}</span>`;
   }
 
   function normalizeCategory(raw, type) {
-    const fallback = type === 'INCOME' ? 'OTHERS' : 'OTHERS';
-    let cat = (raw || fallback).toUpperCase().replace(/ /g, '_').replace(/-/g, '_');
+    let cat = (raw || 'OTHERS').toUpperCase().replace(/ /g, '_').replace(/-/g, '_');
     if (cat === 'OTHER') cat = 'OTHERS';
     const allowed = type === 'INCOME' ? INCOME_CATS : EXPENSE_CATS;
     return allowed.includes(cat) ? cat : 'OTHERS';
@@ -80,244 +156,209 @@ export async function renderBillScanner(container) {
 
   function renderPreviewForm(result) {
     const type = (result.type || 'EXPENSE').toUpperCase();
-    const category = normalizeCategory(
-      type === 'INCOME' ? result.incomeCategory : result.expenseCategory,
-      type
-    );
+    const category = normalizeCategory(type === 'INCOME' ? result.incomeCategory : result.expenseCategory, type);
     const amountOriginal = parseFloat((result.amount || '0').toString().replace(/[^0-9.]/g, '')) || 0;
-    let originalCurrency = (result.currency || 'INR').trim().toUpperCase();
+    let originalCurrency = (result.currency || Auth.getDefaultCurrency()).trim().toUpperCase();
     if (originalCurrency.length !== 3) {
       const map = { '₹': 'INR', RS: 'INR', 'RS.': 'INR', $: 'USD', '€': 'EUR', '£': 'GBP' };
-      originalCurrency = map[originalCurrency] || 'INR';
+      originalCurrency = map[originalCurrency] || Auth.getDefaultCurrency();
     }
-    // OCR converts server-side to the user's saved default currency.
     const currency = (result.defaultCurrency || defaultCurrency || originalCurrency).toUpperCase();
     const converted = Number(result.amountDefault);
     const amount = Number.isFinite(converted) && converted > 0 ? converted : amountOriginal;
     const wasConverted = currency !== originalCurrency;
 
     const form = document.getElementById('bs-preview-form');
-    const dateDisplay = (() => {
-      if (!result.date) return 'No date detected';
-      const d = new Date(`${result.date}T00:00:00`);
-      return Number.isNaN(d.getTime())
-        ? result.date
-        : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    })();
+    const dateDisplay = result.date
+      ? new Date(`${result.date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'No date detected';
 
     form.innerHTML = `
       <div class="ocr-summary">
         <div class="ocr-summary-main">
           <span class="ocr-summary-label">Detected amount</span>
-          <div class="ocr-amount"><span class="ocr-amount-currency">${escapeAttr(currency)}</span><span id="bs-amount-preview">${amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span></div>
-          <div class="ocr-summary-name" id="bs-name-preview">${esc(result.name || 'OCR Receipt')}</div>
-          ${wasConverted ? `<div class="ocr-conversion">${icon('refresh', 'xs')} Converts to ${esc(currency)} · original ${amountOriginal.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${esc(originalCurrency)}</div>` : ''}
+          <div class="ocr-amount"><span class="ocr-amount-currency">${esc(currency)}</span><span id="bs-amount-preview">${formatMoney(amount, currency).replace(/^[^\d−-]*/, '')}</span></div>
+          <div class="ocr-summary-name" id="bs-name-preview">${esc(result.name || 'Receipt')}</div>
+          ${wasConverted ? `<div class="ocr-conversion">${icon('refresh', 'xs')} Converted to ${esc(currency)} · original ${formatMoney(amountOriginal, originalCurrency)}</div>` : ''}
         </div>
         <div class="ocr-summary-meta">
-          <span class="ocr-type-badge ${type === 'INCOME' ? 'is-income' : 'is-expense'}">${type === 'INCOME' ? icon('trending-up', 'xs') : icon('trending-down', 'xs')} ${type === 'INCOME' ? 'Income' : 'Expense'}</span>
+          <span class="ocr-type-badge ${type === 'INCOME' ? 'amount--pos' : ''}">${type === 'INCOME' ? 'Income' : 'Expense'}</span>
           <span class="ocr-date">${icon('calendar', 'xs')} ${esc(dateDisplay)}</span>
         </div>
       </div>
 
-      <section class="ocr-section">
-        <div class="ocr-section-head">
-          <span class="ocr-step">01</span>
-          <div><h4>Receipt details</h4><p>Check what was bought, how much, and when.</p></div>
+      <div class="ocr-field-grid">
+        <div class="ocr-field ocr-field--full has-fill" style="animation-delay:0ms">
+          <label for="bs-name">Merchant</label>
+          <input class="form-input" id="bs-name" value="${escapeAttr(result.name || 'Receipt')}" maxlength="100" required>
+          ${confidenceHtml('name', result)}
         </div>
-        <div class="ocr-field-grid">
-          <div class="ocr-field ocr-field--full">
-            <label for="bs-name">Merchant / name</label>
-            <input class="form-input" id="bs-name" value="${escapeAttr(result.name || 'OCR Receipt')}" maxlength="100" required>
-          </div>
-          <div class="ocr-field">
-            <label for="bs-amount">Amount</label>
-            <div class="ocr-input-affix"><span>${escapeAttr(currency)}</span><input class="form-input" id="bs-amount" type="text" inputmode="decimal" pattern="^\\d+(\\.\\d{1,2})?$" title="Enter a valid amount" value="${amount}" required></div>
-          </div>
-          <div class="ocr-field">
-            <label for="bs-currency">Currency</label>
-            <input class="form-input" id="bs-currency" value="${escapeAttr(currency)}" maxlength="3" required>
-          </div>
-          <div class="ocr-field">
-            <label for="bs-date">Date</label>
-            <input class="form-input" id="bs-date" type="date" value="${escapeAttr(result.date || '')}">
-          </div>
-          <div class="ocr-field">
-            <span class="ocr-field-label">Repeat monthly</span>
-            <label class="ocr-switch">
-              <input type="checkbox" id="bs-recurring" ${result.recurring ? 'checked' : ''}>
-              <span class="ocr-switch-track" aria-hidden="true"></span>
-              <span>Is recurring</span>
-            </label>
-          </div>
+        <div class="ocr-field has-fill" style="animation-delay:40ms">
+          <label for="bs-amount">Amount</label>
+          <div class="ocr-input-affix"><span>${escapeAttr(currency)}</span><input class="form-input" id="bs-amount" type="text" inputmode="decimal" pattern="^\\d+(\\.\\d{1,2})?$" title="Enter a valid amount" value="${amount}" required></div>
+          ${confidenceHtml('amount', result)}
         </div>
-      </section>
-
-      <section class="ocr-section">
-        <div class="ocr-section-head">
-          <span class="ocr-step">02</span>
-          <div><h4>Classification</h4><p>How this entry should be grouped in your reports.</p></div>
+        <div class="ocr-field has-fill" style="animation-delay:80ms">
+          <label for="bs-date">Date</label>
+          <input class="form-input" id="bs-date" type="date" value="${escapeAttr(result.date || '')}">
+          ${confidenceHtml('date', result)}
         </div>
-        <div class="ocr-field-grid">
-          <div class="ocr-field">
-            <label for="bs-type">Type</label>
-            <select class="form-select" id="bs-type">
-              <option value="EXPENSE" ${type === 'EXPENSE' ? 'selected' : ''}>Expense</option>
-              <option value="INCOME" ${type === 'INCOME' ? 'selected' : ''}>Income</option>
-            </select>
-          </div>
-          <div class="ocr-field" id="bs-cat-group">
-            <label for="bs-category">Category</label>
-            <input type="text" id="bs-cat-search" class="form-input category-search" placeholder="Search category..." style="display:none;">
-            <select class="form-select category-select" id="bs-category"></select>
-          </div>
+        <div class="ocr-field has-fill" style="animation-delay:120ms">
+          <label for="bs-category">Category</label>
+          <select class="form-select" id="bs-category"></select>
+          ${confidenceHtml('category', result)}
         </div>
-      </section>
-
-      <section class="ocr-section">
-        <div class="ocr-section-head">
-          <span class="ocr-step">03</span>
-          <div><h4>Details &amp; destination</h4><p>Add context and choose where this entry lives.</p></div>
+        <div class="ocr-field has-fill" style="animation-delay:160ms">
+          <label for="bs-type">Type</label>
+          <select class="form-select" id="bs-type">
+            <option value="EXPENSE" ${type === 'EXPENSE' ? 'selected' : ''}>Expense</option>
+            <option value="INCOME" ${type === 'INCOME' ? 'selected' : ''}>Income</option>
+          </select>
         </div>
-        <div class="ocr-field-grid">
-          <div class="ocr-field ocr-field--full">
-            <label for="bs-desc">Description</label>
-            <textarea class="form-textarea" id="bs-desc" maxlength="500" placeholder="Optional note about this transaction">${escapeAttr(result.description || 'Processed from bill scanner')}</textarea>
-          </div>
-          <div class="ocr-field ocr-field--full">
-            <label for="bs-dest">Save destination</label>
-            <select class="form-select" id="bs-dest">
-              <option value="PERSONAL">Personal transaction</option>
-              ${groupsCache.map(g => `<option value="${g.id}">Group: ${esc(g.name)}</option>`).join('')}
-            </select>
-            <p class="ocr-help">Group expenses will default to an EQUAL split.</p>
-          </div>
+        <div class="ocr-field ocr-field--full">
+          <label for="bs-desc">Note (optional)</label>
+          <textarea class="form-textarea" id="bs-desc" maxlength="500" placeholder="Add context for this entry">${escapeAttr(result.description || '')}</textarea>
         </div>
-      </section>
+        <div class="ocr-field">
+          <span class="ocr-field-label">Recurring</span>
+          <label class="ocr-switch"><input type="checkbox" id="bs-recurring" ${result.recurring ? 'checked' : ''}><span>Repeats every month</span></label>
+        </div>
+        <div class="ocr-field">
+          <label for="bs-dest">Save to</label>
+          <select class="form-select" id="bs-dest">
+            <option value="PERSONAL">Personal transactions</option>
+            ${groupsCache.map(g => `<option value="${g.id}">Group: ${esc(g.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
 
       <div class="ocr-save-bar">
         <div class="ocr-save-hint">${icon('shield', 'xs')} Nothing is saved until you confirm.</div>
-        <button type="submit" class="btn btn-primary" id="bs-save">${icon('check', 'sm')} Save transaction</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn btn-secondary" id="bs-scan-another">Scan another</button>
+          <button type="submit" class="btn btn-primary" id="bs-save">Save transaction</button>
+        </div>
       </div>`;
 
     const typeSelect = document.getElementById('bs-type');
     const catSelect = document.getElementById('bs-category');
     const amountInput = document.getElementById('bs-amount');
-    const currencyInput = document.getElementById('bs-currency');
     const nameInput = document.getElementById('bs-name');
     const amountPreview = document.getElementById('bs-amount-preview');
     const namePreview = document.getElementById('bs-name-preview');
 
-    // The summary mirrors the editable fields so the review panel stays honest.
-    const syncSummary = () => {
-      const value = parseFloat((amountInput.value || '0').toString().replace(/[^0-9.]/g, '')) || 0;
-      amountPreview.textContent = value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-      namePreview.textContent = nameInput.value.trim() || 'OCR Receipt';
-    };
-    [amountInput, currencyInput, nameInput].forEach(el => el.addEventListener('input', syncSummary));
-
-    function fillCategories() {
+    const fillCategories = () => {
       const t = typeSelect.value;
       const cats = t === 'INCOME' ? INCOME_CATS : EXPENSE_CATS;
-      const current = catSelect.value || category;
-      catSelect.innerHTML = cats.map(c =>
-        `<option value="${c}" ${c === current || (current === category && c === category) ? 'selected' : ''}>${c.replace(/_/g, ' ')}</option>`
-      ).join('');
-    }
-
+      const current = cats.includes(category) ? category : 'OTHERS';
+      catSelect.innerHTML = categoryOptions(cats, current);
+    };
     typeSelect.onchange = fillCategories;
     fillCategories();
-    setupCategorySearch('bs-cat-search', 'bs-category');
+
     if (window.TomSelect) {
-      new TomSelect('#bs-type', { create: false, controlInput: null });
-      new TomSelect('#bs-dest', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' }});
+      ['#bs-category', '#bs-type', '#bs-dest'].forEach(sel => {
+        const el = document.querySelector(sel);
+        if (el && !el.tomselect) new TomSelect(sel, { create: false, maxOptions: 200 });
+      });
     }
     if (window.flatpickr) {
-      flatpickr('#bs-date', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'F j, Y', disableMobile: true, theme: 'dark' });
+      flatpickr('#bs-date', { dateFormat: 'Y-m-d', altInput: true, altFormat: 'j M Y', disableMobile: true });
     }
+
+    const syncSummary = () => {
+      const value = parseFloat((amountInput.value || '0').toString().replace(/[^0-9.]/g, '')) || 0;
+      if (amountPreview) amountPreview.textContent = formatMoney(value, currency).replace(/^[^\d−-]*/, '');
+      if (namePreview) namePreview.textContent = nameInput.value.trim() || 'Receipt';
+    };
+    [amountInput, nameInput].forEach(el => el.addEventListener('input', syncSummary));
+
+    document.getElementById('bs-scan-another').onclick = () => {
+      resetScanner();
+      fileInput.click();
+    };
+
     form.onsubmit = (e) => { e.preventDefault(); saveTransaction(userId); };
   }
 
-  // The extracted data is shown inline at the end of the page, not in a modal.
-  // Users scroll through the fields, check them, then confirm at the bottom.
+  function showError(message) {
+    const result = document.getElementById('bs-result');
+    const upload = document.getElementById('bs-upload-stage');
+    if (!result) return;
+    upload.hidden = true;
+    result.hidden = false;
+    result.className = 'scanner-single';
+    result.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">${icon('alert-triangle', 'lg')}</div>
+        <h3>${esc(message)}</h3>
+        <p>Check the photo is straight and well lit, or enter the details manually.</p>
+        <div class="empty-action" style="display:flex;gap:8px;justify-content:center">
+          <button type="button" class="btn btn-secondary" id="bs-try-again">Scan another</button>
+          <button type="button" class="btn btn-primary" id="bs-manual">Enter manually</button>
+        </div>
+      </div>`;
+    document.getElementById('bs-try-again').onclick = () => { resetScanner(); fileInput.click(); };
+    document.getElementById('bs-manual').onclick = () => showReview({ name: '', amount: '', date: '', type: 'EXPENSE' });
+  }
+
   function showReview(result) {
-    const resultCard = document.getElementById('bs-result');
-    if (!resultCard) return;
-    const placeholder = document.getElementById('bs-placeholder');
-    if (placeholder) placeholder.hidden = true;
-    resultCard.hidden = false;
+    const resultEl = document.getElementById('bs-result');
+    const upload = document.getElementById('bs-upload-stage');
+    if (!resultEl) return;
+    upload.hidden = true;
+    resultEl.hidden = false;
+    resultEl.className = 'scanner-grid';
+    if (!document.getElementById('bs-preview').children.length && selectedFile) renderPreview(selectedFile);
     renderPreviewForm(result);
   }
 
-  uploadBtn.onclick = async () => {
-    if (!selectedFile) return;
-    uploadBtn.disabled = true;
-    uploadBtn.innerHTML = '<span class="spinner"></span> Reading…';
-    const reason = document.getElementById('bs-reason');
-    if (reason) reason.textContent = '';
-    try {
-      const fd = new FormData();
-      fd.append('file', selectedFile);
-      const target = encodeURIComponent(Auth.getDefaultCurrency());
-      const res = await api.upload(`/bill/process/${userId}?targetCurrency=${target}`, fd);
-      if (res && res.url) {
-        window._bsReceiptUrl = res.url;
-      }
-      toast('Bill uploaded. AI is processing...', 'info');
-    } catch (err) {
-      toast('OCR upload failed: ' + err.message, 'error');
-      uploadBtn.disabled = false;
-      uploadBtn.innerHTML = `${icon('scan', 'sm')} Read receipt`;
+  function resetScanner() {
+    selectedFile = null;
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+    const upload = document.getElementById('bs-upload-stage');
+    const result = document.getElementById('bs-result');
+    if (upload) upload.hidden = false;
+    if (result) {
+      result.hidden = true;
+      result.className = 'scanner-grid';
+      result.innerHTML = '<section class="scanner-pane"><div class="scanner-preview" id="bs-preview"></div></section><section class="scanner-pane"><div class="ocr-result-head"><h2>Check the details</h2><p class="pane-sub">Anything the scan got wrong is editable before you save.</p></div><form id="bs-preview-form" class="ocr-form"></form></section>';
     }
-  };
-
-  if (window._bsOcrListener) {
-    window.removeEventListener('ocr-completed', window._bsOcrListener);
+    const fname = document.getElementById('bs-fname');
+    if (fname) fname.textContent = '';
+    const reason = document.getElementById('bs-reason');
+    if (reason) reason.textContent = 'Reading starts as soon as you pick a file.';
+    document.getElementById('bs-drop')?.classList.remove('drag-over');
+    fileInput.value = '';
+    window._bsReceiptUrl = null;
   }
+
+  if (window._bsOcrListener) window.removeEventListener('ocr-completed', window._bsOcrListener);
   window._bsOcrListener = (e) => {
     const detail = e.detail;
     if (detail.status === 'SUCCESS' && detail.data) {
       showReview(detail.data);
+      const reason = document.getElementById('bs-reason');
+      if (reason) reason.textContent = '';
+    } else if (detail.status === 'ERROR') {
+      showError(detail.message || "We couldn't read this receipt.");
     }
-    uploadBtn.disabled = !selectedFile;
-    uploadBtn.innerHTML = `${icon('scan', 'sm')} Read receipt`;
-    const reason = document.getElementById('bs-reason');
-    if (reason) reason.textContent = selectedFile ? 'Ready to read.' : 'Choose a file first.';
   };
   window.addEventListener('ocr-completed', window._bsOcrListener);
-}
 
-function escapeAttr(s) {
-  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-}
-
-async function saveTransaction(userId) {
-  const saveBtn = document.getElementById('bs-save');
-  saveBtn.disabled = true;
-  saveBtn.innerHTML = '<span class="spinner"></span> Saving…';
-  try {
-    const type = document.getElementById('bs-type').value;
-    const amount = parseFloat(document.getElementById('bs-amount').value) || 0;
-    let currency = document.getElementById('bs-currency').value.trim().toUpperCase();
-    if (currency.length !== 3) currency = 'INR';
-    
-    const dateVal = document.getElementById('bs-date').value;
-    const isRecurring = document.getElementById('bs-recurring').checked;
-    const dest = document.getElementById('bs-dest').value;
-    const description = document.getElementById('bs-desc').value.trim() || 'Processed from bill scanner';
-    const name = document.getElementById('bs-name').value.trim() || 'OCR Receipt';
-
-      let timeStr = '00:00:00';
-      let isoDate = null;
-      if (dateVal) {
-        const today = new Date();
-        const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-        if (dateVal === todayStr) {
-          timeStr = String(today.getHours()).padStart(2, '0') + ':' + 
-                    String(today.getMinutes()).padStart(2, '0') + ':' + 
-                    String(today.getSeconds()).padStart(2, '0');
-        }
-        isoDate = new Date(`${dateVal}T${timeStr}`).toISOString();
-      }
+  async function saveTransaction(uid) {
+    const saveBtn = document.getElementById('bs-save');
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner"></span> Saving…';
+    try {
+      const type = document.getElementById('bs-type').value;
+      const amount = parseFloat(document.getElementById('bs-amount').value) || 0;
+      let currency = Auth.getDefaultCurrency();
+      const dateVal = document.getElementById('bs-date').value;
+      const isRecurring = document.getElementById('bs-recurring').checked;
+      const dest = document.getElementById('bs-dest').value;
+      const description = document.getElementById('bs-desc').value.trim();
+      const name = document.getElementById('bs-name').value.trim() || 'Receipt';
 
       if (dest === 'PERSONAL') {
         localStorage.setItem('pfa_pending_scan', JSON.stringify({
@@ -330,26 +371,30 @@ async function saveTransaction(userId) {
           description,
           date: dateVal,
           recurring: isRecurring,
-          receiptUrl: window._bsReceiptUrl || null
+          receiptUrl: window._bsReceiptUrl || null,
         }));
-        navigateTo('transactions');
-        toast('Forwarded to personal transactions page', 'info');
+        window.navigateTo('transactions');
+        toast('Receipt sent to transactions', 'info');
       } else {
-      localStorage.setItem('pfa_pending_scan', JSON.stringify({
-        groupId: dest,
-        amount,
-        currency,
-        description: name + (description ? ' - ' + description : ''),
-        date: dateVal,
-        receiptUrl: window._bsReceiptUrl || null
-      }));
-      navigateTo('split');
-      toast('Forwarded to group split page', 'info');
+        localStorage.setItem('pfa_pending_scan', JSON.stringify({
+          groupId: dest,
+          amount,
+          currency,
+          description: name + (description ? ` - ${description}` : ''),
+          date: dateVal,
+          receiptUrl: window._bsReceiptUrl || null,
+        }));
+        window.navigateTo('split');
+        toast('Receipt sent to the group', 'info');
+      }
+    } catch (err) {
+      toast('Could not save: ' + err.message, 'error');
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = `${icon('check', 'sm')} Save transaction`;
     }
-  } catch (err) {
-    toast('Save failed: ' + err.message, 'error');
-  } finally {
-    saveBtn.disabled = false;
-    saveBtn.innerHTML = `${icon('check', 'sm')} Save transaction`;
   }
+}
+
+function escapeAttr(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }

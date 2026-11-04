@@ -57,11 +57,15 @@ describe('renderAnalytics', () => {
 
     const timeline = container.querySelector('#a-timeline');
     timeline.value = 'WEEKLY';
-    container.querySelector('#a-start').value = '2026-11-01';
-    container.querySelector('#a-end').value = '2026-11-30';
+    timeline.dispatchEvent(new Event('change'));
+
+    // One range control replaces the two date inputs; changes apply themselves.
+    const range = container.querySelector('#a-range');
+    range.value = '2026-11-01 to 2026-11-30';
+    range.dispatchEvent(new Event('change'));
+
     global.fetch.mockClear();
     mockAnalyticsApis();
-    container.querySelector('#a-apply').click();
 
     await vi.waitFor(() => {
       const timelineCall = global.fetch.mock.calls
@@ -83,7 +87,7 @@ describe('renderAnalytics', () => {
     await vi.waitFor(() => {
       // Categories are rendered as a readable bar list, not a doughnut.
       const labels = [...container.querySelectorAll('.barlist-label')].map(el => el.textContent);
-      expect(labels).toContain('Food Delivery');
+      expect(labels).toContain('Food delivery');
       expect(labels).not.toContain('FOOD_DELIVERY');
 
       const kpis = container.querySelector('#a-kpis')?.textContent || '';

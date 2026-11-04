@@ -1,27 +1,27 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110417';
-import { esc, pageHeader, emptyState, formatCurrency, formatDate, openModal, confirmModal, modalActions, avatar, EXPENSE_CATS, categoryOptions } from '../utils/ui.js?v=2026110417';
-import { icon } from '../utils/icons.js?v=2026110417';
+import { api, Auth, toast } from '../utils/api.js';
+import {
+  esc, pageHeader, emptyState, formatMoney, formatDate, formatCategory,
+  openModal, confirmModal, modalActions, avatar, displayName, chip,
+  EXPENSE_CATS, categoryOptions, currencyOptionHtml,
+} from '../utils/ui.js';
+import { icon } from '../utils/icons.js';
 
 let currentGroupId = null;
 let expensesPage = 0, expensesTotal = 1;
 let activityPage = 0, activityTotal = 1;
-// Which group tab is showing. Kept module-level so a data refresh (delete,
-// revert, settle) can re-render the group without snapping back to Expenses.
 let activePanel = 'expenses';
 
-// Global notification listeners for Split view
+/* ── Global notifications ───────────────────────────────────────────────── */
 window.addEventListener('group-invite', () => {
   const userId = Auth.getUserId();
-  if (userId && !currentGroupId && document.getElementById('sp-content')) {
-    loadGroups(userId); // Refresh group list if on the main split view
-  }
+  if (userId && !currentGroupId && document.getElementById('sp-content')) loadGroups(userId);
 });
 
 window.addEventListener('expense-added', (e) => {
   const userId = Auth.getUserId();
   const data = e.detail;
   if (userId && currentGroupId && data.groupId === currentGroupId && document.getElementById('sp-content')) {
-    loadGroupDetail(currentGroupId, userId); // Refresh group details
+    loadGroupDetail(currentGroupId, userId, { preserveView: true });
   }
 });
 
@@ -29,7 +29,7 @@ window.addEventListener('debt-settled', (e) => {
   const userId = Auth.getUserId();
   const data = e.detail;
   if (userId && currentGroupId && data.groupId === currentGroupId && document.getElementById('sp-content')) {
-    loadGroupDetail(currentGroupId, userId); // Refresh group details
+    loadGroupDetail(currentGroupId, userId, { preserveView: true });
   }
 });
 
@@ -37,15 +37,19 @@ export async function renderSplit(container) {
   currentGroupId = null;
   activePanel = 'expenses';
   const userId = Auth.getUserId();
+
   container.innerHTML = `
-    ${pageHeader('Split Expenses', '', `
-      <button class="btn btn-secondary btn-sm" id="sp-back" style="display:none">Back to Groups</button>
-      <button class="btn btn-primary btn-sm" id="sp-create">+ New Group</button>`)}
-    <div id="sp-content" class="fade-up"></div>`;
+    ${pageHeader('Split expenses', '', `
+      <button class="btn btn-secondary btn-sm" id="sp-back" hidden>Back to groups</button>
+      <button class="btn btn-primary" id="sp-create">${icon('plus', 'sm')} New group</button>`)}
+    <div id="sp-content"></div>`;
 
   document.getElementById('sp-create').onclick = () => createGroupModal(userId);
-  document.getElementById('sp-back').onclick = () => { currentGroupId = null; loadGroups(userId); };
-  
+  document.getElementById('sp-back').onclick = () => {
+    currentGroupId = null;
+    loadGroups(userId);
+  };
+
   const pendingScanRaw = localStorage.getItem('pfa_pending_scan');
   if (pendingScanRaw) {
     try {
@@ -54,134 +58,210 @@ export async function renderSplit(container) {
       window._pfaPendingScan = pendingScan;
       loadGroupDetail(pendingScan.groupId, userId);
       return;
-    } catch(e) {}
+    } catch { /* ignore a broken queued scan */ }
   }
-  
+
   loadGroups(userId);
 }
 
+/* ── Group list ─────────────────────────────────────────────────────────── */
 async function loadGroups(userId) {
   const el = document.getElementById('sp-content');
-  document.getElementById('sp-back').style.display = 'none';
-  document.getElementById('sp-create').style.display = '';
+  if (!el) return;
+  document.getElementById('sp-back').hidden = true;
+  document.getElementById('sp-create').hidden = false;
   el.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
+
   try {
     const groups = await api.get('/upsert/groups', { userId });
     if (!groups.length) {
-      el.innerHTML = emptyState('users', 'No groups yet', 'Create a group to start splitting expenses.');
+      el.innerHTML = emptyState('users', 'No groups yet',
+        'Create a group to split bills with the people you share costs with.',
+        '<button class="btn btn-primary" id="sp-empty-create">New group</button>');
+      document.getElementById('sp-empty-create').onclick = () => createGroupModal(userId);
       return;
     }
+
     const activeGroups = groups.filter(g => !g.isArchived);
     const archivedGroups = groups.filter(g => g.isArchived);
 
-    let html = '';
+    // Member avatars live on a separate endpoint; load them for the visible cards.
+    const memberMap = new Map();
+    await Promise.all(activeGroups.map(async (g) => {
+      try {
+        const members = await api.get(`/upsert/groups/${g.id}/members`);
+        memberMap.set(g.id, members.filter(m => m.status !== 'PENDING'));
+      } catch { memberMap.set(g.id, []); }
+    }));
 
-    const renderCard = (g) => {
-      const isPending = g.currentUserStatus === 'PENDING';
-      const isArchived = g.isArchived;
-      let balHtml = '';
-      if (g.currentUserNetBalance > 0) {
-        balHtml = `<div style="margin-top:8px; font-size:0.85rem; font-weight:600; color:var(--accent-g);">You get back ${formatCurrency(g.currentUserNetBalance, g.currency)}</div>`;
-      } else if (g.currentUserNetBalance < 0) {
-        balHtml = `<div style="margin-top:8px; font-size:0.85rem; font-weight:600; color:var(--accent);">You owe ${formatCurrency(Math.abs(g.currentUserNetBalance), g.currency)}</div>`;
-      }
-      return `
-      <div class="card group-card" data-id="${g.id}" role="button" tabindex="0" ${
-        isPending ? 'style="border: 2px solid var(--accent-y);"' :
-        isArchived ? 'style="opacity:0.75; border-style:dashed;"' : ''
-      }>
-        <div class="group-name">${esc(g.name)}</div>
-        <div class="group-meta">${esc(g.description || 'No description')}</div>
-        ${balHtml}
-        ${isPending ? `
-          <div style="margin-top: 12px; display:flex; gap: 8px;" class="sp-pending-actions">
-            <button class="btn btn-primary btn-sm sp-outside-accept" data-id="${g.id}">Accept</button>
-            <button class="btn btn-secondary btn-sm sp-outside-decline" data-id="${g.id}">Decline</button>
-          </div>
-        ` : ''}
-        ${isArchived ? `
-          <div style="margin-top: 12px;" class="sp-archived-actions">
-            <button class="btn btn-secondary btn-sm sp-outside-unarchive" data-id="${g.id}" style="gap:6px">
-              ${icon('arrow-up', 'sm')} Unarchive
-            </button>
-          </div>
-        ` : ''}
-      </div>`;
-    };
+    const owed = groups.reduce((sum, g) => sum + Math.max(0, Number(g.currentUserNetBalance) || 0), 0);
+    const owes = groups.reduce((sum, g) => sum + Math.max(0, -(Number(g.currentUserNetBalance) || 0)), 0);
+    const owedGroups = groups.filter(g => Number(g.currentUserNetBalance) > 0).length;
+    const oweGroups = groups.filter(g => Number(g.currentUserNetBalance) < 0).length;
+    const currency = Auth.getDefaultCurrency();
 
-    if (activeGroups.length > 0) {
-      html += `<div class="card-grid card-grid-3">${activeGroups.map(renderCard).join('')}</div>`;
-    } else if (archivedGroups.length === 0) {
-      html += `<div style="text-align:center; padding: 40px; color: var(--text-dim);">No active groups.</div>`;
+    let summary;
+    if (owed > 0 && owes === 0) {
+      summary = `
+        <div class="split-summary">
+          <div>
+            <div class="split-summary-label">You are owed</div>
+            <div class="hero-number" style="color:var(--pos)">${formatMoney(owed, currency)}</div>
+          </div>
+          <div class="split-summary-sub">across ${owedGroups} group${owedGroups === 1 ? '' : 's'}</div>
+        </div>`;
+    } else if (owes > 0 && owed === 0) {
+      summary = `
+        <div class="split-summary">
+          <div>
+            <div class="split-summary-label">You owe</div>
+            <div class="hero-number" style="color:var(--neg)">${formatMoney(owes, currency)}</div>
+          </div>
+          <div class="split-summary-sub">across ${oweGroups} group${oweGroups === 1 ? '' : 's'}</div>
+        </div>`;
+    } else if (owed > 0 && owes > 0) {
+      summary = `
+        <div class="split-summary">
+          <div>
+            <div class="split-summary-label">Net</div>
+            <div class="hero-number" style="color:${owed - owes >= 0 ? 'var(--pos)' : 'var(--neg)'}">${formatMoney(owed - owes, currency)}</div>
+          </div>
+          <div class="split-summary-sub">${formatMoney(owed, currency)} owed to you · ${formatMoney(owes, currency)} owed by you</div>
+        </div>`;
+    } else {
+      summary = `
+        <div class="split-summary">
+          <div>
+            <div class="split-summary-label">Balances</div>
+            <div class="hero-number">All settled up</div>
+          </div>
+        </div>`;
     }
 
-    if (archivedGroups.length > 0) {
+    let html = summary;
+
+    if (activeGroups.length) {
+      html += `<div class="card-grid card-grid-3">${activeGroups.map(g => groupCard(g, memberMap.get(g.id) || [])).join('')}</div>`;
+    } else {
+      html += `<p class="meta" style="padding:20px 0">No active groups.</p>`;
+    }
+
+    if (archivedGroups.length) {
       html += `
-        <div style="margin-top: 40px; border-top: 1px solid var(--border-light); padding-top: 20px;">
-          <div style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-dim); padding:12px; background:var(--bg-card-h); border-radius:8px; width:max-content; transition: background 0.2s;" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background='var(--bg-card-h)'" onclick="const c = document.getElementById('archived-groups-container'); c.style.display = c.style.display === 'none' ? 'block' : 'none';">
-            ${icon('archive', 18)} <span style="font-weight: 500;">Archived Groups (${archivedGroups.length})</span>
-          </div>
-          <div id="archived-groups-container" style="display:none; margin-top:20px;">
+        <div style="margin-top:var(--s6);border-top:1px solid var(--line);padding-top:var(--s4)">
+          <button type="button" class="btn btn-ghost btn-sm" id="sp-archived-toggle" aria-expanded="false">
+            ${icon('archive', 'sm')} Archived groups (${archivedGroups.length})
+          </button>
+          <div id="archived-groups-container" hidden style="margin-top:var(--s4)">
             <div class="card-grid card-grid-3">
-              ${archivedGroups.map(renderCard).join('')}
+              ${archivedGroups.map(g => groupCard(g, memberMap.get(g.id) || [])).join('')}
             </div>
           </div>
-        </div>
-      `;
+        </div>`;
     }
 
     el.innerHTML = html;
 
-    el.querySelectorAll('.sp-outside-accept').forEach(btn => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        try {
-          await api.post(`/upsert/groups/${btn.dataset.id}/members/${userId}/accept`);
-          toast('Invitation accepted!', 'success');
-          loadGroups(userId);
-        } catch(err) { toast(err.message, 'error'); }
-      };
+    document.getElementById('sp-archived-toggle')?.addEventListener('click', () => {
+      const container = document.getElementById('archived-groups-container');
+      const open = container.hidden;
+      container.hidden = !open;
+      document.getElementById('sp-archived-toggle').setAttribute('aria-expanded', String(open));
     });
 
-    el.querySelectorAll('.sp-outside-decline').forEach(btn => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        if (!(await confirmModal('Decline', 'Are you sure you want to decline this invitation?', 'Decline'))) return;
-        try {
-          await api.post(`/upsert/groups/${btn.dataset.id}/members/${userId}/reject`);
-          toast('Invitation declined', 'info');
-          loadGroups(userId);
-        } catch(err) { toast(err.message, 'error'); }
-      };
-    });
-
-    el.querySelectorAll('.sp-outside-unarchive').forEach(btn => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        try {
-          await api.put(`/upsert/groups/${btn.dataset.id}/archive`, null, { params: { archive: false } });
-          toast('Group unarchived', 'success');
-          loadGroups(userId);
-        } catch(err) { toast(err.message, 'error'); }
-      };
-    });
-
-    el.querySelectorAll('.group-card').forEach(c => {
-      const open = () => loadGroupDetail(+c.dataset.id, userId);
-      c.onclick = (e) => {
-        if (e.target.closest('.sp-pending-actions') || e.target.closest('.sp-archived-actions')) return;
-        open();
-      };
-      c.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
-    });
+    wireGroupCardActions(el, userId);
   } catch (err) {
-    el.innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
+    el.innerHTML = `<p style="color:var(--neg)">${esc(err.message)}</p>`;
   }
 }
 
+function groupCard(g, members) {
+  const isPending = g.currentUserStatus === 'PENDING';
+  const isArchived = g.isArchived;
+  const balance = Number(g.currentUserNetBalance) || 0;
+  const currency = g.currency || Auth.getDefaultCurrency();
+
+  let balanceHtml = '<div class="group-balance is-zero">Settled up</div>';
+  if (balance > 0) balanceHtml = `<div class="group-balance is-pos">You get back ${formatMoney(balance, currency)}</div>`;
+  else if (balance < 0) balanceHtml = `<div class="group-balance is-neg">You owe ${formatMoney(Math.abs(balance), currency)}</div>`;
+
+  const shown = members.slice(0, 4);
+  const extra = Math.max(0, members.length - shown.length);
+  const memberHtml = shown.length ? `
+    <div class="group-members">
+      ${shown.map(m => avatar(m.name || m.userName, 26, m.profilePicture)).join('')}
+      ${extra ? `<span class="group-members-count">+${extra}</span>` : `<span class="group-members-count">${members.length} member${members.length === 1 ? '' : 's'}</span>`}
+    </div>` : '';
+
+  return `
+    <article class="group-card" data-id="${g.id}" role="button" tabindex="0"
+      ${isPending ? 'aria-label="Invitation to ' + esc(g.name) + '"' : ''}
+      ${isArchived ? 'style="opacity:.75"' : ''}>
+      <div class="group-name">${esc(g.name)}</div>
+      <div class="group-meta">${esc(g.description || '')}</div>
+      ${memberHtml}
+      ${balanceHtml}
+      ${isPending ? `
+        <div class="sp-pending-actions">
+          <button class="btn btn-primary btn-sm sp-outside-accept" data-id="${g.id}">Accept</button>
+          <button class="btn btn-secondary btn-sm sp-outside-decline" data-id="${g.id}">Decline</button>
+        </div>` : ''}
+      ${isArchived ? `
+        <div class="sp-archived-actions">
+          <button class="btn btn-secondary btn-sm sp-outside-unarchive" data-id="${g.id}">${icon('arrow-up', 'sm')} Unarchive</button>
+        </div>` : ''}
+    </article>`;
+}
+
+function wireGroupCardActions(el, userId) {
+  el.querySelectorAll('.sp-outside-accept').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        await api.post(`/upsert/groups/${btn.dataset.id}/members/${userId}/accept`);
+        toast('Invitation accepted', 'success');
+        loadGroups(userId);
+      } catch (err) { toast(err.message, 'error'); }
+    };
+  });
+
+  el.querySelectorAll('.sp-outside-decline').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!(await confirmModal('Decline invitation', 'You will no longer be part of this group.', 'Decline'))) return;
+      try {
+        await api.post(`/upsert/groups/${btn.dataset.id}/members/${userId}/reject`);
+        toast('Invitation declined', 'info');
+        loadGroups(userId);
+      } catch (err) { toast(err.message, 'error'); }
+    };
+  });
+
+  el.querySelectorAll('.sp-outside-unarchive').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        await api.put(`/upsert/groups/${btn.dataset.id}/archive`, null, { params: { archive: false } });
+        toast('Group unarchived', 'success');
+        loadGroups(userId);
+      } catch (err) { toast(err.message, 'error'); }
+    };
+  });
+
+  el.querySelectorAll('.group-card').forEach(card => {
+    const open = () => loadGroupDetail(+card.dataset.id, userId);
+    card.onclick = (e) => {
+      if (e.target.closest('.sp-pending-actions') || e.target.closest('.sp-archived-actions')) return;
+      open();
+    };
+    card.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    };
+  });
+}
+
+/* ── Group detail ───────────────────────────────────────────────────────── */
 async function loadGroupDetail(groupId, userId, opts = {}) {
-  // A plain load (opening a group) starts at Expenses page 1. A refresh after
-  // an in-place mutation keeps the tab and pagination the user was on.
   if (!opts.preserveView) {
     expensesPage = 0;
     activityPage = 0;
@@ -189,291 +269,244 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
   }
   currentGroupId = groupId;
   const el = document.getElementById('sp-content');
-  document.getElementById('sp-back').style.display = '';
-  document.getElementById('sp-create').style.display = 'none';
+  if (!el) return;
+  document.getElementById('sp-back').hidden = false;
+  document.getElementById('sp-create').hidden = true;
   el.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
+
   try {
     const activityPromise = api.get(`/upsert/groups/${groupId}/activity`, { page: activityPage, size: 8 });
     const [group, membersRaw, expensesResult, balances] = await Promise.all([
       api.get(`/upsert/groups/${groupId}`),
       api.get(`/upsert/groups/${groupId}/members`),
       api.get(`/upsert/groups/${groupId}/expenses`, { page: expensesPage, size: 8 }),
-      api.get(`/upsert/groups/${groupId}/balances`)
+      api.get(`/upsert/groups/${groupId}/balances`),
     ]);
 
     expensesTotal = expensesResult.totalPages || 1;
     const expenses = expensesResult.content || [];
 
-    let usersMap = {};
-    try {
-      const userIds = membersRaw.map(m => m.userId);
-      if (userIds.length > 0) {
-        const users = await api.post('/auth/users/bulk', userIds);
-        users.forEach(u => { usersMap[u.userId] = u; });
-      }
-    } catch(e) { console.warn('Failed to fetch user profiles', e); }
-
-    const members = membersRaw.map(m => {
-      const u = usersMap[m.userId] || {};
-      return { ...m, profilePicture: u.profilePicture, email: u.email, username: u.username };
-    });
+    const members = membersRaw.map(m => ({
+      ...m,
+      displayName: displayName(m.name || m.userName, displayNameFromId(m.userId)),
+    }));
 
     let pendingScan = null;
     if (window._pfaPendingScan && String(window._pfaPendingScan.groupId) === String(groupId)) {
-       pendingScan = window._pfaPendingScan;
-       delete window._pfaPendingScan;
-       const eligibleMembers = members.filter(m => m.status === 'ACCEPTED');
-       // Open modal immediately while background loads
-       try { addExpenseModal(groupId, eligibleMembers, userId, pendingScan); } catch (err) {}
+      pendingScan = window._pfaPendingScan;
+      delete window._pfaPendingScan;
+      const eligible = members.filter(m => m.status === 'ACCEPTED');
+      try { addExpenseModal(groupId, eligible, userId, pendingScan); } catch { /* modal can retry */ }
     }
-    const currentUserMember = members.find(m => m.userId === userId);
-    const isPending = currentUserMember && currentUserMember.status === 'PENDING';
 
-    if (isPending) {
-      el.innerHTML = `
-        <div class="card" style="margin-bottom:20px; text-align:center; padding:40px;">
-          <h2 style="margin-bottom:8px">You've been invited!</h2>
-          <p style="color:var(--text-dim); margin-bottom:24px">You have been invited to join the group <strong>${esc(group.name)}</strong>.</p>
-          <div style="display:flex; justify-content:center; gap:16px;">
-            <button class="btn btn-secondary" id="sp-decline-invite">Decline</button>
-            <button class="btn btn-primary" id="sp-accept-invite">Accept Invitation</button>
-          </div>
-        </div>`;
-        
-      document.getElementById('sp-accept-invite').onclick = async () => {
-        try {
-          await api.post(`/upsert/groups/${groupId}/members/${userId}/accept`);
-          toast('Invitation accepted!', 'success');
-          loadGroupDetail(groupId, userId);
-        } catch(e) { toast(e.message, 'error'); }
-      };
-      document.getElementById('sp-decline-invite').onclick = async () => {
-        if (!(await confirmModal('Decline', 'Are you sure you want to decline this invitation?', 'Decline'))) return;
-        try {
-          await api.post(`/upsert/groups/${groupId}/members/${userId}/reject`);
-          toast('Invitation declined', 'info');
-          document.getElementById('sp-back').click();
-        } catch(e) { toast(e.message, 'error'); }
-      };
+    const me = members.find(m => m.userId === userId);
+    if (me && me.status === 'PENDING') {
+      renderInvitation(el, group, groupId, userId);
       return;
     }
-    
-    const resolveMemberNameLocally = (id) => {
-      const m = members.find(x => x.userId === id);
-      return m ? m.name : id.substring(0, 8);
-    };
 
-    const resolveMemberAvatarLocally = (id) => {
+    const eligibleMembers = members.filter(m => m.status === 'ACCEPTED');
+    const nameOf = (id) => {
+      const m = members.find(x => x.userId === id);
+      return m ? m.displayName : displayNameFromId(id);
+    };
+    const avatarOf = (id) => {
       const m = members.find(x => x.userId === id);
       return m ? m.profilePicture : null;
     };
 
+    const currency = group.currency || Auth.getDefaultCurrency();
+    const debts = balances?.simplifiedDebts || [];
     const myBalanceObj = balances?.memberBalances?.find(b => b.userId === userId);
-    const myNetBalance = myBalanceObj ? myBalanceObj.netBalance : 0;
-    const eligibleMembers = members.filter(m => m.status === 'ACCEPTED');
+    const myNet = Number(myBalanceObj?.netBalance) || 0;
 
-    // Per-person settlement lines for the group landing view: who you owe,
-    // who owes you. A single net number is too thin for the one screen that
-    // involves other people.
-    const myDebts = (balances?.simplifiedDebts || []).filter(d =>
-      d.fromUserId === userId || d.toUserId === userId);
-    const iOweTotal = myDebts.filter(d => d.fromUserId === userId)
-      .reduce((sum, d) => sum + Number(d.amount || 0), 0);
-    const owedToMeTotal = myDebts.filter(d => d.toUserId === userId)
-      .reduce((sum, d) => sum + Number(d.amount || 0), 0);
-    const debtLines = myDebts.map(d => {
-      const youOwe = d.fromUserId === userId;
-      const other = youOwe ? d.toUserName : d.fromUserName;
-      return `<div class="group-balance-line">
-        <span>${esc(other || 'Member')}</span>
-        <span class="amt">${youOwe ? 'you owe ' : 'owes you '}${formatCurrency(Math.abs(Number(d.amount) || 0))}</span>
-      </div>`;
-    }).join('');
-    const balanceSummary = (iOweTotal > 0 || owedToMeTotal > 0) ? `
-      <div class="group-balance-summary">
-        <div class="group-balance-total">
-          ${iOweTotal > 0 ? `You owe <strong>${formatCurrency(iOweTotal)}</strong> in total` : ''}
-          ${iOweTotal > 0 && owedToMeTotal > 0 ? ' · ' : ''}
-          ${owedToMeTotal > 0 ? `You are owed <strong>${formatCurrency(owedToMeTotal)}</strong>` : ''}
-        </div>
-        ${debtLines}
-        <div class="group-balance-actions">
-          <span class="group-compact-meta">${myDebts.length} open balance${myDebts.length === 1 ? '' : 's'}</span>
-          <button class="btn btn-primary btn-sm" id="sp-settle-up">Settle up</button>
-        </div>
-      </div>` : '';
+    const myDebts = debts.filter(d => d.fromUserId === userId || d.toUserId === userId);
+    const iOwe = myDebts.filter(d => d.fromUserId === userId).reduce((s, d) => s + Number(d.amount || 0), 0);
+    const owedToMe = myDebts.filter(d => d.toUserId === userId).reduce((s, d) => s + Number(d.amount || 0), 0);
 
-    // Build balance pills for members
-    const myBalancePill = myNetBalance !== 0
-      ? `<span class="group-balance-pill" style="background:rgba(${myNetBalance > 0 ? '34,201,147' : '249,115,22'},0.12); color:${myNetBalance > 0 ? 'var(--accent-g)' : 'var(--accent)'}; border:1px solid ${myNetBalance > 0 ? 'rgba(34,201,147,0.3)' : 'rgba(249,115,22,0.3)'};">
-          ${myNetBalance > 0 ? '▲ Gets back ' + formatCurrency(myNetBalance) : '▼ Owes ' + formatCurrency(Math.abs(myNetBalance))}
-        </span>`
-      : '';
+    // Compact per-person balance list: only direct debts, left aligned.
+    const balanceRows = members
+      .filter(m => m.userId !== userId && m.status === 'ACCEPTED')
+      .map(m => {
+        const owesMe = myDebts.find(d => d.fromUserId === m.userId && d.toUserId === userId);
+        const iOweThem = myDebts.find(d => d.fromUserId === userId && d.toUserId === m.userId);
+        let amountHtml = '<span class="balance-person-amount is-zero">Settled up</span>';
+        let settleBtn = '';
+        if (owesMe) {
+          const amt = Number(owesMe.amount) || 0;
+          amountHtml = `<span class="balance-person-amount is-pos">owes you ${formatMoney(amt, currency)}</span>`;
+          settleBtn = `<button type="button" class="btn btn-ghost btn-sm settle-btn" data-from="${m.userId}" data-to="${userId}" data-from-name="${esc(m.displayName)}" data-to-name="${esc(nameOf(userId))}">Settle up</button>`;
+        } else if (iOweThem) {
+          const amt = Number(iOweThem.amount) || 0;
+          amountHtml = `<span class="balance-person-amount is-neg">you owe ${formatMoney(amt, currency)}</span>`;
+          settleBtn = `<button type="button" class="btn btn-ghost btn-sm settle-btn" data-from="${userId}" data-to="${m.userId}" data-from-name="${esc(nameOf(userId))}" data-to-name="${esc(m.displayName)}">Settle up</button>`;
+        }
+        return `
+          <div class="balance-person-row">
+            ${avatar(m.displayName, 30, m.profilePicture)}
+            <span class="balance-person-name">${esc(m.displayName)}</span>
+            ${amountHtml}
+            ${settleBtn}
+          </div>`;
+      }).join('');
+
+    const balancesBlock = balanceRows ? `
+      <section class="balances-block" aria-label="Balances in this group">
+        <div class="balances-block-head">
+          <span class="balances-block-title">${iOwe > 0 || owedToMe > 0
+            ? `${owedToMe > 0 ? `You are owed ${formatMoney(owedToMe, currency)}` : ''}${owedToMe > 0 && iOwe > 0 ? ' · ' : ''}${iOwe > 0 ? `you owe ${formatMoney(iOwe, currency)}` : ''}`
+            : 'All settled up'}</span>
+          ${myDebts.length ? `<button type="button" class="btn btn-secondary btn-sm" id="sp-settle-all">Settle all</button>` : ''}
+        </div>
+        ${balanceRows}
+      </section>` : '';
 
     el.innerHTML = `
-      <!-- Compact group header -->
-      <div class="group-compact-header fade-up">
-        <div class="group-compact-header-left">
+      <div class="group-compact-header">
+        <div>
           <div class="group-compact-title">${esc(group.name)}</div>
           <div class="group-compact-meta">
-            <button class="group-compact-members" id="sp-view-members">
-              ${icon('users', 'sm')} ${members.length} Member${members.length !== 1 ? 's' : ''}
-            </button>
-            ${myBalancePill}
+            <button type="button" class="group-compact-members" id="sp-view-members">${icon('users', 'sm')} ${members.length} member${members.length === 1 ? '' : 's'}</button>
+            ${myNet !== 0 ? `<span class="group-balance-pill">${myNet > 0 ? `You get back ${formatMoney(myNet, currency)}` : `You owe ${formatMoney(Math.abs(myNet), currency)}`}</span>` : ''}
           </div>
         </div>
         <div class="group-compact-actions">
-          <button class="btn-add-expense" id="sp-add-expense" ${eligibleMembers.length ? '' : 'disabled'}>
-            ${icon('plus', 'sm')} Add Expense
-          </button>
-          <button class="btn-group-menu" id="sp-group-menu-btn" title="Group options">
-            ${icon('settings', 'sm')}
-          </button>
+          <button class="btn-add-expense" id="sp-add-expense" ${eligibleMembers.length ? '' : 'disabled'}>${icon('plus', 'sm')} Add expense</button>
+          <button class="btn-group-menu" id="sp-group-menu-btn" aria-label="Group options" aria-haspopup="menu">${icon('settings', 'sm')}</button>
         </div>
       </div>
 
-      ${balanceSummary}
-
-      <!-- Group options dropdown (hidden by default) -->
-      <div id="sp-group-menu" style="display:none; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-sm); padding:6px; box-shadow:var(--shadow); margin-bottom:12px; animation: fadeIn 0.15s ease both;">
-        <button class="btn btn-secondary btn-sm" id="sp-edit-group" style="width:100%; justify-content:flex-start; text-align:left; margin-bottom:4px;">${icon('edit', 'sm')} Edit Group</button>
-        <button class="btn btn-secondary btn-sm" id="sp-archive-group" style="width:100%; justify-content:flex-start; text-align:left; background:var(--bg-card-h); margin-bottom:4px;">${group.isArchived ? icon('arrow-up', 'sm') + ' Unarchive' : icon('arrow-down', 'sm') + ' Archive'}</button>
-        <button class="btn btn-secondary btn-sm" id="sp-leave-group" style="width:100%; justify-content:flex-start; text-align:left; margin-bottom:4px;">${icon('log-out', 'sm')} Leave Group</button>
-        <button class="btn btn-sm" id="sp-delete-group" style="width:100%; justify-content:flex-start; text-align:left; background:rgba(239,68,68,0.1); color:var(--accent); border:1px solid rgba(239,68,68,0.2);">${icon('trash', 'sm')} Delete Group</button>
+      <div id="sp-group-menu" class="overflow-menu" role="menu" hidden style="position:relative;right:auto;margin-bottom:var(--s3);max-width:220px;margin-left:auto">
+        <button type="button" role="menuitem" id="sp-edit-group">${icon('edit', 'sm')} Edit group</button>
+        <button type="button" role="menuitem" id="sp-archive-group">${group.isArchived ? icon('arrow-up', 'sm') + ' Unarchive' : icon('arrow-down', 'sm') + ' Archive'}</button>
+        <button type="button" role="menuitem" id="sp-leave-group">${icon('log-out', 'sm')} Leave group</button>
+        <button type="button" role="menuitem" id="sp-delete-group" style="color:var(--neg)">${icon('trash', 'sm')} Delete group</button>
       </div>
 
-      <!-- Split pane: vertical nav + content -->
-      <div class="split-pane fade-up" style="margin-top: 20px;">
-        <!-- Left vertical nav -->
-        <nav class="split-pane-nav">
-          <button class="split-nav-btn active" data-panel="expenses">
-            ${icon('receipt', 'sm')} Expenses
-          </button>
-          <button class="split-nav-btn" data-panel="balances">
-            ${icon('bar-chart', 'sm')} Balances
-          </button>
-          <button class="split-nav-btn" data-panel="activity">
-            ${icon('list', 'sm')} Activity
-          </button>
-        </nav>
+      ${balancesBlock}
 
-        <!-- Right content area -->
-        <div class="split-pane-content">
-          <!-- Expenses panel -->
-          <div class="split-pane-panel active" id="panel-expenses">
-            <div id="expenses-list"></div>
-            <div id="expenses-pagination" class="pagination" style="margin-top:16px;"></div>
-          </div>
+      <div class="tabs" role="tablist" aria-label="Group sections">
+        <button type="button" class="tab ${activePanel === 'expenses' ? 'is-active' : ''}" role="tab" data-panel="expenses" aria-selected="${activePanel === 'expenses'}">Expenses</button>
+        <button type="button" class="tab ${activePanel === 'balances' ? 'is-active' : ''}" role="tab" data-panel="balances" aria-selected="${activePanel === 'balances'}">Balances</button>
+        <button type="button" class="tab ${activePanel === 'activity' ? 'is-active' : ''}" role="tab" data-panel="activity" aria-selected="${activePanel === 'activity'}">Activity</button>
+      </div>
 
-          <!-- Balances panel -->
-          <div class="split-pane-panel" id="panel-balances">
-            <div style="margin-bottom:20px;">
-              <h4 style="margin-bottom:12px; color:var(--text-muted); font-size:0.78rem; font-weight:600;">Net Balances</h4>
-              <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap:10px;">
-                ${balances?.memberBalances?.length ? balances.memberBalances.map(b => `
-                  <div style="background:var(--bg-card-h); padding:12px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px;">
-                    <div style="display:flex; align-items:center; gap:7px; overflow:hidden; min-width:0;">
-                      ${avatar(b.userName || b.userId, 22, resolveMemberAvatarLocally(b.userId))}
-                      <span style="color:var(--text-dim); font-size:0.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@${esc(b.userName || b.userId?.substring(0, 8))}</span>
-                    </div>
-                    <span style="font-weight:700; color:${b.netBalance >= 0 ? 'var(--accent-g)' : 'var(--accent)'}; font-size:1rem; flex-shrink:0;">
-                      ${b.netBalance >= 0 ? '+' : ''}${formatCurrency(b.netBalance)}
-                    </span>
-                  </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;">No balance data yet.</p>'}
-              </div>
-            </div>
+      <div class="panel ${activePanel === 'expenses' ? 'is-active' : ''}" id="panel-expenses" role="tabpanel">
+        <div id="expenses-list"></div>
+        <div id="expenses-pagination" class="pagination"></div>
+      </div>
 
-            <div>
-              <h4 style="margin-bottom:12px; color:var(--text-muted); font-size:0.78rem; font-weight:600;">Who Owes Who</h4>
-              ${balances?.simplifiedDebts?.length ? balances.simplifiedDebts.map(s => {
-                let text = '', amountColor = 'var(--text)', amountSign = '';
-                if (s.fromUserId === userId) {
-                  text = `You owe ${avatar(s.toUserName, 20, resolveMemberAvatarLocally(s.toUserId))} <strong>${esc(s.toUserName)}</strong>`;
-                  amountColor = 'var(--accent)'; amountSign = '-';
-                } else if (s.toUserId === userId) {
-                  text = `${avatar(s.fromUserName, 20, resolveMemberAvatarLocally(s.fromUserId))} <strong>${esc(s.fromUserName)}</strong> owes you`;
-                  amountColor = 'var(--accent-g)'; amountSign = '+';
-                } else {
-                  text = `${avatar(s.fromUserName, 20, resolveMemberAvatarLocally(s.fromUserId))} <strong>${esc(s.fromUserName)}</strong> → ${avatar(s.toUserName, 20, resolveMemberAvatarLocally(s.toUserId))} <strong>${esc(s.toUserName)}</strong>`;
-                }
-                return `
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid var(--border-light); gap:14px; flex-wrap:wrap;">
-                  <div style="font-size:0.92rem; flex:1 1 auto; min-width:180px; word-break:break-word;">${text}</div>
-                  <div style="display:flex; align-items:center; gap:12px; flex-shrink:0;">
-                    <span style="font-weight:800; color:${amountColor}; font-size:1rem;">${amountSign}${formatCurrency(s.amount)}</span>
-                    <button class="btn btn-secondary btn-sm settle-btn"
-                      data-from="${s.fromUserId}" data-to="${s.toUserId}"
-                      data-from-name="${esc(s.fromUserName)}" data-to-name="${esc(s.toUserName)}">
-                      Record Payment
-                    </button>
-                  </div>
-                </div>`;
-              }).join('') : '<p style="color:var(--text-dim); text-align:center; padding:24px 0;">' + icon('check-circle', 'sm') + ' All balances are settled!</p>'}
-            </div>
-          </div>
-
-          <!-- Activity panel -->
-          <div class="split-pane-panel" id="panel-activity">
-            <div id="activity-list"></div>
-            <div id="activity-pagination" class="pagination" style="margin-top:16px;"></div>
-          </div>
+      <div class="panel ${activePanel === 'balances' ? 'is-active' : ''}" id="panel-balances" role="tabpanel">
+        <div class="balances-block" style="max-width:none">
+          <div class="balances-block-head"><span class="balances-block-title">Who owes who</span></div>
+          ${debts.length ? debts.map(s => {
+            const from = s.fromUserId === userId ? 'You' : nameOf(s.fromUserId);
+            const to = s.toUserId === userId ? 'you' : nameOf(s.toUserId);
+            return `
+              <div class="balance-person-row">
+                ${avatar(nameOf(s.fromUserId), 28, avatarOf(s.fromUserId))}
+                <span class="balance-person-name">${esc(from)} ${s.fromUserId === userId ? 'owe' : 'owes'} ${esc(to)}</span>
+                <span class="balance-person-amount ${s.toUserId === userId ? 'is-pos' : ''}">${formatMoney(s.amount, currency)}</span>
+                <button class="btn btn-secondary btn-sm settle-btn"
+                  data-from="${s.fromUserId}" data-to="${s.toUserId}"
+                  data-from-name="${esc(s.fromUserName || nameOf(s.fromUserId))}"
+                  data-to-name="${esc(s.toUserName || nameOf(s.toUserId))}">Record payment</button>
+              </div>`;
+          }).join('') : `<p class="meta" style="padding:16px 0">${icon('check-circle', 'sm')} All balances are settled.</p>`}
         </div>
+      </div>
+
+      <div class="panel ${activePanel === 'activity' ? 'is-active' : ''}" id="panel-activity" role="tabpanel">
+        <div id="activity-list"></div>
+        <div id="activity-pagination" class="pagination"></div>
       </div>`;
 
     document.getElementById('sp-view-members').onclick = () => viewMembersModal(members, groupId, userId);
 
-    // Group menu toggle
+    const menu = document.getElementById('sp-group-menu');
     document.getElementById('sp-group-menu-btn').onclick = (e) => {
       e.stopPropagation();
-      const menu = document.getElementById('sp-group-menu');
-      menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+      menu.hidden = !menu.hidden;
     };
     document.addEventListener('click', (e) => {
-      const menu = document.getElementById('sp-group-menu');
-      if (menu && !e.target.closest('#sp-group-menu') && !e.target.closest('#sp-group-menu-btn')) {
-        menu.style.display = 'none';
-      }
-    }, { once: false });
+      if (!e.target.closest('#sp-group-menu') && !e.target.closest('#sp-group-menu-btn')) menu.hidden = true;
+    });
 
-    // Vertical split-pane nav switching
     const setPanel = (panel) => {
       activePanel = panel;
-      document.querySelectorAll('.split-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.panel === panel));
-      document.querySelectorAll('.split-pane-panel').forEach(p => p.classList.remove('active'));
-      document.getElementById(`panel-${panel}`)?.classList.add('active');
+      document.querySelectorAll('.tab').forEach(b => {
+        const active = b.dataset.panel === panel;
+        b.classList.toggle('is-active', active);
+        b.setAttribute('aria-selected', String(active));
+      });
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('is-active'));
+      document.getElementById(`panel-${panel}`)?.classList.add('is-active');
     };
-    document.querySelectorAll('.split-nav-btn').forEach(btn => {
-      btn.onclick = () => setPanel(btn.dataset.panel);
-    });
-    // Restore the tab from before a re-render (expenses is the HTML default).
+    document.querySelectorAll('.tab').forEach(btn => { btn.onclick = () => setPanel(btn.dataset.panel); });
     setPanel(activePanel);
 
-    document.getElementById('sp-settle-up')?.addEventListener('click', () => setPanel('balances'));
-    document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, eligibleMembers, userId);
+    document.getElementById('sp-settle-all')?.addEventListener('click', () => settleAll(groupId, userId, myDebts));
+    document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, eligibleMembers, userId, null, group.currency);
 
+    const memberCount = Math.max(eligibleMembers.length, 1);
+    const shareOf = (e) => {
+      if (e.splitType === 'EQUAL') return Number(e.amount) / memberCount;
+      if (e.myShare != null) return Number(e.myShare); // supplied by a future API
+      return null;
+    };
 
     const renderExpenses = (exps) => {
-      const elList = document.getElementById('expenses-list');
-      if (!elList) return;
-      elList.innerHTML = exps.length ? exps.map(e => {
-        const expData = { ...e, paidByName: resolveMemberNameLocally(e.paidBy) };
-        return `
-        <div class="balance-item expense-row" data-exp='${esc(JSON.stringify(expData))}' style="padding:16px 0; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-          <div>
-             <div style="font-weight:600; font-size:1.05rem;">${esc(e.description || 'Expense')}</div>
-             <div style="margin-top:4px; font-size:0.85rem; color:var(--text-dim);" class="desktop-only">Paid by ${avatar(resolveMemberNameLocally(e.paidBy), 16, resolveMemberAvatarLocally(e.paidBy))} @${esc(resolveMemberNameLocally(e.paidBy))} · <span class="badge badge-info" style="font-size:.68rem;">${esc(splitTypeLabel(e.splitType))}</span>${e.receiptUrl ? ` · <div class="badge badge-info" style="font-size:.68rem;padding: 2px 4px; cursor:pointer;" title="View receipt" onclick="event.stopPropagation(); window.openReceiptLightbox('${esc(e.receiptUrl)}')">${icon('document', 'xs')}</div>` : ''}</div>
-          </div>
-          <div class="expense-row-actions" style="display:flex; align-items:center; gap: 12px;">
-            <span style="font-weight:700;color:var(--text);font-size:1.1rem;">${formatCurrency(e.amount)}</span>
-          </div>
-        </div>`;
-      }).join('') : emptyState('receipt', 'No expenses yet', 'Keep track of shared bills and tabs by adding your first expense.');
+      const list = document.getElementById('expenses-list');
+      if (!list) return;
+      const settlements = exps.filter(e => String(e.splitType).toUpperCase() === 'SETTLEMENT');
+      const regular = exps.filter(e => String(e.splitType).toUpperCase() !== 'SETTLEMENT');
 
-      elList.querySelectorAll('.expense-row').forEach(row => {
-        row.onclick = () => {
-          const exp = JSON.parse(row.dataset.exp);
-          openExpenseDetailsModal(exp, groupId, userId, eligibleMembers);
-        };
+      const expenseHtml = regular.map(e => {
+        const share = shareOf(e);
+        const mine = e.paidBy === userId ? `You paid` : `${nameOf(e.paidBy)} paid`;
+        return `
+          <div class="expense-row" data-exp='${esc(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
+            <span class="row-icon">${icon('receipt', 'sm')}</span>
+            <div class="expense-row-main">
+              <div class="expense-row-title">${esc(e.description || 'Expense')}</div>
+              <div class="expense-row-meta">
+                <span>${esc(mine)}</span>
+                ${chip(splitTypeLabel(e.splitType), 'neutral')}
+                ${e.receiptUrl ? `<button type="button" class="attach-btn" data-receipt="${esc(e.receiptUrl)}" aria-label="Receipt attached" title="Receipt attached">${icon('paperclip', 'xs')}</button>` : ''}
+              </div>
+            </div>
+            <div class="expense-row-amount">
+              <span class="expense-row-total">${formatMoney(e.amount, e.currency || currency)}</span>
+              ${share != null ? `<span class="expense-row-share">Your share ${formatMoney(share, e.currency || currency)}</span>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+
+      const settlementHtml = settlements.length ? `
+        <div class="settlement-group">
+          <div class="settlement-group-title">Settlements</div>
+          ${settlements.map(e => `
+            <div class="expense-row payment-row" data-exp='${esc(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
+              <span class="row-icon">${icon('arrow-right', 'sm')}</span>
+              <div class="expense-row-main">
+                <div class="expense-row-title">${esc(e.description || 'Payment')}</div>
+                <div class="expense-row-meta">${esc(formatDate(e.createdAt || e.expenseDate))}</div>
+              </div>
+              <div class="expense-row-amount"><span class="expense-row-total">${formatMoney(e.amount, e.currency || currency)}</span></div>
+            </div>`).join('')}
+        </div>` : '';
+
+      list.innerHTML = regular.length || settlements.length
+        ? expenseHtml + settlementHtml
+        : emptyState('receipt', 'No expenses yet', 'Add the first shared cost for this group.');
+
+      list.querySelectorAll('.expense-row').forEach(row => {
+        const open = () => openExpenseDetailsModal(JSON.parse(row.dataset.exp), groupId, userId, eligibleMembers);
+        row.onclick = (e) => { if (e.target.closest('[data-receipt]')) return; open(); };
+        row.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); open(); } };
+      });
+      list.querySelectorAll('[data-receipt]').forEach(btn => {
+        btn.onclick = (e) => { e.stopPropagation(); window.openReceiptLightbox(btn.dataset.receipt); };
       });
 
       renderExpensesPagination();
@@ -488,31 +521,20 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
     };
 
     const renderExpensesPagination = () => {
-      const el = document.getElementById('expenses-pagination');
-      if (!el || expensesTotal <= 1) { if (el) el.innerHTML = ''; return; }
-      
-      let html = `<button class="btn btn-secondary btn-icon" id="ep-prev" ${expensesPage === 0 ? 'disabled' : ''} aria-label="Previous Page">${icon('chevron-left', 'sm')}</button>`;
-      
+      const pager = document.getElementById('expenses-pagination');
+      if (!pager || expensesTotal <= 1) { if (pager) pager.innerHTML = ''; return; }
+      let html = `<button class="btn-icon" id="ep-prev" ${expensesPage === 0 ? 'disabled' : ''} aria-label="Previous page">${icon('chevron-left', 'sm')}</button>`;
       let startPage = Math.max(0, expensesPage - 2);
       let endPage = Math.min(expensesTotal - 1, startPage + 4);
       if (endPage - startPage < 4) startPage = Math.max(0, endPage - 4);
-      
       for (let i = startPage; i <= endPage; i++) {
         html += `<button class="${i === expensesPage ? 'active' : ''}" data-p="${i}" aria-label="Page ${i + 1}">${i + 1}</button>`;
       }
-      
-      html += `<button class="btn btn-secondary btn-icon" id="ep-next" ${expensesPage === expensesTotal - 1 ? 'disabled' : ''} aria-label="Next Page">${icon('chevron-right', 'sm')}</button>`;
-      
-      el.innerHTML = html;
-      
-      if (expensesPage > 0) {
-        document.getElementById('ep-prev').onclick = () => { expensesPage--; loadGroupExpenses(); };
-      }
-      if (expensesPage < expensesTotal - 1) {
-        document.getElementById('ep-next').onclick = () => { expensesPage++; loadGroupExpenses(); };
-      }
-      
-      el.querySelectorAll('button[data-p]').forEach(b => {
+      html += `<button class="btn-icon" id="ep-next" ${expensesPage === expensesTotal - 1 ? 'disabled' : ''} aria-label="Next page">${icon('chevron-right', 'sm')}</button>`;
+      pager.innerHTML = html;
+      if (expensesPage > 0) document.getElementById('ep-prev').onclick = () => { expensesPage--; loadGroupExpenses(); };
+      if (expensesPage < expensesTotal - 1) document.getElementById('ep-next').onclick = () => { expensesPage++; loadGroupExpenses(); };
+      pager.querySelectorAll('button[data-p]').forEach(b => {
         b.onclick = () => { expensesPage = +b.dataset.p; loadGroupExpenses(); };
       });
     };
@@ -522,20 +544,20 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       if (!container) return;
       container.innerHTML = actList?.length ? actList.map(a => `
         <div class="activity-item">
-          <div class="activity-message" style="font-weight:500; display:flex; justify-content:space-between; align-items:center; gap: 12px;">
-            <span style="flex: 1; min-width: 0; word-break: break-word;">${esc(a.message)}</span>
-            ${a.activityType === 'SETTLEMENT_RECORDED' ? `<button class="btn btn-danger btn-sm revert-btn" data-id="${a.referenceId}" title="Revert Settlement" style="padding:4px 8px; font-size:0.75rem; flex-shrink: 0;">Revert</button>` : ''}
+          <div class="activity-message">
+            <span>${esc(a.message)}</span>
+            ${a.activityType === 'SETTLEMENT_RECORDED' ? `<button class="btn btn-danger btn-sm revert-btn" data-id="${a.referenceId}">Revert</button>` : ''}
           </div>
-          <div class="activity-meta" style="font-size:0.8rem; color:var(--text-dim); margin-top:6px;">${formatDate(a.createdAt)} · ${esc(activityTypeLabel(a.activityType))}</div>
-        </div>`).join('') : '<p style="color:var(--text-dim);font-size:.88rem;text-align:center;padding:20px;">No activity yet</p>';
-        
+          <div class="activity-meta">${esc(formatDate(a.createdAt))} · ${esc(activityTypeLabel(a.activityType))}</div>
+        </div>`).join('') : '<p class="meta" style="padding:20px 0;text-align:center">No activity yet.</p>';
+
       container.querySelectorAll('.revert-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           const expenseId = e.currentTarget.dataset.id;
-          if (await confirmModal('Revert Settlement', 'Are you sure you want to revert this settlement? The balances will be restored.', 'Revert')) {
+          if (await confirmModal('Revert settlement', 'The balances will go back to what they were before this payment.', 'Revert')) {
             try {
               await api.delete(`/upsert/groups/${groupId}/expenses/${expenseId}`, { userId });
-              toast('Settlement reverted successfully', 'success');
+              toast('Settlement reverted', 'success');
               loadGroupDetail(groupId, userId, { preserveView: true });
             } catch (err) { toast(err.message, 'error'); }
           }
@@ -553,130 +575,173 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
     };
 
     const renderActivityPagination = () => {
-      const el = document.getElementById('activity-pagination');
-      if (!el || activityTotal <= 1) { if (el) el.innerHTML = ''; return; }
-      
-      let html = `<button class="btn btn-secondary btn-icon" id="ap-prev" ${activityPage === 0 ? 'disabled' : ''} aria-label="Previous Page">${icon('chevron-left', 'sm')}</button>`;
-      
+      const pager = document.getElementById('activity-pagination');
+      if (!pager || activityTotal <= 1) { if (pager) pager.innerHTML = ''; return; }
+      let html = `<button class="btn-icon" id="ap-prev" ${activityPage === 0 ? 'disabled' : ''} aria-label="Previous page">${icon('chevron-left', 'sm')}</button>`;
       let startPage = Math.max(0, activityPage - 2);
       let endPage = Math.min(activityTotal - 1, startPage + 4);
       if (endPage - startPage < 4) startPage = Math.max(0, endPage - 4);
-      
       for (let i = startPage; i <= endPage; i++) {
         html += `<button class="${i === activityPage ? 'active' : ''}" data-p="${i}" aria-label="Page ${i + 1}">${i + 1}</button>`;
       }
-      
-      html += `<button class="btn btn-secondary btn-icon" id="ap-next" ${activityPage === activityTotal - 1 ? 'disabled' : ''} aria-label="Next Page">${icon('chevron-right', 'sm')}</button>`;
-      
-      el.innerHTML = html;
-      
-      if (activityPage > 0) {
-        document.getElementById('ap-prev').onclick = () => { activityPage--; loadGroupActivity(); };
-      }
-      if (activityPage < activityTotal - 1) {
-        document.getElementById('ap-next').onclick = () => { activityPage++; loadGroupActivity(); };
-      }
-      
-      el.querySelectorAll('button[data-p]').forEach(b => {
+      html += `<button class="btn-icon" id="ap-next" ${activityPage === activityTotal - 1 ? 'disabled' : ''} aria-label="Next page">${icon('chevron-right', 'sm')}</button>`;
+      pager.innerHTML = html;
+      if (activityPage > 0) document.getElementById('ap-prev').onclick = () => { activityPage--; loadGroupActivity(); };
+      if (activityPage < activityTotal - 1) document.getElementById('ap-next').onclick = () => { activityPage++; loadGroupActivity(); };
+      pager.querySelectorAll('button[data-p]').forEach(b => {
         b.onclick = () => { activityPage = +b.dataset.p; loadGroupActivity(); };
       });
     };
 
-    // Initial render for expenses
     renderExpenses(expenses);
 
-    // Wire "Record Payment" buttons in the Who Owes Who panel
-    document.querySelectorAll('.settle-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!(await confirmModal('Record Settlement', `Record settlement: did ${btn.dataset.fromName} pay ${btn.dataset.toName}?`, 'Record'))) return;
-        try {
-          await api.post(`/upsert/groups/${groupId}/settle`, null, { params: { fromUserId: btn.dataset.from, toUserId: btn.dataset.to } });
-          toast('Settlement recorded!', 'success');
-          await loadGroupDetail(groupId, userId, { preserveView: true });
-        } catch (e) { toast(e.message, 'error'); }
-      });
-    });
-
-    // Load activity asynchronously
-    activityPromise.then(activityResult => {
-      activityTotal = activityResult.totalPages || 1;
-      renderActivity(activityResult.content || []);
-    }).catch(e => {
+    activityPromise.then(result => {
+      activityTotal = result.totalPages || 1;
+      renderActivity(result.content || []);
+    }).catch(() => {
       const container = document.getElementById('activity-list');
-      if (container) container.innerHTML = `<p style="color:var(--accent);text-align:center;padding:20px;">Failed to load activity.</p>`;
+      if (container) container.innerHTML = '<p style="color:var(--neg);padding:20px 0">Could not load activity.</p>';
     });
 
-    // Wire group action buttons from dropdown
-    const hideMenu = () => { const m = document.getElementById('sp-group-menu'); if (m) m.style.display = 'none'; };
-
-    document.getElementById('sp-edit-group')?.addEventListener('click', () => {
-      hideMenu(); editGroupModal(group, userId);
-    });
-
-    document.getElementById('sp-archive-group')?.addEventListener('click', async () => {
-      hideMenu();
-      if (!(await confirmModal(`${group.isArchived ? 'Unarchive' : 'Archive'} Group`, `Are you sure you want to ${group.isArchived ? 'unarchive' : 'archive'} this group?`, group.isArchived ? 'Unarchive' : 'Archive'))) return;
-      try {
-        await api.put(`/upsert/groups/${groupId}/archive`, null, { params: { archive: !group.isArchived } });
-        toast(`Group ${group.isArchived ? 'unarchived' : 'archived'}`, 'success');
-        document.getElementById('sp-back').click();
-      } catch (err) { toast(err.message, 'error'); }
-    });
-
-    document.getElementById('sp-leave-group')?.addEventListener('click', async () => {
-      hideMenu();
-      if (!(await confirmModal('Leave Group', 'Are you sure you want to leave this group?', 'Leave'))) return;
-      try {
-        await api.delete(`/upsert/groups/${groupId}/members/${userId}`);
-        toast('Left group', 'info');
-        document.getElementById('sp-back').click();
-      } catch (err) { toast(err.message, 'error'); }
-    });
-
-    document.getElementById('sp-delete-group')?.addEventListener('click', async () => {
-      hideMenu();
-      if (!(await confirmModal('Delete Group', 'Are you sure you want to PERMANENTLY delete this group? All expenses must be settled.', 'Delete'))) return;
-      try {
-        await api.delete(`/upsert/groups/${groupId}`, { userId });
-        toast('Group deleted', 'success');
-        document.getElementById('sp-back').click();
-      } catch (err) { toast(err.message, 'error'); }
-    });
-
+    wireGroupMenu(group, groupId, userId);
+    wireSettlementButtons(groupId, userId);
   } catch (err) {
-    el.innerHTML = `<p style="color:var(--accent)">${esc(err.message)}</p>`;
+    el.innerHTML = `<p style="color:var(--neg)">${esc(err.message)}</p>`;
   }
 }
 
+function displayNameFromId(id) {
+  return id ? `Member ${String(id).slice(0, 4)}` : 'Member';
+}
+
+function renderInvitation(el, group, groupId, userId) {
+  el.innerHTML = `
+    <div class="card" style="max-width:560px;text-align:center;padding:var(--s7)">
+      <h2 style="margin-bottom:6px">You've been invited</h2>
+      <p class="meta" style="margin-bottom:var(--s5)">Join <strong style="color:var(--text)">${esc(group.name)}</strong> to split expenses with this group.</p>
+      <div style="display:flex;justify-content:center;gap:12px">
+        <button class="btn btn-secondary" id="sp-decline-invite">Decline</button>
+        <button class="btn btn-primary" id="sp-accept-invite">Accept invitation</button>
+      </div>
+    </div>`;
+
+  document.getElementById('sp-accept-invite').onclick = async () => {
+    try {
+      await api.post(`/upsert/groups/${groupId}/members/${userId}/accept`);
+      toast('Invitation accepted', 'success');
+      loadGroupDetail(groupId, userId);
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  document.getElementById('sp-decline-invite').onclick = async () => {
+    if (!(await confirmModal('Decline invitation', 'You will no longer be part of this group.', 'Decline'))) return;
+    try {
+      await api.post(`/upsert/groups/${groupId}/members/${userId}/reject`);
+      toast('Invitation declined', 'info');
+      document.getElementById('sp-back').click();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+}
+
+async function recordSettlement(groupId, userId, btn) {
+  if (!(await confirmModal('Record payment',
+    `Did ${btn.dataset.fromName} pay ${btn.dataset.toName}? Balances update immediately.`, 'Record payment'))) return;
+  try {
+    await api.post(`/upsert/groups/${groupId}/settle`, null, {
+      params: { fromUserId: btn.dataset.from, toUserId: btn.dataset.to },
+    });
+    toast('Payment recorded', 'success');
+    await loadGroupDetail(groupId, userId, { preserveView: true });
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function settleAll(groupId, userId, myDebts) {
+  if (!myDebts.length) return;
+  if (!(await confirmModal('Settle all',
+    `Record ${myDebts.length} payment${myDebts.length === 1 ? '' : 's'} to clear your balance in this group?`, 'Settle all'))) return;
+  try {
+    for (const d of myDebts) {
+      await api.post(`/upsert/groups/${groupId}/settle`, null, {
+        params: { fromUserId: d.fromUserId, toUserId: d.toUserId },
+      });
+    }
+    toast('All settled', 'success');
+    await loadGroupDetail(groupId, userId, { preserveView: true });
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function wireSettlementButtons(groupId, userId) {
+  document.querySelectorAll('.settle-btn').forEach(btn => {
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = '1';
+    btn.addEventListener('click', () => recordSettlement(groupId, userId, btn));
+  });
+}
+
+function wireGroupMenu(group, groupId, userId) {
+  const hide = () => { const m = document.getElementById('sp-group-menu'); if (m) m.hidden = true; };
+
+  document.getElementById('sp-edit-group')?.addEventListener('click', () => {
+    hide(); editGroupModal(group, userId);
+  });
+
+  document.getElementById('sp-archive-group')?.addEventListener('click', async () => {
+    hide();
+    if (!(await confirmModal(`${group.isArchived ? 'Unarchive' : 'Archive'} group`,
+      group.isArchived ? 'This group will return to your active list.' : 'This group will move to your archived list.',
+      group.isArchived ? 'Unarchive' : 'Archive'))) return;
+    try {
+      await api.put(`/upsert/groups/${groupId}/archive`, null, { params: { archive: !group.isArchived } });
+      toast(group.isArchived ? 'Group unarchived' : 'Group archived', 'success');
+      document.getElementById('sp-back').click();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+
+  document.getElementById('sp-leave-group')?.addEventListener('click', async () => {
+    hide();
+    if (!(await confirmModal('Leave group', 'You will stop seeing this group and its expenses.', 'Leave group'))) return;
+    try {
+      await api.delete(`/upsert/groups/${groupId}/members/${userId}`);
+      toast('Left group', 'info');
+      document.getElementById('sp-back').click();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+
+  document.getElementById('sp-delete-group')?.addEventListener('click', async () => {
+    hide();
+    if (!(await confirmModal('Delete group', 'This permanently deletes the group. Every expense must be settled first.', 'Delete group'))) return;
+    try {
+      await api.delete(`/upsert/groups/${groupId}`, { userId });
+      toast('Group deleted', 'success');
+      document.getElementById('sp-back').click();
+    } catch (err) { toast(err.message, 'error'); }
+  });
+}
+
+/* ── Expense details ────────────────────────────────────────────────────── */
 function openExpenseDetailsModal(e, groupId, userId, members = []) {
-  openModal('Expense Details', `
+  openModal(e.description || 'Expense', `
     <div class="modal-amount-hero">
-      <div class="amount-value" style="color:var(--text)">${formatCurrency(e.amount, e.currency || 'INR')}</div>
-      <div class="amount-name">${esc(e.description)}</div>
-      <div class="amount-date">Paid by @${esc(e.paidByName || e.paidBy)}</div>
+      <div class="amount-value">${formatMoney(e.amount, e.currency || Auth.getDefaultCurrency())}</div>
+      <div class="amount-name">${esc(e.description || 'Expense')}</div>
+      <div class="amount-date">Paid by ${esc(displayName(e.paidByName || e.paidBy))}</div>
     </div>
 
     <div class="modal-detail-panel">
-      <div class="modal-detail-row"><span class="detail-label">Split Type</span><span class="detail-value">${esc(splitTypeLabel(e.splitType))}</span></div>
-      <div class="modal-detail-row"><span class="detail-label">Category</span><span class="detail-value">${esc(e.expenseCategory || 'Others')}</span></div>
+      <div class="modal-detail-row"><span class="detail-label">Split</span><span class="detail-value">${esc(splitTypeLabel(e.splitType))}</span></div>
+      <div class="modal-detail-row"><span class="detail-label">Category</span><span class="detail-value">${esc(formatCategory(e.expenseCategory || 'OTHERS'))}</span></div>
+      ${e.expenseDate || e.createdAt ? `<div class="modal-detail-row"><span class="detail-label">Date</span><span class="detail-value">${esc(formatDate(e.expenseDate || e.createdAt))}</span></div>` : ''}
       ${e.receiptUrl ? `
         <div class="modal-detail-row detail-block">
           <span class="detail-label">Receipt</span>
-          <div style="margin-top:4px">
-            ${e.receiptUrl.toLowerCase().endsWith('.pdf') 
-              ? `<div style="cursor:pointer;padding:16px;background:var(--bg-input);border-radius:var(--radius-sm);border:1px solid var(--border);display:flex;align-items:center;gap:12px;" onclick="event.stopPropagation();window.openReceiptLightbox('${esc(e.receiptUrl)}')">
-                  ${icon('document', 'lg')}
-                  <span style="font-size:0.9rem;color:var(--text);">Click to view PDF receipt</span>
-                </div>`
-              : `<div style="cursor:pointer;" onclick="event.stopPropagation();window.openReceiptLightbox('${esc(e.receiptUrl)}')">
-                  <img src="${esc(e.receiptUrl)}" style="max-width:100%;max-height:180px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block">
-                </div>`
-            }
+          <div style="margin-top:6px">
+            ${e.receiptUrl.toLowerCase().endsWith('.pdf')
+              ? `<button type="button" class="btn btn-secondary" onclick="window.openReceiptLightbox('${esc(e.receiptUrl)}')">${icon('document', 'sm')} Open PDF receipt</button>`
+              : `<button type="button" style="padding:0;border:0;background:none" onclick="window.openReceiptLightbox('${esc(e.receiptUrl)}')"><img src="${esc(e.receiptUrl)}" alt="Receipt" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--line);display:block"></button>`}
           </div>
         </div>` : ''}
     </div>
 
-    <div style="display:flex;gap:10px">
+    <div style="display:flex;gap:10px;margin-top:var(--s4)">
       <button class="btn btn-secondary" id="m-edit-exp-btn" style="flex:1">${icon('edit', 'sm')} Edit</button>
       <button class="btn btn-danger" id="m-del-exp-btn" style="flex:1">${icon('trash', 'sm')} Delete</button>
     </div>
@@ -684,15 +749,13 @@ function openExpenseDetailsModal(e, groupId, userId, members = []) {
 
   document.getElementById('m-edit-exp-btn').onclick = async () => {
     document.querySelector('.modal-overlay').click();
-    // GET /upsert/groups/{id} returns the group only (no members), so use the
-    // members already loaded with the group, falling back to its endpoint.
     let eligible = members.filter(m => m.status === 'ACCEPTED');
     if (!eligible.length) {
       try {
         const raw = await api.get(`/upsert/groups/${groupId}/members`);
         eligible = raw.filter(m => m.status === 'ACCEPTED');
-      } catch (err) {
-        toast('Failed to load group members', 'error');
+      } catch {
+        toast('Could not load group members', 'error');
         return;
       }
     }
@@ -700,7 +763,7 @@ function openExpenseDetailsModal(e, groupId, userId, members = []) {
   };
 
   document.getElementById('m-del-exp-btn').onclick = async () => {
-    if (!(await confirmModal('Delete Expense', 'Are you sure you want to delete this shared expense?', 'Delete'))) return;
+    if (!(await confirmModal('Delete expense', 'This shared expense will be removed for everyone in the group.', 'Delete'))) return;
     try {
       await api.delete(`/upsert/groups/${groupId}/expenses/${e.id}`, { userId });
       toast('Expense deleted', 'success');
@@ -710,133 +773,61 @@ function openExpenseDetailsModal(e, groupId, userId, members = []) {
   };
 }
 
+/* ── Members ────────────────────────────────────────────────────────────── */
 function viewMembersModal(members, groupId, userId) {
-  openModal('Group Members', `
-    <div style="margin-bottom: 20px; max-height: 400px; overflow-y: auto;">
-      ${members.map((m, i) => `<div class="member-row" data-index="${i}" style="padding:12px; border-bottom:1px solid var(--border-light); display:flex; justify-content:space-between; align-items:center; cursor:pointer; transition: background 0.2s;" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background='transparent'">
-        <div style="display:flex; align-items:center; gap:8px;">${avatar(m.name, 28, m.profilePicture)}<span style="font-size:1.05rem; font-weight:500;">@${esc(m.name)}</span></div>
-        ${m.status === 'PENDING' ? '<span class="badge badge-warning" style="font-size:.68rem">Pending</span>' : '<span class="badge badge-success" style="font-size:.68rem; background:var(--accent-g); color:#000;">Accepted</span>'}
-      </div>`).join('')}
+  openModal('Group members', `
+    <div style="margin-bottom:var(--s4);max-height:400px;overflow-y:auto">
+      ${members.map(m => `
+        <div class="member-row">
+          <div class="member-name">${avatar(m.displayName || m.name, 28, m.profilePicture)}<span>${esc(m.displayName || displayName(m.name))}</span></div>
+          ${m.status === 'PENDING' ? chip('Pending', 'warn') : chip('Accepted', 'pos')}
+        </div>`).join('')}
     </div>
-    <button class="btn btn-secondary" style="width:100%" id="vm-add-member">+ Add Member</button>
-  `, {
-    onSubmit: () => {}
-  });
-  
-  // Wait for modal to render
+    <button class="btn btn-secondary" style="width:100%" id="vm-add-member">${icon('user-plus', 'sm')} Add member</button>
+  `);
+
   setTimeout(() => {
     document.getElementById('vm-add-member').onclick = () => {
       document.querySelector('.modal-close').click();
       addMemberModal(groupId, userId);
     };
-    
-    document.querySelectorAll('.member-row').forEach(row => {
-      row.onclick = () => {
-        const index = parseInt(row.getAttribute('data-index'));
-        const member = members[index];
-        document.querySelector('.modal-close').click();
-        viewMemberProfileModal(member, members, groupId, userId);
-      };
-    });
-  }, 50);
-}
-
-function viewMemberProfileModal(member, members, groupId, userId) {
-  const isMe = member.userId === userId;
-  openModal('Member Profile', `
-    <div style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:10px 10px 30px 10px;text-align:center;">
-      <div style="position:relative;">
-        ${member.profilePicture 
-          ? `<img src="${member.profilePicture}" style="width:160px;height:160px;border-radius:50%;object-fit:cover;box-shadow:0 8px 24px rgba(0,0,0,0.2);" />` 
-          : `<div style="width:160px;height:160px;border-radius:50%;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;font-size:3.5rem;color:var(--text-dim);box-shadow:0 8px 24px rgba(0,0,0,0.2);">${(member.name || 'U')[0].toUpperCase()}</div>`
-        }
-      </div>
-      <div>
-        <h2 style="margin-bottom:4px; font-size:1.6rem;">@${esc(member.name)}</h2>
-        <div style="color:var(--text-dim); font-size:1.05rem;">${esc(member.email || 'No email available')}</div>
-      </div>
-      
-      <div style="width:100%; max-width:300px; margin-top:16px;">
-        <div style="display:flex; justify-content:space-between; padding:12px; border-bottom:1px solid var(--border-light);">
-          <span style="color:var(--text-dim);">Status</span>
-          <span style="font-weight:600;">${member.status}</span>
-        </div>
-      </div>
-    </div>
-    
-    <div style="display:flex; gap:12px;">
-      <button class="btn btn-secondary" style="flex:1" id="vmp-back">Back to Members</button>
-      ${isMe ? '' : '<button class="btn btn-primary" style="flex:1" disabled title="Coming soon">Send Money</button>'}
-    </div>
-  `, {
-    onSubmit: () => {}
-  });
-
-  setTimeout(() => {
-    document.getElementById('vmp-back').onclick = () => {
-      document.querySelector('.modal-close').click();
-      viewMembersModal(members, groupId, userId);
-    };
-  }, 50);
+  }, 20);
 }
 
 function editGroupModal(group, userId) {
-  openModal('Edit Group', `
+  openModal('Edit group', `
     <form id="eg-form">
-      <div class="form-group"><label for="eg-name">Group Name</label><input class="form-input" id="eg-name" required maxlength="100" value="${esc(group.name)}"></div>
+      <div class="form-group"><label for="eg-name">Group name</label><input class="form-input" id="eg-name" required maxlength="100" value="${esc(group.name)}"></div>
       <div class="form-group"><label for="eg-desc">Description</label><textarea class="form-textarea" id="eg-desc" maxlength="300">${esc(group.description || '')}</textarea></div>
-      <div class="form-group"><label for="eg-currency">Currency</label><input class="form-input" id="eg-currency" value="${esc(group.currency || 'INR')}" maxlength="3" required></div>
-
-      ${modalActions('Cancel', 'Save Changes')}
+      <div class="form-group"><label for="eg-currency">Currency</label><select class="form-select" id="eg-currency">${currencyOptionHtml(group.currency || 'INR')}</select></div>
+      ${modalActions('Cancel', 'Save changes')}
     </form>`, {
     onSubmit: async () => {
       await api.put(`/upsert/groups/${group.id}`, {
         name: document.getElementById('eg-name').value.trim(),
         description: document.getElementById('eg-desc').value.trim() || undefined,
-        currency: document.getElementById('eg-currency').value.trim().toUpperCase()
+        currency: document.getElementById('eg-currency').value.trim().toUpperCase(),
       });
       toast('Group updated', 'success');
       loadGroupDetail(group.id, userId);
     }
   });
-
-  setTimeout(() => {
-      document.getElementById('eg-archive-btn').onclick = async () => {
-          if (!(await confirmModal('Archive Group', 'Are you sure you want to archive this group? It will be hidden from the active list.', 'Archive'))) return;
-          try {
-              await api.put(`/upsert/groups/${group.id}/archive`, null, { params: { archive: true } });
-              toast('Group archived status updated', 'success');
-              document.querySelector('.modal-close').click();
-              loadGroups(userId); // reload groups list to show/hide it
-          } catch (err) { toast(err.message, 'error'); }
-      };
-
-      document.getElementById('eg-delete-btn').onclick = async () => {
-          if (!(await confirmModal('Delete Group', 'Are you sure you want to PERMANENTLY delete this group? All expenses must be settled.', 'Delete'))) return;
-          try {
-              await api.delete(`/upsert/groups/${group.id}`, { userId });
-              toast('Group deleted', 'success');
-              document.querySelector('.modal-close').click();
-              document.getElementById('sp-back').click(); // Go back to list
-          } catch (err) { toast(err.message, 'error'); }
-      };
-  }, 50);
 }
 
 function createGroupModal(userId) {
-  openModal('Create Group', `
+  openModal('New group', `
     <form id="cg-form">
-      <div class="form-group"><label for="cg-name">Group Name</label><input class="form-input" id="cg-name" required maxlength="100"></div>
-      <div class="form-group"><label for="cg-desc">Description</label><textarea class="form-textarea" id="cg-desc" maxlength="300"></textarea></div>
-      <div class="form-group"><label for="cg-currency">Currency</label><input class="form-input" id="cg-currency" value="INR" maxlength="3" required></div>
-      ${modalActions('Cancel', 'Create')}
+      <div class="form-group"><label for="cg-name">Group name</label><input class="form-input" id="cg-name" required maxlength="100" placeholder="e.g. Office lunch crew"></div>
+      <div class="form-group"><label for="cg-desc">Description (optional)</label><textarea class="form-textarea" id="cg-desc" maxlength="300"></textarea></div>
+      <div class="form-group"><label for="cg-currency">Currency</label><select class="form-select" id="cg-currency">${currencyOptionHtml(Auth.getDefaultCurrency())}</select></div>
+      ${modalActions('Cancel', 'Create group')}
     </form>`, {
     onSubmit: async () => {
       await api.post('/upsert/groups', {
         name: document.getElementById('cg-name').value.trim(),
         description: document.getElementById('cg-desc').value.trim() || undefined,
         createdBy: userId,
-        currency: document.getElementById('cg-currency').value.trim().toUpperCase()
+        currency: document.getElementById('cg-currency').value.trim().toUpperCase(),
       });
       toast('Group created', 'success');
       loadGroups(userId);
@@ -845,29 +836,23 @@ function createGroupModal(userId) {
 }
 
 function addMemberModal(groupId, userId) {
-  openModal('Add Member', `
+  openModal('Add member', `
     <form id="am-form">
       <div class="form-group">
         <label for="am-search">Search by username or email</label>
-        <input class="form-input" id="am-search" placeholder="Type to search registered users…" autocomplete="off" required>
+        <input class="form-input" id="am-search" placeholder="Type at least 2 characters…" autocomplete="off" required>
         <div id="am-results" class="user-search-results" hidden></div>
         <input type="hidden" id="am-uid">
         <input type="hidden" id="am-name">
-        <p id="am-selected" style="font-size:.82rem;color:var(--text-dim);margin-top:8px"></p>
+        <p id="am-selected" class="meta" style="margin-top:8px"></p>
       </div>
-      ${modalActions('Cancel', 'Add')}
+      ${modalActions('Cancel', 'Add member')}
     </form>`, {
     onSubmit: async () => {
       const memberId = document.getElementById('am-uid').value;
       const memberName = document.getElementById('am-name').value;
-      if (!memberId) {
-        toast('Select a registered user from the search results', 'error');
-        throw new Error('No user selected');
-      }
-      await api.post(`/upsert/groups/${groupId}/members`, {
-        userId: memberId,
-        name: memberName
-      });
+      if (!memberId) throw new Error('Select a registered user from the search results');
+      await api.post(`/upsert/groups/${groupId}/members`, { userId: memberId, name: memberName });
       toast('Member added', 'success');
       loadGroupDetail(groupId, userId);
     }
@@ -877,8 +862,7 @@ function addMemberModal(groupId, userId) {
   const resultsEl = document.getElementById('am-results');
   const selectedEl = document.getElementById('am-selected');
   let debounceTimer = null;
-
-  let currentPage = 0;
+  let searchPage = 0;
 
   const performSearch = async (append = false) => {
     const q = searchInput.value.trim();
@@ -887,63 +871,44 @@ function addMemberModal(groupId, userId) {
       resultsEl.innerHTML = '';
       return;
     }
-    
     try {
       const limit = 8;
-      const users = await api.get('/auth/users/search', { q, limit, page: currentPage });
-      
-      const renderUser = u => `
+      const users = await api.get('/auth/users/search', { q, limit, page: searchPage });
+      const loadMoreBtn = document.getElementById('am-load-more');
+      if (loadMoreBtn) loadMoreBtn.remove();
+
+      const html = users.map(u => `
         <button type="button" class="user-search-item" data-id="${esc(u.userId)}" data-name="${esc(u.username)}">
-          <strong>@${esc(u.username)}</strong>
+          <strong>${esc(displayName(u.username))}</strong>
           <span>${esc(u.email)}</span>
-        </button>`;
+        </button>`).join('');
 
-      if (!users.length && !append) {
-        resultsEl.innerHTML = '<div class="user-search-empty">No users found</div>';
-      } else {
-        const loadMoreBtn = document.getElementById('am-load-more');
-        if (loadMoreBtn) loadMoreBtn.remove(); // Remove existing load more button before appending
-        
-        const html = users.map(renderUser).join('');
-        if (append) {
-          resultsEl.insertAdjacentHTML('beforeend', html);
-        } else {
-          resultsEl.innerHTML = html;
-        }
+      if (!users.length && !append) resultsEl.innerHTML = '<div class="user-search-empty">No users found</div>';
+      else if (append) resultsEl.insertAdjacentHTML('beforeend', html);
+      else resultsEl.innerHTML = html;
 
-        // Re-attach click listeners
-        resultsEl.querySelectorAll('.user-search-item').forEach(btn => {
-          btn.onclick = () => {
-            document.getElementById('am-uid').value = btn.dataset.id;
-            document.getElementById('am-name').value = btn.dataset.name;
-            searchInput.value = `@${btn.dataset.name}`;
-            selectedEl.textContent = `Selected: @${btn.dataset.name}`;
-            resultsEl.hidden = true;
-          };
-        });
+      resultsEl.querySelectorAll('.user-search-item').forEach(btn => {
+        btn.onclick = () => {
+          document.getElementById('am-uid').value = btn.dataset.id;
+          document.getElementById('am-name').value = btn.dataset.name;
+          searchInput.value = displayName(btn.dataset.name);
+          selectedEl.textContent = `Selected: ${displayName(btn.dataset.name)}`;
+          resultsEl.hidden = true;
+        };
+      });
 
-        // Add "Load More" button if we got a full page
-        if (users.length === limit) {
-          resultsEl.insertAdjacentHTML('beforeend', `
-            <button type="button" id="am-load-more" class="user-search-item" style="justify-content: center; color: var(--primary);">
-              Load More
-            </button>
-          `);
-          document.getElementById('am-load-more').onclick = () => {
-            currentPage++;
-            document.getElementById('am-load-more').textContent = 'Loading...';
-            performSearch(true);
-          };
-        }
+      if (users.length === limit) {
+        resultsEl.insertAdjacentHTML('beforeend', '<button type="button" id="am-load-more" class="user-search-item" style="align-items:center;color:var(--brand)">Load more</button>');
+        document.getElementById('am-load-more').onclick = () => {
+          searchPage++;
+          document.getElementById('am-load-more').textContent = 'Loading…';
+          performSearch(true);
+        };
       }
       resultsEl.hidden = false;
     } catch (e) {
-      if (!append) {
-        resultsEl.innerHTML = `<div class="user-search-empty">${esc(e.message)}</div>`;
-        resultsEl.hidden = false;
-      } else {
-        toast(e.message, 'error');
-      }
+      resultsEl.innerHTML = `<div class="user-search-empty">${esc(e.message)}</div>`;
+      resultsEl.hidden = false;
     }
   };
 
@@ -952,13 +917,14 @@ function addMemberModal(groupId, userId) {
     document.getElementById('am-uid').value = '';
     document.getElementById('am-name').value = '';
     selectedEl.textContent = '';
-    currentPage = 0;
+    searchPage = 0;
     debounceTimer = setTimeout(() => performSearch(false), 300);
   };
 }
 
+/* ── Shared expense form ────────────────────────────────────────────────── */
 function splitTypeLabel(type) {
-  const map = { EQUAL: 'Equal', PERCENTAGE: 'Percentage', EXACT: 'By amount' };
+  const map = { EQUAL: 'Equal', PERCENTAGE: 'Percentage', EXACT: 'By amount', SETTLEMENT: 'Payment' };
   return map[(type || 'EQUAL').toUpperCase()] || 'Equal';
 }
 
@@ -968,99 +934,94 @@ function activityTypeLabel(type) {
     MEMBER_ADDED: 'Member added',
     EXPENSE_ADDED: 'Expense added',
     EXPENSE_DELETED: 'Expense deleted',
-    SETTLEMENT_RECORDED: 'Settlement'
+    SETTLEMENT_RECORDED: 'Settlement',
   };
   return map[(type || '').toUpperCase()] || type || 'Activity';
 }
 
 function editExpense(e, groupId, userId, members) {
-  addExpenseModal(groupId, members, userId, e);
+  addExpenseModal(groupId, members, userId, e, e.currency);
 }
 
-function addExpenseModal(groupId, members, userId, initialData = null) {
+function addExpenseModal(groupId, members, userId, initialData = null, groupCurrency = null) {
   if (!members.length) {
-    toast('Add at least one member before creating an expense', 'error');
+    toast('Add a member before creating an expense', 'error');
     return;
   }
-  
+
   const isEdit = !!(initialData && initialData.id);
   const defaultDesc = initialData ? esc(initialData.description) : '';
   const defaultAmt = initialData && initialData.amount ? initialData.amount : '';
-  const defaultCur = initialData && initialData.currency ? esc(initialData.currency) : 'INR';
-  const defaultDate = initialData && initialData.date ? esc(initialData.date) : '';
+  const defaultCur = initialData && initialData.currency ? esc(initialData.currency) : (groupCurrency || Auth.getDefaultCurrency());
+  const defaultDate = initialData && (initialData.expenseDate || initialData.createdAt)
+    ? esc(String(initialData.expenseDate || initialData.createdAt).split('T')[0]) : '';
   const defaultReceipt = initialData && initialData.receiptUrl ? esc(initialData.receiptUrl) : '';
-  const hasReceipt = !!(defaultReceipt);
-  const defaultPaidBy = initialData && initialData.paidBy ? initialData.paidBy : '';
+  const hasReceipt = !!defaultReceipt;
+  const defaultPaidBy = initialData && initialData.paidBy ? initialData.paidBy : userId;
   const defaultSplitType = initialData && initialData.splitType ? initialData.splitType : 'EQUAL';
   const defaultCategory = initialData && initialData.expenseCategory ? initialData.expenseCategory : 'OTHERS';
-  const SPLIT_CATS = EXPENSE_CATS;
-  const splitCatOptions = categoryOptions;
 
-  openModal(isEdit ? 'Edit Shared Expense' : 'Add Shared Expense', `
+  openModal(isEdit ? 'Edit shared expense' : 'Add shared expense', `
     <form id="ae-form">
       <div class="form-row">
-        <div class="form-group" style="flex:2"><label for="ae-desc">Description</label><input class="form-input" id="ae-desc" required maxlength="100" value="${defaultDesc}" placeholder="e.g. Dinner, Groceries"></div>
+        <div class="form-group" style="flex:2"><label for="ae-desc">Description</label><input class="form-input" id="ae-desc" required maxlength="100" value="${defaultDesc}" placeholder="e.g. Dinner, groceries"></div>
         <div class="form-group" style="flex:1"><label for="ae-amt">Amount</label><input class="form-input" id="ae-amt" type="text" inputmode="decimal" required value="${defaultAmt}" placeholder="0.00"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label for="ae-paid">Paid By</label>
+        <div class="form-group"><label for="ae-paid">Paid by</label>
           <select class="form-select" id="ae-paid" required>
-            ${members.map(m => `<option value="${m.userId}" ${defaultPaidBy === m.userId ? 'selected' : ''}>@${esc(m.name)}</option>`).join('')}
+            ${members.map(m => `<option value="${m.userId}" ${defaultPaidBy === m.userId ? 'selected' : ''}>${esc(m.displayName || displayName(m.name))}</option>`).join('')}
           </select>
         </div>
-        <div class="form-group"><label for="ae-currency">Currency</label><input class="form-input" id="ae-currency" value="${defaultCur}" maxlength="3" required></div>
+        <div class="form-group"><label for="ae-currency">Currency</label><select class="form-select" id="ae-currency" required>${currencyOptionHtml(defaultCur)}</select></div>
         <div class="form-group"><label for="ae-date">Date</label><input class="form-input" id="ae-date" type="date" value="${defaultDate}"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label for="ae-split-type">Split Type</label>
+        <div class="form-group"><label for="ae-split-type">Split</label>
           <select class="form-select" id="ae-split-type">
-            <option value="EQUAL" ${defaultSplitType === 'EQUAL' ? 'selected' : ''}>Split equally</option>
+            <option value="EQUAL" ${defaultSplitType === 'EQUAL' ? 'selected' : ''}>Equally</option>
             <option value="PERCENTAGE" ${defaultSplitType === 'PERCENTAGE' ? 'selected' : ''}>By percentage</option>
             <option value="EXACT" ${defaultSplitType === 'EXACT' ? 'selected' : ''}>By exact amount</option>
           </select>
         </div>
         <div class="form-group"><label for="ae-cat">Category</label>
-          <select class="form-select" id="ae-cat">
-            ${SPLIT_CATS.length ? splitCatOptions(SPLIT_CATS, defaultCategory) : '<option value="OTHERS">Others</option>'}
-          </select>
+          <select class="form-select" id="ae-cat">${categoryOptions(EXPENSE_CATS, defaultCategory)}</select>
         </div>
       </div>
       <div id="ae-split-details" hidden></div>
       <div class="form-group" style="margin-top:4px">
-        <label>Receipt / Bill</label>
+        <label>Receipt or bill</label>
         <div id="ae-receipt-preview" class="receipt-preview-wrap" style="display:${hasReceipt ? 'block' : 'none'}">
-          ${hasReceipt ? `<img src="${defaultReceipt}"><button type="button" class="receipt-remove" id="ae-receipt-remove" title="Remove">×</button>` : ''}
+          ${hasReceipt ? `<img src="${defaultReceipt}" alt="Receipt"><button type="button" class="receipt-remove" id="ae-receipt-remove" aria-label="Remove receipt">×</button>` : ''}
         </div>
         <label id="ae-receipt-upload" class="receipt-upload-zone" style="display:${hasReceipt ? 'none' : 'flex'}" for="ae-receipt-file">
           ${icon('upload', 'sm')}
-          <span class="upload-label">Click to upload receipt or bill</span>
-          <span class="upload-hint">Image or PDF, max 10 MB</span>
+          <span class="upload-label">Choose a receipt</span>
+          <span class="upload-hint">Image or PDF, up to 10 MB</span>
           <input type="file" id="ae-receipt-file" accept="image/*,application/pdf">
         </label>
         <input type="hidden" id="ae-receipt-url" value="${defaultReceipt}">
       </div>
-      ${modalActions('Cancel', isEdit ? 'Update Expense' : 'Add Expense')}
+      ${modalActions('Cancel', isEdit ? 'Save changes' : 'Add expense')}
     </form>`, {
     onSubmit: async () => {
       const splitType = document.getElementById('ae-split-type').value;
       const amount = parseFloat(document.getElementById('ae-amt').value);
       const expenseDate = document.getElementById('ae-date').value;
-      
+
       const submitBtn = document.querySelector('#ae-form button[type="submit"]');
       const fileInput = document.getElementById('ae-receipt-file');
       if (fileInput && fileInput.files.length > 0) {
         submitBtn.disabled = true;
         const originalText = submitBtn.textContent;
-        submitBtn.innerHTML = '<span class="spinner"></span> Uploading...';
+        submitBtn.innerHTML = '<span class="spinner"></span> Uploading…';
         try {
           const fd = new FormData();
           fd.append('file', fileInput.files[0]);
           const upRes = await api.upload(`/receipt/upload/${userId}`, fd);
-          if (upRes && upRes.url) {
-             document.getElementById('ae-receipt-url').value = upRes.url;
-          }
+          if (upRes && upRes.url) document.getElementById('ae-receipt-url').value = upRes.url;
         } catch (e) {
-          toast('Failed to upload receipt: ' + e.message, 'error');
+          toast('Could not upload the receipt: ' + e.message, 'error');
           submitBtn.disabled = false;
           submitBtn.textContent = originalText;
           return;
@@ -1070,45 +1031,40 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
 
       const payload = {
         description: document.getElementById('ae-desc').value.trim(),
-        amount: amount,
+        amount,
         currency: document.getElementById('ae-currency').value.trim().toUpperCase(),
         paidBy: document.getElementById('ae-paid').value,
-        splitType: splitType,
+        splitType,
         expenseCategory: document.getElementById('ae-cat')?.value || 'OTHERS',
-        receiptUrl: document.getElementById('ae-receipt-url').value || null
+        receiptUrl: document.getElementById('ae-receipt-url').value || null,
       };
-      
+
       let timeStr = '00:00:00';
       let isoDate = null;
       if (expenseDate) {
         const today = new Date();
         const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
         if (expenseDate === todayStr) {
-          timeStr = String(today.getHours()).padStart(2, '0') + ':' + 
-                    String(today.getMinutes()).padStart(2, '0') + ':' + 
+          timeStr = String(today.getHours()).padStart(2, '0') + ':' +
+                    String(today.getMinutes()).padStart(2, '0') + ':' +
                     String(today.getSeconds()).padStart(2, '0');
         }
         isoDate = new Date(`${expenseDate}T${timeStr}`).toISOString();
       }
-
-      if (isoDate) {
-         payload.expenseDate = isoDate;
-      }
+      if (isoDate) payload.expenseDate = isoDate;
 
       if (splitType === 'PERCENTAGE' || splitType === 'EXACT') {
         const splitDetails = members.map(m => ({
           userId: m.userId,
           userName: m.name,
-          value: parseFloat(document.getElementById(`ae-split-${m.userId}`).value) || 0
+          value: parseFloat(document.getElementById(`ae-split-${m.userId}`).value) || 0,
         }));
         const total = splitDetails.reduce((sum, d) => sum + d.value, 0);
         if (splitType === 'PERCENTAGE' && Math.abs(total - 100) > 0.0001) {
-          toast('Percentages must add up to 100%', 'error');
-          throw new Error('Invalid percentage split');
+          throw new Error('Percentages must add up to 100%');
         }
         if (splitType === 'EXACT' && Math.abs(total - amount) > 0.0001) {
-          toast(`Exact amounts must add up to ${amount}`, 'error');
-          throw new Error('Invalid exact split');
+          throw new Error(`Exact amounts must add up to ${formatMoney(amount, payload.currency)}`);
         }
         payload.splitDetails = splitDetails;
       }
@@ -1116,7 +1072,7 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
       if (isEdit) {
         payload.id = initialData.id;
         await api.put(`/upsert/groups/${groupId}/expenses/${initialData.id}`, payload);
-        toast('Expense updated', 'success');
+        toast('Saved', 'success');
       } else {
         await api.post(`/upsert/groups/${groupId}/expenses`, payload);
         toast('Expense added', 'success');
@@ -1129,16 +1085,13 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
   const splitDetailsEl = document.getElementById('ae-split-details');
   const amountInput = document.getElementById('ae-amt');
 
-  const rmReceiptBtn = document.getElementById('ae-receipt-remove');
-  if (rmReceiptBtn) {
-    rmReceiptBtn.onclick = () => {
-      document.getElementById('ae-receipt-preview').style.display = 'none';
-      document.getElementById('ae-receipt-upload').style.display = 'flex';
-      document.getElementById('ae-receipt-url').value = '';
-      const fileInput = document.getElementById('ae-receipt-file');
-      if (fileInput) fileInput.value = '';
-    };
-  }
+  document.getElementById('ae-receipt-remove')?.addEventListener('click', () => {
+    document.getElementById('ae-receipt-preview').style.display = 'none';
+    document.getElementById('ae-receipt-upload').style.display = 'flex';
+    document.getElementById('ae-receipt-url').value = '';
+    const fileInput = document.getElementById('ae-receipt-file');
+    if (fileInput) fileInput.value = '';
+  });
 
   const receiptFile = document.getElementById('ae-receipt-file');
   if (receiptFile) {
@@ -1149,36 +1102,24 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
       const uploadZone = document.getElementById('ae-receipt-upload');
       const isPdf = file.type === 'application/pdf';
       const isImage = file.type.startsWith('image/');
-      
+
       let previewContent = '';
       let objectUrl = null;
-      
+
       if (isImage) {
         objectUrl = URL.createObjectURL(file);
         previewContent = `<img src="${objectUrl}" alt="Receipt preview">`;
       } else if (isPdf) {
-        previewContent = `
-          <div class="receipt-pdf-preview">
-            ${icon('document', 'lg')}
-            <span>${esc(file.name)}</span>
-            <small>PDF Document</small>
-          </div>
-        `;
+        previewContent = `<div class="receipt-pdf-preview">${icon('document', 'lg')}<span>${esc(file.name)}</span><small>PDF document</small></div>`;
       } else {
-        previewContent = `
-          <div class="receipt-file-preview">
-            ${icon('file', 'lg')}
-            <span>${esc(file.name)}</span>
-            <small>${file.type || 'Unknown file type'}</small>
-          </div>
-        `;
+        previewContent = `<div class="receipt-file-preview">${icon('file', 'lg')}<span>${esc(file.name)}</span><small>${esc(file.type || 'File')}</small></div>`;
       }
-      
-      preview.innerHTML = `${previewContent}<button type="button" class="receipt-remove" id="ae-receipt-remove" title="Remove">×</button>`;
+
+      preview.innerHTML = `${previewContent}<button type="button" class="receipt-remove" id="ae-receipt-remove" aria-label="Remove receipt">×</button>`;
       preview.style.display = 'block';
       uploadZone.style.display = 'none';
       document.getElementById('ae-receipt-url').value = '';
-      
+
       document.getElementById('ae-receipt-remove').onclick = () => {
         receiptFile.value = '';
         if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -1187,12 +1128,6 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
         document.getElementById('ae-receipt-url').value = '';
       };
     });
-  }
-
-  if (window.TomSelect) {
-    new TomSelect('#ae-paid', { create: false, controlInput: null, sortField: { field: 'text', direction: 'asc' } });
-    new TomSelect('#ae-split-type', { create: false, controlInput: null });
-    new TomSelect('#ae-cat', { create: false, placeholder: 'Search category…', maxOptions: 100 });
   }
 
   function defaultSplitValue(type, amount) {
@@ -1212,12 +1147,12 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
     const amount = parseFloat(amountInput.value) || 0;
     if (type === 'PERCENTAGE') {
       const ok = Math.abs(total - 100) <= 0.0001;
-      summary.textContent = `Total: ${total.toFixed(4)}% ${ok ? '' : '(must equal 100%)'}`;
-      summary.style.color = ok ? 'var(--accent-g)' : 'var(--accent)';
+      summary.textContent = `Total: ${total.toFixed(2)}% ${ok ? '' : '(must equal 100%)'}`;
+      summary.style.color = ok ? 'var(--pos)' : 'var(--neg)';
     } else {
       const ok = Math.abs(total - amount) <= 0.0001;
-      summary.textContent = `Total: ${formatCurrency(total)} ${ok ? '' : `(must equal ${formatCurrency(amount)})`}`;
-      summary.style.color = ok ? 'var(--accent-g)' : 'var(--accent)';
+      summary.textContent = `Total: ${formatMoney(total)} ${ok ? '' : `(must equal ${formatMoney(amount)})`}`;
+      summary.style.color = ok ? 'var(--pos)' : 'var(--neg)';
     }
   }
 
@@ -1239,11 +1174,10 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
         <label>${isPct ? 'Percentage per member' : 'Amount per member'}</label>
         ${members.map(m => `
           <div class="split-detail-row">
-            <span>@${esc(m.name)}</span>
+            <span>${esc(m.displayName || displayName(m.name))}</span>
             <div class="split-detail-input-wrap">
               <input class="form-input split-detail-input" id="ae-split-${m.userId}"
-                type="text" inputmode="decimal"
-                ${isPct ? 'max="100"' : ''} value="${defaultVal}" required>
+                type="text" inputmode="decimal" value="${defaultVal}" required>
               ${isPct ? '<span class="split-detail-suffix">%</span>' : ''}
             </div>
           </div>`).join('')}
@@ -1251,55 +1185,42 @@ function addExpenseModal(groupId, members, userId, initialData = null) {
       </div>`;
 
     const dirtyFlags = {};
-    
+
     function runAdjustment() {
-        const target = isPct ? 100 : (parseFloat(amountInput.value) || 0);
-        let dirtySum = 0;
-        let cleanCount = 0;
-        
+      const target = isPct ? 100 : (parseFloat(amountInput.value) || 0);
+      let dirtySum = 0;
+      let cleanCount = 0;
+
+      members.forEach(member => {
+        if (dirtyFlags[member.userId]) dirtySum += (parseFloat(document.getElementById(`ae-split-${member.userId}`).value) || 0);
+        else cleanCount++;
+      });
+
+      if (cleanCount > 0) {
+        const remainder = Math.max(0, target - dirtySum);
+        const perClean = Math.floor((remainder / cleanCount) * 10000) / 10000;
         members.forEach(member => {
-            if (dirtyFlags[member.userId]) {
-                dirtySum += (parseFloat(document.getElementById(`ae-split-${member.userId}`).value) || 0);
-            } else {
-                cleanCount++;
-            }
+          if (!dirtyFlags[member.userId]) document.getElementById(`ae-split-${member.userId}`).value = perClean;
         });
-        
-        if (cleanCount > 0) {
-            const remainder = Math.max(0, target - dirtySum);
-            const perClean = Math.floor((remainder / cleanCount) * 10000) / 10000;
-            
-            members.forEach(member => {
-                if (!dirtyFlags[member.userId]) {
-                    document.getElementById(`ae-split-${member.userId}`).value = perClean;
-                }
-            });
-            
-            const cleanMembers = members.filter(member => !dirtyFlags[member.userId]);
-            if (cleanMembers.length > 0) {
-                 const lastClean = cleanMembers[cleanMembers.length - 1];
-                 const othersSum = dirtySum + perClean * (cleanCount - 1);
-                 document.getElementById(`ae-split-${lastClean.userId}`).value = Math.max(0, Math.round((target - othersSum) * 10000) / 10000);
-            }
+        const cleanMembers = members.filter(member => !dirtyFlags[member.userId]);
+        if (cleanMembers.length > 0) {
+          const lastClean = cleanMembers[cleanMembers.length - 1];
+          const othersSum = dirtySum + perClean * (cleanCount - 1);
+          document.getElementById(`ae-split-${lastClean.userId}`).value = Math.max(0, Math.round((target - othersSum) * 10000) / 10000);
         }
-        updateSplitSummary();
+      }
+      updateSplitSummary();
     }
 
     members.forEach(m => {
       const inputEl = document.getElementById(`ae-split-${m.userId}`);
-      inputEl.addEventListener('input', (e) => {
-        dirtyFlags[m.userId] = true;
-        runAdjustment();
-      });
+      inputEl.addEventListener('input', () => { dirtyFlags[m.userId] = true; runAdjustment(); });
     });
-    
-    // Initial exact distribution
+
     runAdjustment();
 
     amountInput.oninput = () => {
-      if (splitTypeSelect.value === 'EXACT') {
-          runAdjustment();
-      }
+      if (splitTypeSelect.value === 'EXACT') runAdjustment();
     };
   }
 

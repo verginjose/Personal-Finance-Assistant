@@ -64,7 +64,7 @@ describe('renderDashboard', () => {
 
     await vi.waitFor(() => {
       expect(container.querySelector('#d-health-score')?.textContent).toBe('720');
-      expect(container.querySelectorAll('#d-kpis .figure').length).toBe(4);
+      expect(container.querySelector('#d-net')?.textContent).toBe('₹20,000.00');
     });
     expect(container.querySelector('#d-health-grade')?.textContent).toBe('Grade A');
     // The dashboard now surfaces totals; Analytics keeps the breakdowns.

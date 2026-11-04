@@ -33,13 +33,13 @@ describe('app shell navigation', () => {
   it('exposes every destination on desktop and mobile', () => {
     expect(document.querySelectorAll('#sidebar-nav a')).toHaveLength(8);
 
-    // Bottom bar: Home, Activity, (FAB), Analytics, More.
+    // Bottom bar: Dashboard, Transactions, (crucially, Add), Split, More.
     const barViews = [...document.querySelectorAll('#bottom-nav [data-view]')].map(a => a.dataset.view);
-    expect(barViews).toEqual(['dashboard', 'transactions', 'analytics']);
+    expect(barViews).toEqual(['dashboard', 'transactions', 'split']);
 
     // Everything else is grouped under More — including Bill Scanner.
     const moreViews = [...document.querySelectorAll('#more-menu-sheet [data-view]')].map(a => a.dataset.view);
-    expect(moreViews).toEqual(['bill-scanner', 'split', 'goals', 'subscriptions', 'profile']);
+    expect(moreViews).toEqual(['bill-scanner', 'analytics', 'subscriptions', 'goals', 'profile']);
   });
 
   it('highlights More while a grouped view is open', () => {
@@ -52,9 +52,8 @@ describe('app shell navigation', () => {
     expect(document.getElementById('mobile-more-btn').hasAttribute('aria-current')).toBe(false);
   });
 
-  it('opens the transaction form from the FAB "Add Expense" shortcut', async () => {
+  it('opens the transaction form from the mobile Add button', async () => {
     document.getElementById('mobile-fab').click();
-    document.getElementById('action-add-expense').click();
 
     await vi.waitFor(() => {
       expect(document.querySelector('.modal-overlay')).toBeTruthy();

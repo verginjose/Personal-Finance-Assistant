@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   esc,
   formatCurrency,
+  formatMoney,
+  formatCompact,
   formatCategory,
   formatDate,
   healthScoreColor,
@@ -34,8 +36,21 @@ describe('ui utilities', () => {
     expect(formatCurrency(99.5, 'USD')).toBe('$99.50');
   });
 
-  it('formats category labels', () => {
+  it('formats money with Indian grouping and a true minus sign', () => {
+    expect(formatMoney(-6327.59)).toBe('−₹6,327.59');
+    expect(formatMoney(190830)).toBe('₹1,90,830.00');
+  });
+
+  it('formats compact axis values', () => {
+    expect(formatCompact(0)).toBe('₹0');
+    expect(formatCompact(50000)).toBe('₹50K');
+    expect(formatCompact(120000)).toBe('₹1.2L');
+  });
+
+  it('formats category labels in sentence case', () => {
     expect(formatCategory('RESTAURANTS')).toBe('Restaurants');
+    expect(formatCategory('OTT_SUBSCRIPTIONS')).toBe('OTT subscriptions');
+    expect(formatCategory('CAB_AND_AUTO')).toBe('Cab and auto');
   });
 
   it('formats dates from ISO strings', () => {
@@ -44,15 +59,15 @@ describe('ui utilities', () => {
   });
 
   it('returns health score colors by threshold', () => {
-    expect(healthScoreColor(800)).toBe('var(--accent-g)');
-    expect(healthScoreColor(600)).toBe('var(--accent-y)');
-    expect(healthScoreColor(300)).toBe('var(--accent)');
+    expect(healthScoreColor(800)).toBe('var(--pos)');
+    expect(healthScoreColor(600)).toBe('var(--warn)');
+    expect(healthScoreColor(300)).toBe('var(--neg)');
   });
 
   it('returns budget status colors', () => {
-    expect(budgetStatusColor('EXCEEDED')).toBe('var(--accent)');
-    expect(budgetStatusColor('WARNING')).toBe('var(--accent-y)');
-    expect(budgetStatusColor('SAFE')).toBe('var(--accent-g)');
+    expect(budgetStatusColor('EXCEEDED')).toBe('var(--neg)');
+    expect(budgetStatusColor('WARNING')).toBe('var(--warn)');
+    expect(budgetStatusColor('SAFE')).toBe('var(--pos)');
   });
 
   it('builds page header HTML', () => {

@@ -1,8 +1,12 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110417';
-import { icon } from '../utils/icons.js?v=2026110417';
-import { esc, pageHeader, openModal, currencyOptionHtml } from '../utils/ui.js?v=2026110417';
+import { api, Auth, toast } from '../utils/api.js';
+import { icon } from '../utils/icons.js';
+import {
+  esc, pageHeader, openModal, currencyOptionHtml, formatMoney,
+  getThemePreference, setThemePreference, avatar,
+} from '../utils/ui.js';
+
 export async function renderProfile(container) {
-  const email = Auth.getEmail();
+  const email = Auth.getEmail() || '';
 
   let profilePicture = '';
   let currentUsername = '';
@@ -10,170 +14,195 @@ export async function renderProfile(container) {
   try {
     const me = await api.get('/auth/me');
     profilePicture = me.profilePicture || '';
-    currentUsername = me.username || '';
+    currentUsername = me.username || me.name || '';
     defaultCurrency = me.defaultCurrency || defaultCurrency;
     Auth.setDefaultCurrency(defaultCurrency);
-  } catch (e) {
-    console.error('Failed to load profile', e);
-  }
+  } catch { /* render what we have */ }
 
-  const displayName = currentUsername || (email ? email.split('@')[0] : 'User');
-  const initial = (displayName || 'U')[0].toUpperCase();
+  const displayName = currentUsername || email.split('@')[0] || 'User';
 
   container.innerHTML = `
     ${pageHeader('Profile', '')}
-    <div class="profile-layout fade-up">
-      <div class="profile-main">
-      <section class="profile-hero" aria-label="Account overview">
-        <div class="profile-hero-aura" aria-hidden="true"></div>
-        <div class="profile-hero-body">
-          <div class="profile-avatar-wrap">
-            <div class="profile-avatar-lg" id="p-avatar" style="cursor:pointer;position:relative;overflow:hidden;${profilePicture ? `background-image:url('${profilePicture}')` : ''}" title="Click to change profile picture" role="button" tabindex="0" aria-label="Change profile picture">
-              ${profilePicture ? '' : initial}
-              <div class="avatar-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;color:#fff;pointer-events:none;">${icon('camera', 'sm')}</div>
-            </div>
-            <input type="file" id="p-avatar-upload" accept="image/*" hidden>
-          </div>
-          <div class="profile-identity">
-            <h2 class="profile-name">${esc(displayName)}</h2>
-            <p class="profile-email">${icon('mail', 'xs')} ${esc(email || '—')}</p>
-          </div>
+    <div class="profile-layout">
+      <section class="profile-section" aria-labelledby="p-account-heading">
+        <div class="profile-section-head">
+          <h2 id="p-account-heading">Account</h2>
+          <p>How you appear in groups and shared expenses.</p>
         </div>
-        <div class="profile-divider"></div>
-        <form id="p-username-form" class="profile-form">
+        <div class="profile-identity">
+          <button type="button" class="profile-avatar-lg" id="p-avatar"
+            ${profilePicture ? `style="background-image:url('${esc(profilePicture)}')"` : ''}
+            aria-label="Change profile picture" title="Change profile picture">
+            ${profilePicture ? '' : avatar(displayName, 64)}
+          </button>
+          <div>
+            <div class="profile-name">${esc(displayName)}</div>
+            <div class="profile-email">${icon('mail', 'xs')} ${esc(email || '—')}</div>
+          </div>
+          <input type="file" id="p-avatar-upload" accept="image/*" hidden>
+        </div>
+        <form id="p-name-form">
           <div class="profile-field">
             <label for="p-username">Display name</label>
-            <p class="profile-help">This is how you appear in groups and shared expenses. Use your real name so people recognise you.</p>
             <div class="profile-inline-form">
               <input class="form-input" id="p-username" type="text" value="${esc(currentUsername)}" placeholder="e.g. Nandini Chandra" required minlength="3" maxlength="50">
-              <button type="submit" class="btn btn-primary">Save</button>
+              <button type="submit" class="btn btn-primary" id="p-name-save" hidden>Save changes</button>
             </div>
+            <p class="profile-help">Use the name people will recognise in split expenses.</p>
           </div>
         </form>
       </section>
 
-        <section class="profile-panel">
-          <div class="profile-panel-head">
-            <div class="profile-panel-icon profile-panel-icon--warn">${icon('shield', 'sm')}</div>
-            <div>
-              <h3>Session</h3>
-              <p>Sign out from this device. Your data remains saved.</p>
-            </div>
+      <section class="profile-section" aria-labelledby="p-prefs-heading">
+        <div class="profile-section-head">
+          <h2 id="p-prefs-heading">Preferences</h2>
+          <p>Default currency, theme and number format.</p>
+        </div>
+        <div class="profile-field">
+          <label for="p-currency">Default currency</label>
+          <select class="form-select" id="p-currency">${currencyOptionHtml(defaultCurrency)}</select>
+          <p class="profile-help">Receipts and reports are converted to this currency.</p>
+        </div>
+        <div class="profile-field">
+          <span class="profile-field-label">Theme</span>
+          <div class="segmented" id="p-theme" role="group" aria-label="Theme">
+            <button type="button" class="segmented-item" data-theme-pref="system">System</button>
+            <button type="button" class="segmented-item" data-theme-pref="dark">Dark</button>
+            <button type="button" class="segmented-item" data-theme-pref="light">Light</button>
           </div>
-          <button class="btn btn-danger profile-submit" id="p-logout">${icon('log-out', 'sm')} Sign out</button>
-        </section>
-      </div>
+        </div>
+        <div class="profile-field">
+          <span class="profile-field-label">Number format</span>
+          <div class="profile-format-preview">${formatMoney(123456, defaultCurrency)}</div>
+          <p class="profile-help">Indian grouping, a true minus sign and tabular figures.</p>
+        </div>
+      </section>
 
-      <div class="profile-side">
-        <section class="profile-panel">
-          <div class="profile-panel-head">
-            <div class="profile-panel-icon">${icon('wallet', 'sm')}</div>
-            <div>
-              <h3>Default currency</h3>
-              <p>Receipts and reports are converted to this currency.</p>
-            </div>
-          </div>
-          <form id="p-currency-form" class="profile-form">
-            <div class="profile-field">
-              <label for="p-currency">Currency</label>
-              <div class="profile-inline-form">
-                <select class="form-select" id="p-currency">${currencyOptionHtml(defaultCurrency)}</select>
-                <button type="submit" class="btn btn-primary">Save</button>
-              </div>
-            </div>
-          </form>
-        </section>
+      <section class="profile-section" aria-labelledby="p-security-heading">
+        <div class="profile-section-head">
+          <h2 id="p-security-heading">Security</h2>
+          <p>Keep your account protected.</p>
+        </div>
+        <button class="btn btn-secondary" id="p-change-password">Change password</button>
+      </section>
 
-        <section class="profile-panel">
-          <div class="profile-panel-head">
-            <div class="profile-panel-icon">${icon('lock', 'sm')}</div>
-            <div>
-              <h3>Change password</h3>
-              <p>Use at least 8 characters. You'll stay signed in on this device.</p>
-            </div>
-          </div>
-          <form id="pw-form" class="profile-form">
-            <div class="profile-field">
-              <label for="pw-current">Current password</label>
-              <input class="form-input" id="pw-current" type="password" required minlength="8" autocomplete="current-password" placeholder="Enter current password">
-            </div>
-            <div class="profile-field">
-              <label for="pw-new">New password</label>
-              <input class="form-input" id="pw-new" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters">
-            </div>
-            <button type="submit" class="btn btn-primary profile-submit">Update password</button>
-          </form>
-        </section>
-      </div>
+      <section class="profile-section" aria-labelledby="p-session-heading">
+        <div class="profile-section-head">
+          <h2 id="p-session-heading">Session</h2>
+          <p>Sign out from this device. Your data stays saved.</p>
+        </div>
+        <button class="btn btn-ghost" id="p-logout">${icon('log-out', 'sm')} Sign out</button>
+      </section>
     </div>`;
 
-  document.getElementById('p-username-form').onsubmit = async (e) => {
+  const nameInput = document.getElementById('p-username');
+  const nameSave = document.getElementById('p-name-save');
+  nameInput.oninput = () => {
+    nameSave.hidden = nameInput.value.trim() === (currentUsername || '').trim();
+  };
+
+  document.getElementById('p-name-form').onsubmit = async (e) => {
     e.preventDefault();
+    const value = nameInput.value.trim();
     try {
-      await api.put('/auth/profile', {
-        username: document.getElementById('p-username').value
-      });
-      toast('Username updated successfully', 'success');
+      await api.put('/auth/profile', { username: value });
+      currentUsername = value;
+      localStorage.setItem('pfa_name', value);
+      nameSave.hidden = true;
+      const sidebarName = document.querySelector('.sidebar-user-name');
+      if (sidebarName) sidebarName.textContent = value;
+      toast('Saved', 'success');
     } catch (err) { toast(err.message, 'error'); }
   };
 
-  document.getElementById('p-currency-form').onsubmit = async (e) => {
-    e.preventDefault();
-    const currency = document.getElementById('p-currency').value;
+  const currencySelect = document.getElementById('p-currency');
+  if (window.TomSelect && !currencySelect.tomselect) {
+    new TomSelect(currencySelect, { create: false, maxOptions: 200 });
+  }
+  currencySelect.addEventListener('change', async () => {
+    const currency = currencySelect.value;
     try {
       await api.put('/auth/profile', { defaultCurrency: currency });
       Auth.setDefaultCurrency(currency);
-      toast(`Default currency set to ${currency}`, 'success');
+      const preview = document.querySelector('.profile-format-preview');
+      if (preview) preview.textContent = formatMoney(123456, currency);
+      toast('Saved', 'success');
     } catch (err) { toast(err.message, 'error'); }
-  };
+  });
 
-  document.getElementById('pw-form').onsubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await api.post('/auth/change-password', {
-        currentPassword: document.getElementById('pw-current').value,
-        newPassword: document.getElementById('pw-new').value
-      });
-      toast('Password updated', 'success');
-      document.getElementById('pw-form').reset();
-    } catch (err) { toast(err.message, 'error'); }
+  const themeWrap = document.getElementById('p-theme');
+  const syncTheme = () => {
+    const pref = getThemePreference();
+    themeWrap.querySelectorAll('[data-theme-pref]').forEach(btn => {
+      const active = btn.dataset.themePref === pref;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+  };
+  themeWrap.querySelectorAll('[data-theme-pref]').forEach(btn => {
+    btn.onclick = () => {
+      setThemePreference(btn.dataset.themePref);
+      syncTheme();
+      toast('Theme updated', 'success');
+    };
+  });
+  syncTheme();
+
+  document.getElementById('p-change-password').onclick = () => {
+    openModal('Change password', `
+      <form id="pw-form">
+        <div class="form-group"><label for="pw-current">Current password</label>
+          <input class="form-input" id="pw-current" type="password" required autocomplete="current-password">
+        </div>
+        <div class="form-group"><label for="pw-new">New password</label>
+          <input class="form-input" id="pw-new" type="password" required minlength="8" autocomplete="new-password">
+          <p class="pw-strength" id="pw-strength">At least 8 characters.</p>
+        </div>
+        <div class="form-group"><label for="pw-confirm">Confirm new password</label>
+          <input class="form-input" id="pw-confirm" type="password" required minlength="8" autocomplete="new-password">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" data-modal-cancel>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save changes</button>
+        </div>
+      </form>`, {
+      onSubmit: async () => {
+        const current = document.getElementById('pw-current').value;
+        const next = document.getElementById('pw-new').value;
+        const confirm = document.getElementById('pw-confirm').value;
+        if (next !== confirm) throw new Error('The new passwords do not match');
+        await api.post('/auth/change-password', { currentPassword: current, newPassword: next });
+        toast('Password changed', 'success');
+      }
+    });
+
+    const pwNew = document.getElementById('pw-new');
+    const hint = document.getElementById('pw-strength');
+    pwNew.oninput = () => {
+      const v = pwNew.value;
+      let level = 'weak';
+      let text = 'Use at least 8 characters.';
+      if (v.length >= 8 && /[A-Z]/.test(v) && /[0-9]/.test(v)) { level = 'strong'; text = 'Strong password.'; }
+      else if (v.length >= 8) { level = 'ok'; text = 'Add a capital letter and a number to strengthen it.'; }
+      hint.dataset.level = level;
+      hint.textContent = text;
+    };
   };
 
   document.getElementById('p-logout').onclick = async () => {
     try {
       const refresh = Auth.getRefresh();
       if (refresh) await api.post('/auth/logout', { refreshToken: refresh });
-    } catch { /* ignore */ }
+    } catch { /* sign out locally regardless */ }
     Auth.clear();
-    toast('Logged out', 'info');
+    toast('Signed out', 'info');
     window.dispatchEvent(new Event('auth-change'));
   };
 
-  const avatarDiv = document.getElementById('p-avatar');
+  /* Profile picture */
+  const avatarBtn = document.getElementById('p-avatar');
   const uploadInput = document.getElementById('p-avatar-upload');
-  
-  avatarDiv.onmouseenter = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '1';
-  avatarDiv.onmouseleave = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '0';
-  avatarDiv.onfocus = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '1';
-  avatarDiv.onblur = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '0';
-  avatarDiv.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); avatarDiv.click(); } };
-  
-  avatarDiv.onclick = () => {
-    const body = `
-      <div style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:10px;">
-        ${profilePicture 
-          ? `<img src="${profilePicture}" style="width:250px;height:250px;border-radius:50%;object-fit:cover;box-shadow:0 8px 24px rgba(0,0,0,0.2);" />` 
-          : `<div style="width:250px;height:250px;border-radius:50%;background:var(--bg-elevated);display:flex;align-items:center;justify-content:center;font-size:5rem;color:var(--text-dim);box-shadow:0 8px 24px rgba(0,0,0,0.2);">${(email || 'U')[0].toUpperCase()}</div>`
-        }
-        <button class="btn btn-primary" id="view-upload-btn" type="button">${icon('camera', 'sm')} Update Picture</button>
-      </div>
-    `;
-    const { overlay, close } = openModal('Profile Picture', body);
-    overlay.querySelector('#view-upload-btn').onclick = () => {
-      close();
-      uploadInput.click();
-    };
-  };
+  avatarBtn.onclick = () => uploadInput.click();
 
   uploadInput.onchange = (e) => {
     const file = e.target.files[0];
@@ -181,81 +210,62 @@ export async function renderProfile(container) {
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const modalBody = `
-        <div style="max-height: 60vh; display: flex; justify-content: center; align-items: center; background: #000; border-radius: 8px; overflow: hidden;">
-          <img id="crop-image" src="${event.target.result}" style="max-width: 100%; max-height: 60vh; display: block;" />
+      const { overlay, close } = openModal('Crop profile picture', `
+        <div style="max-height:60vh;display:flex;justify-content:center;align-items:center;background:var(--bg);border-radius:8px;overflow:hidden">
+          <img id="crop-image" src="${event.target.result}" alt="Picture to crop" style="max-width:100%;max-height:60vh;display:block">
         </div>
-        <div style="margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px;">
+        <div class="modal-actions">
           <button class="btn btn-ghost" type="button" data-modal-cancel>Cancel</button>
-          <button class="btn btn-primary" id="crop-save-btn" type="button">Save Picture</button>
+          <button class="btn btn-primary" id="crop-save-btn" type="button">Save picture</button>
         </div>
-      `;
+      `);
 
-      const { overlay, close } = openModal('Crop Profile Picture', modalBody);
       const imgEl = overlay.querySelector('#crop-image');
       const saveBtn = overlay.querySelector('#crop-save-btn');
-
-      // Initialize Cropper
-      const cropper = new Cropper(imgEl, {
-        aspectRatio: 1,
-        viewMode: 1,
-        autoCropArea: 0.8,
-        background: false,
-      });
+      let cropper = null;
+      if (window.Cropper) {
+        cropper = new Cropper(imgEl, { aspectRatio: 1, viewMode: 1, autoCropArea: 0.8, background: false });
+      }
 
       saveBtn.onclick = async () => {
         saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving...';
-        
-        const canvas = cropper.getCroppedCanvas({ width: 250, height: 250 });
-        canvas.toBlob(async (blob) => {
-          if (!blob) {
-            toast('Failed to crop image', 'error');
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save Picture';
-            return;
-          }
+        saveBtn.textContent = 'Saving…';
+        const canvas = cropper ? cropper.getCroppedCanvas({ width: 250, height: 250 }) : null;
+        const blob = canvas ? await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85)) : file;
+        if (!blob) {
+          toast('Could not process that image', 'error');
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save picture';
+          return;
+        }
 
+        try {
           const formData = new FormData();
           formData.append('file', blob, 'profile.jpg');
+          const uploadRes = await fetch('/api/profile/upload', {
+            method: 'POST',
+            body: formData,
+            headers: { Authorization: 'Bearer ' + Auth.getToken() },
+          });
+          if (!uploadRes.ok) throw new Error('Upload failed: ' + uploadRes.status);
+          const { url: imageUrl } = await uploadRes.json();
 
-          try {
-            // First, upload the image to MinIO
-            const uploadRes = await fetch('/api/profile/upload', {
-              method: 'POST',
-              body: formData,
-              headers: { 'Authorization': 'Bearer ' + Auth.getToken() }
-            });
-            if (!uploadRes.ok) throw new Error('Upload failed: ' + uploadRes.status);
-            const { url: imageUrl } = await uploadRes.json();
-
-            // Save the URL (not base64) to the database
-            await api.put('/auth/profile', { profilePicture: imageUrl });
-            profilePicture = imageUrl;
-            avatarDiv.style.backgroundImage = `url('${imageUrl}')`;
-            avatarDiv.innerHTML = `<div class="avatar-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;color:#fff;">${icon('camera', 'sm')}</div>`;
-            avatarDiv.onmouseenter = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '1';
-            avatarDiv.onmouseleave = () => avatarDiv.querySelector('.avatar-overlay').style.opacity = '0';
-
-            toast('Profile picture updated', 'success');
-
-            const sidebarAvatar = document.querySelector('.sidebar-user-avatar');
-            if (sidebarAvatar) {
-              sidebarAvatar.style.backgroundImage = `url('${imageUrl}')`;
-              sidebarAvatar.style.backgroundSize = 'cover';
-              sidebarAvatar.style.backgroundPosition = 'center';
-              sidebarAvatar.textContent = '';
-            }
-            close();
-          } catch (err) {
-            toast('Failed to upload picture: ' + err.message, 'error');
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save Picture';
-          }
-        }, 'image/jpeg', 0.85);
+          await api.put('/auth/profile', { profilePicture: imageUrl });
+          profilePicture = imageUrl;
+          avatarBtn.style.backgroundImage = `url('${imageUrl}')`;
+          avatarBtn.innerHTML = '';
+          const sidebarAvatar = document.getElementById('shell-avatar');
+          if (sidebarAvatar) sidebarAvatar.innerHTML = avatar(displayName, 32, imageUrl);
+          toast('Picture updated', 'success');
+          close();
+        } catch (err) {
+          toast('Could not upload the picture: ' + err.message, 'error');
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save picture';
+        }
       };
     };
     reader.readAsDataURL(file);
-    e.target.value = ''; // allow picking the same file again
+    e.target.value = '';
   };
 }

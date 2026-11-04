@@ -24,14 +24,14 @@ describe('renderAuth', () => {
     renderAuth(container);
     expect(container.querySelector('#auth-form')).toBeTruthy();
     expect(container.querySelector('#tab-login').classList.contains('active')).toBe(true);
-    expect(container.querySelector('#auth-submit').textContent).toContain('Sign In');
+    expect(container.querySelector('#auth-submit').textContent).toContain('Sign in');
   });
 
   it('switches to register tab', () => {
     renderAuth(container);
     container.querySelector('#tab-register').click();
     expect(container.querySelector('#tab-register').classList.contains('active')).toBe(true);
-    expect(container.querySelector('#auth-submit').textContent).toContain('Create Account');
+    expect(container.querySelector('#auth-submit').textContent).toContain('Create account');
   });
 
   it('submits login and saves session', async () => {

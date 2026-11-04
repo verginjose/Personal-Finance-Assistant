@@ -4,7 +4,7 @@ import {
   healthPanelHtml, aiPanelHtml, renderHealthData, renderAiData,
   formatMoney, formatCategory, formatDayLabel, formatDue, dateTooltip, esc,
   segmentedControl, wireSegmented, progressBar, skeletonRows,
-  displayAmountFor, displayName, openModal, humanizeNamesIn,
+  displayAmountFor, displayName, humanizeNamesIn,
 } from '../utils/ui.js';
 import {
   PERIODS, periodRange, previousRange, periodHeading, periodScopeLabel,
@@ -63,32 +63,10 @@ export async function renderDashboard(container) {
       </div>
 
       <aside class="dash-col dash-col--side">
-        <section class="dash-card" id="d-goals-summary" aria-labelledby="d-goals-title">
-          <div class="ledger-head">
-            <h2 class="section-title" id="d-goals-title">Goals</h2>
-            <button type="button" class="btn btn-ghost btn-sm" data-nav="goals">View all</button>
-          </div>
-          <div id="d-goals-rows">
-            <div class="skeleton skeleton-line" style="width:60%"></div>
-            <div class="skeleton skeleton-line" style="width:100%;margin-top:10px"></div>
-            <div class="skeleton skeleton-line" style="width:45%;margin-top:10px"></div>
-          </div>
-        </section>
-
-        <section class="dash-card" id="d-budgets-summary" aria-labelledby="d-budgets-title" hidden>
-          <div class="ledger-head">
-            <h2 class="section-title" id="d-budgets-title">Budgets</h2>
-            <button type="button" class="btn btn-ghost btn-sm" data-nav="goals">View all</button>
-          </div>
-          <div id="d-budget-rows" class="budget-mini-list"></div>
-        </section>
-
         ${aiPanelHtml('d')}
         ${healthPanelHtml('d')}
       </aside>
     </div>`;
-
-  let currentCapLabel = '';
 
   wireSegmented(container, (period) => {
     currentPeriod = period;
@@ -97,7 +75,7 @@ export async function renderDashboard(container) {
     loadSummary();
     renderPendingInsights();
     loadInsights();
-    loadHealth(currentCapLabel);
+    loadHealth();
   });
 
   container.querySelectorAll('[data-nav]').forEach(btn => {
@@ -152,21 +130,11 @@ export async function renderDashboard(container) {
     renderHealthData('d', health, { capLabel, scopeLabel: periodScopeLabel(currentPeriod) });
   };
 
-  const subscriptionsPromise = api.get('/upsert/subscriptions', { userId }).catch(() => []);
-
   try {
-    const [budgets, goals, subscriptions] = await Promise.all([
-      api.get('/upsert/budgets', { userId }).catch(() => []),
-      api.get('/upsert/goals', { userId }).catch(() => []),
-      subscriptionsPromise,
-    ]);
-
+    const subscriptions = await api.get('/upsert/subscriptions', { userId }).catch(() => []);
     if (!document.getElementById('d-health-score')) return; // navigated away
-
-    renderBudgets(budgets);
     renderComingUp(subscriptions);
-    currentCapLabel = await renderGoalsSummary(goals, userId);
-    await loadHealth(currentCapLabel);
+    await loadHealth();
   } catch (err) {
     toast('Failed to load dashboard: ' + err.message, 'error');
   }
@@ -348,30 +316,6 @@ function titleCase(value) {
   return String(value || '').toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-/* ── Budgets (one-line rows) ─────────────────────────────────────────────── */
-function renderBudgets(budgets) {
-  const section = document.getElementById('d-budgets-summary');
-  const list = document.getElementById('d-budget-rows');
-  if (!section || !list) return;
-  const rows = (budgets || []).slice(0, 3);
-  if (!rows.length) { section.hidden = true; return; }
-
-  list.innerHTML = rows.map(b => {
-    const pct = Math.min(Number(b.utilizationPercentage) || 0, 100);
-    const currency = b.currency || Auth.getDefaultCurrency();
-    const color = pct >= 100 ? 'var(--neg)' : pct >= 80 ? 'var(--warn)' : 'var(--pos)';
-    return `
-      <div class="budget-mini">
-        <div class="budget-mini-head">
-          <span class="budget-mini-name">${esc(formatCategory(b.expenseCategory))}</span>
-          <span class="budget-mini-figures">${formatMoney(Number(b.spentAmount) || 0, currency)} of ${formatMoney(Number(b.budgetAmount) || 0, currency)}</span>
-        </div>
-        ${progressBar(pct, color)}
-      </div>`;
-  }).join('');
-  section.hidden = false;
-}
-
 /* ── Coming up ───────────────────────────────────────────────────────────── */
 function renderComingUp(subs) {
   const section = document.getElementById('d-comingup-section');
@@ -407,117 +351,6 @@ function renderComingUp(subs) {
     foot.textContent = 'No charges in the next 7 days.';
   }
   section.hidden = false;
-}
-
-/**
- * Goal cards with a mini progress bar and a status chip. Returns the label of
- * the first goal that is behind, which the health panel uses to withhold an
- * inconsistent top grade.
- */
-async function renderGoalsSummary(goals, userId) {
-  const active = (goals || []).filter(g => !g.completed);
-  const rowsEl = document.getElementById('d-goals-rows');
-  const section = document.getElementById('d-goals-summary');
-  if (!rowsEl || !section) return '';
-
-  if (!active.length) {
-    rowsEl.innerHTML = `
-      <div class="dash-empty">
-        <p>Set a goal to start saving toward something specific.</p>
-        <button type="button" class="btn btn-secondary btn-sm" data-nav="goals">New goal</button>
-      </div>`;
-    rowsEl.querySelector('[data-nav]')?.addEventListener('click', () => window.navigateTo('goals'));
-    return '';
-  }
-
-  const shown = active.slice(0, 2);
-  const forecasts = await Promise.allSettled(
-    shown.map(g => g.deadline
-      ? api.get(`/analytics/goals/${g.id}/forecast`, { userId }).catch(() => null)
-      : Promise.resolve(null))
-  );
-
-  let capped = '';
-  rowsEl.innerHTML = shown.map((g, i) => {
-    const pct = Math.min(Number(g.progressPercentage) || 0, 100);
-    const months = monthsUntil(g.deadline);
-    const remaining = Math.max(0, Number(g.targetAmount) - Number(g.savedAmount));
-    const required = months ? remaining / months : null;
-    const forecast = forecasts[i]?.status === 'fulfilled' ? forecasts[i].value : null;
-    const actual = forecast ? Number(forecast.monthlyVelocity) || 0 : null;
-    const expected = goalExpectedPct(g);
-    const behind = required != null && actual != null ? actual < required : false;
-    if (behind && !capped) capped = `Goal behind: ${g.name}`;
-    const chipHtml = behind ? '<span class="chip chip--warn">Behind</span>' : '<span class="chip chip--pos">On track</span>';
-    return `
-      <article class="goal-mini">
-        <div class="goal-mini-head">
-          <span class="goal-mini-name">${esc(g.name)}</span>
-          ${chipHtml}
-        </div>
-        ${progressBar(pct, behind ? 'var(--warn)' : 'var(--pos)', false, { expected })}
-        <div class="goal-mini-figures">
-          <span><strong>${formatMoney(Number(g.savedAmount) || 0, g.currency)}</strong> of ${formatMoney(Number(g.targetAmount) || 0, g.currency)}</span>
-          <span>${pct.toFixed(0)}%</span>
-        </div>
-        ${required != null ? `<div class="goal-reco"><span>Save <strong>${formatMoney(required, g.currency)}</strong> a month to reach it by ${esc(formatMonthDate(g.deadline))}</span></div>` : ''}
-        <button type="button" class="btn btn-secondary btn-sm goal-mini-add" data-goal="${esc(String(g.id))}">Add money</button>
-      </article>`;
-  }).join('');
-
-  rowsEl.querySelectorAll('[data-goal]').forEach(btn => {
-    btn.onclick = () => {
-      const goal = shown.find(g => String(g.id) === btn.dataset.goal);
-      if (goal) openGoalContribution(goal, userId);
-    };
-  });
-  return capped;
-}
-
-function goalExpectedPct(g) {
-  if (!g.deadline || !g.createdAt) return null;
-  const start = new Date(g.createdAt).getTime();
-  const end = new Date(g.deadline).getTime();
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
-  return Math.min(Math.max(((Date.now() - start) / (end - start)) * 100, 0), 100);
-}
-
-function formatMonthDate(value) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function openGoalContribution(goal, userId) {
-  openModal(`Add money to ${displayName(goal.name)}`, `
-    <form id="goal-money-form">
-      <p class="modal-lead">Every contribution is recorded as a transfer into <strong style="color:var(--text)">${esc(goal.name)}</strong>.</p>
-      <div class="form-group">
-        <label for="gm-amount">Amount</label>
-        <input class="form-input" id="gm-amount" type="text" inputmode="decimal" required placeholder="0.00">
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" data-modal-cancel>Cancel</button>
-        <button type="submit" class="btn btn-primary">Add money</button>
-      </div>
-    </form>`, {
-    onSubmit: async () => {
-      const amount = parseFloat(document.getElementById('gm-amount').value);
-      if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter an amount greater than zero');
-      await api.patch(`/upsert/goals/${goal.id}/contribute`, { amount }, { userId });
-      toast('Money added', 'success');
-      const goals = await api.get('/upsert/goals', { userId }).catch(() => []);
-      await renderGoalsSummary(goals, userId);
-    },
-  });
-}
-
-function monthsUntil(deadline) {
-  const end = new Date(deadline);
-  if (Number.isNaN(end.getTime())) return null;
-  const now = new Date();
-  const months = (end.getFullYear() - now.getFullYear()) * 12 + (end.getMonth() - now.getMonth());
-  return Math.max(1, months);
 }
 
 async function refreshAdvisor() {

@@ -7,6 +7,7 @@ import java.util.List;
 
 public interface ExpenseTransactionLinkRepository extends JpaRepository<ExpenseTransactionLink, Long> {
     List<ExpenseTransactionLink> findBySharedExpenseId(Long sharedExpenseId);
+    List<ExpenseTransactionLink> findByTransactionEntryIdIn(List<Long> transactionEntryIds);
     void deleteBySharedExpenseId(Long sharedExpenseId);
     boolean existsByTransactionEntryId(Long transactionEntryId);
 }

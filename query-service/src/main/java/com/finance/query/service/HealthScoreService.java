@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -25,13 +26,35 @@ public class HealthScoreService {
 
     private final TransactionEntryRepository repository;
 
-    // Cache score for 1 hour
-    @Cacheable(value = "health-score", key = "#userId")
+    /** All-time score, retained for callers that do not pass a period. */
     public HealthScoreResponse calculateScore(UUID userId) {
-        BigDecimal income  = safe(repository.getTotalAmountByType(userId, TransactionType.valueOf("INCOME")));
-        BigDecimal expense = safe(repository.getTotalAmountByType(userId, TransactionType.valueOf("EXPENSE")));
-        List<CategoryRow> categories = repository.getAllCategoryAnalytics(userId);
-        long txCount = repository.countByUserId(userId);
+        return calculateScore(userId, null, null);
+    }
+
+    /**
+     * Score for an optional date range. A null bound means "unbounded", so
+     * (null, null) keeps the all-time behaviour while a month range scores the
+     * period the user is actually looking at.
+     */
+    @Cacheable(value = "health-score",
+            key = "#userId + ':' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX')")
+    public HealthScoreResponse calculateScore(UUID userId, LocalDate startDate, LocalDate endDate) {
+        boolean ranged = startDate != null || endDate != null;
+        LocalDateTime start = startDate != null ? startDate.atStartOfDay() : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime end = endDate != null ? endDate.atTime(23, 59, 59) : LocalDateTime.of(9999, 12, 31, 23, 59, 59);
+
+        BigDecimal income = safe(ranged
+                ? repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.INCOME, start, end)
+                : repository.getTotalAmountByType(userId, TransactionType.valueOf("INCOME")));
+        BigDecimal expense = safe(ranged
+                ? repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.EXPENSE, start, end)
+                : repository.getTotalAmountByType(userId, TransactionType.valueOf("EXPENSE")));
+        List<CategoryRow> categories = ranged
+                ? repository.getExpenseCategoryAnalyticsByDateRange(userId, start, end)
+                : repository.getAllCategoryAnalytics(userId);
+        long txCount = ranged
+                ? repository.countByUserIdAndDateRange(userId, start, end)
+                : repository.countByUserId(userId);
 
         if (txCount == 0) {
             Map<String, Integer> emptyBreakdown = new LinkedHashMap<>();

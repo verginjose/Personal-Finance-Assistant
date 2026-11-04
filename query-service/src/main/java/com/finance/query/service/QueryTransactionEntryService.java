@@ -2,8 +2,16 @@ package com.finance.query.service;
 
 import com.finance.query.dto.CreateEntryResponse;
 import com.finance.query.model.Category;
+import com.finance.query.model.ExpenseGroup;
+import com.finance.query.model.ExpenseSplit;
+import com.finance.query.model.ExpenseTransactionLink;
+import com.finance.query.model.SharedExpense;
 import com.finance.query.model.TransactionEntry;
 import com.finance.query.model.TransactionType;
+import com.finance.query.repository.ExpenseGroupRepository;
+import com.finance.query.repository.ExpenseSplitRepository;
+import com.finance.query.repository.ExpenseTransactionLinkRepository;
+import com.finance.query.repository.SharedExpenseRepository;
 import com.finance.query.repository.TransactionEntryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
@@ -15,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +35,10 @@ import java.util.UUID;
 public class QueryTransactionEntryService {
 
     private final TransactionEntryRepository repository;
+    private final ExpenseTransactionLinkRepository linkRepository;
+    private final SharedExpenseRepository sharedExpenseRepository;
+    private final ExpenseGroupRepository expenseGroupRepository;
+    private final ExpenseSplitRepository expenseSplitRepository;
 
     @Transactional(readOnly = true)
     public Page<CreateEntryResponse> getGoalContributions(Long goalId, UUID userId, int page, int size) {
@@ -49,13 +63,78 @@ public class QueryTransactionEntryService {
         LocalDateTime start = startDate != null ? startDate.atStartOfDay()          : null;
         LocalDateTime end   = endDate   != null ? endDate.atTime(23, 59, 59) : null;
 
-        return repository.findByUserIdAndFilters(userId, type, category, start, end, PageRequest.of(page, size));
+        Page<TransactionEntry> result = repository.findByUserIdAndFilters(userId, type, category, start, end, PageRequest.of(page, size));
+        enrichGroupContext(result.getContent());
+        return result;
     }
 
     @Transactional(readOnly = true)
     @Cacheable(value = "transactions", key = "#userId + ':search:' + #query + ':' + #page + ':' + #size", sync = true)
     public Page<TransactionEntry> searchEntries(UUID userId, String query, int page, int size) {
-        return repository.searchByUserId(userId, query, PageRequest.of(page, size));
+        Page<TransactionEntry> result = repository.searchByUserId(userId, query, PageRequest.of(page, size));
+        enrichGroupContext(result.getContent());
+        return result;
+    }
+
+    /**
+     * Attach the group name, the shared total and this user's share to ledger
+     * rows that were created from a shared expense. The link table already
+     * records the relationship; resolving it here keeps the client from
+     * dividing a total or showing a bare "no group" split row.
+     */
+    private void enrichGroupContext(List<TransactionEntry> entries) {
+        if (entries == null || entries.isEmpty()) return;
+
+        List<Long> entryIds = new ArrayList<>();
+        for (TransactionEntry entry : entries) {
+            if (entry.getId() != null) entryIds.add(entry.getId());
+        }
+        if (entryIds.isEmpty()) return;
+
+        List<ExpenseTransactionLink> links = linkRepository.findByTransactionEntryIdIn(entryIds);
+        if (links.isEmpty()) return;
+
+        Map<Long, Long> entryToExpense = new HashMap<>();
+        for (ExpenseTransactionLink link : links) {
+            if (link.getTransactionEntryId() != null && link.getSharedExpenseId() != null) {
+                entryToExpense.put(link.getTransactionEntryId(), link.getSharedExpenseId());
+            }
+        }
+        if (entryToExpense.isEmpty()) return;
+
+        List<Long> expenseIds = new ArrayList<>(entryToExpense.values().stream().distinct().toList());
+        Map<Long, SharedExpense> expenses = new HashMap<>();
+        for (SharedExpense expense : sharedExpenseRepository.findAllById(expenseIds)) {
+            expenses.put(expense.getId(), expense);
+        }
+
+        List<Long> groupIds = new ArrayList<>();
+        for (SharedExpense expense : expenses.values()) {
+            if (expense.getGroupId() != null && !groupIds.contains(expense.getGroupId())) {
+                groupIds.add(expense.getGroupId());
+            }
+        }
+        Map<Long, ExpenseGroup> groups = new HashMap<>();
+        for (ExpenseGroup group : expenseGroupRepository.findAllById(groupIds)) {
+            groups.put(group.getId(), group);
+        }
+
+        Map<String, BigDecimal> shares = new HashMap<>();
+        for (ExpenseSplit split : expenseSplitRepository.findBySharedExpenseIdIn(expenseIds)) {
+            shares.merge(split.getSharedExpenseId() + ":" + split.getUserId(), split.getAmount(), BigDecimal::add);
+        }
+
+        for (TransactionEntry entry : entries) {
+            Long expenseId = entryToExpense.get(entry.getId());
+            if (expenseId == null) continue;
+            SharedExpense expense = expenses.get(expenseId);
+            if (expense == null) continue;
+            entry.setGroupId(expense.getGroupId());
+            entry.setTotalAmount(expense.getAmount());
+            ExpenseGroup group = groups.get(expense.getGroupId());
+            if (group != null) entry.setGroupName(group.getName());
+            entry.setMyShare(shares.get(expenseId + ":" + entry.getUserId()));
+        }
     }
 
     @Transactional(readOnly = true)

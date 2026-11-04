@@ -174,4 +174,24 @@ class HealthScoreServiceTest {
 
         return list;
     }
+
+    @Test
+    @DisplayName("calculateScore: a date range uses the ranged repository queries")
+    void calculateScore_dateRange_usesRangedQueries() {
+        java.time.LocalDate start = java.time.LocalDate.of(2026, 11, 1);
+        java.time.LocalDate end = java.time.LocalDate.of(2026, 11, 30);
+        when(repository.getTotalAmountByTypeAndDateRange(eq(userId), eq(TransactionType.INCOME), any(), any()))
+                .thenReturn(BigDecimal.ZERO);
+        when(repository.getTotalAmountByTypeAndDateRange(eq(userId), eq(TransactionType.EXPENSE), any(), any()))
+                .thenReturn(BigDecimal.ZERO);
+        when(repository.getExpenseCategoryAnalyticsByDateRange(eq(userId), any(), any())).thenReturn(List.of());
+        when(repository.countByUserIdAndDateRange(eq(userId), any(), any())).thenReturn(0L);
+
+        HealthScoreResponse res = service.calculateScore(userId, start, end);
+
+        assertThat(res.getGrade()).isEqualTo("N/A");
+        verify(repository).getExpenseCategoryAnalyticsByDateRange(eq(userId), any(), any());
+        verify(repository).countByUserIdAndDateRange(eq(userId), any(), any());
+        verify(repository, never()).getTotalAmountByType(any(), any());
+    }
 }

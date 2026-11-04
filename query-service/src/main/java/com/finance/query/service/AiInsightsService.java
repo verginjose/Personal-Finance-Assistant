@@ -21,6 +21,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -55,14 +56,33 @@ public class AiInsightsService {
      * advice cached under the old rules (e.g. "Goal 1122") is not served for
      * the full 24-hour TTL after a deploy.
      */
-    private static final String CACHE_KEY_VERSION = "v4:";
+    private static final String CACHE_KEY_VERSION = "v5:";
 
-    // Cache AI insights for 24 hours per user (avoid repeated LLM calls)
-    @Cacheable(value = "ai-insights", key = "'v4:' + #userId")
     public AiInsightResponse generateInsights(UUID userId) {
-        BigDecimal income  = safeAmount(repository.getTotalAmountByType(userId, TransactionType.valueOf("INCOME")));
-        BigDecimal expense = safeAmount(repository.getTotalAmountByType(userId, TransactionType.valueOf("EXPENSE")));
-        List<CategoryRow> categories = repository.getAllCategoryAnalytics(userId);
+        return generateInsights(userId, null, null);
+    }
+
+    /**
+     * Insights for an optional date range. Null bounds mean "unbounded", so
+     * (null, null) keeps the all-time behaviour while a month range answers the
+     * period currently selected in the UI.
+     */
+    @Cacheable(value = "ai-insights",
+            key = "'v5:' + #userId + ':' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX')")
+    public AiInsightResponse generateInsights(UUID userId, LocalDate startDate, LocalDate endDate) {
+        boolean ranged = startDate != null || endDate != null;
+        LocalDateTime start = startDate != null ? startDate.atStartOfDay() : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime end = endDate != null ? endDate.atTime(23, 59, 59) : LocalDateTime.of(9999, 12, 31, 23, 59, 59);
+
+        BigDecimal income  = safeAmount(ranged
+                ? repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.INCOME, start, end)
+                : repository.getTotalAmountByType(userId, TransactionType.valueOf("INCOME")));
+        BigDecimal expense = safeAmount(ranged
+                ? repository.getTotalAmountByTypeAndDateRange(userId, TransactionType.EXPENSE, start, end)
+                : repository.getTotalAmountByType(userId, TransactionType.valueOf("EXPENSE")));
+        List<CategoryRow> categories = ranged
+                ? repository.getExpenseCategoryAnalyticsByDateRange(userId, start, end)
+                : repository.getAllCategoryAnalytics(userId);
 
         if (income.compareTo(BigDecimal.ZERO) == 0 && expense.compareTo(BigDecimal.ZERO) == 0) {
             return buildDefaultResponse();
@@ -91,16 +111,27 @@ public class AiInsightsService {
     }
 
     /**
-     * Bypasses the 24-hour cache and regenerates advice on demand (the UI's
-     * "Refresh" button). Self-invocation of {@link #generateInsights(UUID)} is
-     * deliberate: it skips the cache proxy so the user gets fresh advice.
+     * Bypasses the cache and regenerates advice on demand (the UI's "Refresh"
+     * button). Self-invocation of {@link #generateInsights(UUID, LocalDate, LocalDate)}
+     * is deliberate: it skips the cache proxy so the user gets fresh advice.
      */
     public AiInsightResponse regenerateInsights(UUID userId) {
+        return regenerateInsights(userId, null, null);
+    }
+
+    /** Period-aware refresh: evicts only the key for this range. */
+    public AiInsightResponse regenerateInsights(UUID userId, LocalDate startDate, LocalDate endDate) {
         Cache cache = cacheManager.getCache("ai-insights");
         if (cache != null) {
-            cache.evict(CACHE_KEY_VERSION + userId);
+            cache.evict(cacheKey(userId, startDate, endDate));
         }
-        return generateInsights(userId);
+        return generateInsights(userId, startDate, endDate);
+    }
+
+    private static String cacheKey(UUID userId, LocalDate startDate, LocalDate endDate) {
+        return CACHE_KEY_VERSION + userId + ':'
+                + (startDate != null ? startDate : "MIN") + ':'
+                + (endDate != null ? endDate : "MAX");
     }
 
     // ── Prompt building ───────────────────────────────────────────────────────

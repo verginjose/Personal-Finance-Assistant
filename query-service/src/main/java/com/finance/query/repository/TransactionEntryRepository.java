@@ -160,6 +160,23 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                    SUM(t.amount) AS totalAmount,
                    COUNT(t) AS transactionCount
             FROM TransactionEntry t
+            WHERE t.userId = :userId
+              AND t.deletedAt IS NULL
+              AND t.type = com.finance.query.model.TransactionType.EXPENSE
+              AND t.category <> com.finance.query.model.Category.SETTLEMENT
+              AND t.createdAt BETWEEN :start AND :end
+            GROUP BY t.category
+            ORDER BY totalAmount DESC
+            """)
+    List<CategoryRow> getExpenseCategoryAnalyticsByDateRange(
+            @Param("userId") UUID userId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+
+    @Query("""
+            SELECT t.category AS category,
+                   SUM(t.amount) AS totalAmount,
+                   COUNT(t) AS transactionCount
+            FROM TransactionEntry t
             WHERE t.userId = :userId AND t.type = :type AND t.deletedAt IS NULL
             GROUP BY t.category
             ORDER BY totalAmount DESC
@@ -263,4 +280,14 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
     @Query(value = "SELECT COUNT(t.id) FROM transaction_entries t WHERE t.user_id = ?1 AND t.deleted_at IS NULL",
             nativeQuery = true)
     long countByUserId(UUID userId);
+
+    @Query("""
+            SELECT COUNT(t)
+            FROM TransactionEntry t
+            WHERE t.userId = :userId AND t.deletedAt IS NULL
+              AND t.createdAt BETWEEN :start AND :end
+            """)
+    long countByUserIdAndDateRange(@Param("userId") UUID userId,
+                                   @Param("start") LocalDateTime start,
+                                   @Param("end") LocalDateTime end);
 }

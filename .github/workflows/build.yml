@@ -120,12 +120,12 @@ jobs:
             tmp="$(mktemp -d)"
             curl -fsSL "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz" \
               | tar -xz -C "$tmp" --strip-components=1 bin/buildctl
-            install -m 0755 "$tmp/bin/buildctl" /opt/buildctl/buildctl
+            install -m 0755 "$tmp/buildctl" /opt/buildctl/buildctl
             rm -rf "$tmp"
           fi
           ln -sf /opt/buildctl/buildctl "$HOME/.local/bin/buildctl"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          buildctl --version
+          "$HOME/.local/bin/buildctl" --version
 
       - name: Build and push
         run: |

@@ -14,12 +14,17 @@ let showExpense = true;
 let showNet = true;
 let expensesOnly = false;
 let lastTimeline = null;
+/** Latest KPI figures, so a width change (rotation) re-checks compaction. */
+let lastKpis = null;
+let kpiObserver = null;
 
 const DEFAULT_FILTERS = { preset: 'ALL', timeline: 'MONTHLY', range: '' };
 
 export async function renderAnalytics(container) {
   charts.forEach(c => destroyChart(c));
   charts = [];
+  if (kpiObserver) { kpiObserver.disconnect(); kpiObserver = null; }
+  lastKpis = null;
   showIncome = true; showExpense = true; showNet = true; expensesOnly = false;
 
   const userId = Auth.getUserId();
@@ -214,6 +219,20 @@ export async function renderAnalytics(container) {
   wireLegend(userId);
   updateResetVisibility();
   syncPresetChips();
+  // Rotation or a window resize changes the KPI column width; re-check whether
+  // the full figures still fit instead of leaving a stale compact form.
+  if (kpiObserver) kpiObserver.disconnect();
+  if (typeof ResizeObserver !== 'undefined') {
+    const kpis = document.getElementById('a-kpis');
+    if (kpis) {
+      kpiObserver = new ResizeObserver(() => {
+        if (!lastKpis) return;
+        const { income, expense, count, net } = lastKpis;
+        renderKpis(income, expense, count, net);
+      });
+      kpiObserver.observe(kpis);
+    }
+  }
   // The range control must not look focused before the user touches it.
   requestAnimationFrame(() => {
     const range = document.getElementById('a-range');
@@ -379,6 +398,7 @@ function setFigureValue(el, value, currency) {
 function renderKpis(income, expense, count, netValue = null) {
   const currency = Auth.getDefaultCurrency();
   const net = netValue != null && Number.isFinite(netValue) ? netValue : income - expense;
+  lastKpis = { income, expense, count, net };
   const netEl = document.getElementById('a-net');
   if (netEl) {
     setFigureValue(netEl, net, currency);

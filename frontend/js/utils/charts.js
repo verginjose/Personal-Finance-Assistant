@@ -165,6 +165,9 @@ export function createBarChart(ctx, { labels, income, expense, net, currency = '
             },
             ...(net && showNet ? {
               afterBody: (items) => {
+                // The Net line is its own dataset, so it already has a row.
+                // Only add one when that dataset is hidden.
+                if (items.some(i => String(i.dataset?.label || '') === 'Net')) return '';
                 const i = items[0]?.dataIndex;
                 if (i == null) return '';
                 return ` Net  ${formatMoney(Number(net[i]) || 0, currency)}`;
@@ -180,9 +183,21 @@ export function createBarChart(ctx, { labels, income, expense, net, currency = '
           ticks: {
             color: p.text2,
             maxRotation: 0,
-            autoSkip: true,
-            maxTicksLimit: mobile ? 4 : 11,
+            // Phone labels are chosen below so the newest bucket is always
+            // named; auto-skip alone drops the last one.
+            autoSkip: !mobile,
+            maxTicksLimit: mobile ? undefined : 11,
           },
+          afterBuildTicks: mobile ? (scale) => {
+            const total = scale.ticks.length;
+            const max = 4;
+            if (total <= max) return;
+            const keep = new Set([0, total - 1]);
+            for (let i = 1; i < max - 1; i++) {
+              keep.add(Math.round((i * (total - 1)) / (max - 1)));
+            }
+            scale.ticks = scale.ticks.filter((_, i) => keep.has(i));
+          } : undefined,
         },
         y: {
           beginAtZero: true,

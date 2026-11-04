@@ -1606,6 +1606,9 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
 .ocr-type-badge { display: inline-flex; align-items: center; gap: 5px; }
 .ocr-date { display: inline-flex; align-items: center; gap: 5px; }
 .ocr-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+/* The switch is a direct child of .ocr-field, so `.ocr-field > label` would
+   otherwise force it to `display: block` and drop the gap. */
+.ocr-field > label.ocr-switch { display: inline-flex; }
 .ocr-switch input { width: 16px; height: 16px; accent-color: var(--brand); }
 .ocr-switch-track { display: none; }
 .ocr-result-head h2 { font-size: 18px; }
@@ -1816,7 +1819,9 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
   .table-wrap { border-radius: var(--r-control); }
   .desktop-only { display: none !important; }
   .goal-card-head { flex-wrap: wrap; }
-  .goal-card-head > div:first-child { flex: 1 1 100%; }
+  /* Keep the overflow menu on the title row: a full-width or auto-basis text
+     block would orphan the ⋮ button on its own line above the progress bar. */
+  .goal-card-head > div:first-child { flex: 1 1 0; min-width: 0; }
   .goal-card-actions { margin-left: 0; flex-wrap: wrap; }
 }
 
@@ -1824,8 +1829,15 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
   .card-grid-1, .card-grid-2, .card-grid-3, .card-grid-4 { grid-template-columns: minmax(0, 1fr); }
   .dash-sub-item { font-size: 13px; }
   .figure { min-width: 96px; }
-  .segmented { width: 100%; overflow-x: auto; }
-  .segmented-item { flex: 1; text-align: center; }
+  /* Wrap instead of clipping: the four period options are wider than a phone,
+     and a hidden horizontal scroll cut "All time" off at the edge. */
+  .segmented { width: 100%; flex-wrap: wrap; }
+  .segmented:not(.segmented--sm) .segmented-item { flex: 1 1 auto; min-height: 44px; text-align: center; }
+  /* A four-option control reads better as an even 2x2 than 3 + 1. */
+  .segmented:has(> .segmented-item:nth-child(4):last-child) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .barlist-row { grid-template-columns: 100px 1fr 76px 36px; }
   .barlist-label { font-size: 13px; }
 }
@@ -2256,6 +2268,9 @@ body.sheet-open { overflow: hidden; }
 
 /* Caption form of the settlements note is mobile-only. */
 .figure-note--caption { display: none; }
+/* The date-range calendar icon is a phone-only affordance; on desktop it would
+   sit unstyled beside the input. */
+.analytics-range-icon { display: none; }
 
 @media (max-width: 767px) {
   /* ── 0. Global shell ───────────────────────────────────────────────────── */
@@ -2317,6 +2332,23 @@ body.sheet-open { overflow: hidden; }
   .ledger-name,
   .bottom-nav-item { min-width: 0; }
 
+  /* Form controls on phones: 48px targets and 16px text, which also stops
+     iOS/Android zooming the page when a field takes focus. */
+  .form-input,
+  .form-select,
+  .form-textarea {
+    min-height: 48px;
+    font-size: 16px;
+  }
+  .form-textarea { resize: none; }
+  /* Tom Select copies .form-select onto its wrapper; size the visible control
+     itself so it matches the native fields (48px, 16px text). */
+  .ts-wrapper .ts-control {
+    min-height: 48px !important;
+    font-size: 16px !important;
+  }
+  .ts-wrapper .ts-control > input { font-size: 16px !important; }
+
   /* ── 1. Analytics ─────────────────────────────────────────────────────── */
   .analytics-toolbar { flex-direction: column; align-items: stretch; gap: var(--s3); }
   .analytics-toolbar > div { width: 100%; flex: 1 1 auto; }
@@ -2359,6 +2391,7 @@ body.sheet-open { overflow: hidden; }
   }
   .analytics-range-wrap input::placeholder { color: var(--text-2); }
   .analytics-range-icon {
+    display: inline-flex;
     position: absolute;
     right: 12px;
     top: 50%;
@@ -2393,12 +2426,21 @@ body.sheet-open { overflow: hidden; }
   }
   .analytics-reset:hover { background: var(--raised); color: var(--text); }
 
-  .figures--kpi { flex-wrap: wrap; gap: var(--s4); }
+  /* Two fixed columns: without minmax(0, …) a long figure widens its column
+     instead of overflowing it, so setFigureValue() never sees scrollWidth >
+     clientWidth and the compact fallback never fires. */
+  .figures--kpi {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s4);
+  }
+  .figure,
   .figure--net { min-width: 0; }
   .figure-value {
     font-size: clamp(18px, 5.5vw, 24px);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    overflow: hidden;
   }
   .figure-value--net {
     font-size: clamp(28px, 9vw, 44px);
@@ -2667,7 +2709,7 @@ body.sheet-open { overflow: hidden; }
     font-size: 16px;
   }
   .ocr-form .form-textarea { resize: none; }
-  .ocr-switch {
+  .ocr-field > label.ocr-switch {
     display: flex;
     align-items: center;
     gap: 12px;

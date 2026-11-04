@@ -117,7 +117,7 @@ class AiInsightsServiceTest {
 
         service.regenerateInsights(userId);
 
-        verify(cache).evict("v5:" + userId + ":MIN:MAX");
+        verify(cache).evict("v6:" + userId + ":MIN:MAX");
         verify(repository).getTotalAmountByType(userId, TransactionType.INCOME);
     }
 

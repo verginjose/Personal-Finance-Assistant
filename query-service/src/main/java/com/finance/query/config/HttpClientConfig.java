@@ -28,6 +28,11 @@ public class HttpClientConfig {
     public HttpClient httpClient() {
         return HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
+                // Follow provider-side redirects: Frankfurter moved from
+                // api.frankfurter.app to api.frankfurter.dev and answers old
+                // URLs with a 301, which an HttpClient that never follows
+                // redirects would surface as a failed rates lookup.
+                .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
     }
 }

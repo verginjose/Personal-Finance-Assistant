@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Currency conversion backed by the ECB reference rates published through
- * Frankfurter (https://frankfurter.app). No API key is needed.
+ * Frankfurter (https://frankfurter.dev). No API key is needed.
  *
  * <p>Rates are fetched once per base currency and cached for
  * {@code fx.rates.ttl-minutes}. A failed refresh keeps serving the last good
@@ -49,7 +49,7 @@ public class FxRateService {
 
     public FxRateService(
             HttpClient httpClient,
-            @Value("${fx.rates.url:https://api.frankfurter.app/latest}") String ratesUrl,
+            @Value("${fx.rates.url:https://api.frankfurter.dev/v1/latest}") String ratesUrl,
             @Value("${fx.rates.ttl-minutes:360}") long ttlMinutes,
             @Value("${fx.rates.failure-backoff-seconds:60}") long failureBackoffSeconds,
             @Value("${fx.rates.timeout-seconds:5}") long timeoutSeconds) {

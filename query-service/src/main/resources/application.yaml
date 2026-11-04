@@ -61,7 +61,7 @@ cerebras:
 # is known the entry's amountDefault stays null and the UI shows the original.
 fx:
   rates:
-    url: ${FX_RATES_URL:https://api.frankfurter.app/latest}
+    url: ${FX_RATES_URL:https://api.frankfurter.dev/v1/latest}
     ttl-minutes: ${FX_RATES_TTL_MINUTES:360}
     failure-backoff-seconds: ${FX_RATES_FAILURE_BACKOFF_SECONDS:60}
     timeout-seconds: ${FX_RATES_TIMEOUT_SECONDS:5}

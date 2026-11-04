@@ -281,9 +281,10 @@ async function loadTransactions(userId) {
               ${icon(txnIcon, 'sm')}
             </div>
             <div>
-              <strong style="font-size:0.93rem;">${esc(t.name)}</strong>
+              <strong class="txn-name" style="font-size:0.93rem;">${esc(t.name)}</strong>
               ${t.recurring ? `<span class="badge badge-recurring" style="margin-left:6px;">${icon('repeat', 'xs')} ${esc(t.recurringPeriod)}</span>` : ''}
               ${t.receiptUrl ? `<span class="badge badge-info" style="margin-left:6px; font-size:.68rem; padding: 2px 4px; cursor:pointer;" onclick="event.stopPropagation(); window.openReceiptLightbox('${esc(t.receiptUrl)}')" title="View receipt">${icon('document', 'xs')} Receipt</span>` : ''}
+              <span class="txn-mobile-date">${formatDate(t.createdAt)}</span>
               ${t.description ? `<br><small style="color:var(--text-dim)" class="desktop-only">${esc(t.description)}</small>` : ''}
             </div>
           </div>

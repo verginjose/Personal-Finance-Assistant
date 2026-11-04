@@ -17,7 +17,7 @@ from minio import Minio
 from paddleocr import PaddleOCR
 
 # OCR service entrypoint: FastAPI app that extracts text from uploaded
-# images/PDFs via PaddleOCR and publishes results to the queue.
+# images/PDFs via PaddleOCR and publishes the results to the message queue.
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 

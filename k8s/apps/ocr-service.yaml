@@ -49,8 +49,8 @@ data:
   MINIO_ENDPOINT: minio:9000
   MINIO_ACCESS_KEY: admin
   MINIO_SECURE: "false"
-  CEREBRAS_MODEL: qwen-3.8-27b
-  CEREBRAS_URL: https://api.cerebras.ai/v1/chat/completions
+  GROQ_MODEL: openai/gpt-oss-120b
+  GROQ_URL: https://api.groq.com/openai/v1/chat/completions
 ---
 apiVersion: apps/v1
 kind: Deployment

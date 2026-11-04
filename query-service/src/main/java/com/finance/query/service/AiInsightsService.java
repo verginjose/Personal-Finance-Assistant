@@ -33,14 +33,14 @@ public class AiInsightsService {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    @Value("${cerebras.api.key:}")
-    private String cerebrasApiKey;
+    @Value("${groq.api.key:}")
+    private String groqApiKey;
 
-    @Value("${cerebras.model:qwen-3.8-27b}")
-    private String cerebrasModel;
+    @Value("${groq.model:openai/gpt-oss-120b}")
+    private String groqModel;
 
-    @Value("${cerebras.url:https://api.cerebras.ai/v1/chat/completions}")
-    private String cerebrasUrl;
+    @Value("${groq.url:https://api.groq.com/openai/v1/chat/completions}")
+    private String groqUrl;
 
     private final TransactionEntryRepository repository;
     private final GoalForecastingService goalForecastingService;
@@ -56,7 +56,7 @@ public class AiInsightsService {
      * advice cached under the old rules (e.g. "Goal 1122") is not served for
      * the full 24-hour TTL after a deploy.
      */
-    private static final String CACHE_KEY_VERSION = "v5:";
+    private static final String CACHE_KEY_VERSION = "v6:";
 
     public AiInsightResponse generateInsights(UUID userId) {
         return generateInsights(userId, null, null);
@@ -68,7 +68,7 @@ public class AiInsightsService {
      * period currently selected in the UI.
      */
     @Cacheable(value = "ai-insights",
-            key = "'v5:' + #userId + ':' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX')")
+            key = "'v6:' + #userId + ':' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX')")
     public AiInsightResponse generateInsights(UUID userId, LocalDate startDate, LocalDate endDate) {
         boolean ranged = startDate != null || endDate != null;
         LocalDateTime start = startDate != null ? startDate.atStartOfDay() : LocalDateTime.of(1970, 1, 1, 0, 0);
@@ -97,15 +97,15 @@ public class AiInsightsService {
 
         String prompt = buildPrompt(income, expense, categories, goalForecasts, budgetTrends);
 
-        if (cerebrasApiKey == null || cerebrasApiKey.isBlank()) {
-            log.warn("CEREBRAS_API_KEY not configured — returning rule-based insights");
+        if (groqApiKey == null || groqApiKey.isBlank()) {
+            log.warn("GROQ_API_KEY not configured — returning rule-based insights");
             return buildRuleBasedInsights(income, expense, categories, goalForecasts, budgetTrends);
         }
 
         try {
-            return callCerebras(prompt);
+            return callGroq(prompt);
         } catch (Exception e) {
-            log.error("Cerebras call failed, falling back to rule-based: {}", e.getMessage());
+            log.error("Groq call failed, falling back to rule-based: {}", e.getMessage());
             return buildRuleBasedInsights(income, expense, categories, goalForecasts, budgetTrends);
         }
     }
@@ -195,27 +195,27 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
         return sb.toString();
     }
 
-    // ── Cerebras HTTP call ────────────────────────────────────────────────────
+    // ── Groq HTTP call ────────────────────────────────────────────────────────
 
-    private AiInsightResponse callCerebras(String prompt) throws Exception {
+    private AiInsightResponse callGroq(String prompt) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", cerebrasModel);
+        body.put("model", groqModel);
         body.put("temperature", 0.3);
         body.put("response_format", Map.of("type", "json_object"));
         body.put("messages", List.of(Map.of("role", "user", "content", prompt)));
 
         String bodyJson = MAPPER.writeValueAsString(body);
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(cerebrasUrl))
+                .uri(URI.create(groqUrl))
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + cerebrasApiKey)
+                .header("Authorization", "Bearer " + groqApiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
                 .timeout(Duration.ofSeconds(30))
                 .build();
 
         HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
         if (res.statusCode() != 200) {
-            throw new RuntimeException("Cerebras HTTP " + res.statusCode());
+            throw new RuntimeException("Groq HTTP " + res.statusCode());
         }
 
         JsonNode root = MAPPER.readTree(res.body());
@@ -224,7 +224,7 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
 
         AiInsightResponse response = MAPPER.treeToValue(parsed, AiInsightResponse.class);
         if (response == null || response.getInsights() == null || response.getInsights().isEmpty()) {
-            throw new RuntimeException("Cerebras returned no usable insights");
+            throw new RuntimeException("Groq returned no usable insights");
         }
         normalizeInsights(response.getInsights());
         if (response.getSummary() == null || response.getSummary().isBlank()) {

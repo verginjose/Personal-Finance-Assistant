@@ -9,7 +9,7 @@ import java.time.Duration;
 
 /**
  * Provides a shared {@link HttpClient} bean for outbound HTTP calls
- * (currently used by {@link com.finance.query.service.AiInsightsService} for Cerebras API calls).
+ * (currently used by {@link com.finance.query.service.AiInsightsService} for Groq API calls).
  *
  * <p>Exposing as a Spring bean allows:
  * <ul>

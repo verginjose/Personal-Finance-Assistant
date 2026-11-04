@@ -512,7 +512,9 @@ repo-level `.env`:
 
 It applies in dependency order and waits for each StatefulSet before starting
 the apps. `--with-cloudflared` additionally starts the tunnel (see
-`optional/cloudflared.yaml` for the Cloudflare-side route).
+`optional/cloudflared.yaml` for the Cloudflare-side route). `pipeline.sh` now
+applies the tunnel automatically on every deploy when `cloudflared-secrets`
+exists, since Argo CD does not manage that Deployment.
 
 Check status:
 

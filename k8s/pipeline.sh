@@ -15,7 +15,8 @@
 #   ./k8s/pipeline.sh --skip-build           # reuse the images already built
 #   ./k8s/pipeline.sh --skip-deploy          # build + validate only
 #   ./k8s/pipeline.sh --skip-ocr             # skip the ~17 GB OCR image
-#   ./k8s/pipeline.sh --with-cloudflared     # also apply the tunnel
+#   ./k8s/pipeline.sh --with-cloudflared     # force the tunnel even without its Secret
+#                                            # (applied automatically when cloudflared-secrets exists)
 #   PUSH_REGISTRY=ghcr.io/you/pfa ./k8s/pipeline.sh   # build, import, and push
 #
 # Requires a terminal for the `sudo` calls (image import, cluster start).
@@ -179,7 +180,16 @@ else
   apply_args=()
   [[ "${SKIP_OCR}" == "true" ]] && apply_args+=(--skip-ocr)
   [[ "${WITH_OCR}" == "true" ]] && apply_args+=(--with-ocr)
-  [[ "${WITH_CLOUDFLARED}" == "true" ]] && apply_args+=(--with-cloudflared)
+  # cloudflared is deliberately outside Argo CD (argocd/apps/40-edge.yaml), so
+  # nothing else reconciles its Deployment. Re-apply it on every deploy whenever
+  # its tunnel Secret exists, otherwise manifest changes (e.g. the per-workload
+  # secret split in 0508b5a) never reach the live object.
+  if [[ "${WITH_CLOUDFLARED}" == "true" ]] || \
+     kubectl -n "${NS}" get secret cloudflared-secrets >/dev/null 2>&1; then
+    apply_args+=(--with-cloudflared)
+  else
+    warn "cloudflared skipped: cloudflared-secrets not found (seal it with k8s/seal-secrets.sh)"
+  fi
   "${K8S_DIR}/apply.sh" "${apply_args[@]}"
   ok "deployed"
 fi

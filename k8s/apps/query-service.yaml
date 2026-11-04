@@ -63,7 +63,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: query-service
-          image: 127.0.0.1:30500/finance/query-service:15224332de52
+          image: 127.0.0.1:30500/finance/query-service:2bc582ba3a62
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

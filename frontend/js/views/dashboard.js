@@ -1,9 +1,9 @@
 import { api, Auth, toast } from '../utils/api.js';
-import { icon, categoryIcon } from '../utils/icons.js';
+import { icon } from '../utils/icons.js';
 import {
-  aiPanelHtml, renderAiData,
+  aiPanelHtml, renderAiData, categoryDot,
   formatMoney, formatCategory, formatDayLabel, formatDue, dateTooltip, esc,
-  segmentedControl, wireSegmented, progressBar, skeletonRows,
+  segmentedControl, wireSegmented, skeletonRows,
   displayAmountFor, displayName, humanizeNamesIn,
 } from '../utils/ui.js';
 import {
@@ -12,9 +12,14 @@ import {
 } from '../utils/totals.js';
 
 let currentPeriod = 'month';
+/** Latest totals and top category, so the sentence can update from either. */
+let lastTotals = null;
+let lastTopCategory = null;
 
 export async function renderDashboard(container) {
   const userId = Auth.getUserId();
+  lastTotals = null;
+  lastTopCategory = null;
 
   container.innerHTML = `
     <div class="period-header">
@@ -22,21 +27,42 @@ export async function renderDashboard(container) {
       ${segmentedControl('dashboard-period', PERIODS, currentPeriod, 'Reporting period')}
     </div>
 
-    <section class="dash-hero" id="d-kpis" aria-live="polite">
-      <div class="dash-hero-label" id="d-hero-label">Net</div>
-      <div class="dash-hero-top">
-        <span class="hero-number" id="d-net">—</span>
-        <span class="dash-delta" id="d-delta"></span>
+    <section class="statement" id="d-kpis" aria-live="polite">
+      <div class="statement-figure">
+        <div class="statement-label" id="d-hero-label">Net this month</div>
+        <div class="dash-hero-top">
+          <span class="hero-number" id="d-net">—</span>
+          <span class="dash-delta" id="d-delta"></span>
+        </div>
       </div>
-      <div class="dash-sub">
-        <span class="dash-sub-item" id="d-earned-item">Earned <strong id="d-earned">—</strong></span>
-        <span class="dash-sub-item" id="d-spent-item">Spent <strong id="d-spent">—</strong></span>
-        <span class="dash-sub-item" id="d-net-item" hidden>Net <strong id="d-net-sub">—</strong></span>
+
+      <div class="statement-bars">
+        <div class="statement-bar-row">
+          <span class="statement-bar-label">Earned</span>
+          <span class="statement-bar-track" role="img" aria-label="Income compared with spending">
+            <span class="statement-bar-fill is-pos" id="d-earned-bar"></span>
+          </span>
+          <span class="statement-bar-value" id="d-earned">—</span>
+        </div>
+        <div class="statement-bar-row">
+          <span class="statement-bar-label">Spent</span>
+          <span class="statement-bar-track" role="img" aria-label="Spending compared with income">
+            <span class="statement-bar-fill is-spent" id="d-spent-bar"></span>
+          </span>
+          <span class="statement-bar-value" id="d-spent">—</span>
+        </div>
       </div>
+
+      <p class="statement-sentence" id="d-sentence"></p>
       <div class="dash-pace" id="d-pace"></div>
+
       <div class="dash-saved" id="d-saved-wrap" hidden>
         <div class="dash-saved-label"><span id="d-saved-label"></span><span id="d-saved-pct"></span></div>
-        ${progressBar(0, 'var(--pos)')}
+        <div class="progress-wrap">
+          <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-fill" style="width:0%"></div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -44,26 +70,26 @@ export async function renderDashboard(container) {
       <div class="dash-col dash-col--main">
         <section aria-labelledby="d-recent-title">
           <div class="ledger-head">
-            <h2 id="d-recent-title" class="section-title">Recent transactions</h2>
+            <h2 id="d-recent-title">Recent transactions</h2>
             <button type="button" class="btn btn-ghost btn-sm" data-nav="transactions">View all</button>
           </div>
           <div id="d-recent" aria-live="polite">
             ${skeletonRows(3)}
           </div>
         </section>
+      </div>
+
+      <aside class="dash-col dash-col--side">
+        ${aiPanelHtml('d')}
 
         <section class="dash-card" id="d-comingup-section" aria-labelledby="d-comingup-title" hidden>
           <div class="ledger-head">
-            <h2 id="d-comingup-title" class="section-title">Coming up</h2>
+            <h2 id="d-comingup-title">Coming up</h2>
             <button type="button" class="btn btn-ghost btn-sm" data-nav="subscriptions">View subscriptions</button>
           </div>
           <div id="d-comingup"></div>
           <p class="dash-comingup-foot" id="d-comingup-foot"></p>
         </section>
-      </div>
-
-      <aside class="dash-col dash-col--side">
-        ${aiPanelHtml('d')}
       </aside>
     </div>`;
 
@@ -71,10 +97,11 @@ export async function renderDashboard(container) {
     currentPeriod = period;
     const label = document.getElementById('d-period-label');
     if (label) label.textContent = periodHeading(currentPeriod);
+    lastTotals = null;
+    lastTopCategory = null;
     loadSummary();
-    renderPendingInsights();
+    loadComposition();
     loadInsights();
-    loadHealth();
   });
 
   container.querySelectorAll('[data-nav]').forEach(btn => {
@@ -95,15 +122,39 @@ export async function renderDashboard(container) {
       })
       .catch(() => renderFigures(null, null));
 
-    // Three rows keep "Coming up" visible without scrolling on a laptop.
-    api.get('/upsert/entries', { userId, page: 0, size: 3, ...range })
+    // Five rows fill the ledger column without turning the page into a table.
+    api.get('/upsert/entries', { userId, page: 0, size: 5, ...range })
       .then(renderRecent)
       .catch(() => renderRecent(null));
   };
 
-  loadSummary();
+  // The top expense category lets the statement say "most of it went to X"
+  // without guessing. It is decoration on top of the totals, never a blocker.
+  const loadComposition = () => {
+    const range = periodRange(currentPeriod);
+    api.get('/analytics/category-pie-chart', {
+      userId,
+      ...range,
+      timelineType: 'MONTHLY',
+      tzOffsetMinutes: -new Date().getTimezoneOffset(),
+      transactionFilter: 'EXPENSE',
+    }).then((pie) => {
+      const labels = pie?.labels || [];
+      const values = pie?.datasets?.[0]?.data || [];
+      let best = null;
+      labels.forEach((label, i) => {
+        const value = Number(values[i]) || 0;
+        if (!best || value > best.value) best = { label, value };
+      });
+      lastTopCategory = best && best.value > 0 ? best.label : null;
+      updateSentence();
+    }).catch(() => { /* the sentence simply omits the category */ });
+  };
 
-  // AI insights can take seconds; never block the rest of the page on it.
+  loadSummary();
+  loadComposition();
+
+  // Notes can take seconds; never block the rest of the page on them.
   const loadInsights = () => {
     const range = periodRange(currentPeriod);
     api.get('/analytics/ai-insights', { userId, ...range })
@@ -113,12 +164,6 @@ export async function renderDashboard(container) {
       .catch((e) => {
         if (document.getElementById('d-ai-insights-list')) renderAiData('d', { error: e.message }, refreshAdvisor, { scopeLabel: periodScopeLabel(currentPeriod) });
       });
-  };
-  const renderPendingInsights = () => {
-    const meta = document.getElementById('d-ai-meta');
-    const summary = document.getElementById('d-ai-summary');
-    if (summary) summary.textContent = `Based on ${periodScopeLabel(currentPeriod)}`;
-    if (meta) meta.textContent = '';
   };
   loadInsights();
 
@@ -141,29 +186,30 @@ function renderFigures(totals, previous) {
   const net = Number(totals?.net) || 0;
   const noIncome = income <= 0;
 
+  lastTotals = { totals, previous, currency, income, expense, net, noIncome };
+
   const labelEl = document.getElementById('d-hero-label');
   const netValue = document.getElementById('d-net');
   const earnedEl = document.getElementById('d-earned');
   const spentEl = document.getElementById('d-spent');
-  const netSub = document.getElementById('d-net-sub');
-  const earnedItem = document.getElementById('d-earned-item');
-  const spentItem = document.getElementById('d-spent-item');
-  const netItem = document.getElementById('d-net-item');
+  const earnedBar = document.getElementById('d-earned-bar');
+  const spentBar = document.getElementById('d-spent-bar');
 
   // The hero shows the figure that means something for the period. Early in a
   // month, before income lands, a negative net is normal, not an alarm.
-  if (labelEl) labelEl.textContent = noIncome ? 'Spent so far' : 'Net';
+  if (labelEl) labelEl.textContent = noIncome ? 'Spent this period' : 'Net this period';
   if (netValue) {
     const value = noIncome ? expense : net;
     netValue.textContent = formatMoney(value, currency);
-    netValue.className = `hero-number ${!noIncome && net > 0 ? 'is-pos' : ''}`;
+    netValue.className = `hero-number ${noIncome ? 'is-neg' : net >= 0 ? 'is-pos' : 'is-neg'}`;
   }
   if (earnedEl) earnedEl.textContent = formatMoney(income, currency);
   if (spentEl) spentEl.textContent = formatMoney(expense, currency);
-  if (netSub) netSub.textContent = formatMoney(net, currency);
-  if (earnedItem) earnedItem.hidden = false;
-  if (spentItem) spentItem.hidden = noIncome;
-  if (netItem) netItem.hidden = !noIncome;
+
+  // One scale for both bars, so the comparison is honest.
+  const scale = Math.max(income, expense, 1);
+  if (earnedBar) earnedBar.style.width = `${Math.min(100, (income / scale) * 100)}%`;
+  if (spentBar) spentBar.style.width = `${Math.min(100, (expense / scale) * 100)}%`;
 
   // Like-for-like comparison: the same days of the previous month, short of
   // comparing four days of spending against a whole month.
@@ -188,20 +234,26 @@ function renderFigures(totals, previous) {
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       if (daysElapsed >= 7) {
         const paceValue = (expense / daysElapsed) * daysInMonth;
-        pace.textContent = `On pace for ${formatMoney(paceValue, currency)} this month`;
+        pace.textContent = `At this pace, ${formatMoney(paceValue, currency)} by the end of ${now.toLocaleDateString('en-IN', { month: 'long' })}.`;
       }
     }
   }
 
   const savedWrap = document.getElementById('d-saved-wrap');
   if (savedWrap) {
-    savedWrap.hidden = !(income > 0);
-    if (income > 0) {
+    // Only show the kept-income bar when there is something kept; the
+    // statement sentence already covers a negative month.
+    savedWrap.hidden = !(income > 0 && net > 0);
+    if (income > 0 && net > 0) {
       const savedRate = Math.max(0, (net / income) * 100);
       const label = document.getElementById('d-saved-label');
       const pct = document.getElementById('d-saved-pct');
-      if (label) label.textContent = `Saved ${savedRate.toFixed(0)}% of income`;
-      if (pct) pct.textContent = formatMoney(Math.max(net, 0), currency);
+      if (label) {
+        label.textContent = net > 0
+          ? `Kept ${savedRate.toFixed(0)}% of income`
+          : 'Nothing saved this period.';
+      }
+      if (pct) pct.textContent = net > 0 ? formatMoney(net, currency) : '';
       const fill = savedWrap.querySelector('.progress-fill');
       const track = savedWrap.querySelector('.progress-track');
       if (fill) fill.style.background = savedRate >= 20 ? 'var(--pos)' : 'var(--warn)';
@@ -211,6 +263,44 @@ function renderFigures(totals, previous) {
       }
     }
   }
+
+  updateSentence();
+}
+
+/** One plain sentence that answers "am I okay?" from the real numbers. */
+function updateSentence() {
+  const el = document.getElementById('d-sentence');
+  if (!el || !lastTotals) return;
+  const { currency, income, expense, net } = lastTotals;
+  const top = lastTopCategory
+    ? (String(lastTopCategory).toUpperCase() === 'OTHERS'
+      ? 'uncategorized spending'
+      : formatCategory(lastTopCategory).toLowerCase())
+    : '';
+
+  if (expense <= 0) {
+    el.textContent = income > 0
+      ? `You earned ${formatMoney(income, currency)} and have not spent any of it yet.`
+      : 'Nothing recorded for this period yet. Add a transaction to start the ledger.';
+    return;
+  }
+
+  if (income <= 0) {
+    el.textContent = `You have spent ${formatMoney(expense, currency)} this period. No income is recorded yet.`;
+    return;
+  }
+
+  if (net < 0) {
+    const over = formatMoney(Math.abs(net), currency);
+    el.innerHTML = `You spent <strong>${esc(over)}</strong> more than you earned this period.`
+      + (top ? ` Most of it went to ${esc(top.toLowerCase())}.` : '');
+    return;
+  }
+
+  const saved = (net / income) * 100;
+  el.innerHTML = `You kept <strong class="is-pos">${esc(formatMoney(net, currency))}</strong> of the `
+    + `${esc(formatMoney(income, currency))} you earned this period — ${saved.toFixed(0)}% of your income.`
+    + (top ? ` The largest expense was ${esc(top.toLowerCase())}.` : '');
 }
 
 function settlementTitle(t, userId) {
@@ -221,7 +311,7 @@ function settlementTitle(t, userId) {
   if (m) return `You paid ${displayName(m[1])}`;
   m = /^received from\s+(.+)$/i.exec(raw);
   if (m) return `${displayName(m[1])} paid you`;
-  m = /payment from\s+(.+?)\s+to\s+(.+)$/i.exec(raw);
+  m = /^payment from\s+(.+?)\s+to\s+(.+)$/i.exec(raw);
   if (m) {
     const from = displayName(m[1]);
     const to = displayName(m[2]);
@@ -243,7 +333,8 @@ function renderRecent(result) {
   const currency = Auth.getDefaultCurrency();
 
   if (!items.length) {
-    wrap.innerHTML = `<p class="meta" style="padding:20px 0">No transactions in this period. Add one to get started.</p>`;
+    wrap.innerHTML = `<p class="meta" style="padding:20px 0">No transactions in this period. <button type="button" class="insight-action" id="d-empty-add">Add one</button></p>`;
+    document.getElementById('d-empty-add')?.addEventListener('click', () => window.openAddTransaction?.());
     return;
   }
 
@@ -272,9 +363,12 @@ function renderRecent(result) {
         ? `<button type="button" class="attach-btn" data-receipt="${esc(t.receiptUrl)}" aria-label="Receipt attached" title="Receipt attached">${icon('paperclip', 'sm')}</button>`
         : '';
       const isSettlement = String(cat).toUpperCase() === 'SETTLEMENT';
+      const marker = isSettlement
+        ? `<span class="row-icon">${icon('arrow-right', 'sm')}</span>`
+        : categoryDot(cat);
       return `
         <div class="ledger-row" role="button" tabindex="0" data-txn="${esc(String(t.id || ''))}">
-          <span class="dash-recent-icon">${icon(isSettlement ? 'arrow-right' : categoryIcon(cat), 'sm')}</span>
+          ${marker}
           <div class="ledger-name">
             ${esc(settlementTitle(t))}
             <div class="txn-sub">${esc(isSettlement ? (settlementGroup(t) || formatCategory(cat)) : formatCategory(cat))}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}${tags}</div>
@@ -327,7 +421,6 @@ function renderComingUp(subs) {
   const currency = Auth.getDefaultCurrency();
   list.innerHTML = shown.map(s => `
     <div class="comingup-row">
-      <span class="row-icon">${icon('repeat', 'sm')}</span>
       <div class="comingup-main">
         <div class="comingup-name">${esc(s.name)}</div>
         <div class="comingup-when" title="${esc(dateTooltip(s.nextChargeDate))}">${esc(formatDue(s.nextChargeDate, s.daysUntilCharge))}</div>
@@ -351,10 +444,10 @@ async function refreshAdvisor() {
     const range = periodRange(currentPeriod);
     const ai = await api.get('/analytics/ai-insights', { userId: Auth.getUserId(), refresh: true, ...range });
     renderAiData('d', ai, refreshAdvisor, { scopeLabel: periodScopeLabel(currentPeriod) });
-    toast('Insights refreshed', 'success');
+    toast('Notes refreshed', 'success');
   } catch (err) {
     renderAiData('d', { error: err.message }, refreshAdvisor, { scopeLabel: periodScopeLabel(currentPeriod) });
-    toast('Could not refresh insights: ' + err.message, 'error');
+    toast('Could not refresh notes: ' + err.message, 'error');
   } finally {
     const current = document.getElementById('d-ai-refresh');
     if (current) current.disabled = false;

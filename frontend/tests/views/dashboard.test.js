@@ -72,14 +72,15 @@ describe('renderDashboard', () => {
     mockDashboardApis({ aiDelay: 250 });
     await renderDashboard(container);
 
-    // The dashboard has already resolved while the AI request is still in
-    // flight, so every other panel must be painted.
+    // The dashboard has already resolved while the notes request is still in
+    // flight. The page is painted; the notes panel is hidden, never skeletoned.
     expect(container.querySelector('#d-kpis')).toBeTruthy();
-    expect(container.querySelector('#d-ai-summary')?.textContent).toContain('Analyzing');
-    expect(container.querySelectorAll('#d-ai-insights-list .advisor-skeleton').length).toBeGreaterThan(0);
+    expect(container.querySelector('#d-notes')?.hidden).toBe(true);
+    expect(container.querySelector('#d-ai-insights-list')?.textContent).toBe('');
 
     await vi.waitFor(() => {
       expect(container.querySelector('#d-ai-insights-list')?.textContent).toContain('Save more');
+      expect(container.querySelector('#d-notes')?.hidden).toBe(false);
     });
   });
 });

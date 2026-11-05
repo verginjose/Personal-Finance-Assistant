@@ -4,7 +4,7 @@ import { createBarChart, destroyChart } from '../utils/charts.js';
 import { getTotals } from '../utils/totals.js';
 import {
   pageHeader, skeletonChart, formatMoney, formatCompact, formatCategory, formatMonth,
-  formatDate, esc,
+  formatDate, esc, categoryDot,
 } from '../utils/ui.js';
 
 let charts = [];
@@ -92,18 +92,7 @@ export async function renderAnalytics(container) {
       <button type="button" class="analytics-reset" id="a-clear" hidden>Reset</button>
     </div>
 
-    <div class="card-grid card-grid-2">
-      <section class="section-card">
-        <div class="section-card-header"><h3>Where your money went</h3></div>
-        <div class="section-card-body" id="a-expense-wrap">${skeletonChart(220)}</div>
-      </section>
-      <section class="section-card">
-        <div class="section-card-header"><h3>Where it came from</h3></div>
-        <div class="section-card-body" id="a-income-wrap">${skeletonChart(220)}</div>
-      </section>
-    </div>
-
-    <section class="section-card" style="margin-top:var(--s4)">
+    <section class="section-card">
       <div class="section-card-header">
         <h3>Income and expenses</h3>
         <span class="card-subtitle" id="a-timeline-caption"></span>
@@ -112,12 +101,23 @@ export async function renderAnalytics(container) {
         <div class="chart-legend" id="a-legend">
           <button type="button" class="chart-toggle is-on" data-series="income" aria-pressed="true"><span class="chart-toggle-swatch" style="color:var(--pos)"></span>Income</button>
           <button type="button" class="chart-toggle is-on" data-series="expense" aria-pressed="true"><span class="chart-toggle-swatch" style="color:var(--text-2)"></span>Expenses</button>
-          <button type="button" class="chart-toggle is-on" data-series="net" aria-pressed="true"><span class="chart-toggle-swatch" style="color:var(--brand)"></span>Net line</button>
+          <button type="button" class="chart-toggle is-on" data-series="net" aria-pressed="true"><span class="chart-toggle-swatch" style="color:var(--text)"></span>Net line</button>
           <button type="button" class="chart-toggle chart-toggle--mode" data-series="expenses-only" aria-pressed="false" aria-label="View mode: expenses only">Expenses only</button>
         </div>
-        <div class="chart-container chart-container--tall" id="a-timeline-wrap">${skeletonChart(320)}</div>
+        <div class="chart-container chart-container--tall" id="a-timeline-wrap">${skeletonChart(340)}</div>
       </div>
-    </section>`;
+    </section>
+
+    <div class="card-grid card-grid-2" style="margin-top:var(--s6)">
+      <section class="section-card">
+        <div class="section-card-header"><h3>Spending by category</h3></div>
+        <div class="section-card-body" id="a-expense-wrap">${skeletonChart(220)}</div>
+      </section>
+      <section class="section-card">
+        <div class="section-card-header"><h3>Income</h3></div>
+        <div class="section-card-body" id="a-income-wrap">${skeletonChart(220)}</div>
+      </section>
+    </div>`;
 
   // Searchable selects, themed.
   if (window.TomSelect) {
@@ -481,7 +481,11 @@ function mountCategoryList(wrapId, data, foldLabel, kind) {
   const values = data?.datasets?.[0]?.data || [];
 
   const rows = labels
-    .map((label, i) => ({ label: formatCategory(label), raw: label, value: Number(values[i]) || 0 }))
+    .map((label, i) => ({
+      label: String(label).toUpperCase() === 'OTHERS' ? 'Uncategorized' : formatCategory(label),
+      raw: label,
+      value: Number(values[i]) || 0,
+    }))
     .filter(r => r.value > 0)
     .sort((a, b) => b.value - a.value);
 
@@ -503,14 +507,31 @@ function mountCategoryList(wrapId, data, foldLabel, kind) {
   const rowHtml = (r, { folded = false } = {}) => {
     const pct = total > 0 ? (r.value / total) * 100 : 0;
     const width = max > 0 ? Math.max(1, (r.value / max) * 100) : 0;
+    const dot = isIncome
+      ? '<span class="cat-dot" data-tone="2" aria-hidden="true"></span>'
+      : categoryDot(r.raw);
     return `
       <div class="barlist-row ${folded ? 'is-folded' : ''}" ${folded ? 'data-fold' : `data-category="${esc(r.raw)}"`} role="button" tabindex="0" aria-label="${esc(r.label)}, ${formatMoney(r.value, currency)}, ${pctLabel(pct)} of total">
-        <div class="barlist-label">${esc(r.label)}</div>
-        <div class="barlist-track"><div class="barlist-fill" style="width:${width.toFixed(1)}%${folded ? '' : `;background:${isIncome ? 'var(--pos)' : 'var(--text-2)'}`}"></div></div>
+        <div class="barlist-label">${folded ? '' : dot}<span>${esc(r.label)}</span></div>
+        <div class="barlist-track"><div class="barlist-fill" style="width:${width.toFixed(1)}%${folded ? '' : `;background:${isIncome ? 'var(--pos)' : 'var(--brand)'}`}"></div></div>
         <div class="barlist-value">${formatMoney(r.value, currency, { decimals: 0 })}</div>
         <div class="barlist-pct">${pctLabel(pct)}</div>
       </div>`;
   };
+
+  // A dominant "Others" bar is a useless chart. Say what it is and make the
+  // fix one click away, rather than leaving a 96% empty column.
+  const uncat = rows.find(r => String(r.raw).toUpperCase() === 'OTHERS');
+  const uncatShare = uncat ? (uncat.value / total) * 100 : 0;
+  const uncatNote = !isIncome && uncatShare >= 40
+    ? `<div class="uncat-note">
+        <div>
+          <strong>${pctLabel(uncatShare)} of spending is uncategorized.</strong>
+          Sort these entries to get a useful breakdown.
+          <button type="button" id="a-uncat-btn">Review uncategorized</button>
+        </div>
+      </div>`
+    : '';
 
   wrap.innerHTML = `
     <div class="barlist">
@@ -519,7 +540,13 @@ function mountCategoryList(wrapId, data, foldLabel, kind) {
     </div>
     <button type="button" class="barlist-showall" ${rows.length > 5 ? '' : 'hidden'}>Show all ${rows.length} categories</button>
     <div class="barlist-extra" hidden>${mobileExtra.map(r => rowHtml(r)).join('')}</div>
-    <div class="barlist-total">Total ${formatMoney(total, currency)}</div>`;
+    <div class="barlist-total">Total ${formatMoney(total, currency)}</div>
+    ${uncatNote}`;
+
+  document.getElementById('a-uncat-btn')?.addEventListener('click', () => {
+    sessionStorage.setItem('pendingCategoryFilter', 'OTHERS');
+    window.navigateTo('transactions', { query: '?category=OTHERS' });
+  });
 
   const moreBtn = wrap.querySelector('.barlist-showall');
   const extra = wrap.querySelector('.barlist-extra');

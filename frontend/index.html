@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>PFA — Personal Finance Assistant</title>
   <meta name="description" content="Personal finance assistant with insights, bill scanning, split expenses and analytics.">
-  <meta name="theme-color" content="#0D1412">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230D1412'/%3E%3Cpath d='M11 24V8h6.4a5.2 5.2 0 0 1 0 10.4H11' fill='none' stroke='%23C9A45C' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <meta name="theme-color" content="#F2F3EE">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23F2F3EE'/%3E%3Cpath d='M10 25V7h6.8a5.6 5.6 0 0 1 0 11.2H10' fill='none' stroke='%231D2B32' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M22 25V7' stroke='%232B4CC9' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
   <script>
     // Resolve the theme before first paint so there is no flash.
     (function () {
@@ -14,14 +14,14 @@
         var pref = localStorage.getItem('pfa_theme') || 'system';
         var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-        document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#0D1412' : '#F4F5F3');
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#141A22' : '#F2F3EE');
       } catch (e) { /* storage unavailable */ }
     })();
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
-  <link rel="stylesheet" href="css/style.css?v=2026110503">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
+  <link rel="stylesheet" href="css/style.css?v=2026110504">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 
   <!-- Cropper.js for the profile picture -->
@@ -40,6 +40,6 @@
 </head>
 <body>
   <div id="app"></div>
-  <script type="module" src="js/app.js?v=2026110503"></script>
+  <script type="module" src="js/app.js?v=2026110504"></script>
 </body>
 </html>

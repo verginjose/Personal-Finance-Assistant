@@ -105,9 +105,11 @@ describe('ui utilities', () => {
     renderAiData('i', {
       summary: '3 insights found',
       insights: [{ title: 'High spending', message: 'Cut dining', type: 'WARNING' }],
-    });
+    }, null, { scopeLabel: 'November 2026' });
 
-    expect(document.getElementById('i-ai-summary').textContent).toBe('3 insights found');
+    // The panel states the scope; it never repeats a generated paragraph that
+    // could disagree with the totals shown above it.
+    expect(document.getElementById('i-ai-summary').textContent).toBe('Based on November 2026');
     expect(document.getElementById('i-ai-insights-list').children.length).toBe(1);
     expect(document.getElementById('i-ai-insights-list').textContent).toContain('High spending');
   });

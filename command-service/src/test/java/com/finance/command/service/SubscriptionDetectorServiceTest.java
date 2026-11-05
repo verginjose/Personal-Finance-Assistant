@@ -130,6 +130,26 @@ class SubscriptionDetectorServiceTest {
     }
 
     @Test
+    @DisplayName("processRecurringTransactions: a dismissed subscription stays dismissed")
+    void processRecurringTransactions_dismissedSubscription_staysInactive() {
+        TransactionEntry entry = buildEntry("Netflix", new BigDecimal("649.00"), RecurringPeriod.MONTHLY);
+
+        Subscription dismissed = new Subscription();
+        dismissed.setId(7L);
+        dismissed.setUserId(userId);
+        dismissed.setName("Netflix");
+        dismissed.setAmount(new BigDecimal("649.00"));
+        dismissed.setActive(false);
+        when(subscriptionRepository.findFirstByUserIdAndNameIgnoreCaseOrderByIdAsc(any(), eq("Netflix")))
+                .thenReturn(Optional.of(dismissed));
+        when(subscriptionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service.processRecurringTransactions(List.of(entry));
+
+        assertThat(dismissed.isActive()).isFalse();
+    }
+
+    @Test
     @DisplayName("processRecurringTransactions: skips INCOME recurring entries")
     void processRecurringTransactions_incomeEntry_skipped() {
         TransactionEntry entry = buildEntry("Salary", new BigDecimal("50000"), RecurringPeriod.MONTHLY);

@@ -229,6 +229,11 @@ public class SubscriptionDetectorService {
                 .findFirstByUserIdAndNameIgnoreCaseOrderByIdAsc(userId, name);
 
         Subscription sub = existing.orElseGet(Subscription::new);
+        // "Not a subscription" has to stick. The merchant keeps being detected,
+        // so re-activating here would silently undo the user's decision at the
+        // next detection run.
+        boolean dismissed = existing.map(s -> !s.isActive()).orElse(false);
+
         sub.setUserId(userId);
         sub.setName(name);
         sub.setAmount(amount);
@@ -236,7 +241,7 @@ public class SubscriptionDetectorService {
         sub.setPeriod(period);
         sub.setNextChargeDate(nextCharge);
         sub.setDaysUntilCharge(daysUntil);
-        sub.setActive(true);
+        sub.setActive(!dismissed);
         sub.setLastSeenAt(LocalDateTime.now());
 
         subscriptionRepository.save(sub);

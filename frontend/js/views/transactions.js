@@ -1,10 +1,11 @@
 import { api, Auth, toast } from '../utils/api.js';
-import { icon, categoryIcon } from '../utils/icons.js';
+import { icon } from '../utils/icons.js';
 import {
   esc, escAttr, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
   openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions,
   setupCategorySearch, currencyOptionHtml, formatDayLabel, skeletonRows,
   displayAmountFor, displayName, dateTooltip, humanizeNamesIn, humanizeSystemText,
+  categoryDot,
 } from '../utils/ui.js';
 
 let currentPage = 0, totalPages = 0;
@@ -124,7 +125,7 @@ export async function renderTransactions(container) {
   currentPage = Number.isInteger(pageParam) && pageParam > 0 ? pageParam - 1 : 0;
   const urlCategory = urlParams.get('category');
   container.innerHTML = `
-    ${pageHeader('Transactions', '', '<button class="btn btn-primary" id="t-add">Add transaction</button>')}
+    ${pageHeader('Transactions', '', '<button class="btn btn-primary" id="t-add" title="Add transaction (N)">Add transaction</button>')}
     <div class="toolbar">
       <div class="search-box page-search">${icon('search', 'sm')}<input class="form-input" id="t-search" placeholder="Search by name or note…" aria-label="Search transactions" autocomplete="off"></div>
       <button class="btn btn-ghost btn-sm" id="t-filter-btn">${icon('filter', 'sm')} Filters</button>
@@ -494,13 +495,12 @@ async function loadTransactions(userId) {
           const categoryCell = settlement
             ? `<span class="chip chip--neutral">Settlement</span>`
             : `<button type="button" class="cat-edit-btn" data-cat-id="${esc(String(t.id))}" title="Change category" aria-label="Change category: ${esc(formatCategory(cat))}">
-                ${esc(formatCategory(cat))}${icon('chevron-down', 'xs')}
+                ${categoryDot(cat)}<span>${esc(formatCategory(cat))}</span>${icon('chevron-down', 'xs')}
               </button>`;
 
           return `<tr data-txn='${escAttr(JSON.stringify(t))}' tabindex="0" class="txn-row ${settlement ? 'is-settlement' : ''}" style="cursor:pointer">
             <td>
               <div class="txn-row-main">
-                <span class="row-icon">${icon(settlement ? 'arrow-right' : categoryIcon(cat), 'sm')}</span>
                 <div class="txn-row-text">
                   <div class="txn-name">${esc(title)}${receipt}${recurring}</div>
                   ${subParts.length ? `<div class="txn-sub">${subParts.join(' · ')}</div>` : ''}
@@ -592,7 +592,9 @@ function renderMobileTransactions(items, currency, userId) {
         : `${esc(formatCategory(cat))}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}`;
       return `
         <div class="ledger-row ${settlement ? 'is-settlement' : ''}" role="button" tabindex="0" data-txn-id="${esc(String(t.id || ''))}">
-          <span class="row-icon">${icon(settlement ? 'arrow-right' : categoryIcon(cat), 'sm')}</span>
+          ${settlement
+            ? `<span class="row-icon">${icon('arrow-right', 'sm')}</span>`
+            : categoryDot(cat)}
           <div class="ledger-name">
             <span class="txn-title">${esc(title)}</span>
             <div class="txn-sub">${sub}</div>

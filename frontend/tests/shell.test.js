@@ -60,11 +60,18 @@ describe('app shell navigation', () => {
     });
   });
 
-  it('opens the transaction form from the desktop sidebar quick-add', async () => {
-    document.getElementById('sidebar-add-txn').click();
+  it('opens the transaction form from the N shortcut', async () => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', bubbles: true }));
 
     await vi.waitFor(() => {
       expect(document.querySelector('.modal-overlay')).toBeTruthy();
     });
+  });
+
+  it('keeps one primary add action off the sidebar', () => {
+    // The pinned sidebar button was removed; the action lives where the task
+    // happens (the Transactions header) and as the mobile Add button.
+    expect(document.getElementById('sidebar-add-txn')).toBeNull();
+    expect(document.getElementById('mobile-fab')).toBeTruthy();
   });
 });

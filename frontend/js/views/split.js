@@ -2,9 +2,9 @@ import { api, Auth, toast } from '../utils/api.js';
 import {
   esc, escAttr, emptyState, formatMoney, formatDate, formatCategory, dateTooltip,
   openModal, confirmModal, modalActions, avatar, displayName, chip, displayAmountFor,
-  skeletonRows, EXPENSE_CATS, categoryOptions, currencyOptionHtml,
+  skeletonRows, EXPENSE_CATS, categoryOptions, currencyOptionHtml, categoryDot,
 } from '../utils/ui.js';
-import { icon, categoryIcon } from '../utils/icons.js';
+import { icon } from '../utils/icons.js';
 
 let currentGroupId = null;
 let expensesPage = 0, expensesTotal = 1;
@@ -644,7 +644,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
         : '';
       return `
         <div class="expense-row" data-exp='${escAttr(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
-          <span class="row-icon">${icon(categoryIcon(e.expenseCategory || 'OTHERS'), 'sm')}</span>
+          ${categoryDot(e.expenseCategory || 'OTHERS')}
           <div class="expense-row-main">
             <div class="expense-row-title">${esc(e.description || 'Expense')}</div>
             <div class="expense-row-meta">

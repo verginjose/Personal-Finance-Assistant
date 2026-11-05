@@ -1,8 +1,8 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
-  esc, pageHeader, emptyState, formatMoney, formatDate, formatUpcoming,
-  confirmModal, openModal, modalActions, avatar, chip,
+  esc, pageHeader, emptyState, formatMoney, formatUpcoming,
+  confirmModal, openModal, modalActions, avatar,
 } from '../utils/ui.js';
 
 const PERIOD_MONTHS = { DAILY: 30, WEEKLY: 4.345, MONTHLY: 1, YEARLY: 1 / 12 };
@@ -13,6 +13,7 @@ export async function renderSubscriptions(container) {
   container.innerHTML = `
     ${pageHeader('Subscriptions', '')}
     <div class="subs-summary" id="subs-summary"></div>
+    <div id="subs-month"></div>
     <div id="subs-grid"></div>`;
 
   await loadSubscriptions(userId);
@@ -20,14 +21,16 @@ export async function renderSubscriptions(container) {
   async function loadSubscriptions(uid) {
     const grid = document.getElementById('subs-grid');
     const summary = document.getElementById('subs-summary');
+    const month = document.getElementById('subs-month');
     if (!grid) return;
     grid.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
     try {
       const data = await api.get('/upsert/subscriptions', { userId: uid });
       if (!data?.length) {
         if (summary) summary.innerHTML = '';
-        grid.innerHTML = emptyState('check-circle', 'No subscriptions detected',
-          'Mark transactions as recurring to track them here.');
+        if (month) month.innerHTML = '';
+        grid.innerHTML = emptyState('repeat', 'No subscriptions detected',
+          'Mark a transaction as recurring to track its next charge here.');
         return;
       }
 
@@ -37,9 +40,11 @@ export async function renderSubscriptions(container) {
 
       if (summary) {
         summary.innerHTML = `
-          <strong>${formatMoney(monthlyTotal, currency)} a month</strong>
-          <span>${formatMoney(yearlyTotal, currency)} a year · ${data.length} recurring charge${data.length === 1 ? '' : 's'}</span>`;
+          <strong>${formatMoney(monthlyTotal, currency)}</strong>
+          <span class="subs-summary-unit">a month · ${formatMoney(yearlyTotal, currency)} a year · ${data.length} recurring charge${data.length === 1 ? '' : 's'}</span>`;
       }
+
+      if (month) month.innerHTML = monthStrip(data, currency);
 
       const upcoming = data
         .filter(s => s.daysUntilCharge != null && s.daysUntilCharge >= 0 && s.daysUntilCharge <= 7)
@@ -54,48 +59,16 @@ export async function renderSubscriptions(container) {
               `${esc(s.name)} ${s.daysUntilCharge === 0 ? 'today' : `in ${s.daysUntilCharge} day${s.daysUntilCharge === 1 ? '' : 's'}`}`
             ).join(', ')}</span>
           </div>` : ''}
-        <div class="table-wrap subs-desktop">
-          <table class="subs-table">
-            <thead><tr>
-              <th>Subscription</th>
-              <th>Frequency</th>
-              <th style="text-align:right">Amount</th>
-              <th style="text-align:right">
-                <button type="button" class="sort-btn" data-sort="monthly" aria-label="Sort by monthly cost">Per month</button>
-              </th>
-              <th>
-                <button type="button" class="sort-btn" data-sort="next" aria-label="Sort by next charge">Next charge</button>
-              </th>
-              <th><span class="sr-only">Actions</span></th>
-            </tr></thead>
-            <tbody>
-              ${sorted.map(subRow).join('')}
-            </tbody>
-          </table>
+        <div class="subs-columns">
+          <span class="card-subtitle">${sortKey === 'next' ? 'Next charge first' : 'Most expensive first'}</span>
+          <div class="subs-sort">
+            <button type="button" class="sort-btn" data-sort="next" aria-pressed="${sortKey === 'next'}">Next charge</button>
+            <button type="button" class="sort-btn" data-sort="monthly" aria-pressed="${sortKey === 'monthly'}">Monthly cost</button>
+          </div>
         </div>
-        <div class="subs-mobile" id="subs-mobile"></div>`;
-
-      const mobile = document.getElementById('subs-mobile');
-      if (mobile) {
-        mobile.innerHTML = sorted.map(sub => `
-          <button type="button" class="subs-card-row" data-sub-id="${sub.id}" style="width:100%;text-align:left">
-            ${avatar(sub.name, 32)}
-            <span class="subs-card-main">
-              <span class="subs-card-name">${esc(sub.name)}</span>
-              <span class="subs-card-meta">${esc(titleCase(sub.period))} · ${esc(formatUpcoming(sub.nextChargeDate, sub.daysUntilCharge))}</span>
-            </span>
-            <span class="subs-card-amount">
-              <strong>${formatMoney(monthly(sub), currency)}</strong>
-              <span>per month</span>
-            </span>
-          </button>`).join('');
-        mobile.querySelectorAll('[data-sub-id]').forEach(row => {
-          row.onclick = () => {
-            const sub = sorted.find(s => String(s.id) === row.dataset.subId);
-            if (sub) editSub(sub, uid);
-          };
-        });
-      }
+        <div class="subs-list">
+          ${sorted.map(sub => subRow(sub, currency)).join('')}
+        </div>`;
 
       grid.querySelectorAll('[data-sort]').forEach(btn => {
         btn.onclick = () => { sortKey = btn.dataset.sort; loadSubscriptions(uid); };
@@ -119,10 +92,7 @@ export async function renderSubscriptions(container) {
   }
 
   function wireRow(sub, uid) {
-    document.getElementById(`sub-row-${sub.id}`)?.addEventListener('click', (e) => {
-      if (e.target.closest('.sub-row-menu-btn') || e.target.closest('.sub-row-menu')) return;
-      editSub(sub, uid);
-    });
+    document.getElementById(`sub-row-${sub.id}`)?.addEventListener('click', () => editSub(sub, uid));
     const menuBtn = document.getElementById(`sub-menu-btn-${sub.id}`);
     const menu = document.getElementById(`sub-menu-${sub.id}`);
     if (menuBtn && menu) {
@@ -197,30 +167,70 @@ function titleCase(value) {
   return String(value || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function frequencyChip(period) {
-  const tone = period === 'YEARLY' ? 'neutral' : period === 'DAILY' ? 'warn' : 'brand';
-  return chip(titleCase(period), tone);
+/**
+ * The month strip: every day of the current month, with a mark where a
+ * subscription is due. It is a calendar for the next 31 days, nothing more.
+ */
+function monthStrip(data, currency) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const days = new Date(year, month + 1, 0).getDate();
+  const today = now.getDate();
+
+  const byDay = new Map();
+  data.forEach((sub) => {
+    if (!sub.nextChargeDate) return;
+    const d = new Date(sub.nextChargeDate);
+    if (Number.isNaN(d.getTime())) return;
+    if (d.getFullYear() !== year || d.getMonth() !== month) return;
+    const day = d.getDate();
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(sub);
+  });
+
+  const cells = Array.from({ length: 31 }, (_, i) => {
+    const day = i + 1;
+    if (day > days) return '<span class="month-strip-day is-empty" aria-hidden="true"></span>';
+    const charges = byDay.get(day) || [];
+    const names = charges.map(s => `${s.name} ${formatMoney(Number(s.amount) || 0, s.currency || currency)}`).join(', ');
+    const title = charges.length ? `${day}: ${names}` : `Day ${day}: no charge`;
+    return `<span class="month-strip-day${charges.length ? ' has-charge' : ''}${day === today ? ' is-today' : ''}"
+      title="${esc(title)}" aria-label="${esc(title)}">${day}</span>`;
+  }).join('');
+
+  const monthName = now.toLocaleDateString('en-IN', { month: 'long' });
+  return `
+    <div class="month-strip">
+      <div class="month-strip-head">
+        <span>Charges in ${esc(monthName)}</span>
+        <span>${byDay.size ? `${byDay.size} day${byDay.size === 1 ? '' : 's'}` : 'None this month'}</span>
+      </div>
+      <div class="month-strip-days">${cells}</div>
+    </div>`;
 }
 
-function subRow(sub) {
-  const currency = sub.currency || Auth.getDefaultCurrency();
+function subRow(sub, currency) {
+  const cost = sub.currency || Auth.getDefaultCurrency();
   return `
-    <tr id="sub-row-${sub.id}" style="cursor:pointer">
-      <td>
-        <span class="subs-name">${avatar(sub.name, 32)}<span>${esc(sub.name)}</span></span>
-      </td>
-      <td>${frequencyChip(sub.period)}</td>
-      <td class="subs-amount">${formatMoney(sub.amount, currency)}</td>
-      <td class="subs-amount">${formatMoney(monthly(sub), currency)}</td>
-      <td class="subs-when">${esc(formatUpcoming(sub.nextChargeDate, sub.daysUntilCharge))}</td>
-      <td style="text-align:right">
-        <span class="overflow-wrap">
-          <button type="button" class="sub-row-menu-btn" id="sub-menu-btn-${sub.id}" aria-label="Actions for ${esc(sub.name)}" aria-haspopup="menu">${icon('more-vertical', 'sm')}</button>
-          <div class="overflow-menu sub-row-menu" id="sub-menu-${sub.id}" role="menu" hidden>
-            <button type="button" role="menuitem" id="sub-edit-${sub.id}">Edit</button>
-            <button type="button" role="menuitem" id="sub-dismiss-${sub.id}">Not a subscription</button>
-          </div>
+    <div class="subs-card-row" data-sub-id="${sub.id}">
+      <button type="button" class="subs-card-open" id="sub-row-${sub.id}" aria-label="Edit ${esc(sub.name)}">
+        ${avatar(sub.name, 32)}
+        <span class="subs-card-main">
+          <span class="subs-card-name">${esc(sub.name)}</span>
+          <span class="subs-card-meta">${esc(titleCase(sub.period))} · ${esc(formatUpcoming(sub.nextChargeDate, sub.daysUntilCharge))}</span>
         </span>
-      </td>
-    </tr>`;
+        <span class="subs-card-amount">
+          <strong>${formatMoney(monthly(sub), currency)}</strong>
+          <span>${formatMoney(sub.amount, cost)} charged</span>
+        </span>
+      </button>
+      <span class="overflow-wrap">
+        <button type="button" class="sub-row-menu-btn" id="sub-menu-btn-${sub.id}" aria-label="Actions for ${esc(sub.name)}" aria-haspopup="menu">${icon('more-vertical', 'sm')}</button>
+        <div class="overflow-menu sub-row-menu" id="sub-menu-${sub.id}" role="menu" hidden>
+          <button type="button" role="menuitem" id="sub-edit-${sub.id}">Edit</button>
+          <button type="button" role="menuitem" id="sub-dismiss-${sub.id}">Not a subscription</button>
+        </div>
+      </span>
+    </div>`;
 }

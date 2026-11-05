@@ -2,7 +2,7 @@ import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
   esc, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
-  progressBar, budgetStatusColor, chip, openModal, confirmModal, modalActions,
+  progressBar, goalRuler, budgetStatusColor, openModal, confirmModal, modalActions,
   EXPENSE_CATS, categoryOptions, currencyOptionHtml,
 } from '../utils/ui.js';
 
@@ -11,20 +11,23 @@ export async function renderGoals(container) {
   container.innerHTML = `
     ${pageHeader('Goals and budgets', '')}
     <div class="goals-layout">
-      <section aria-labelledby="goals-title">
-        <div class="section-header">
-          <h2 id="goals-title">Savings goals</h2>
-          <button class="btn btn-ghost btn-sm" id="add-goal-btn">${icon('plus', 'sm')} New goal</button>
-        </div>
-        <div id="goals-list" class="goal-list"><div class="spinner-center"><span class="spinner"></span></div></div>
-      </section>
-      <section aria-labelledby="budgets-title">
-        <div class="section-header">
-          <h2 id="budgets-title">Category budgets</h2>
-          <button class="btn btn-ghost btn-sm" id="add-budget-btn">${icon('plus', 'sm')} New budget</button>
-        </div>
-        <div id="budgets-list" class="goal-list"><div class="spinner-center"><span class="spinner"></span></div></div>
-      </section>
+      <div class="goals-main">
+        <section aria-labelledby="goals-title">
+          <div class="section-header">
+            <h2 id="goals-title">Savings goals</h2>
+            <button class="btn btn-ghost btn-sm" id="add-goal-btn">${icon('plus', 'sm')} New goal</button>
+          </div>
+          <div id="goals-list" class="goal-list"><div class="spinner-center"><span class="spinner"></span></div></div>
+        </section>
+        <section aria-labelledby="budgets-title">
+          <div class="section-header">
+            <h2 id="budgets-title">Category budgets</h2>
+            <button class="btn btn-ghost btn-sm" id="add-budget-btn">${icon('plus', 'sm')} New budget</button>
+          </div>
+          <div id="budgets-list" class="goal-list"><div class="spinner-center"><span class="spinner"></span></div></div>
+        </section>
+      </div>
+      <aside class="goals-side" id="goals-side" aria-live="polite"></aside>
     </div>`;
 
   bindEvents(userId);
@@ -46,6 +49,7 @@ async function loadGoals(uid) {
       if (forecasts[i]?.status === 'fulfilled') forecastById.set(g.id, forecasts[i].value);
     });
 
+    renderPlan(active);
     if (!goals.length) {
       el.className = 'goal-list';
       el.innerHTML = emptyState('target', 'No savings goals',
@@ -121,25 +125,27 @@ function goalCard(g, forecast) {
   const months = monthsUntil(g.deadline);
   const remaining = Math.max(0, Number(g.targetAmount) - Number(g.savedAmount));
   const required = months ? remaining / months : null;
-  const actual = forecast ? Number(forecast.monthlyVelocity) || 0 : null;
   const overdue = g.deadline ? new Date(g.deadline).getTime() < Date.now() && !g.completed : false;
 
-  let behind = false;
-  if (!g.completed && required != null) {
-    if (actual != null) behind = actual < required;
-    else if (expected != null) behind = pct + 5 < expected;
-  }
+  // "Behind" is measured the same way the ruler mark is drawn: against the
+  // share of the time between the goal's start and its deadline. Mixing in a
+  // forecast here would make the sentence disagree with the picture.
+  const behind = !g.completed && expected != null && pct + 5 < expected;
 
-  const color = g.completed ? 'var(--pos)' : behind ? 'var(--warn)' : 'var(--pos)';
-  let statusChip = chip('On track', 'pos');
-  if (g.completed) statusChip = chip('Done', 'pos');
-  else if (behind) statusChip = chip('Behind', 'warn');
+  const daysLeft = g.deadline && !g.completed
+    ? Math.ceil((new Date(g.deadline).getTime() - Date.now()) / 86400000)
+    : null;
+  const deadlineFact = g.deadline
+    ? (overdue
+      ? `${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? '' : 's'} past the target date`
+      : `${daysLeft} day${daysLeft === 1 ? '' : 's'} to go`)
+    : '';
 
   let reco = '';
-  if (!g.completed && required != null) {
-    reco = `<div class="goal-reco"><span>Save <strong>${formatMoney(required, g.currency)}</strong> a month to hit ${esc(formatDate(g.deadline))}.</span></div>`;
+  if (!g.completed && required != null && !overdue) {
+    reco = `<div class="goal-reco"><span>Save <strong>${formatMoney(required, g.currency)}</strong> a month to reach it by ${esc(formatDate(g.deadline))}.</span></div>`;
   } else if (!g.completed && overdue) {
-    reco = `<div class="goal-reco"><span>Deadline has passed. Add the remaining <strong>${formatMoney(remaining, g.currency)}</strong> to finish.</span></div>`;
+    reco = `<div class="goal-reco"><span>The target date has passed. ${formatMoney(remaining, g.currency)} still to add.</span></div>`;
   }
 
   return `
@@ -148,8 +154,10 @@ function goalCard(g, forecast) {
         <div>
           <div class="goal-title">${esc(g.name)}</div>
           <div class="goal-meta-line">
-            ${statusChip}
-            ${g.deadline ? `<span>${icon('calendar', 'xs')} ${esc(formatDate(g.deadline))}</span>` : ''}
+            <span>${formatMoney(remaining, g.currency)} left</span>
+            ${deadlineFact ? `<span>${esc(deadlineFact)}</span>` : ''}
+            ${behind && !g.completed ? `<span style="color:var(--warn)">behind the pace you set</span>` : ''}
+            ${g.completed ? `<span style="color:var(--pos)">completed</span>` : ''}
           </div>
         </div>
         <div class="goal-card-actions">
@@ -163,13 +171,54 @@ function goalCard(g, forecast) {
           </span>
         </div>
       </div>
-      ${progressBar(pct, color, false, { expected })}
+
+      ${goalRuler(pct, { expected, label: `${g.name}: ${formatMoney(g.savedAmount, g.currency)} of ${formatMoney(g.targetAmount, g.currency)} saved` })}
+
       <div class="goal-figures">
         <span><strong>${formatMoney(g.savedAmount, g.currency)}</strong> saved of <strong>${formatMoney(g.targetAmount, g.currency)}</strong></span>
         <span>${pct.toFixed(0)}%</span>
       </div>
       ${reco}
     </article>`;
+}
+
+/** The right column: what the open goals add up to and what they need monthly. */
+function renderPlan(activeGoals) {
+  const side = document.getElementById('goals-side');
+  if (!side) return;
+  const goals = (activeGoals || []).filter(g => !g.completed);
+  if (!goals.length) { side.innerHTML = ''; return; }
+
+  const currency = goals[0].currency || Auth.getDefaultCurrency();
+  const target = goals.reduce((sum, g) => sum + (Number(g.targetAmount) || 0), 0);
+  const saved = goals.reduce((sum, g) => sum + (Number(g.savedAmount) || 0), 0);
+  const remaining = Math.max(0, target - saved);
+  const pct = target > 0 ? (saved / target) * 100 : 0;
+
+  let monthly = 0;
+  let dated = 0;
+  goals.forEach(g => {
+    const months = monthsUntil(g.deadline);
+    if (months) {
+      dated += 1;
+      monthly += Math.max(0, Number(g.targetAmount) - Number(g.savedAmount)) / months;
+    }
+  });
+
+  side.innerHTML = `
+    <section class="plan-panel">
+      <h3>Savings plan</h3>
+      <div class="plan-figure">${formatMoney(remaining, currency)}</div>
+      <p class="plan-caption">still to save across ${goals.length} open goal${goals.length === 1 ? '' : 's'}.</p>
+      <div class="plan-rows">
+        <div class="plan-row"><span>Saved so far</span><span>${formatMoney(saved, currency)} of ${formatMoney(target, currency)}</span></div>
+        <div class="plan-row"><span>Overall</span><span>${pct.toFixed(0)}%</span></div>
+        ${monthly > 0 ? `<div class="plan-row"><span>Needed each month</span><span>${formatMoney(monthly, currency)}</span></div>` : ''}
+      </div>
+      <p class="plan-note">${monthly > 0
+        ? `The monthly figure adds up each goal's own deadline (${dated} dated goal${dated === 1 ? '' : 's'}).`
+        : 'Add a target date to a goal to see what it needs each month.'}</p>
+    </section>`;
 }
 
 function periodEnd(b) {
@@ -200,32 +249,29 @@ function budgetCard(b) {
   const end = periodEnd(b);
   const daysLeft = end ? Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000)) : null;
 
-  let statusChip = chip('On track', 'pos');
-  if (b.status === 'EXCEEDED') statusChip = chip('Over budget', 'neg');
-  else if (b.status === 'WARNING') statusChip = chip('Close to limit', 'warn');
-
   return `
     <article class="budget-card" id="budget-card-${b.budgetId}">
-      <div class="goal-card-head">
+      <div class="budget-line">
         <div>
           <div class="goal-title">${esc(formatCategory(b.expenseCategory))}</div>
-          <div class="goal-meta-line">
-            ${statusChip}
-            <span>${esc(periodText)}${daysLeft != null ? ` · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : ''}</span>
-            ${b.carryForward ? `<span class="txn-tag">${icon('repeat', 'xs')} Rollover</span>` : ''}
-          </div>
+          <div class="budget-period">${esc(periodText)}${daysLeft != null ? ` · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : ''}${b.carryForward ? ' · carries over' : ''}</div>
         </div>
-        <span class="overflow-wrap">
-          <button id="budget-menu-${b.budgetId}" class="btn btn-ghost btn-icon btn-sm" aria-label="More actions for ${esc(formatCategory(b.expenseCategory))}" aria-haspopup="menu">${icon('more-vertical', 'sm')}</button>
-          <div class="overflow-menu" id="budget-actions-${b.budgetId}" role="menu" hidden>
-            <button id="del-budget-${b.budgetId}" role="menuitem">Delete budget</button>
-          </div>
-        </span>
+        <div style="display:flex;align-items:center;gap:var(--s2)">
+          <span class="budget-period" style="color:${b.status === 'EXCEEDED' ? 'var(--neg)' : b.status === 'WARNING' ? 'var(--warn)' : 'var(--text-2)'}">
+            ${remaining >= 0 ? `${formatMoney(remaining, b.currency)} left` : `${formatMoney(Math.abs(remaining), b.currency)} over`}
+          </span>
+          <span class="overflow-wrap">
+            <button id="budget-menu-${b.budgetId}" class="btn btn-ghost btn-icon btn-sm" aria-label="More actions for ${esc(formatCategory(b.expenseCategory))}" aria-haspopup="menu">${icon('more-vertical', 'sm')}</button>
+            <div class="overflow-menu" id="budget-actions-${b.budgetId}" role="menu" hidden>
+              <button id="del-budget-${b.budgetId}" role="menuitem">Delete budget</button>
+            </div>
+          </span>
+        </div>
       </div>
       ${progressBar(pct, color)}
       <div class="budget-figures">
         <span><strong>${formatMoney(b.spentAmount, b.currency)}</strong> spent of <strong>${formatMoney(b.budgetAmount, b.currency)}</strong></span>
-        <span>${remaining >= 0 ? `${formatMoney(remaining, b.currency)} left` : `${formatMoney(Math.abs(remaining), b.currency)} over`}</span>
+        <span>${pct.toFixed(0)}%</span>
       </div>
     </article>`;
 }

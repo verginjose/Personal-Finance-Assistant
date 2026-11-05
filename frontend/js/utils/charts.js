@@ -12,14 +12,14 @@ function token(name, fallback) {
 
 function palette() {
   return {
-    pos: token('--pos', '#5DBB93'),
-    neg: token('--neg', '#D9806A'),
-    text: token('--text', '#E7EEEA'),
-    text2: token('--text-2', '#93A39D'),
-    line: token('--line', '#243430'),
-    raised: token('--raised', '#1A2623'),
-    brand: token('--brand', '#C9A45C'),
-    font: "'Hanken Grotesk', 'Public Sans', system-ui, sans-serif",
+    pos: token('--pos', '#1F7A4D'),
+    neg: token('--neg', '#B4462F'),
+    text: token('--text', '#1D2B32'),
+    text2: token('--text-2', '#5C6C6D'),
+    line: token('--line', '#DEE2D8'),
+    raised: token('--raised', '#FFFFFF'),
+    brand: token('--brand', '#2B4CC9'),
+    font: "'Hanken Grotesk', system-ui, sans-serif",
   };
 }
 
@@ -124,8 +124,8 @@ export function createBarChart(ctx, { labels, income, expense, net, currency = '
       label: 'Net',
       type: 'line',
       data: net,
-      borderColor: p.brand,
-      backgroundColor: p.brand,
+      borderColor: p.text,
+      backgroundColor: p.text,
       borderWidth: 2,
       pointRadius: 0,
       pointHoverRadius: 4,

@@ -113,6 +113,20 @@ function toneFor(name) {
   return (hash % AVATAR_TONES) + 1;
 }
 
+/** A category's colour is derived from its name, never from its position. */
+const CAT_DOT_TONES = 8;
+export function categoryTone(category) {
+  const s = String(category || '');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  return (hash % CAT_DOT_TONES) + 1;
+}
+
+/** Small colour dot for a category. Decoration; the name is always beside it. */
+export function categoryDot(category) {
+  return `<span class="cat-dot" data-tone="${categoryTone(category)}" aria-hidden="true"></span>`;
+}
+
 export function avatar(name, size = 32, profilePicUrl = null) {
   const label = displayName(name, 'User');
   if (profilePicUrl) {
@@ -420,7 +434,7 @@ export function applyTheme(pref = getThemePreference()) {
   const resolved = resolvedTheme(pref);
   document.documentElement.setAttribute('data-theme', resolved);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0D1412' : '#F4F5F3');
+  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#141A22' : '#F2F3EE');
   return resolved;
 }
 
@@ -545,6 +559,29 @@ export function progressBar(pct, color = 'var(--pos)', showLabel = false, { expe
     </div>`;
 }
 
+/**
+ * The goals ruler: a measuring track with ten ticks and a marker showing where
+ * the calendar says the goal should be today. This is the app's one showpiece.
+ */
+export function goalRuler(pct, { expected = null, label = '' } = {}) {
+  const width = Math.min(Math.max(Number(pct) || 0, 0), 100);
+  const pace = expected == null ? null : Math.min(Math.max(Number(expected) || 0, 0), 100);
+  const ticks = Array.from({ length: 11 }, (_, i) => {
+    const major = i % 5 === 0;
+    return `<span class="ruler-tick${major ? ' ruler-tick--major' : ''}" style="left:${i * 10}%"></span>`;
+  }).join('');
+  const aria = label || `${width.toFixed(0)}% of the target saved`;
+  return `
+    <div class="ruler">
+      <div class="ruler-track" role="img" aria-label="${esc(aria)}">
+        <div class="ruler-fill${pace != null && width + 5 < pace ? ' is-behind' : ''}" style="width:${width.toFixed(1)}%"></div>
+        ${ticks}
+        ${pace != null ? `<span class="ruler-now" style="left:${pace.toFixed(1)}%" title="Where the calendar says you should be"></span>` : ''}
+      </div>
+      <div class="ruler-scale" aria-hidden="true"><span>0</span><span>Halfway</span><span>Target</span></div>
+    </div>`;
+}
+
 export function budgetStatusColor(status) {
   if (status === 'EXCEEDED') return 'var(--neg)';
   if (status === 'WARNING') return 'var(--warn)';
@@ -640,32 +677,30 @@ function aiNoticeHtml(iconName, title, message, tone = '') {
     </div>`;
 }
 
+/**
+ * Notes panel. It stays hidden until there is real content — never a perpetual
+ * loading state, never a skeleton on a page that is already useful without it.
+ */
 export function aiPanelHtml(prefix) {
-  const skeleton = Array.from({ length: 3 }, () => `
-    <div class="advisor-insight advisor-skeleton" aria-hidden="true">
-      <div class="skeleton advisor-skeleton-line advisor-skeleton-line--short"></div>
-      <div class="skeleton advisor-skeleton-line"></div>
-    </div>`).join('');
   return `
-    <section class="advisor-card" aria-labelledby="${prefix}-ai-title">
+    <section class="advisor-card" id="${prefix}-notes" aria-labelledby="${prefix}-ai-title" hidden>
       <div class="advisor-header">
-        <h3 class="section-title attention-head" id="${prefix}-ai-title">Insights</h3>
+        <h3 class="attention-head" id="${prefix}-ai-title">Notes</h3>
         <div class="advisor-header-meta">
           <span class="advisor-updated" id="${prefix}-ai-meta"></span>
-          <button type="button" class="btn btn-icon btn-ghost btn-sm advisor-refresh" id="${prefix}-ai-refresh" title="Refresh insights" aria-label="Refresh insights">
+          <button type="button" class="btn btn-icon btn-ghost btn-sm advisor-refresh" id="${prefix}-ai-refresh" title="Refresh notes" aria-label="Refresh notes">
             ${icon('refresh', 'sm')}
           </button>
         </div>
       </div>
-      <p id="${prefix}-ai-summary" class="ai-summary">Analyzing your transactions…</p>
-      <div id="${prefix}-ai-insights-list" class="advisor-grid" aria-live="polite" aria-busy="true">
-        ${skeleton}
-      </div>
+      <p id="${prefix}-ai-summary" class="ai-summary" hidden></p>
+      <div id="${prefix}-ai-insights-list" class="advisor-grid" aria-live="polite" aria-busy="false"></div>
       <div id="${prefix}-ai-goals" class="advisor-goals" hidden></div>
     </section>`;
 }
 
 export function renderAiData(prefix, ai, onRefresh, { scopeLabel = '' } = {}) {
+  const elPanel = document.getElementById(`${prefix}-notes`);
   const elSummary = document.getElementById(`${prefix}-ai-summary`);
   const elMeta = document.getElementById(`${prefix}-ai-meta`);
   const elList = document.getElementById(`${prefix}-ai-insights-list`);
@@ -676,18 +711,13 @@ export function renderAiData(prefix, ai, onRefresh, { scopeLabel = '' } = {}) {
   if (!elList) return;
   elList.setAttribute('aria-busy', 'false');
 
-  if (!ai) {
-    if (elSummary) elSummary.textContent = 'Insights are unavailable right now.';
-    elList.innerHTML = aiNoticeHtml('info', 'No insights available', 'Try refreshing in a moment.');
+  // Unavailable notes are not a task. Leave the page quiet rather than giving
+  // the failure its own card; the rest of the dashboard still works.
+  if (!ai || ai.error) {
+    if (elPanel) elPanel.hidden = true;
     return;
   }
-
-  if (ai.error) {
-    if (elSummary) elSummary.textContent = 'The advisor could not load your insights.';
-    if (elMeta) elMeta.textContent = 'Not updated';
-    elList.innerHTML = aiNoticeHtml('alert-triangle', 'Could not load insights', ai.error, 'advisor-notice--error');
-    return;
-  }
+  if (elPanel) elPanel.hidden = false;
 
   const TYPE_ORDER = { WARNING: 0, INFO: 1, TIP: 1, ACHIEVEMENT: 2 };
   const sorted = dedupeInsights((ai.insights || [])
@@ -707,10 +737,15 @@ export function renderAiData(prefix, ai, onRefresh, { scopeLabel = '' } = {}) {
   const insights = picked;
 
   if (elSummary) {
-    // Show the scope instead of a generated paragraph that repeats the hero
-    // totals (and may disagree with the selector).
-    elSummary.textContent = scopeLabel ? `Based on ${scopeLabel}` : (ai.summary || 'Here is what your recent activity suggests.');
-    elSummary.hidden = insights.length === 0 && !scopeLabel;
+    // State the scope, or say plainly that there is nothing to report. Never
+    // repeat a generated paragraph that might disagree with the hero totals.
+    if (insights.length) {
+      elSummary.textContent = scopeLabel ? `Based on ${scopeLabel}` : '';
+      elSummary.hidden = !scopeLabel;
+    } else {
+      elSummary.textContent = 'Nothing unusual this week.';
+      elSummary.hidden = false;
+    }
   }
   if (elMeta) {
     const when = ai.generatedAt ? relativeTime(ai.generatedAt) : '';
@@ -719,13 +754,12 @@ export function renderAiData(prefix, ai, onRefresh, { scopeLabel = '' } = {}) {
   if (elTitle) {
     const warnings = insights.filter(i => i.type === 'WARNING').length;
     elTitle.innerHTML = warnings > 0
-      ? `Insights <span class="chip chip--warn chip--inline" title="${warnings} warning${warnings === 1 ? '' : 's'}">${warnings}</span>`
-      : 'Insights';
+      ? `Notes <span class="chip chip--warn chip--inline" title="${warnings} warning${warnings === 1 ? '' : 's'}">${warnings}</span>`
+      : 'Notes';
   }
 
   if (!insights.length) {
-    elList.innerHTML = aiNoticeHtml('check-circle', 'All clear',
-      'No concerns found in your recent activity.');
+    elList.innerHTML = '';
     return;
   }
 

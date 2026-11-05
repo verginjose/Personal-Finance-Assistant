@@ -18,16 +18,27 @@ export async function renderBillScanner(container) {
     ${pageHeader('Bill scanner', '')}
     <div id="bs-stage">
       <section class="scanner-single" id="bs-upload-stage" aria-labelledby="bs-scan-title">
-        <h2 id="bs-scan-title" class="section-title">Scan a receipt</h2>
-        <p class="pane-sub">We read the merchant, amount, date and category, then convert it to ${esc(defaultCurrency)}.</p>
-        <div class="drop-zone" id="bs-drop" role="button" tabindex="0" aria-label="Upload a receipt">
-          <div class="drop-icon">${icon('camera', 'lg')}</div>
-          <p>Drop a receipt, or choose a file</p>
-          <p class="drop-help">JPEG, PNG or PDF, up to 10 MB</p>
+        <h2 id="bs-scan-title">Add a bill from a photo</h2>
+        <p class="pane-sub">We'll fill in the merchant, amount and date. You can edit everything before saving.</p>
+        <div class="drop-zone" id="bs-drop" role="button" tabindex="0" aria-label="Add a bill from a photo">
+          <span class="receipt-sample" aria-hidden="true">
+            <span class="receipt-sample-line"></span>
+            <span class="receipt-sample-line"></span>
+            <span class="receipt-sample-line"></span>
+            <span class="receipt-sample-line"></span>
+          </span>
+          <p>Drop a bill here, or choose a file</p>
+          <p class="drop-help">A photo or a PDF, up to 10 MB. Amounts are shown in ${esc(defaultCurrency)}.</p>
           <div class="file-name" id="bs-fname"></div>
         </div>
         <input type="file" id="bs-file" accept="image/*,application/pdf" hidden>
-        <p class="read-reason" id="bs-reason">Reading starts as soon as you pick a file.</p>
+        <p class="read-reason" id="bs-reason"></p>
+
+        <ol class="scan-steps">
+          <li><strong>Photograph the bill.</strong> A flat, well-lit photo reads best.</li>
+          <li><strong>Check the details.</strong> Merchant, amount, date and category stay editable.</li>
+          <li><strong>Save once.</strong> Nothing is added to your ledger until you confirm.</li>
+        </ol>
       </section>
 
       <div class="scanner-grid" id="bs-result" hidden>
@@ -96,7 +107,7 @@ export async function renderBillScanner(container) {
     const drop = document.getElementById('bs-drop');
     if (drop) drop.classList.add('drag-over');
     const reason = document.getElementById('bs-reason');
-    if (reason) reason.textContent = 'Reading the receipt…';
+    if (reason) reason.textContent = 'Reading the bill…';
 
     try {
       const fd = new FormData();
@@ -129,7 +140,7 @@ export async function renderBillScanner(container) {
           </div>
           <p class="ocr-save-hint">${icon('sparkles', 'xs')} Reading the merchant, amount, date and category.</p>`;
       }
-      if (reason) reason.textContent = 'Extracting the details…';
+      if (reason) reason.textContent = 'Finding the merchant, amount and date…';
       toast('Receipt uploaded. Reading it now…', 'info');
     } catch (err) {
       if (drop) drop.classList.remove('drag-over');
@@ -337,7 +348,7 @@ export async function renderBillScanner(container) {
     const fname = document.getElementById('bs-fname');
     if (fname) fname.textContent = '';
     const reason = document.getElementById('bs-reason');
-    if (reason) reason.textContent = 'Reading starts as soon as you pick a file.';
+    if (reason) reason.textContent = '';
     document.getElementById('bs-drop')?.classList.remove('drag-over');
     fileInput.value = '';
     window._bsReceiptUrl = null;

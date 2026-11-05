@@ -73,7 +73,6 @@ function renderShell() {
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-head">
           <a class="logo" href="/dashboard" data-view="dashboard" aria-label="PFA — Personal Finance Assistant" title="PFA — Personal Finance Assistant">
-            <span class="logo-mark" aria-hidden="true">P</span>
             <span class="logo-text">PFA</span>
           </a>
           <button type="button" class="sidebar-collapse" id="sidebar-collapse" aria-label="Collapse navigation" title="Collapse navigation">${icon('chevron-left', 'sm')}</button>
@@ -85,9 +84,6 @@ function renderShell() {
               <span class="icon">${icon(n.icon, 'sm')}</span><span class="nav-label">${esc(n.label)}</span>
             </a>`).join('')}
         </nav>
-        <button type="button" class="sidebar-quick-add" id="sidebar-add-txn" ${currentView === 'transactions' ? 'hidden' : ''}>
-          ${icon('plus', 'sm')}<span class="nav-label">Add transaction</span><kbd class="kbd">N</kbd>
-        </button>
         <div class="sidebar-user-wrap">
           <button type="button" class="sidebar-user" id="sidebar-user" aria-haspopup="menu" aria-expanded="false" aria-label="Open account menu">
             <span id="shell-avatar">${initial}</span>
@@ -177,7 +173,6 @@ function wireShell() {
     };
   });
 
-  document.getElementById('sidebar-add-txn').onclick = openAddTransaction;
   document.getElementById('mobile-fab').onclick = openAddTransaction;
 
   const shell = document.getElementById('app-shell');
@@ -337,8 +332,6 @@ function updateNavActive(view) {
     else moreBtn.removeAttribute('aria-current');
   }
 
-  const quickAdd = document.getElementById('sidebar-add-txn');
-  if (quickAdd) quickAdd.hidden = view === 'transactions';
 }
 
 function openAddTransaction() {

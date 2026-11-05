@@ -73,7 +73,7 @@ export async function renderSubscriptions(container) {
           </div>
         </div>
         <div class="subs-list">
-          ${sorted.map(sub => subRow(sub, currency)).join('')}
+          ${sorted.map(sub => subRow(sub)).join('')}
         </div>`;
 
       grid.querySelectorAll('[data-sort]').forEach(btn => {
@@ -218,7 +218,7 @@ function monthStrip(data, currency) {
     </div>`;
 }
 
-function subRow(sub, currency) {
+function subRow(sub) {
   const cost = sub.currency || Auth.getDefaultCurrency();
   return `
     <div class="subs-card-row" data-sub-id="${sub.id}">
@@ -229,8 +229,7 @@ function subRow(sub, currency) {
           <span class="subs-card-meta">${esc(titleCase(sub.period))} · ${esc(formatUpcoming(sub.nextChargeDate, daysUntilDate(sub.nextChargeDate)))}</span>
         </span>
         <span class="subs-card-amount">
-          <strong>${formatMoney(monthly(sub), currency)}<span class="subs-per-mo">/mo</span></strong>
-          <span>${formatMoney(sub.amount, cost)} per charge</span>
+          <strong>${formatMoney(sub.amount, cost)} <span class="subs-card-per">per charge</span></strong>
         </span>
       </button>
       <span class="overflow-wrap">

@@ -35,12 +35,12 @@ describe('renderSubscriptions — countdowns', () => {
     global.fetch.mockReset();
   });
 
-  it('distinguishes the monthly projection from the actual charge', async () => {
+  it('shows the actual charge, not the monthly projection', async () => {
     const container = await render([sub({ amount: 64, nextChargeDate: isoDay(1) })]);
 
     const amount = container.querySelector('.subs-card-amount')?.textContent || '';
-    expect(amount).toContain('1,920.00/mo'); // 64 × 30, the daily normaliser
     expect(amount).toContain('64.00 per charge');
+    expect(amount).not.toContain('1,920.00'); // the daily × 30 projection stays in the headline
   });
 
   it('labels a future charge from its date', async () => {

@@ -1295,20 +1295,22 @@ tbody tr:hover { background: transparent; }
      it, and the hairline above it is the section rule, not a gap. */
   padding: 0;
 }
-.advisor-header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); }
+.advisor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s3); }
 .advisor-header-meta { display: flex; align-items: center; gap: var(--s2); }
 .attention-head { font-family: var(--font-display); font-size: var(--fs-md); font-weight: 500; }
 .advisor-updated { font-size: 11px; color: var(--text-2); }
-.advisor-refresh { color: var(--text-2); }
-.ai-summary { font-size: var(--fs-sm); color: var(--text-2); margin-top: 2px; }
-.advisor-grid { display: flex; flex-direction: column; margin-top: var(--s1); }
+/* Negative block margins keep the 32px hit area but stop the button deciding
+   the header's height, so the heading sits right under the section rule. */
+.advisor-refresh { color: var(--text-2); margin-block: -4px; }
+.ai-summary { font-size: var(--fs-sm); color: var(--text-2); margin-top: 0; }
+.advisor-grid { display: flex; flex-direction: column; margin-top: 0; }
 .advisor-insight {
   display: flex;
   gap: var(--s3);
   padding: var(--s3) 0;
   border-top: 1px solid var(--line);
 }
-.advisor-insight:first-child { border-top: 0; }
+.advisor-insight:first-child { border-top: 0; padding-top: var(--s1); }
 .advisor-insight-icon { color: var(--text-2); margin-top: 2px; flex-shrink: 0; }
 .advisor-insight.is-warning .advisor-insight-icon { color: var(--warn); }
 .advisor-insight.is-good .advisor-insight-icon { color: var(--pos); }

@@ -29,47 +29,47 @@ export async function renderDashboard(container) {
       ${segmentedControl('dashboard-period', PERIODS, currentPeriod, 'Reporting period')}
     </div>
 
-    <section class="statement" id="d-kpis" aria-live="polite">
-      <div class="statement-figure">
-        <div class="statement-label" id="d-hero-label">Net this month</div>
-        <div class="dash-hero-top">
-          <span class="hero-number" id="d-net">—</span>
-          <span class="dash-delta" id="d-delta"></span>
-        </div>
-      </div>
-
-      <div class="statement-bars">
-        <div class="statement-bar-row">
-          <span class="statement-bar-label">Earned</span>
-          <span class="statement-bar-track" role="img" aria-label="Income compared with spending">
-            <span class="statement-bar-fill is-pos" id="d-earned-bar"></span>
-          </span>
-          <span class="statement-bar-value" id="d-earned">—</span>
-        </div>
-        <div class="statement-bar-row">
-          <span class="statement-bar-label">Spent</span>
-          <span class="statement-bar-track" role="img" aria-label="Spending compared with income">
-            <span class="statement-bar-fill is-spent" id="d-spent-bar"></span>
-          </span>
-          <span class="statement-bar-value" id="d-spent">—</span>
-        </div>
-      </div>
-
-      <p class="statement-sentence" id="d-sentence"></p>
-      <div class="dash-pace" id="d-pace"></div>
-
-      <div class="dash-saved" id="d-saved-wrap" hidden>
-        <div class="dash-saved-label"><span id="d-saved-label"></span><span id="d-saved-pct"></span></div>
-        <div class="progress-wrap">
-          <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-            <div class="progress-fill" style="width:0%"></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <div class="dash-columns">
       <div class="dash-col dash-col--main">
+        <section class="statement" id="d-kpis" aria-live="polite">
+          <div class="statement-figure">
+            <div class="statement-label" id="d-hero-label">Net this month</div>
+            <div class="dash-hero-top">
+              <span class="hero-number" id="d-net">—</span>
+              <span class="dash-delta" id="d-delta"></span>
+            </div>
+          </div>
+
+          <div class="statement-bars">
+            <div class="statement-bar-row">
+              <span class="statement-bar-label">Earned</span>
+              <span class="statement-bar-track" role="img" aria-label="Income compared with spending">
+                <span class="statement-bar-fill is-pos" id="d-earned-bar"></span>
+              </span>
+              <span class="statement-bar-value" id="d-earned">—</span>
+            </div>
+            <div class="statement-bar-row">
+              <span class="statement-bar-label">Spent</span>
+              <span class="statement-bar-track" role="img" aria-label="Spending compared with income">
+                <span class="statement-bar-fill is-spent" id="d-spent-bar"></span>
+              </span>
+              <span class="statement-bar-value" id="d-spent">—</span>
+            </div>
+          </div>
+
+          <p class="statement-sentence" id="d-sentence"></p>
+          <div class="dash-pace" id="d-pace"></div>
+
+          <div class="dash-saved" id="d-saved-wrap" hidden>
+            <div class="dash-saved-label"><span id="d-saved-label"></span><span id="d-saved-pct"></span></div>
+            <div class="progress-wrap">
+              <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                <div class="progress-fill" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section aria-labelledby="d-recent-title">
           <div class="ledger-head">
             <h2 id="d-recent-title">Recent transactions</h2>

@@ -1215,7 +1215,9 @@ tbody tr:hover { background: transparent; }
 }
 .period-header h1 { font-size: var(--fs-xl); }
 
-.statement { margin-bottom: var(--s6); }
+/* The statement is the first item of the main column now, so the column gap
+   separates it from the ledger below; no margin of its own. */
+.statement { margin-bottom: 0; }
 .statement-figure { margin-bottom: var(--s4); }
 .dash-hero-label,
 .statement-label { font-size: var(--fs-sm); color: var(--text-2); margin-bottom: 2px; }

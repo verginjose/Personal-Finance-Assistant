@@ -68,6 +68,26 @@ describe('renderDashboard', () => {
     expect(kpis).toContain('₹30,000'); // expenses
   });
 
+  it('shows at most three recent transactions', async () => {
+    const entries = Array.from({ length: 5 }, (_, i) => ({
+      id: i + 1, name: `Merchant ${i + 1}`, amount: 100 + i, type: 'EXPENSE',
+      expenseCategory: 'OTHERS', createdAt: '2026-11-05T04:00:00Z',
+    }));
+    global.fetch.mockImplementation((url) => {
+      const u = String(url);
+      if (u.includes('/upsert/entries')) {
+        return Promise.resolve(jsonResponse({ content: entries, totalElements: 5 }));
+      }
+      return Promise.resolve(jsonResponse([]));
+    });
+
+    await renderDashboard(container);
+
+    await vi.waitFor(() => {
+      expect(container.querySelectorAll('#d-recent .ledger-row').length).toBe(3);
+    });
+  });
+
   it('does not hold the page for slow AI insights', async () => {
     mockDashboardApis({ aiDelay: 250 });
     await renderDashboard(container);

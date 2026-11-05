@@ -12,6 +12,8 @@ import {
 } from '../utils/totals.js';
 
 let currentPeriod = 'month';
+/** Recent transactions is a glance, not a ledger. */
+const RECENT_LIMIT = 3;
 /** Latest totals and top category, so the sentence can update from either. */
 let lastTotals = null;
 let lastTopCategory = null;
@@ -122,8 +124,8 @@ export async function renderDashboard(container) {
       })
       .catch(() => renderFigures(null, null));
 
-    // Five rows fill the ledger column without turning the page into a table.
-    api.get('/upsert/entries', { userId, page: 0, size: 5, ...range })
+    // Three rows is the recent list; "View all" carries the rest.
+    api.get('/upsert/entries', { userId, page: 0, size: 3, ...range })
       .then(renderRecent)
       .catch(() => renderRecent(null));
   };
@@ -332,7 +334,8 @@ function settlementGroup(t) {
 function renderRecent(result) {
   const wrap = document.getElementById('d-recent');
   if (!wrap) return;
-  const items = result?.content || [];
+  // At most three rows, whatever the API sends back.
+  const items = (result?.content || []).slice(0, RECENT_LIMIT);
   const currency = Auth.getDefaultCurrency();
 
   if (!items.length) {

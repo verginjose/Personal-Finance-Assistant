@@ -229,8 +229,8 @@ function subRow(sub, currency) {
           <span class="subs-card-meta">${esc(titleCase(sub.period))} · ${esc(formatUpcoming(sub.nextChargeDate, daysUntilDate(sub.nextChargeDate)))}</span>
         </span>
         <span class="subs-card-amount">
-          <strong>${formatMoney(monthly(sub), currency)}</strong>
-          <span>${formatMoney(sub.amount, cost)} charged</span>
+          <strong>${formatMoney(monthly(sub), currency)}<span class="subs-per-mo">/mo</span></strong>
+          <span>${formatMoney(sub.amount, cost)} per charge</span>
         </span>
       </button>
       <span class="overflow-wrap">

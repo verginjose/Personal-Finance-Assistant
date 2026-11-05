@@ -67,4 +67,34 @@ describe('renderTransactions', () => {
     expect(document.querySelector('#txn-form')).toBeTruthy();
     expect(document.querySelector('#m-name')).toBeTruthy();
   });
+
+  it('changes the category straight from the detail sheet', async () => {
+    const txn = {
+      id: 7,
+      name: 'Groceries',
+      type: 'EXPENSE',
+      expenseCategory: 'FOOD_AND_DINING',
+      amount: 450,
+      currency: 'INR',
+      createdAt: '2025-06-01T10:00:00Z',
+    };
+    mockFetchJson({ content: [txn], totalPages: 1 });
+    await renderTransactions(container);
+    await vi.waitFor(() => {
+      expect(container.querySelector('tr[data-txn]')).toBeTruthy();
+    });
+
+    mockFetchJson(txn); // the detail sheet refetches the row
+    container.querySelector('tr[data-txn] .txn-name').click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('#m-detail-cat .cat-edit-btn')).toBeTruthy();
+    });
+    const btn = document.querySelector('#m-detail-cat .cat-edit-btn');
+    btn.click();
+
+    // The chip becomes a select in place; the edit form is never opened.
+    expect(document.querySelector('#m-detail-cat select')).toBeTruthy();
+    expect(document.querySelector('#txn-form')).toBeFalsy();
+  });
 });

@@ -340,6 +340,18 @@ export function asDate(value) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * Server instants without an offset are UTC. Browsers would read
+ * "2026-11-05T10:02:00" as local time, making a note generated now look hours
+ * old for anyone outside the server's zone. Older cached responses still carry
+ * that shape, so normalise it here rather than trusting the payload.
+ */
+export function asServerInstant(value) {
+  const s = String(value || '').trim();
+  if (!s) return null;
+  return /^\d{4}-\d{2}-\d{2}T[\d:.]+$/.test(s) ? `${s}Z` : s;
+}
+
 function isoDayDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -762,7 +774,7 @@ export function renderAiData(prefix, ai, onRefresh, { scopeLabel = '' } = {}) {
     }
   }
   if (elMeta) {
-    const when = ai.generatedAt ? relativeTime(ai.generatedAt) : '';
+    const when = ai.generatedAt ? relativeTime(asServerInstant(ai.generatedAt)) : '';
     elMeta.textContent = when ? `Updated ${when}` : '';
   }
   if (elTitle) {

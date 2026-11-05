@@ -68,12 +68,20 @@ function titleCase(value) {
   return String(value || '').toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+/** The category chip is also the control: change it in place, no edit form. */
+function categoryButtonHtml(t, { dot = true } = {}) {
+  const cat = txCategory(t) || 'OTHERS';
+  const label = esc(formatCategory(cat));
+  return `<button type="button" class="cat-edit-btn" data-cat-id="${esc(String(t.id))}" title="Change category" aria-label="Change category: ${label}">
+      ${dot ? categoryDot(cat) : ''}<span>${label}</span>${icon('chevron-down', 'xs')}
+    </button>`;
+}
+
 /** Inline category correction for auto-generated rows. */
-function startCategoryEdit(btn, userId) {
-  const t = JSON.parse(btn.closest('tr').dataset.txn);
+function startCategoryEdit(btn, t, userId, onDone) {
   const isIncome = t.type === 'INCOME';
   const cats = isIncome ? INCOME_CATS : EXPENSE_CATS;
-  const current = t.expenseCategory || t.incomeCategory || t.category || 'OTHERS';
+  const current = txCategory(t) || 'OTHERS';
 
   const select = document.createElement('select');
   select.className = 'form-select';
@@ -96,6 +104,9 @@ function startCategoryEdit(btn, userId) {
     select.disabled = true;
     try {
       await api.put('/upsert/update', { ...t, category: value, userId });
+      t.category = value;
+      if (isIncome) t.incomeCategory = value;
+      else t.expenseCategory = value;
       toast('Category updated', 'success', {
         undo: async () => {
           await api.put('/upsert/update', { ...t, category: current, userId });
@@ -103,6 +114,7 @@ function startCategoryEdit(btn, userId) {
           loadTransactions(userId);
         },
       });
+      if (onDone) onDone(value);
       loadTransactions(userId);
     } catch (err) {
       toast(err.message || 'Could not update category', 'error');
@@ -469,7 +481,6 @@ async function loadTransactions(userId) {
           const isIncome = t.type === 'INCOME';
           const shown = displayAmountFor(t, currency);
           const amount = formatMoney(isIncome ? shown.amount : -shown.amount, shown.currency);
-          const cat = txCategory(t);
           const settlement = isSettlementRow(t);
 
           // A split row names the group and what the number means. The API
@@ -494,9 +505,7 @@ async function loadTransactions(userId) {
           const title = settlement ? settlementTitle(t, userId) : humanizeNamesIn(t.name || 'Transaction');
           const categoryCell = settlement
             ? `<span class="chip chip--neutral">Settlement</span>`
-            : `<button type="button" class="cat-edit-btn" data-cat-id="${esc(String(t.id))}" title="Change category" aria-label="Change category: ${esc(formatCategory(cat))}">
-                ${categoryDot(cat)}<span>${esc(formatCategory(cat))}</span>${icon('chevron-down', 'xs')}
-              </button>`;
+            : categoryButtonHtml(t);
 
           return `<tr data-txn='${escAttr(JSON.stringify(t))}' tabindex="0" class="txn-row ${settlement ? 'is-settlement' : ''}" style="cursor:pointer">
             <td>
@@ -526,7 +535,7 @@ async function loadTransactions(userId) {
 
       tbody.querySelectorAll('tr[data-txn]').forEach(tr => {
         tr.onclick = (e) => {
-          if (e.target.closest('.cat-edit-btn') || e.target.closest('.attach-btn')) return;
+          if (e.target.closest('.cat-edit-btn') || e.target.closest('.attach-btn') || e.target.closest('select')) return;
           const t = JSON.parse(tr.dataset.txn);
           openTransactionDetailsModal(t, userId);
         };
@@ -545,7 +554,10 @@ async function loadTransactions(userId) {
       });
 
       tbody.querySelectorAll('.cat-edit-btn').forEach(btn => {
-        btn.onclick = (e) => { e.stopPropagation(); startCategoryEdit(btn, userId); };
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          startCategoryEdit(btn, JSON.parse(btn.closest('tr').dataset.txn), userId);
+        };
       });
       tbody.querySelectorAll('[data-receipt]').forEach(btn => {
         btn.onclick = (e) => { e.stopPropagation(); window.openReceiptLightbox(btn.dataset.receipt); };
@@ -589,7 +601,7 @@ function renderMobileTransactions(items, currency, userId) {
       const title = settlement ? settlementTitle(t, userId) : humanizeNamesIn(t.name || 'Transaction');
       const sub = settlement
         ? esc(settlementGroup(t) || 'Settlement')
-        : `${esc(formatCategory(cat))}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}`;
+        : `${categoryButtonHtml(t, { dot: false })}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}`;
       return `
         <div class="ledger-row ${settlement ? 'is-settlement' : ''}" role="button" tabindex="0" data-txn-id="${esc(String(t.id || ''))}">
           ${settlement
@@ -610,12 +622,27 @@ function renderMobileTransactions(items, currency, userId) {
     : '');
 
   el.querySelectorAll('[data-txn-id]').forEach(row => {
-    const open = () => {
+    const open = (e) => {
+      // The category chip edits in place; do not also open the detail sheet.
+      if (e && e.target.closest('.cat-edit-btn, select')) return;
       const t = items.find(i => String(i.id) === row.dataset.txnId);
       if (t) openTransactionDetailsModal(t, userId);
     };
     row.onclick = open;
-    row.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); open(); } };
+    row.onkeydown = (e) => {
+      if (e.key !== 'Enter') return;
+      if (e.target.closest('.cat-edit-btn, select')) return;
+      e.preventDefault();
+      open(e);
+    };
+  });
+
+  el.querySelectorAll('.cat-edit-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const t = items.find(i => String(i.id) === btn.dataset.catId);
+      if (t) startCategoryEdit(btn, t, userId);
+    };
   });
 }
 
@@ -891,7 +918,10 @@ async function openTransactionDetailsModal(t, userId) {
 
     <div class="modal-detail-panel">
       <div class="modal-detail-row"><span class="detail-label">Type</span><span class="detail-value">${isIncome ? 'Income' : 'Expense'}</span></div>
-      <div class="modal-detail-row"><span class="detail-label">Category</span><span class="detail-value">${esc(formatCategory(cat))}</span></div>
+      <div class="modal-detail-row">
+        <span class="detail-label">Category</span>
+        <span class="detail-value" id="m-detail-cat">${isSettlementRow(t) ? esc(formatCategory(cat)) : categoryButtonHtml(t)}</span>
+      </div>
       <div class="modal-detail-row"><span class="detail-label">Currency</span><span class="detail-value">${esc(currency)}</span></div>
       ${t.recurring ? `<div class="modal-detail-row"><span class="detail-label">Recurring</span><span class="detail-value">${esc(titleCase(t.recurringPeriod || 'Yes'))}</span></div>` : ''}
       ${t.description ? `<div class="modal-detail-row detail-block"><span class="detail-label">Note</span><span class="detail-value">${esc(humanizeSystemText(t.description))}</span></div>` : ''}
@@ -917,6 +947,17 @@ async function openTransactionDetailsModal(t, userId) {
     document.querySelector('.modal-overlay').click();
     setTimeout(() => editTransaction(userId, t.id), 50);
   };
+  // Change the category straight from the detail sheet — the edit form is only
+  // for name, amount, date and note.
+  const catBox = document.getElementById('m-detail-cat');
+  if (catBox) {
+    catBox.onclick = (e) => {
+      const btn = e.target.closest('.cat-edit-btn');
+      if (!btn) return;
+      e.stopPropagation();
+      startCategoryEdit(btn, t, userId, () => { catBox.innerHTML = categoryButtonHtml(t); });
+    };
+  }
   document.getElementById('m-del-btn').onclick = async () => {
     if (!(await confirmModal('Delete transaction', 'This transaction will be removed permanently.', 'Delete'))) return;
     try {

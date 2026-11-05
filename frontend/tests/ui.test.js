@@ -19,6 +19,7 @@ import {
   humanizeSystemText,
   displayAmountFor,
   formatDue,
+  asServerInstant,
 } from '../js/utils/ui.js';
 
 describe('ui utilities', () => {
@@ -112,6 +113,16 @@ describe('ui utilities', () => {
     expect(document.getElementById('i-ai-summary').textContent).toBe('Based on November 2026');
     expect(document.getElementById('i-ai-insights-list').children.length).toBe(1);
     expect(document.getElementById('i-ai-insights-list').textContent).toContain('High spending');
+  });
+
+  it('treats a server timestamp without an offset as UTC', () => {
+    // Cached responses from before the backend emitted an offset.
+    expect(asServerInstant('2026-11-05T10:02:00')).toBe('2026-11-05T10:02:00Z');
+    expect(asServerInstant('2026-11-05T10:02:00.123')).toBe('2026-11-05T10:02:00.123Z');
+    expect(asServerInstant('2026-11-05T10:02:00Z')).toBe('2026-11-05T10:02:00Z');
+    expect(asServerInstant('2026-11-05T10:02:00+05:30')).toBe('2026-11-05T10:02:00+05:30');
+    expect(asServerInstant('')).toBeNull();
+    expect(asServerInstant(null)).toBeNull();
   });
 
   it('humanises handles into display names', () => {

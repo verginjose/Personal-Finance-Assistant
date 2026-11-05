@@ -21,9 +21,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Slf4j
@@ -230,7 +230,7 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
         if (response.getSummary() == null || response.getSummary().isBlank()) {
             response.setSummary("Here is what your recent activity suggests.");
         }
-        response.setGeneratedAt(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        response.setGeneratedAt(nowIso());
         return response;
     }
 
@@ -381,8 +381,7 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
             summary = "No spending to break down yet.";
         }
 
-        return new AiInsightResponse(insights, summary,
-                LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        return new AiInsightResponse(insights, summary, nowIso());
     }
 
     /** Goal names are the only thing the user (and the LLM) should ever see. */
@@ -406,6 +405,15 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
         return out.length() == 0 ? "This category" : out.toString();
     }
 
+    /**
+     * An instant with an explicit UTC offset. A bare {@code LocalDateTime} is
+     * read by the browser as local time, so a note generated now in a UTC
+     * cluster would show as "6 hr ago" for a user in IST.
+     */
+    private static String nowIso() {
+        return Instant.now().toString();
+    }
+
     private AiInsightResponse buildDefaultResponse() {
         return new AiInsightResponse(
                 List.of(new AiInsightResponse.Insight(
@@ -413,7 +421,7 @@ Return ONLY valid JSON in this format (no markdown, no explanation):
                         "Start logging your income and expenses to receive personalized financial insights.",
                         "TIP", 1)),
                 "Add your first transaction to unlock AI-powered insights.",
-                LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                nowIso());
     }
 
     private BigDecimal safeAmount(BigDecimal v) {

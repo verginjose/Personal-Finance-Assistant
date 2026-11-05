@@ -23,10 +23,11 @@ public class QuerySubscriptionController {
     @Operation(summary = "Get detected active subscriptions for user")
     public ResponseEntity<List<SubscriptionResponse>> getSubscriptions(
             @RequestHeader("X-User-Id") String xUserId,
-            @RequestParam UUID userId) {
+            @RequestParam UUID userId,
+            @RequestParam(required = false) Integer tzOffsetMinutes) {
         if (!UUID.fromString(xUserId).equals(userId)) {
             throw new SecurityException("User ID mismatch");
         }
-        return ResponseEntity.ok(service.getSubscriptionsForUser(userId));
+        return ResponseEntity.ok(service.getSubscriptionsForUser(userId, tzOffsetMinutes));
     }
 }

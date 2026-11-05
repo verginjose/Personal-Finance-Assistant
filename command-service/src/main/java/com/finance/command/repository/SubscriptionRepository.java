@@ -15,5 +15,11 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
 
     Optional<Subscription> findByUserIdAndNameAndAmount(UUID userId, String name, java.math.BigDecimal amount);
 
+    /**
+     * Match on the merchant name alone so a price change updates the existing
+     * subscription instead of adding a duplicate a few rupees apart.
+     */
+    Optional<Subscription> findFirstByUserIdAndNameIgnoreCaseOrderByIdAsc(UUID userId, String name);
+
     List<Subscription> findByUserId(UUID userId);
 }

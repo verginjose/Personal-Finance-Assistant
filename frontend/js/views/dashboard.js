@@ -2,7 +2,7 @@ import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
   aiPanelHtml, renderAiData, categoryDot,
-  formatMoney, formatCategory, formatDayLabel, formatDue, dateTooltip, esc,
+  formatMoney, formatCategory, formatDayLabel, formatDue, dateTooltip, daysUntilDate, esc,
   segmentedControl, wireSegmented, skeletonRows,
   displayAmountFor, displayName, humanizeNamesIn,
 } from '../utils/ui.js';
@@ -168,7 +168,10 @@ export async function renderDashboard(container) {
   loadInsights();
 
   try {
-    const subscriptions = await api.get('/upsert/subscriptions', { userId }).catch(() => []);
+    const subscriptions = await api.get('/upsert/subscriptions', {
+      userId,
+      tzOffsetMinutes: -new Date().getTimezoneOffset(),
+    }).catch(() => []);
     if (!document.getElementById('d-comingup')) return; // navigated away
     renderComingUp(subscriptions);
   } catch (err) {
@@ -411,9 +414,13 @@ function renderComingUp(subs) {
   const charges = (subs || []).filter(s => s.nextChargeDate);
   if (!charges.length) { section.hidden = true; return; }
 
-  const due = charges
-    .filter(s => s.daysUntilCharge != null && s.daysUntilCharge >= 0 && s.daysUntilCharge <= 7)
-    .sort((a, b) => a.daysUntilCharge - b.daysUntilCharge);
+  // Derive the countdown from the date; daysUntilCharge is a nightly snapshot
+  // and reads as "tomorrow" for days after the job stopped advancing a row.
+  const withDays = charges.map(s => ({ sub: s, days: daysUntilDate(s.nextChargeDate) }));
+  const due = withDays
+    .filter(x => x.days != null && x.days >= 0 && x.days <= 7)
+    .sort((a, b) => a.days - b.days)
+    .map(x => x.sub);
   const shown = due.length ? due : [...charges]
     .sort((a, b) => new Date(a.nextChargeDate) - new Date(b.nextChargeDate))
     .slice(0, 3);
@@ -423,7 +430,7 @@ function renderComingUp(subs) {
     <div class="comingup-row">
       <div class="comingup-main">
         <div class="comingup-name">${esc(s.name)}</div>
-        <div class="comingup-when" title="${esc(dateTooltip(s.nextChargeDate))}">${esc(formatDue(s.nextChargeDate, s.daysUntilCharge))}</div>
+        <div class="comingup-when" title="${esc(dateTooltip(s.nextChargeDate))}">${esc(formatDue(s.nextChargeDate, daysUntilDate(s.nextChargeDate)))}</div>
       </div>
       <span class="comingup-amount">${formatMoney(Number(s.amount) || 0, s.currency || currency)}</span>
     </div>`).join('');

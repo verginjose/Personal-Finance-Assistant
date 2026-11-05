@@ -95,13 +95,38 @@ class SubscriptionDetectorServiceTest {
     @DisplayName("processRecurringTransactions: saves subscription for each EXPENSE recurring entry")
     void processRecurringTransactions_expenseEntries_savesSubscriptions() {
         TransactionEntry entry = buildEntry("Netflix", new BigDecimal("649.00"), RecurringPeriod.MONTHLY);
-        when(subscriptionRepository.findByUserIdAndNameAndAmount(any(), eq("Netflix"), any()))
+        when(subscriptionRepository.findFirstByUserIdAndNameIgnoreCaseOrderByIdAsc(any(), eq("Netflix")))
                 .thenReturn(Optional.empty());
         when(subscriptionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         service.processRecurringTransactions(List.of(entry));
 
         verify(subscriptionRepository, times(1)).save(any(Subscription.class));
+    }
+
+    @Test
+    @DisplayName("processRecurringTransactions: refreshes a DAILY subscription's dates")
+    void processRecurringTransactions_dailyEntry_advancesNextChargeDate() {
+        TransactionEntry entry = buildEntry("Amul milk delivery", new BigDecimal("64.00"), RecurringPeriod.DAILY);
+
+        // Row frozen by the old job: date in the past, countdown still 1.
+        Subscription existing = new Subscription();
+        existing.setId(9L);
+        existing.setUserId(userId);
+        existing.setName("Amul milk delivery");
+        existing.setAmount(new BigDecimal("55.96"));
+        existing.setNextChargeDate(LocalDate.now().minusDays(1));
+        existing.setDaysUntilCharge(1);
+        when(subscriptionRepository.findFirstByUserIdAndNameIgnoreCaseOrderByIdAsc(any(), eq("Amul milk delivery")))
+                .thenReturn(Optional.of(existing));
+        when(subscriptionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service.processRecurringTransactions(List.of(entry));
+
+        assertThat(existing.getNextChargeDate()).isAfter(LocalDate.now());
+        assertThat(existing.getDaysUntilCharge()).isGreaterThanOrEqualTo(1);
+        // The price is updated in place instead of adding a duplicate row.
+        assertThat(existing.getAmount()).isEqualByComparingTo("64.00");
     }
 
     @Test

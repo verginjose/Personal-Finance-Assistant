@@ -332,7 +332,7 @@ export function stripAmounts(value) {
 }
 
 /* ── Dates ──────────────────────────────────────────────────────────────── */
-function asDate(value) {
+export function asDate(value) {
   if (!value) return null;
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   const s = String(value);
@@ -369,11 +369,25 @@ export function formatDayLabel(iso) {
   return formatDay(d);
 }
 
+/**
+ * Whole calendar days from the viewer's today to the given date.
+ * Counted on local date parts so the answer matches the calendar strip
+ * regardless of the hour of day or the server's timezone.
+ */
+export function daysUntilDate(value) {
+  const d = asDate(value);
+  if (!d) return null;
+  const now = new Date();
+  const from = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  const to = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((from - to) / 86400000);
+}
+
 /** Fri 5 Dec · in 26 days */
 export function formatUpcoming(iso, daysUntil) {
   const d = asDate(iso);
   if (!d) return '—';
-  const days = daysUntil != null ? Number(daysUntil) : Math.round((d.getTime() - Date.now()) / 86400000);
+  const days = daysUntil != null ? Number(daysUntil) : (daysUntilDate(iso) ?? 0);
   const day = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
   if (days < 0) return `${day} · overdue`;
   if (days === 0) return `${day} · today`;
@@ -385,7 +399,7 @@ export function formatUpcoming(iso, daysUntil) {
 export function formatDue(iso, daysUntil) {
   const d = asDate(iso);
   if (!d) return '—';
-  const days = daysUntil != null ? Number(daysUntil) : Math.round((d.getTime() - Date.now()) / 86400000);
+  const days = daysUntil != null ? Number(daysUntil) : (daysUntilDate(iso) ?? 0);
   const absolute = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
   if (days < 0) return `Overdue · ${absolute}`;
   if (days === 0) return `Today · ${absolute}`;

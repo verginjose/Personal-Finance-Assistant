@@ -9,6 +9,8 @@ import com.finance.command.repository.SubscriptionRepository;
 import com.finance.command.repository.TransactionEntryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,7 +40,26 @@ public class SubscriptionDetectorService {
     @Transactional
     public void runDailyDetection() {
         log.info("Starting daily subscription detection job...");
-        // Detect from all recurring=true transactions in the system
+        refreshAllSubscriptions();
+    }
+
+    /**
+     * Heal rows as soon as the service starts: a subscription whose dates were
+     * frozen by an earlier bug should not stay wrong until the next 02:00 run.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void refreshOnStartup() {
+        try {
+            log.info("Refreshing subscriptions on startup...");
+            refreshAllSubscriptions();
+        } catch (RuntimeException e) {
+            // Never block startup on a detection pass.
+            log.warn("Startup subscription refresh failed: {}", e.getMessage(), e);
+        }
+    }
+
+    private void refreshAllSubscriptions() {
         List<TransactionEntry> allRecurring = transactionRepository
                 .findAllByRecurringTrueAndDeletedAtIsNull();
         processRecurringTransactions(allRecurring);
@@ -116,11 +137,10 @@ public class SubscriptionDetectorService {
             RecurringPeriod period = entry.getRecurringPeriod() != null
                     ? entry.getRecurringPeriod() : RecurringPeriod.MONTHLY;
 
-            // A daily flag on a purchase (e.g. a juice) is a habit, not a
-            // recurring subscription; including it inflates the monthly total
-            // by the price of the item times thirty.
-            if (period == RecurringPeriod.DAILY) continue;
-
+            // Daily charges are refreshed here as well. Skipping them used to
+            // leave existing DAILY rows frozen: the nightly job never advanced
+            // their next_charge_date, so the UI kept showing an old date as
+            // "tomorrow" forever.
             upsertSubscription(entry.getUserId(), entry.getName(), entry.getAmount(),
                     entry.getCurrency(), period, entry.getCreatedAt().toLocalDate());
         }
@@ -206,7 +226,7 @@ public class SubscriptionDetectorService {
         int daysUntil = Math.max(0, (int) ChronoUnit.DAYS.between(LocalDate.now(), nextCharge));
 
         Optional<Subscription> existing = subscriptionRepository
-                .findByUserIdAndNameAndAmount(userId, name, amount);
+                .findFirstByUserIdAndNameIgnoreCaseOrderByIdAsc(userId, name);
 
         Subscription sub = existing.orElseGet(Subscription::new);
         sub.setUserId(userId);

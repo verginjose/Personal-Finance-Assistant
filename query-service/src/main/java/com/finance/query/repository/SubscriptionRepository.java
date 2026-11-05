@@ -13,6 +13,8 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
 
     List<Subscription> findByUserIdAndActiveTrueOrderByDaysUntilChargeAsc(UUID userId);
 
+    List<Subscription> findByUserIdAndActiveTrueOrderByNextChargeDateAsc(UUID userId);
+
     Optional<Subscription> findByUserIdAndNameAndAmount(UUID userId, String name, java.math.BigDecimal amount);
 
     List<Subscription> findByUserId(UUID userId);

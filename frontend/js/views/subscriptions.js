@@ -2,7 +2,7 @@ import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
   esc, pageHeader, emptyState, formatMoney, formatUpcoming,
-  confirmModal, openModal, modalActions, avatar,
+  confirmModal, openModal, modalActions, avatar, asDate, daysUntilDate,
 } from '../utils/ui.js';
 
 const PERIOD_MONTHS = { DAILY: 30, WEEKLY: 4.345, MONTHLY: 1, YEARLY: 1 / 12 };
@@ -25,7 +25,10 @@ export async function renderSubscriptions(container) {
     if (!grid) return;
     grid.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
     try {
-      const data = await api.get('/upsert/subscriptions', { userId: uid });
+      const data = await api.get('/upsert/subscriptions', {
+        userId: uid,
+        tzOffsetMinutes: -new Date().getTimezoneOffset(),
+      });
       if (!data?.length) {
         if (summary) summary.innerHTML = '';
         if (month) month.innerHTML = '';
@@ -46,17 +49,20 @@ export async function renderSubscriptions(container) {
 
       if (month) month.innerHTML = monthStrip(data, currency);
 
+      // Count down from the date itself: the stored daysUntilCharge is only a
+      // snapshot from the nightly job, and it drifts between runs.
       const upcoming = data
-        .filter(s => s.daysUntilCharge != null && s.daysUntilCharge >= 0 && s.daysUntilCharge <= 7)
-        .sort((a, b) => a.daysUntilCharge - b.daysUntilCharge);
+        .map(s => ({ sub: s, days: daysUntilDate(s.nextChargeDate) }))
+        .filter(x => x.days != null && x.days >= 0 && x.days <= 7)
+        .sort((a, b) => a.days - b.days);
 
       const sorted = sortSubs(data);
       grid.innerHTML = `
         ${upcoming.length ? `
           <div class="upcoming-strip">
             ${icon('calendar', 'sm')}
-            <span><strong>Due this week</strong> · ${upcoming.map(s =>
-              `${esc(s.name)} ${s.daysUntilCharge === 0 ? 'today' : `in ${s.daysUntilCharge} day${s.daysUntilCharge === 1 ? '' : 's'}`}`
+            <span><strong>Due this week</strong> · ${upcoming.map(({ sub, days }) =>
+              `${esc(sub.name)} ${days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}`
             ).join(', ')}</span>
           </div>` : ''}
         <div class="subs-columns">
@@ -181,8 +187,10 @@ function monthStrip(data, currency) {
   const byDay = new Map();
   data.forEach((sub) => {
     if (!sub.nextChargeDate) return;
-    const d = new Date(sub.nextChargeDate);
-    if (Number.isNaN(d.getTime())) return;
+    // Parse as a local date, exactly as the relative label does; `new Date('2026-11-04')`
+    // would be UTC midnight and can land on the previous day west of Greenwich.
+    const d = asDate(sub.nextChargeDate);
+    if (!d) return;
     if (d.getFullYear() !== year || d.getMonth() !== month) return;
     const day = d.getDate();
     if (!byDay.has(day)) byDay.set(day, []);
@@ -218,7 +226,7 @@ function subRow(sub, currency) {
         ${avatar(sub.name, 32)}
         <span class="subs-card-main">
           <span class="subs-card-name">${esc(sub.name)}</span>
-          <span class="subs-card-meta">${esc(titleCase(sub.period))} · ${esc(formatUpcoming(sub.nextChargeDate, sub.daysUntilCharge))}</span>
+          <span class="subs-card-meta">${esc(titleCase(sub.period))} · ${esc(formatUpcoming(sub.nextChargeDate, daysUntilDate(sub.nextChargeDate)))}</span>
         </span>
         <span class="subs-card-amount">
           <strong>${formatMoney(monthly(sub), currency)}</strong>

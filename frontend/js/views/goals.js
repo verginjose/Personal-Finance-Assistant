@@ -383,7 +383,7 @@ async function viewGoalDetails(goalParam, uid, reloadData = false) {
     </div>
 
     <div class="section-header" style="margin-bottom:var(--s2)">
-      <h3 style="font-size:14px">Contributions</h3>
+      <h3 style="font-size:0.875rem">Contributions</h3>
       ${!goal.completed ? '<button class="btn btn-secondary btn-sm" id="btn-add-contrib">Add money</button>' : ''}
     </div>
 

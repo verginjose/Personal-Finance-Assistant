@@ -2131,7 +2131,13 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
 .sp-settled-toggle:hover { color: var(--text); }
 .split-side-foot { margin-top: var(--s4); }
 
-.split-spendby { margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line); }
+/* The balance summary is part of the Spending tab on narrow screens and
+   lives in the sticky side panel on desktop. */
+.sp-mobile-summary { display: none; }
+.sp-mobile-summary .split-side-hero { padding-bottom: var(--s4); border-bottom: 1px solid var(--line); margin-bottom: 0; }
+.sp-mobile-summary .split-side-foot .btn { width: 100%; }
+
+.split-spendby { margin-top: 0; padding-top: 0; border-top: 0; margin-bottom: var(--s4); }
 .split-spendby-title { font-size: 12px; color: var(--text-2); margin-bottom: var(--s3); }
 .spendby-row { display: grid; grid-template-columns: minmax(0, 96px) minmax(0, 1fr) auto; align-items: center; gap: var(--s2); margin-bottom: 8px; }
 .spendby-name { font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2244,8 +2250,11 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
 
 @media (max-width: 1100px) {
   .split-layout { grid-template-columns: minmax(0, 1fr); }
-  .split-side { order: -1; position: static; }
-  .split-side .side-balance-list { max-height: none; }
+  /* Below tablet width the tab bar comes first; the balance side panel
+     (and its "You're owed" hero) moves into the Spending tab instead of
+     pushing the expense feed off the first screen. */
+  .split-side { display: none; }
+  .sp-mobile-summary { display: block; }
 }
 
 @media (max-width: 767px) {

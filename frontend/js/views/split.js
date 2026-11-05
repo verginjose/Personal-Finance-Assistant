@@ -372,7 +372,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       : (memberBalances.length
         ? memberBalances.reduce((sum, b) => sum + spentOf(b), 0)
         : null);
-    const spendByHtml = spendBy.length > 1 ? `
+    const spendByHtml = spendBy.length > 0 ? `
       <div class="split-spendby">
         <div class="split-spendby-title">Spending by member</div>
         ${spendBy.map(b => `
@@ -408,7 +408,6 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
           <div class="split-side-foot">
             <button type="button" class="btn btn-secondary btn-sm" id="sp-settle-all">Settle all</button>
           </div>` : ''}
-        ${spendByHtml}
       </aside>`;
 
     el.innerHTML = `
@@ -440,6 +439,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
             <button type="button" class="tab ${activePanel === 'expenses' ? 'is-active' : ''}" role="tab" data-panel="expenses" aria-selected="${activePanel === 'expenses'}">Expenses</button>
             <button type="button" class="tab ${activePanel === 'balances' ? 'is-active' : ''}" role="tab" data-panel="balances" aria-selected="${activePanel === 'balances'}">Balances</button>
             <button type="button" class="tab ${activePanel === 'activity' ? 'is-active' : ''}" role="tab" data-panel="activity" aria-selected="${activePanel === 'activity'}">Activity</button>
+            <button type="button" class="tab ${activePanel === 'spending' ? 'is-active' : ''}" role="tab" data-panel="spending" aria-selected="${activePanel === 'spending'}">Spending</button>
           </div>
 
           <div class="panel ${activePanel === 'expenses' ? 'is-active' : ''}" id="panel-expenses" role="tabpanel">
@@ -482,6 +482,17 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
           <div class="panel ${activePanel === 'activity' ? 'is-active' : ''}" id="panel-activity" role="tabpanel">
             <div id="activity-list"></div>
             <div id="activity-pagination" class="pagination"></div>
+          </div>
+
+          <div class="panel ${activePanel === 'spending' ? 'is-active' : ''}" id="panel-spending" role="tabpanel">
+            <div class="sp-mobile-summary">
+              <div class="split-side-hero">${sideHero}</div>
+              ${myDebts.length > 1 ? `
+                <div class="split-side-foot">
+                  <button type="button" class="btn btn-secondary btn-sm" id="sp-settle-all-mobile">Settle all</button>
+                </div>` : ''}
+            </div>
+            ${spendByHtml || `<p class="meta" style="padding:16px 0">${icon('check-circle', 'sm')} No spending recorded yet.</p>`}
           </div>
         </div>
         ${sidePanel}
@@ -535,6 +546,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
     setPanel(activePanel);
 
     document.getElementById('sp-settle-all')?.addEventListener('click', () => settleAll(groupId, userId, myDebts));
+    document.getElementById('sp-settle-all-mobile')?.addEventListener('click', () => settleAll(groupId, userId, myDebts));
     document.getElementById('sp-add-expense').onclick = () => addExpenseModal(groupId, eligibleMembers, userId, null, group.currency);
 
     const memberCount = Math.max(eligibleMembers.length, 1);
@@ -918,12 +930,12 @@ function openExpenseDetailsModal(e, groupId, userId, members = []) {
     </div>
 
     <div style="display:flex;gap:10px;margin-top:var(--s4)">
-      <button class="btn btn-secondary" id="m-edit-exp-btn" style="flex:1">${icon('edit', 'sm')} Edit</button>
+      ${e.splitType === 'SETTLEMENT' ? '' : `<button class="btn btn-secondary" id="m-edit-exp-btn" style="flex:1">${icon('edit', 'sm')} Edit</button>`}
       <button class="btn btn-danger" id="m-del-exp-btn" style="flex:1">${icon('trash', 'sm')} Delete</button>
     </div>
   `);
 
-  document.getElementById('m-edit-exp-btn').onclick = async () => {
+  document.getElementById('m-edit-exp-btn')?.addEventListener('click', async () => {
     document.querySelector('.modal-overlay').click();
     let eligible = members.filter(m => m.status === 'ACCEPTED');
     if (!eligible.length) {
@@ -936,7 +948,7 @@ function openExpenseDetailsModal(e, groupId, userId, members = []) {
       }
     }
     setTimeout(() => editExpense(e, groupId, userId, eligible), 50);
-  };
+  });
 
   document.getElementById('m-del-exp-btn').onclick = async () => {
     if (!(await confirmModal('Delete expense', 'This shared expense will be removed for everyone in the group.', 'Delete'))) return;
@@ -1109,6 +1121,7 @@ function activityTypeLabel(type) {
     GROUP_CREATED: 'Group created',
     MEMBER_ADDED: 'Member added',
     EXPENSE_ADDED: 'Expense added',
+    EXPENSE_UPDATED: 'Expense updated',
     EXPENSE_DELETED: 'Expense deleted',
     SETTLEMENT_RECORDED: 'Settlement',
   };

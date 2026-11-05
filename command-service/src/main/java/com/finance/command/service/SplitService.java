@@ -445,6 +445,109 @@ public class SplitService {
         @CacheEvict(value = "group-expenses", key = "#groupId"),
         @CacheEvict(value = "group-balances", key = "#groupId")
     })
+    public SharedExpense updateSharedExpense(Long groupId, Long expenseId,
+                                             CreateSharedExpenseRequest req, UUID actorUserId) {
+        ExpenseGroup group = groupRepo.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));
+        requireGroupMember(groupId, actorUserId);
+
+        SharedExpense expense = expenseRepo.findById(expenseId)
+                .orElseThrow(() -> new IllegalArgumentException("Expense " + expenseId + " not found"));
+        if (!expense.getGroupId().equals(groupId)) {
+            throw new IllegalArgumentException("Expense does not belong to this group");
+        }
+        if (expense.getSplitType() == SharedExpense.SplitType.SETTLEMENT) {
+            throw new IllegalStateException("Settlements cannot be edited");
+        }
+
+        List<GroupMember> allMembers = memberRepo.findByGroupId(groupId);
+        GroupMember actorMember = allMembers.stream()
+                .filter(m -> m.getUserId().equals(actorUserId))
+                .findFirst()
+                .orElseThrow(() -> new SecurityException("User is not a member of this group"));
+
+        boolean payerIsMember = allMembers.stream().anyMatch(m -> m.getUserId().equals(req.getPaidBy()));
+        if (!payerIsMember) {
+            throw new SecurityException("Payer is not a member of this group");
+        }
+
+        UUID oldPayerId = expense.getPaidBy();
+        List<ExpenseSplit> oldSplits = splitRepo.findBySharedExpenseId(expenseId);
+        boolean hasRecordedSettlements = oldSplits.stream()
+                .anyMatch(s -> s.isSettled() && !s.getUserId().equals(oldPayerId));
+        if (hasRecordedSettlements) {
+            throw new IllegalStateException("Cannot edit an expense with recorded settlements");
+        }
+
+        String actorName = actorMember.getName();
+
+        // The personal transactions generated for the old split no longer
+        // describe this expense, so remove them before regenerating below.
+        for (ExpenseTransactionLink link : transactionLinkRepo.findBySharedExpenseId(expenseId)) {
+            transactionEntryService.deleteEntryInternal(link.getTransactionEntryId(), link.getUserId());
+        }
+        transactionLinkRepo.deleteBySharedExpenseId(expenseId);
+        splitRepo.deleteAll(oldSplits);
+        splitRepo.flush();
+
+        expense.setDescription(req.getDescription());
+        expense.setAmount(req.getAmount());
+        expense.setCurrency(req.getCurrency() != null ? req.getCurrency() : group.getCurrency());
+        expense.setPaidBy(req.getPaidBy());
+        expense.setSplitType(req.getSplitType() != null
+                ? SharedExpense.SplitType.valueOf(req.getSplitType().toUpperCase())
+                : SharedExpense.SplitType.EQUAL);
+        if (req.getExpenseDate() != null) {
+            expense.setExpenseDate(req.getExpenseDate());
+        }
+        expense.setReceiptUrl(req.getReceiptUrl());
+        if (req.getExpenseCategory() != null && !req.getExpenseCategory().isBlank()) {
+            try {
+                expense.setExpenseCategory(
+                        SharedExpense.ExpenseCategory.valueOf(req.getExpenseCategory().toUpperCase()));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        expense = expenseRepo.save(expense);
+
+        List<ExpenseSplit> splits = generateSplits(expense, req, allMembers);
+        createPersonalTransactions(expense, splits, group);
+
+        // The old and new participants both had their personal reads changed
+        // (the payer may have changed, so the union of the two sets matters).
+        evictAnalyticsCacheForSplits(oldSplits, oldPayerId);
+        evictAnalyticsCacheForSplits(splits, expense.getPaidBy());
+
+        groupActivityService.log(groupId, actorUserId, actorName,
+                ActivityType.EXPENSE_UPDATED,
+                "@" + actorName + " updated expense \"" + expense.getDescription()
+                        + "\" (" + expense.getAmount() + " " + expense.getCurrency() + ")",
+                expenseId);
+        log.info("Shared expense updated: id={}, group={}, amount={}", expenseId, groupId, expense.getAmount());
+
+        final String desc = expense.getDescription();
+        splits.forEach(s -> {
+            if (!s.getUserId().equals(actorUserId) && s.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                notificationService.sendNotification(s.getUserId(), Map.of(
+                        "status", "INFO",
+                        "message", actorName + " updated an expense: " + desc,
+                        "event", "expense-updated",
+                        "groupId", groupId));
+            }
+        });
+
+        Set<UUID> affectedMemberIds = allMembers.stream()
+                .map(GroupMember::getUserId)
+                .collect(Collectors.toSet());
+        queryCacheEvictor.evictGroupKeys(groupId, affectedMemberIds);
+
+        return expense;
+    }
+
+    @Caching(evict = {
+        @CacheEvict(value = "group-expenses", key = "#groupId"),
+        @CacheEvict(value = "group-balances", key = "#groupId")
+    })
     public void deleteSharedExpense(Long groupId, Long expenseId, UUID actorUserId) {
         ExpenseGroup group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));

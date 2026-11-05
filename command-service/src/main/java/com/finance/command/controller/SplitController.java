@@ -133,6 +133,17 @@ public class SplitController {
 
 
 
+    @PutMapping("/{groupId}/expenses/{expenseId}")
+    public ResponseEntity<SharedExpense> updateExpense(
+            @RequestHeader("X-User-Id") String xUserId,
+            @PathVariable Long groupId,
+            @PathVariable Long expenseId,
+            @Valid @RequestBody CreateSharedExpenseRequest req) {
+        req.setGroupId(groupId);
+        return ResponseEntity.ok(
+                splitService.updateSharedExpense(groupId, expenseId, req, requireUserId(xUserId)));
+    }
+
     @DeleteMapping("/{groupId}/expenses/{expenseId}")
     public ResponseEntity<Map<String, String>> deleteExpense(
             @RequestHeader("X-User-Id") String xUserId,

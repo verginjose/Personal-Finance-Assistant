@@ -53,6 +53,7 @@ public class GroupActivity {
         GROUP_CREATED,
         MEMBER_ADDED,
         EXPENSE_ADDED,
+        EXPENSE_UPDATED,
         EXPENSE_DELETED,
         SETTLEMENT_RECORDED
     }

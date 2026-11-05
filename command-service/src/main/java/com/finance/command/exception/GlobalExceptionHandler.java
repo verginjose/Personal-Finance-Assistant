@@ -125,6 +125,17 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse("Bad Request", List.of("Malformed request body"), 400));
     }
 
+    /** An unmapped HTTP method is a client/routing error, not a 500. */
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(
+            org.springframework.web.HttpRequestMethodNotSupportedException ex) {
+        log.warn("Method not supported: {}", ex.getMessage());
+        recordError(405);
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(new ErrorResponse("Method Not Allowed",
+                        List.of("Request method '" + ex.getMethod() + "' is not supported"), 405));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex) {
         log.error("Unexpected error", ex);

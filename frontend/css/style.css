@@ -2295,10 +2295,11 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
 .txn-mobile { display: none; }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
-/* Desktop gets one step more type. Everything above is in rem, so this is the
-   single knob for PC text size — raise it to 18px or 19px for bigger type. */
+/* Desktop gets one step more type — 110% of the browser default, the size
+   that read normally on a PC monitor. Everything above is in rem, so this is
+   the single knob for PC text size (e.g. 115% or 120% for larger). */
 @media (min-width: 1025px) {
-  html { font-size: 17px; }
+  html { font-size: 110%; }
 }
 
 @media (max-width: 1100px) {

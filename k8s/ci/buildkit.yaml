@@ -34,33 +34,25 @@ data:
     [worker.oci]
       gc = true
 
-      # The base images every service build needs - maven, eclipse-temurin and
-      # nginx from Docker Hub, plus the dockerfile frontend: pulled over the
-      # internet, slow to re-fetch on this link. The budget is deliberately
-      # above the disk's expected cache use, so this rule stays dormant and
-      # these layers are never evicted. Raise it only if it starts firing; the
-      # real signal is buildctl du -f 'description~=docker\.io'.
+      # One unfiltered rule, deliberately.
+      #
+      # The earlier version filtered by description (`description~=docker\.io`,
+      # `description~=registry\.pfa…`) to pin Docker Hub images and evict the
+      # OCR pull. That failed in two ways: build-result records ("mount / from
+      # exec …", "[4/4] COPY app/ .") match no description filter, so 46 GB of
+      # them was never a candidate; and containerd filter syntax has no
+      # negation, so a filtered cap cannot mean "everything else".
+      #
+      # An unfiltered budget still protects the base images in practice: maven,
+      # eclipse-temurin and nginx are referenced by every service build, so
+      # their last-used time is always fresh and LRU reaches the stale ocr-base
+      # and old build layers first.
+      #
+      # Note each rule deletes at most one record per GC run, and GC runs about
+      # once per build, so a burst (an ocr-service build pulls 16 layers) can
+      # stay above the cap until enough builds have run.
       [[worker.oci.gcpolicy]]
-        filters = ['description~=docker\.io/(library/(maven|eclipse-temurin|nginx)|docker/dockerfile)']
-        keepBytes = "64GB"
-
-      # finance/ocr-base layers (~28 GB unpacked) come from the in-cluster
-      # registry over loopback, so they are cheap to re-fetch and are the part
-      # that gets evicted. Add keepDuration = "24h" if ocr-service gets built
-      # more than once a day and the re-pull time starts to hurt.
-      [[worker.oci.gcpolicy]]
-        filters = ['description~=registry\.pfa\.svc\.cluster\.local']
-        keepBytes = "2GB"
-
-      # nvidia/cuda (~10 GB) is only needed when the ocr-base image itself is
-      # rebuilt, which is rare. Not pinned: released once idle for two weeks.
-      # keepBytes is small only so the rule stays armed - the global cache is
-      # always above it - and keepDuration does the actual work here, by
-      # protecting anything used within the last 14 days.
-      [[worker.oci.gcpolicy]]
-        filters = ['description~=docker\.io/nvidia']
-        keepBytes = "1GB"
-        keepDuration = "336h"
+        keepBytes = "20GB"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

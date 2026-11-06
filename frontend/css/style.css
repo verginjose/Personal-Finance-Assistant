@@ -2282,21 +2282,8 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
   border: 0;
   box-shadow: none;
 }
+.modal--lightbox { outline: none; }
 .modal--lightbox .modal-body { padding: 0; }
-.modal--lightbox .modal-close {
-  position: fixed;
-  top: 14px;
-  right: 14px;
-  z-index: 2;
-  width: 36px;
-  height: 36px;
-  color: #fff;
-  background: rgba(16, 20, 28, 0.55);
-  border-radius: var(--r-pill);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-.modal--lightbox .modal-close:hover { background: rgba(16, 20, 28, 0.75); }
 .picture-lightbox { display: flex; flex-direction: column; align-items: center; gap: var(--s3); }
 .picture-lightbox-stage { display: flex; justify-content: center; min-width: 0; }
 .picture-lightbox-stage img {
@@ -2729,7 +2716,6 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
   .modal-overlay--lightbox { padding: 8px; align-items: center; }
   .modal--lightbox { max-height: none; overflow: visible; }
   .picture-lightbox-stage img { max-height: 74vh; }
-  .modal--lightbox .modal-close { top: 8px; right: 8px; }
   .toast-container { bottom: calc(76px + env(safe-area-inset-bottom)); }
   .split-summary strong { font-size: 1.875rem; }
   .balances-block { max-width: none; }

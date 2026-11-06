@@ -802,9 +802,10 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
   overlay.className = isLightbox ? 'modal-overlay modal-overlay--lightbox' : 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal ${size}${isLightbox ? ' modal--lightbox' : ''}" role="dialog" aria-modal="true"
+         ${isLightbox ? 'tabindex="-1"' : ''}
          ${isLightbox ? `aria-label="${escAttr(title)}"` : 'aria-labelledby="modal-title"'}>
       ${isLightbox
-        ? `<button type="button" class="btn btn-icon modal-close" aria-label="Close">${icon('close', 'sm')}</button>`
+        ? ''
         : `<div class="modal-header">
              <h2 id="modal-title">${esc(title)}</h2>
              <button type="button" class="btn btn-icon btn-ghost modal-close" aria-label="Close">${icon('close', 'sm')}</button>
@@ -844,8 +845,17 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
   };
   document.addEventListener('keydown', onKeydown);
 
-  overlay.querySelector('.modal-close').onclick = close;
-  overlay.onclick = (e) => { if (e.target === overlay) close(); };
+  overlay.querySelector('.modal-close')?.addEventListener('click', close);
+  overlay.onclick = (e) => {
+    if (isLightbox) {
+      // A picture viewer has no close button: a click anywhere but the picture
+      // itself (or its action buttons) dismisses it.
+      if (e.target.closest('.picture-lightbox-stage') || e.target.closest('.picture-lightbox-actions')) return;
+      close();
+      return;
+    }
+    if (e.target === overlay) close();
+  };
 
   const cancelBtn = overlay.querySelector('[data-modal-cancel]');
   if (cancelBtn) cancelBtn.onclick = close;
@@ -893,7 +903,8 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
 
   setTimeout(() => {
     const firstField = overlay.querySelector('input:not([type="hidden"]), textarea, select');
-    (firstField || overlay.querySelector('.modal-close'))?.focus();
+    const target = firstField || overlay.querySelector('.modal-close') || overlay.querySelector('.modal--lightbox');
+    if (target && typeof target.focus === 'function') target.focus();
   }, 20);
 
   return { overlay, close };

@@ -20,6 +20,36 @@ data:
     [registry."registry.pfa.svc.cluster.local:5000"]
       http = true
       insecure = true
+
+    # Cache retention. With no gcpolicy BuildKit falls back to
+    # config.DetectDefaultGCCap(), which is 10% of the filesystem it can see.
+    # buildkit-cache is a local-path PVC (hostPath, no quota), so that is 10%
+    # of the whole 474 GiB root disk - about 48 GB, and the cache drifts there.
+    #
+    # Two things to know about how these rules are evaluated (cache/manager.go,
+    # pruneOnce): keepBytes is compared against the WHOLE cache, not the size
+    # of the matched records, and each rule deletes at most one record per GC
+    # run. keepDuration is the opposite of what it sounds like - it PROTECTS
+    # records used more recently than the duration, it does not expire them.
+    [worker.oci]
+      gc = true
+
+      # Docker Hub base images (maven, eclipse-temurin, nginx, nvidia/cuda):
+      # pulled over the internet, slow to re-fetch on this link. The budget is
+      # deliberately above the disk's expected cache use, so this rule stays
+      # dormant and these layers are never evicted. Raise it only if it starts
+      # firing; the real signal is buildctl du -f 'description~=docker\.io'.
+      [[worker.oci.gcpolicy]]
+        filters = ['description~=docker\.io']
+        keepBytes = "64GB"
+
+      # finance/ocr-base layers (~28 GB unpacked) come from the in-cluster
+      # registry over loopback, so they are cheap to re-fetch and are the part
+      # that gets evicted. Add keepDuration = "24h" if ocr-service gets built
+      # more than once a day and the re-pull time starts to hurt.
+      [[worker.oci.gcpolicy]]
+        filters = ['description~=registry\.pfa\.svc\.cluster\.local']
+        keepBytes = "2GB"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

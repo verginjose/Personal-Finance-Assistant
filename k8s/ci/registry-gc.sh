@@ -36,18 +36,49 @@ fi
 curl -fsS "${REGISTRY}/v2/" >/dev/null || { echo "Registry not reachable at ${REGISTRY}" >&2; exit 1; }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "${TMP}"' EXIT
 
-manifest_digest() {  # repo tag -> digest
-  curl -fsSI -H "Accept: ${ACCEPT}" "${REGISTRY}/v2/$1/manifests/$2" \
-    | awk -F': ' 'tolower($1)=="docker-content-digest"{gsub("\r","");print $2}'
+# The registry Deployment is managed by Argo CD with selfHeal: true, so scaling
+# it to 0 for phase 2 gets reverted within one resync (~60 s). Suspend self-heal
+# for the duration and put it back on exit, whatever happens.
+ARGO_APP="${ARGO_APP:-pfa-ci}"
+SUSPENDED_SELFHEAL=false
+argo_selfheal() {  # true|false; no-op when Argo or the app is absent
+  kubectl -n argocd get app "${ARGO_APP}" >/dev/null 2>&1 || return 0
+  kubectl -n argocd patch app "${ARGO_APP}" --type merge \
+    -p "{\"spec\":{\"syncPolicy\":{\"automated\":{\"selfHeal\":$1}}}}" >/dev/null
+}
+restore_selfheal() {
+  if [[ "${SUSPENDED_SELFHEAL}" == true ]]; then
+    argo_selfheal true && SUSPENDED_SELFHEAL=false
+  fi
+}
+# Never leave the registry down, even if GC fails or the script is interrupted.
+REGISTRY_STOPPED=false
+restore_registry() {
+  if [[ "${REGISTRY_STOPPED}" == true ]]; then
+    kubectl -n "${NS}" scale deploy/registry --replicas=1 >/dev/null 2>&1 || true
+    REGISTRY_STOPPED=false
+  fi
+}
+trap 'restore_registry; restore_selfheal; rm -rf "${TMP}"' EXIT
+
+# A tag can outlive the manifest it points at (the tag link file stays behind
+# after the manifest is deleted), so every lookup below treats a 404 as "tag is
+# dangling" rather than as a fatal error. Without this a single dangling tag
+# aborts the run under `set -e` and the remaining repositories are never
+# pruned.
+manifest_digest() {  # repo tag -> digest, empty if the tag is dangling
+  curl -fsSI -H "Accept: ${ACCEPT}" "${REGISTRY}/v2/$1/manifests/$2" 2>/dev/null \
+    | awk -F': ' 'tolower($1)=="docker-content-digest"{gsub("\r","");print $2}' \
+    || true
 }
 
 manifest_created() {  # repo tag -> RFC3339 creation time from the image config
   local cfg
-  cfg="$(curl -fsS -H "Accept: ${ACCEPT}" "${REGISTRY}/v2/$1/manifests/$2" | jq -r '.config.digest // empty')"
+  cfg="$(curl -fsS -H "Accept: ${ACCEPT}" "${REGISTRY}/v2/$1/manifests/$2" 2>/dev/null \
+    | jq -r '.config.digest // empty' || true)"
   [[ -z "${cfg}" ]] && return 0
-  curl -fsSL "${REGISTRY}/v2/$1/blobs/${cfg}" | jq -r '.created // empty'
+  curl -fsSL "${REGISTRY}/v2/$1/blobs/${cfg}" 2>/dev/null | jq -r '.created // empty' || true
 }
 
 echo "==> Pruning tags (keep ${KEEP} per repository)"
@@ -57,16 +88,23 @@ curl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[]' | while read -r re
 
   : > "${TMP}/tags"
   for tag in ${tags}; do
-    created="$(manifest_created "${repo}" "${tag}")"
     digest="$(manifest_digest "${repo}" "${tag}")"
-    [[ -z "${digest}" ]] && continue
+    if [[ -z "${digest}" ]]; then
+      echo "    skip ${repo}:${tag} (dangling tag, no manifest)"
+      continue
+    fi
+    created="$(manifest_created "${repo}" "${tag}")"
     printf '%s %s %s\n' "${created:-1970-01-01T00:00:00Z}" "${tag}" "${digest}" >> "${TMP}/tags"
   done
 
   sort -r "${TMP}/tags" | tail -n +"$((KEEP + 1))" | while read -r _ tag digest; do
     echo "    delete ${repo}:${tag} (${digest:0:19})"
     if [[ "${DRY_RUN}" == false ]]; then
-      curl -fsS -X DELETE "${REGISTRY}/v2/${repo}/manifests/${digest}" >/dev/null
+      # A failed delete must not abort the run: the next phase's GC still frees
+      # whatever layers are already unreferenced.
+      if ! curl -fsS -X DELETE "${REGISTRY}/v2/${repo}/manifests/${digest}" >/dev/null 2>&1; then
+        echo "    warn: delete failed for ${repo}:${tag}"
+      fi
     fi
   done
 done
@@ -77,7 +115,12 @@ if [[ "${DRY_RUN}" == true ]]; then
 fi
 
 echo "==> Stopping registry"
+if kubectl -n argocd get app "${ARGO_APP}" >/dev/null 2>&1; then
+  argo_selfheal false
+  SUSPENDED_SELFHEAL=true
+fi
 kubectl -n "${NS}" scale deploy/registry --replicas=0
+REGISTRY_STOPPED=true
 kubectl -n "${NS}" wait --for=delete pod -l app=registry --timeout=120s 2>/dev/null || true
 
 cat <<EOF | kubectl apply -f - >/dev/null
@@ -102,15 +145,18 @@ spec:
 EOF
 
 echo "==> Running garbage collection"
-kubectl -n "${NS}" wait --for=condition=Ready pod/registry-gc --timeout=120s 2>/dev/null || true
-for _ in $(seq 1 60); do
+# Do not wait for Ready: a one-shot pod often goes straight to Succeeded and
+# would burn the full timeout. Poll the phase instead.
+phase=""
+for _ in $(seq 1 180); do
   phase="$(kubectl -n "${NS}" get pod registry-gc -o jsonpath='{.status.phase}' 2>/dev/null || echo Unknown)"
   [[ "${phase}" == "Succeeded" || "${phase}" == "Failed" ]] && break
   sleep 2
 done
 kubectl -n "${NS}" logs registry-gc || true
 kubectl -n "${NS}" delete pod registry-gc --ignore-not-found
+[[ "${phase}" == "Succeeded" ]] || { echo "  gc pod ended in phase ${phase:-Unknown}" >&2; exit 1; }
 
 echo "==> Restarting registry"
-kubectl -n "${NS}" scale deploy/registry --replicas=1
+restore_registry
 kubectl -n "${NS}" rollout status deploy/registry --timeout=120s

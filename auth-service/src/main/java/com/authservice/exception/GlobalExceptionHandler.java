@@ -22,6 +22,10 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
 
     @Override
     public Mono<Void> handle(@NonNull ServerWebExchange exchange, @NonNull Throwable ex) {
+        if (ex instanceof AuthService.InvalidCredentialsException) {
+            return respond(exchange, HttpStatus.UNAUTHORIZED, "Unauthorized", "Invalid email or password");
+        }
+
         if (ex instanceof org.springframework.security.core.AuthenticationException
                 || ex instanceof AuthService.InvalidRefreshTokenException) {
             return respond(exchange, HttpStatus.UNAUTHORIZED, "Unauthorized", "Invalid or expired token");

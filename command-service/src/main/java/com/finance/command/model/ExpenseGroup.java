@@ -48,6 +48,10 @@ public class ExpenseGroup {
     @Transient
     private String currentUserStatus;
 
+    /** ADMIN or MEMBER for the requesting user; lets the UI gate admin actions. */
+    @Transient
+    private String currentUserRole;
+
     @Transient
     private java.math.BigDecimal currentUserNetBalance;
 

@@ -45,6 +45,14 @@ export async function renderSplit(container) {
     <div id="sp-content"></div>`;
   wireListHeader(userId);
 
+  // Opened from a notification: jump straight to that group.
+  if (window._pfaOpenGroupId) {
+    const gid = window._pfaOpenGroupId;
+    delete window._pfaOpenGroupId;
+    loadGroupDetail(gid, userId);
+    return;
+  }
+
   const pendingScanRaw = localStorage.getItem('pfa_pending_scan');
   if (pendingScanRaw) {
     try {
@@ -85,9 +93,29 @@ async function loadGroups(userId) {
     await Promise.all(activeGroups.map(async (g) => {
       try {
         const members = await api.get(`/upsert/groups/${g.id}/members`);
-        memberMap.set(g.id, members.filter(m => m.status !== 'PENDING'));
+        memberMap.set(g.id, members
+          .filter(m => m.status !== 'PENDING')
+          .map(m => ({ ...m, role: m.role || (String(m.userId) === String(g.createdBy) ? 'ADMIN' : 'MEMBER') })));
       } catch { memberMap.set(g.id, []); }
     }));
+
+    // One bulk profile lookup gives every card a real photo and username.
+    try {
+      const ids = [...new Set([...memberMap.values()].flat().map(m => m.userId))];
+      if (ids.length) {
+        const profiles = await api.post('/auth/users/bulk', ids);
+        const byId = new Map((profiles || []).map(p => [p.userId, p]));
+        for (const list of memberMap.values()) {
+          list.forEach(m => {
+            const p = byId.get(m.userId);
+            if (!p) return;
+            m.profilePicture = p.profilePicture || null;
+            m.username = p.username || null;
+            m.email = p.email || null;
+          });
+        }
+      }
+    } catch { /* initials are fine */ }
 
     const owed = groups.reduce((sum, g) => sum + Math.max(0, Number(g.currentUserNetBalance) || 0), 0);
     const owes = groups.reduce((sum, g) => sum + Math.max(0, -(Number(g.currentUserNetBalance) || 0)), 0);
@@ -109,7 +137,7 @@ async function loadGroups(userId) {
     let html = summary;
 
     if (activeGroups.length) {
-      html += `<div class="card-grid card-grid-3">${activeGroups.map(g => groupCard(g, memberMap.get(g.id) || [])).join('')}</div>`;
+      html += `<div class="card-grid card-grid-3">${activeGroups.map(g => groupCard(g, memberMap.get(g.id) || [], userId)).join('')}</div>`;
     } else {
       html += `<p class="meta" style="padding:20px 0">No active groups.</p>`;
     }
@@ -122,7 +150,7 @@ async function loadGroups(userId) {
           </button>
           <div id="archived-groups-container" hidden style="margin-top:var(--s4)">
             <div class="card-grid card-grid-3">
-              ${archivedGroups.map(g => groupCard(g, memberMap.get(g.id) || [])).join('')}
+              ${archivedGroups.map(g => groupCard(g, memberMap.get(g.id) || [], userId)).join('')}
             </div>
           </div>
         </div>`;
@@ -158,11 +186,12 @@ function wireListHeader(userId) {
   if (create) create.onclick = () => createGroupModal(userId);
 }
 
-function groupCard(g, members) {
+function groupCard(g, members, userId) {
   const isPending = g.currentUserStatus === 'PENDING';
   const isArchived = g.isArchived;
   const balance = Number(g.currentUserNetBalance) || 0;
   const currency = g.currency || Auth.getDefaultCurrency();
+  const canManage = g.currentUserRole === 'ADMIN' || String(g.createdBy || '') === String(userId || '');
 
   let balanceHtml = '<div class="group-balance is-zero">Settled up</div>';
   if (balance > 0) balanceHtml = `<div class="group-balance is-pos">You get back ${formatMoney(balance, currency)}</div>`;
@@ -172,7 +201,8 @@ function groupCard(g, members) {
   const extra = Math.max(0, members.length - shown.length);
   const memberHtml = shown.length ? `
     <div class="group-members">
-      ${shown.map(m => avatar(displayName(m.name || m.userName, 'Member'), 26, m.profilePicture)).join('')}
+      ${shown.map(m => `<button type="button" class="group-member-avatar" data-profile="${m.userId}"
+          data-name="${esc(m.name || m.userName || '')}" data-role="${esc(m.role || '')}" data-manage="${canManage ? '1' : ''}" aria-label="View ${esc(displayName(m.name || m.userName, 'member'))}'s profile">${avatar(displayName(m.name || m.userName, 'Member'), 26, m.profilePicture)}</button>`).join('')}
       ${extra ? `<span class="group-members-count">+${extra}</span>` : `<span class="group-members-count">${members.length} member${members.length === 1 ? '' : 's'}</span>`}
     </div>` : '';
 
@@ -197,6 +227,19 @@ function groupCard(g, members) {
 }
 
 function wireGroupCardActions(el, userId) {
+  el.querySelectorAll('.group-member-avatar').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const card = btn.closest('.group-card');
+      openMemberProfile(btn.dataset.profile, { displayName: btn.dataset.name, role: btn.dataset.role }, {
+        groupId: card ? card.dataset.id : null,
+        viewerUserId: userId,
+        canManage: btn.dataset.manage === '1',
+        onChanged: () => loadGroups(userId),
+      });
+    };
+  });
+
   el.querySelectorAll('.sp-outside-accept').forEach(btn => {
     btn.onclick = async (e) => {
       e.stopPropagation();
@@ -282,10 +325,29 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
     expensesTotal = expensesResult.totalPages || 1;
     const expenses = expensesResult.content || [];
 
-    const members = membersRaw.map(m => ({
-      ...m,
-      displayName: displayName(m.name || m.userName, displayNameFromId(m.userId)),
-    }));
+    // Profiles are kept in auth-service; one bulk call gives every member's
+    // avatar/username/email without an N+1 request per person.
+    const profilesById = new Map();
+    try {
+      if (membersRaw.length) {
+        const profiles = await api.post('/auth/users/bulk', membersRaw.map(m => m.userId));
+        (profiles || []).forEach(p => profilesById.set(p.userId, p));
+      }
+    } catch { /* profiles are optional decoration */ }
+
+    const members = membersRaw.map(m => {
+      const p = profilesById.get(m.userId) || {};
+      return {
+        ...m,
+        // Groups created before admin roles existed may have a null role; their
+        // creator is still the admin in every meaningful sense.
+        role: m.role || (String(m.userId) === String(group.createdBy) ? 'ADMIN' : 'MEMBER'),
+        displayName: displayName(m.name || p.username, displayNameFromId(m.userId)),
+        username: p.username || null,
+        email: p.email || null,
+        profilePicture: p.profilePicture || null,
+      };
+    });
 
     let pendingScan = null;
     if (window._pfaPendingScan && String(window._pfaPendingScan.groupId) === String(groupId)) {
@@ -312,6 +374,12 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
     };
 
     const currency = group.currency || Auth.getDefaultCurrency();
+    // `currentUserRole` is derived by the API, but older groups migrated before
+    // roles existed can still report MEMBER/null for their creator. Fall back to
+    // the membership row and the group's creator so admins always see their tools.
+    const iAmAdmin = group.currentUserRole === 'ADMIN'
+      || me?.role === 'ADMIN'
+      || String(group.createdBy || '') === String(userId);
     const debts = balances?.simplifiedDebts || [];
     const myDebts = debts.filter(d => d.fromUserId === userId || d.toUserId === userId);
     const iOwe = myDebts.filter(d => d.fromUserId === userId).reduce((s, d) => s + Number(d.amount || 0), 0);
@@ -420,10 +488,10 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
           <div class="overflow-wrap">
             <button class="btn-group-menu" id="sp-group-menu-btn" aria-label="Group options" aria-haspopup="menu" aria-expanded="false">${icon('settings', 'sm')}</button>
             <div id="sp-group-menu" class="overflow-menu" role="menu" hidden>
-              <button type="button" role="menuitem" id="sp-edit-group">${icon('edit', 'sm')} Edit group</button>
+              ${iAmAdmin ? `<button type="button" role="menuitem" id="sp-edit-group">${icon('edit', 'sm')} Edit group</button>` : ''}
               <button type="button" role="menuitem" id="sp-archive-group">${group.isArchived ? icon('arrow-up', 'sm') + ' Unarchive' : icon('arrow-down', 'sm') + ' Archive'}</button>
               <button type="button" role="menuitem" id="sp-leave-group">${icon('log-out', 'sm')} Leave group</button>
-              <button type="button" role="menuitem" id="sp-delete-group" style="color:var(--neg)">${icon('trash', 'sm')} Delete group</button>
+              ${iAmAdmin ? `<button type="button" role="menuitem" id="sp-delete-group" style="color:var(--neg)">${icon('trash', 'sm')} Delete group</button>` : ''}
             </div>
           </div>
         </div>
@@ -503,7 +571,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       currentGroupId = null;
       loadGroups(userId);
     };
-    document.getElementById('sp-view-members').onclick = () => viewMembersModal(members, groupId, userId);
+    document.getElementById('sp-view-members').onclick = () => viewMembersModal(members, groupId, userId, group);
 
     const settledToggle = document.getElementById('sp-settled-toggle');
     if (settledToggle) {
@@ -962,24 +1030,197 @@ function openExpenseDetailsModal(e, groupId, userId, members = []) {
 }
 
 /* ── Members ────────────────────────────────────────────────────────────── */
-function viewMembersModal(members, groupId, userId) {
+function viewMembersModal(members, groupId, userId, group) {
+  const selfRole = members.find(m => m.userId === userId)?.role;
+  const iAmAdmin = group?.currentUserRole === 'ADMIN'
+    || selfRole === 'ADMIN'
+    || String(group?.createdBy || '') === String(userId);
   openModal('Group members', `
     <div style="margin-bottom:var(--s4);max-height:400px;overflow-y:auto">
-      ${members.map(m => `
+      ${members.map(m => {
+        const isSelf = m.userId === userId;
+        const isAdmin = m.role === 'ADMIN' || String(m.userId) === String(group?.createdBy || '');
+        return `
         <div class="member-row">
-          <div class="member-name">${avatar(m.displayName || m.name, 28, m.profilePicture)}<span>${esc(m.displayName || displayName(m.name))}</span></div>
-          ${m.status === 'PENDING' ? chip('Pending', 'warn') : chip('Accepted', 'pos')}
-        </div>`).join('')}
+          <div class="member-main">
+            <button type="button" class="member-avatar-btn" data-picture="${m.userId}"
+                    aria-label="View ${esc(m.displayName || m.name)}'s picture">
+              ${avatar(m.displayName || m.name, 44, m.profilePicture)}
+            </button>
+            <div class="member-identity">
+              <button type="button" class="member-name member-profile-btn" data-profile="${m.userId}"
+                      aria-label="View profile of ${esc(m.displayName || m.name)}">
+                <span>${esc(m.displayName || displayName(m.name))}${isSelf ? ' (you)' : ''}</span>
+              </button>
+              ${m.email ? `<span class="member-email">${esc(m.email)}</span>` : ''}
+            </div>
+          </div>
+          <span class="member-tags">
+            ${isAdmin ? chip('Admin', 'brand') : (m.status === 'PENDING' ? '' : chip('Member', 'neutral'))}
+            ${m.status === 'PENDING' ? chip('Pending', 'warn') : ''}
+          </span>
+          ${iAmAdmin && !isSelf && m.status === 'ACCEPTED' ? `
+            <span class="member-actions">
+              <button type="button" class="btn-icon" data-admin-toggle="${m.userId}" data-admin="${isAdmin ? 'false' : 'true'}"
+                      title="${isAdmin ? 'Remove admin' : 'Make admin'}" aria-label="${isAdmin ? 'Remove admin' : 'Make admin'}">
+                ${icon(isAdmin ? 'user-x' : 'user-check', 'sm')}
+              </button>
+              <button type="button" class="btn-icon" data-remove-member="${m.userId}"
+                      data-name="${esc(m.displayName || m.name)}"
+                      title="Remove from group" aria-label="Remove from group">
+                ${icon('trash', 'sm')}
+              </button>
+            </span>` : ''}
+        </div>`;
+      }).join('')}
     </div>
-    <button class="btn btn-secondary" style="width:100%" id="vm-add-member">${icon('user-plus', 'sm')} Add member</button>
+    ${iAmAdmin ? `<button class="btn btn-secondary" style="width:100%" id="vm-add-member">${icon('user-plus', 'sm')} Add member</button>` : ''}
   `);
 
   setTimeout(() => {
-    document.getElementById('vm-add-member').onclick = () => {
-      document.querySelector('.modal-close').click();
-      addMemberModal(groupId, userId);
-    };
+    if (iAmAdmin) {
+      document.getElementById('vm-add-member').onclick = () => {
+        document.querySelector('.modal-close').click();
+        addMemberModal(groupId, userId);
+      };
+    }
+
+    // The avatar is a shortcut to the picture itself; the name opens the full
+    // profile (which also carries the admin actions).
+    document.querySelectorAll('[data-picture]').forEach(btn => {
+      btn.onclick = () => {
+        const member = members.find(m => String(m.userId) === String(btn.dataset.picture));
+        if (member) openMemberPicture(member);
+      };
+    });
+
+    document.querySelectorAll('[data-profile]').forEach(btn => {
+      btn.onclick = () => {
+        const member = members.find(m => m.userId === btn.dataset.profile);
+        openMemberProfile(btn.dataset.profile, member, {
+          groupId,
+          viewerUserId: userId,
+          canManage: iAmAdmin,
+          onChanged: () => {
+            document.querySelector('.modal-overlay .modal-close')?.click();
+            loadGroupDetail(groupId, userId, { preserveView: true });
+          },
+        });
+      };
+    });
+
+    document.querySelectorAll('[data-admin-toggle]').forEach(btn => {
+      btn.onclick = async () => {
+        const makeAdmin = btn.dataset.admin === 'true';
+        try {
+          await api.put(`/upsert/groups/${groupId}/members/${btn.dataset.adminToggle}/admin`,
+            null, { params: { admin: makeAdmin } });
+          toast(makeAdmin ? 'Member promoted to admin' : 'Admin role removed', 'success');
+          document.querySelector('.modal-close')?.click();
+          loadGroupDetail(groupId, userId, { preserveView: true });
+        } catch (err) { toast(err.message, 'error'); }
+      };
+    });
+
+    document.querySelectorAll('[data-remove-member]').forEach(btn => {
+      btn.onclick = async () => {
+        const name = btn.dataset.name;
+        if (!(await confirmModal('Remove member',
+          `Remove ${name} from the group? Any remaining balance will be settled first; removal only happens if their balance is zero.`,
+          'Remove member'))) return;
+        try {
+          await api.delete(`/upsert/groups/${groupId}/members/${btn.dataset.removeMember}`, { settle: true });
+          toast(`${name} removed from the group`, 'success');
+          document.querySelector('.modal-close')?.click();
+          loadGroupDetail(groupId, userId, { preserveView: true });
+        } catch (err) { toast(err.message, 'error'); }
+      };
+    });
   }, 20);
+}
+
+/** Direct picture viewer — opened by the avatar in the member list. */
+function openMemberPicture(member) {
+  const label = member.displayName || displayName(member.name, 'Member');
+  openModal('Profile picture', `
+    <div class="avatar-popup">
+      ${member.profilePicture
+        ? `<img src="${esc(member.profilePicture)}" alt="${esc(label)}">`
+        : avatar(label, 220)}
+    </div>`, { size: 'lg' });
+}
+
+/** Public profile of another group member, with admin actions when allowed. */
+async function openMemberProfile(memberUserId, fallback = {}, context = {}) {
+  let profile = {
+    username: fallback.username || fallback.displayName || fallback.name || 'Member',
+    email: fallback.email || '',
+    profilePicture: fallback.profilePicture || null,
+  };
+  try {
+    const fetched = await api.get(`/auth/users/${memberUserId}`);
+    if (fetched) profile = { ...profile, ...fetched };
+  } catch { /* fall back to what the member row already knows */ }
+
+  const label = profile.username || fallback.displayName || 'Member';
+  const isAdmin = fallback.role === 'ADMIN';
+  const canManage = !!context.canManage
+    && context.groupId != null
+    && String(memberUserId) !== String(context.viewerUserId || '');
+
+  const { overlay, close } = openModal('Profile', `
+    <div class="member-profile">
+      <div class="member-profile-avatar">
+        ${profile.profilePicture
+          ? `<button type="button" class="member-profile-avatar-btn" id="mp-avatar" aria-label="View ${esc(label)}'s picture">${avatar(label, 120, profile.profilePicture)}</button>`
+          : avatar(label, 120)}
+      </div>
+      <div class="member-profile-name">${esc(label)}</div>
+      <div class="member-profile-tags">
+        ${isAdmin ? chip('Admin', 'brand') : chip('Member', 'neutral')}
+      </div>
+      ${profile.email ? `<div class="member-profile-email">${icon('mail', 'xs')} ${esc(profile.email)}</div>` : ''}
+      ${canManage ? `
+        <div class="member-profile-actions">
+          <button type="button" class="btn btn-secondary" id="mp-admin-toggle">
+            ${isAdmin ? 'Remove admin' : 'Make admin'}
+          </button>
+          <button type="button" class="btn btn-danger" id="mp-remove-member">Remove from group</button>
+        </div>` : ''}
+    </div>`);
+
+  overlay.querySelector('#mp-avatar')?.addEventListener('click', () => {
+    openMemberPicture({ displayName: label, profilePicture: profile.profilePicture });
+  });
+
+  if (!canManage) return;
+
+  const adminBtn = overlay.querySelector('#mp-admin-toggle');
+  adminBtn.onclick = async () => {
+    adminBtn.disabled = true;
+    try {
+      await api.put(`/upsert/groups/${context.groupId}/members/${memberUserId}/admin`,
+        null, { params: { admin: !isAdmin } });
+      toast(isAdmin ? 'Admin role removed' : 'Member promoted to admin', 'success');
+      close();
+      context.onChanged?.();
+    } catch (err) {
+      toast(err.message, 'error');
+      adminBtn.disabled = false;
+    }
+  };
+
+  overlay.querySelector('#mp-remove-member').onclick = async () => {
+    if (!(await confirmModal('Remove member',
+      `Remove ${label} from the group? Any remaining balance will be settled first; removal only happens if their balance is zero.`,
+      'Remove member'))) return;
+    try {
+      await api.delete(`/upsert/groups/${context.groupId}/members/${memberUserId}`, { settle: true });
+      toast(`${label} removed from the group`, 'success');
+      close();
+      context.onChanged?.();
+    } catch (err) { toast(err.message, 'error'); }
+  };
 }
 
 function editGroupModal(group, userId) {
@@ -1120,6 +1361,8 @@ function activityTypeLabel(type) {
   const map = {
     GROUP_CREATED: 'Group created',
     MEMBER_ADDED: 'Member added',
+    MEMBER_REMOVED: 'Member removed',
+    ADMIN_CHANGED: 'Admin changed',
     EXPENSE_ADDED: 'Expense added',
     EXPENSE_UPDATED: 'Expense updated',
     EXPENSE_DELETED: 'Expense deleted',

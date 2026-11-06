@@ -3,13 +3,15 @@ FROM maven:3.9.6-eclipse-temurin-21 AS builder
 
 WORKDIR /app
 
-# Copy pom.xml and download dependencies (layer caching optimization)
+# Copy pom.xml and download dependencies (layer caching optimization).
+# The BuildKit cache mount keeps ~/.m2 on the buildkitd cache volume across
+# builds, so repeat builds do not re-download the same dependencies.
 COPY pom.xml .
-RUN mvn dependency:go-offline -B -q
+RUN --mount=type=cache,target=/root/.m2,sharing=locked mvn dependency:go-offline -B -q
 
 # Copy the rest of the source code and build the jar
 COPY src ./src
-RUN mvn clean package -Dmaven.test.skip=true -q
+RUN --mount=type=cache,target=/root/.m2,sharing=locked mvn clean package -Dmaven.test.skip=true -q
 
 # Step 2: Runtime stage — use JRE-only alpine image for smaller footprint
 FROM eclipse-temurin:21-jre-alpine

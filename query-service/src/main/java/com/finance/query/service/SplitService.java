@@ -62,6 +62,7 @@ public class SplitService {
             if (membership != null) {
                 group.setIsArchived(membership.isArchived());
                 group.setCurrentUserStatus(membership.getStatus().name());
+                group.setCurrentUserRole(membership.isAdmin() ? "ADMIN" : "MEMBER");
             }
             group.setCurrentUserNetBalance(netBalances.getOrDefault(group.getId(), BigDecimal.ZERO));
         }
@@ -115,6 +116,7 @@ public class SplitService {
                     .ifPresent(m -> {
                         group.setIsArchived(m.isArchived());
                         group.setCurrentUserStatus(m.getStatus().name());
+                        group.setCurrentUserRole(m.isAdmin() ? "ADMIN" : "MEMBER");
                     });
                 return group;
             });
@@ -127,6 +129,39 @@ public class SplitService {
     @Transactional(readOnly = true)
     public List<GroupMember> getGroupMembers(Long groupId) {
         return memberRepo.findByGroupId(groupId);
+    }
+
+    /**
+     * Everyone the user shares an accepted group with, deduplicated, with the
+     * group names that connect them. Used by the profile page so people can
+     * open a fellow member's profile without leaving their own profile.
+     */
+    @Transactional(readOnly = true)
+    public List<com.finance.query.dto.SharedPerson> getPeopleYouShareGroupsWith(UUID userId) {
+        List<GroupMember> myMemberships = memberRepo.findByUserId(userId).stream()
+                .filter(m -> m.getStatus() == GroupMember.InvitationStatus.ACCEPTED)
+                .toList();
+        if (myMemberships.isEmpty()) return List.of();
+
+        Map<UUID, java.util.List<String>> groupsByPerson = new HashMap<>();
+        Map<UUID, String> names = new HashMap<>();
+        for (GroupMember mine : myMemberships) {
+            String groupName = groupRepo.findById(mine.getGroupId())
+                    .map(ExpenseGroup::getName)
+                    .orElse("Group " + mine.getGroupId());
+            for (GroupMember peer : memberRepo.findByGroupId(mine.getGroupId())) {
+                if (peer.getStatus() != GroupMember.InvitationStatus.ACCEPTED) continue;
+                if (peer.getUserId().equals(userId)) continue;
+                groupsByPerson.computeIfAbsent(peer.getUserId(), k -> new java.util.ArrayList<>()).add(groupName);
+                names.putIfAbsent(peer.getUserId(), peer.getName());
+            }
+        }
+        return groupsByPerson.entrySet().stream()
+                .map(e -> new com.finance.query.dto.SharedPerson(
+                        e.getKey(), names.get(e.getKey()), e.getValue().size(), e.getValue()))
+                .sorted(Comparator.comparing(com.finance.query.dto.SharedPerson::name,
+                        Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+                .toList();
     }
 
     /* ─── SHARED EXPENSES ─── */

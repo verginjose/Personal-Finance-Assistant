@@ -57,6 +57,8 @@ public class SplitService {
         String creatorName = userValidationService.displayName(creator);
         GroupMember creatorMember = addMemberInternal(group.getId(), req.getCreatedBy(), creatorName);
         creatorMember.setStatus(GroupMember.InvitationStatus.ACCEPTED);
+        // The creator is the group's first admin.
+        creatorMember.setRole(GroupMember.Role.ADMIN);
         memberRepo.save(creatorMember);
         groupActivityService.log(group.getId(), req.getCreatedBy(), creatorName,
                 ActivityType.GROUP_CREATED,
@@ -70,7 +72,7 @@ public class SplitService {
     public ExpenseGroup updateGroup(Long groupId, UpdateGroupRequest req, UUID actorUserId) {
         ExpenseGroup group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));
-        requireGroupMember(groupId, actorUserId);
+        requireGroupAdmin(groupId, actorUserId);
 
         group.setName(req.getName());
         group.setDescription(req.getDescription());
@@ -126,6 +128,7 @@ public class SplitService {
             if (membership != null) {
                 group.setIsArchived(membership.isArchived());
                 group.setCurrentUserStatus(membership.getStatus().name());
+                group.setCurrentUserRole(membership.isAdmin() ? "ADMIN" : "MEMBER");
             }
             group.setCurrentUserNetBalance(netBalances.getOrDefault(group.getId(), BigDecimal.ZERO));
         }
@@ -179,6 +182,7 @@ public class SplitService {
                     .ifPresent(m -> {
                         group.setIsArchived(m.isArchived());
                         group.setCurrentUserStatus(m.getStatus().name());
+                        group.setCurrentUserRole(m.isAdmin() ? "ADMIN" : "MEMBER");
                     });
                 return group;
             });
@@ -188,7 +192,7 @@ public class SplitService {
     public void deleteGroup(Long groupId, UUID actorUserId) {
         ExpenseGroup group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group not found"));
-        requireGroupMember(groupId, actorUserId);
+        requireGroupAdmin(groupId, actorUserId);
 
         GroupBalanceResponse balances = self.getGroupBalances(groupId);
         boolean hasDebt = balances.getMemberBalances().stream()
@@ -234,7 +238,7 @@ public class SplitService {
     public GroupMember addMember(Long groupId, AddMemberRequest req, UUID actorUserId) {
         groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group " + groupId + " not found"));
-        requireGroupMember(groupId, actorUserId);
+        requireGroupAdmin(groupId, actorUserId);
         RegisteredUser user = userValidationService.requireRegisteredUser(req.getUserId());
         if (memberRepo.existsByGroupIdAndUserId(groupId, req.getUserId())) {
             throw new IllegalArgumentException("User is already a member of this group");
@@ -267,7 +271,146 @@ public class SplitService {
         m.setUserId(userId);
         m.setName(name);
         m.setStatus(GroupMember.InvitationStatus.PENDING);
+        m.setRole(GroupMember.Role.MEMBER);
         return memberRepo.save(m);
+    }
+
+    /* ─── ADMIN ─── */
+
+    /**
+     * Promote or demote a member. Only admins may call this, and the group can
+     * never be left without an admin.
+     */
+    @Caching(evict = {
+            @CacheEvict(value = "user-groups", key = "#memberUserId"),
+            @CacheEvict(value = "group-details", key = "#groupId + '-' + #memberUserId")
+    })
+    public void setAdmin(Long groupId, UUID memberUserId, boolean admin, UUID actorUserId) {
+        requireGroupAdmin(groupId, actorUserId);
+        GroupMember member = requireAcceptedMembership(groupId, memberUserId);
+
+        if (!admin && member.isAdmin() && countOtherAdmins(groupId, memberUserId) == 0) {
+            throw new IllegalArgumentException(
+                    "The group needs at least one admin. Promote someone else first.");
+        }
+        if (member.isAdmin() == admin) return;
+
+        member.setRole(admin ? GroupMember.Role.ADMIN : GroupMember.Role.MEMBER);
+        memberRepo.save(member);
+
+        String actorName = resolveMemberName(groupId, actorUserId);
+        groupActivityService.log(groupId, actorUserId, actorName,
+                ActivityType.ADMIN_CHANGED,
+                admin
+                        ? "@" + actorName + " made @" + member.getName() + " an admin"
+                        : "@" + actorName + " removed admin from @" + member.getName(),
+                member.getId());
+
+        notificationService.sendNotification(memberUserId, Map.of(
+                "status", "INFO",
+                "message", admin
+                        ? "You are now an admin of " + groupName(groupId)
+                        : "You are no longer an admin of " + groupName(groupId),
+                "event", "group-admin-changed",
+                "groupId", groupId));
+
+        queryCacheEvictor.evictGroupKeys(groupId, memberIds(groupId));
+    }
+
+    /**
+     * Remove a member (admin only). With {@code settleFirst}, any residual
+     * balance is recorded as settlement payments and the member is removed
+     * only once their net balance reaches zero.
+     */
+    @Caching(evict = {
+            @CacheEvict(value = "group-expenses", key = "#groupId"),
+            @CacheEvict(value = "group-balances", key = "#groupId")
+    })
+    public void removeMember(Long groupId, UUID memberUserId, UUID actorUserId, boolean settleFirst) {
+        requireGroupAdmin(groupId, actorUserId);
+        if (memberUserId.equals(actorUserId)) {
+            throw new IllegalArgumentException("Use leave group to remove yourself.");
+        }
+        GroupMember member = requireAcceptedMembership(groupId, memberUserId);
+        if (member.isAdmin() && countOtherAdmins(groupId, memberUserId) == 0) {
+            throw new IllegalArgumentException(
+                    "Cannot remove the group's only admin. Promote another admin first.");
+        }
+
+        if (settleFirst) {
+            // Settle every simplified debt that involves this member. The loop
+            // is bounded because each pass either clears a debt or leaves the
+            // member with nothing left to settle.
+            for (int pass = 0; pass < 10; pass++) {
+                GroupBalanceResponse balances = self.getGroupBalances(groupId);
+                List<GroupBalanceResponse.SettlementSuggestion> involving =
+                        balances.getSimplifiedDebts().stream()
+                                .filter(s -> s.getFromUserId().equals(memberUserId)
+                                        || s.getToUserId().equals(memberUserId))
+                                .toList();
+                if (involving.isEmpty()) break;
+                for (GroupBalanceResponse.SettlementSuggestion s : involving) {
+                    self.settleDebt(groupId, s.getFromUserId(), s.getToUserId(), actorUserId);
+                }
+            }
+        }
+
+        BigDecimal residual = netBalanceOf(groupId, memberUserId);
+        if (residual.compareTo(BigDecimal.ZERO) != 0) {
+            throw new IllegalArgumentException("Cannot remove @" + member.getName()
+                    + ": their balance in this group is " + residual.toPlainString()
+                    + ". Record a settlement first.");
+        }
+
+        String memberName = member.getName();
+        String actorName = resolveMemberName(groupId, actorUserId);
+        String name = groupName(groupId);
+        Set<UUID> affected = memberIds(groupId);
+
+        var userGroupsCache = cacheManager.getCache("user-groups");
+        if (userGroupsCache != null) {
+            affected.forEach(userGroupsCache::evict);
+        }
+        memberRepo.delete(member);
+
+        groupActivityService.log(groupId, actorUserId, actorName,
+                ActivityType.MEMBER_REMOVED,
+                "@" + actorName + " removed @" + memberName + " from the group",
+                groupId);
+
+        notificationService.sendNotification(memberUserId, Map.of(
+                "status", "INFO",
+                "message", "You were removed from the group: " + name,
+                "event", "group-removed",
+                "groupId", groupId));
+
+        queryCacheEvictor.evictGroupKeys(groupId, affected);
+    }
+
+    private GroupMember requireAcceptedMembership(Long groupId, UUID userId) {
+        return memberRepo.findByGroupIdAndUserId(groupId, userId)
+                .filter(m -> m.getStatus() == GroupMember.InvitationStatus.ACCEPTED)
+                .orElseThrow(() -> new IllegalArgumentException("User is not an active member of this group"));
+    }
+
+    private long countOtherAdmins(Long groupId, UUID excludingUserId) {
+        return memberRepo.findByGroupId(groupId).stream()
+                .filter(m -> m.getStatus() == GroupMember.InvitationStatus.ACCEPTED)
+                .filter(m -> m.isAdmin())
+                .filter(m -> !m.getUserId().equals(excludingUserId))
+                .count();
+    }
+
+    private BigDecimal netBalanceOf(Long groupId, UUID userId) {
+        return self.getGroupBalances(groupId).getMemberBalances().stream()
+                .filter(b -> b.getUserId().equals(userId))
+                .map(GroupBalanceResponse.MemberBalance::getNetBalance)
+                .findFirst()
+                .orElse(BigDecimal.ZERO);
+    }
+
+    private String groupName(Long groupId) {
+        return groupRepo.findById(groupId).map(ExpenseGroup::getName).orElse("the group");
     }
 
     @Caching(evict = {
@@ -325,6 +468,15 @@ public class SplitService {
                 .filter(m -> m.getUserId().equals(userId))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Membership not found"));
+
+        // Never strand the group without an admin while other members remain.
+        boolean othersRemain = memberRepo.findByGroupId(groupId).stream()
+                .anyMatch(m -> !m.getUserId().equals(userId)
+                        && m.getStatus() == GroupMember.InvitationStatus.ACCEPTED);
+        if (member.isAdmin() && othersRemain && countOtherAdmins(groupId, userId) == 0) {
+            throw new IllegalArgumentException(
+                    "You are the group's only admin. Promote another admin before leaving.");
+        }
 
         // Ensure balance is 0
         GroupBalanceResponse balances = self.getGroupBalances(groupId);
@@ -1048,6 +1200,15 @@ public class SplitService {
     private void requireGroupMember(Long groupId, UUID userId) {
         if (!memberRepo.existsByGroupIdAndUserId(groupId, userId)) {
             throw new SecurityException("User is not a member of this group");
+        }
+    }
+
+    /** Admin-only actions: group settings, invitations, promotions, removals. */
+    private void requireGroupAdmin(Long groupId, UUID userId) {
+        GroupMember membership = memberRepo.findByGroupIdAndUserId(groupId, userId)
+                .orElseThrow(() -> new SecurityException("User is not a member of this group"));
+        if (!membership.isAdmin()) {
+            throw new SecurityException("Only group admins can do that");
         }
     }
 

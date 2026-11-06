@@ -11,6 +11,7 @@
 #   ./k8s/start.sh --no-port-forward    # do not start the UI port-forwards
 #   ./k8s/start.sh --full               # also run ./k8s/apply.sh afterwards
 #   ./k8s/start.sh --stop-port-forwards # stop the forwards this script started, then exit
+#   ./k8s/start.sh --build-ocr-base     # rebuild+push finance/ocr-base (30+ min), then exit
 #
 # To stop everything later: ./k8s/stop.sh
 # To delete things:         ./k8s/cleanup.sh --help
@@ -52,9 +53,10 @@ SHOW_SECRETS=false
 RUN_APPLY=false
 START_PF=true
 STOP_PF=false
+BUILD_OCR_BASE=false
 
 usage() {
-  sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -66,6 +68,7 @@ for arg in "$@"; do
     --port-forward)       START_PF=true ;;
     --no-port-forward)    START_PF=false ;;
     --stop-port-forwards) STOP_PF=true ;;
+    --build-ocr-base)     BUILD_OCR_BASE=true ;;
     -h|--help)            usage ;;
     *) echo "Unknown argument: ${arg}" >&2; exit 2 ;;
   esac
@@ -208,6 +211,113 @@ _start_port_forward_once() {
 [[ -f "${ENV_FILE}" ]] || { fail "missing ${ENV_FILE}"; exit 1; }
 command -v kubectl >/dev/null 2>&1 || { fail "kubectl not installed"; exit 1; }
 
+# ── OCR base image ───────────────────────────────────────────────────────────
+# Rebuilds ocr-service/Dockerfile.full and pushes finance/ocr-base. That image
+# is consumed by ocr-service/Dockerfile (FROM ${OCR_BASE}) and is only rebuilt
+# by hand when requirements.txt changes — the CI workflow always builds the
+# thin app layer, never the 1.9 GB paddlepaddle-gpu stack.
+#
+# The build runs in the in-cluster BuildKit daemon, so the push originates from
+# the pod: it can resolve registry.pfa.svc.cluster.local and buildkitd.toml
+# already marks that endpoint http/insecure. Your host's loopback NodePort is
+# not reachable from inside the pod, so never push to 127.0.0.1:30500 here.
+OCR_BASE_REPO="${OCR_BASE_REPO:-registry.pfa.svc.cluster.local:5000/finance/ocr-base}"
+OCR_BASE_TAG="${OCR_BASE_TAG:-cu126-py311-v1}"
+OCR_BASE_BUILD_TIMEOUT="${OCR_BASE_BUILD_TIMEOUT:-7200}"   # seconds; the wheel is slow
+
+wait_for_url() {   # <url> <seconds> <description>
+  local url="$1" deadline=$((SECONDS + $2)) desc="$3"
+  until curl -fsS --max-time 5 "${url}" >/dev/null 2>&1; do
+    if [[ ${SECONDS} -ge ${deadline} ]]; then
+      fail "${desc} is not answering at ${url}"
+      return 1
+    fi
+    sleep 3
+  done
+}
+
+build_ocr_base() {
+  local pod ctx rc line last="" started
+
+  step "ocr base image (${OCR_BASE_TAG})"
+  if ! kubectl -n "${NS}" rollout status deployment/buildkitd --timeout=300s >/dev/null 2>&1; then
+    fail "buildkitd did not become ready (see k8s/ci/buildkit.yaml)"
+    exit 1
+  fi
+  pod="$(kubectl -n "${NS}" get pod -l app=buildkitd -o jsonpath='{.items[0].metadata.name}')"
+  ok "buildkitd pod ${pod}"
+
+  wait_for_url "http://127.0.0.1:30500/v2/" 120 "image registry" || exit 1
+  ok "registry reachable"
+
+  # Stage only what Dockerfile.full consumes. `kubectl cp` tars the directory
+  # as-is (it does not honour .dockerignore), and ocr-service/ holds a ~900 MB
+  # local .venv, so copy the three inputs into a throwaway directory instead.
+  ctx="$(mktemp -d)"
+  trap "rm -rf '${ctx}'" EXIT
+  cp -r "${ROOT_DIR}/ocr-service/app" "${ROOT_DIR}/ocr-service/requirements.txt" \
+        "${ROOT_DIR}/ocr-service/Dockerfile.full" "${ctx}/"
+  echo "    uploading build context ($(du -sh "${ctx}" | cut -f1))"
+  # `kubectl cp` nests into an existing destination, so a leftover /tmp/ocr-ctx
+  # from an interrupted run would leave the context one level too deep.
+  kubectl -n "${NS}" exec "${pod}" -- rm -rf /tmp/ocr-ctx >/dev/null 2>&1 || true
+  kubectl -n "${NS}" cp "${ctx}" "${pod}:/tmp/ocr-ctx" >/dev/null
+  ok "context staged at ${pod}:/tmp/ocr-ctx"
+
+  # Detach inside the pod: BuildKit cancels the build when its client goes
+  # away, and this takes 30+ minutes. A sentinel file records the exit status
+  # so progress can be polled without pgrep (which would also match the
+  # `sh -c` wrapper that contains the pattern).
+  kubectl -n "${NS}" exec "${pod}" -- sh -c "
+    rm -f /tmp/ocr-build.log /tmp/ocr-build.rc
+    nohup sh -c 'buildctl --addr tcp://127.0.0.1:1234 build \
+      --progress plain \
+      --frontend dockerfile.v0 \
+      --local context=/tmp/ocr-ctx \
+      --local dockerfile=/tmp/ocr-ctx \
+      --opt filename=Dockerfile.full \
+      --output type=image,name=${OCR_BASE_REPO}:${OCR_BASE_TAG},push=true \
+      > /tmp/ocr-build.log 2>&1; echo \$? > /tmp/ocr-build.rc' >/dev/null 2>&1 &
+  " >/dev/null
+  ok "build started; following ${pod}:/tmp/ocr-build.log (Ctrl-C is safe)"
+
+  started=${SECONDS}
+  while :; do
+    rc="$(kubectl -n "${NS}" exec "${pod}" -- cat /tmp/ocr-build.rc 2>/dev/null | tr -d '[:space:]' || true)"
+    line="$(kubectl -n "${NS}" exec "${pod}" -- sh -c \
+      "grep -v '^[[:space:]]*$' /tmp/ocr-build.log 2>/dev/null | tail -n 1" 2>/dev/null | tr -d '\r' || true)"
+    if [[ -n "${line}" && "${line}" != "${last}" ]]; then
+      printf '    %s\n' "${line}"
+      last="${line}"
+    fi
+    [[ -n "${rc}" ]] && break
+    if [[ $((SECONDS - started)) -ge ${OCR_BASE_BUILD_TIMEOUT} ]]; then
+      warn "gave up after ${OCR_BASE_BUILD_TIMEOUT}s; the build may still be running in the pod"
+      echo "    follow it with: kubectl -n ${NS} exec ${pod} -- tail -f /tmp/ocr-build.log"
+      exit 1
+    fi
+    sleep 15
+  done
+
+  # A zero exit is not proof of a push — confirm the tag is actually served.
+  if [[ "${rc}" != "0" ]] || ! curl -fsSI --max-time 10 \
+        "http://127.0.0.1:30500/v2/finance/ocr-base/manifests/${OCR_BASE_TAG}" >/dev/null 2>&1; then
+    fail "build failed (buildctl exit ${rc:-unknown})"
+    echo "    last log lines:" >&2
+    kubectl -n "${NS}" exec "${pod}" -- tail -n 25 /tmp/ocr-build.log >&2 || true
+    echo "    full log: kubectl -n ${NS} exec ${pod} -- cat /tmp/ocr-build.log" >&2
+    exit 1
+  fi
+  ok "pushed ${OCR_BASE_REPO}:${OCR_BASE_TAG}"
+
+  kubectl -n "${NS}" exec "${pod}" -- rm -rf /tmp/ocr-ctx >/dev/null 2>&1 || true
+  echo
+  echo "    next steps:"
+  echo "      - new tag? bump OCR_BASE in ocr-service/Dockerfile and docker-compose.yml"
+  echo "      - git push: CI rebuilds ocr-service/Dockerfile FROM this base"
+}
+
+
 if ${STOP_PF}; then
   step "port-forwards"
   stop_port_forwards
@@ -258,6 +368,13 @@ if ! kubectl get namespace "${NS}" >/dev/null 2>&1; then
   warn "namespace ${NS} does not exist"
   echo "    deploy it with: ./k8s/apply.sh --with-cloudflared"
   exit 1
+fi
+
+# One-shot maintenance mode: the workloads themselves are not needed, only
+# buildkitd and the registry, so stop here instead of waiting for the stack.
+if ${BUILD_OCR_BASE}; then
+  build_ocr_base
+  exit 0
 fi
 
 if ${RUN_APPLY}; then
@@ -331,7 +448,10 @@ if ${START_PF}; then
                                  "http://localhost:9001 (console) / :9000 (API)" || true
   start_port_forward rabbitmq   "${NS}" rabbitmq   15672:15672  http://localhost:15672 || true
   if kubectl get namespace argocd >/dev/null 2>&1; then
-    start_port_forward argocd argocd argocd-server 8080:443 https://localhost:8080 || true
+    # argocd-server runs with server.insecure=true, so the service's port 80
+    # speaks plain HTTP. Forwarding 443 and browsing https:// fails with an
+    # "unavailable server" TLS error.
+    start_port_forward argocd argocd argocd-server 8080:80 http://localhost:8080 || true
   else
     warn "argocd namespace missing; skipping the Argo CD port-forward"
   fi
@@ -362,14 +482,14 @@ if ${START_PF}; then
   printf '    prometheus     http://localhost:9090\n'
   printf '    minio          http://localhost:9001      (console); API on :9000\n'
   printf '    rabbitmq       http://localhost:15672\n'
-  printf '    argocd         https://localhost:8080     (admin / see credentials)\n'
+  printf '    argocd         http://localhost:8080      (admin / see credentials)\n'
 else
   printf '    frontend       kubectl -n pfa port-forward svc/frontend 3001:80        → http://localhost:3001\n'
   printf '    grafana        kubectl -n pfa port-forward svc/grafana 3000:3000        → http://localhost:3000\n'
   printf '    prometheus     kubectl -n pfa port-forward svc/prometheus 9090:9090     → http://localhost:9090\n'
   printf '    minio          kubectl -n pfa port-forward svc/minio 9000:9000 9001:9001 → http://localhost:9001\n'
   printf '    rabbitmq       kubectl -n pfa port-forward svc/rabbitmq 15672:15672     → http://localhost:15672\n'
-  printf '    argocd         kubectl -n argocd port-forward svc/argocd-server 8080:443 → https://localhost:8080\n'
+  printf '    argocd         kubectl -n argocd port-forward svc/argocd-server 8080:80  → http://localhost:8080\n'
 fi
 printf '    registry       curl http://127.0.0.1:30500/v2/_catalog\n'
 printf '    ci runs        https://github.com/verginjose/Personal-Finance-Assistant/actions\n'

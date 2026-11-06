@@ -68,7 +68,13 @@ function titleCase(value) {
   return String(value || '').toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-/** The category chip is also the control: change it in place, no edit form. */
+/** Read-only category label for the ledger rows. */
+function categoryDisplayHtml(t, { dot = true } = {}) {
+  const cat = txCategory(t) || 'OTHERS';
+  return `<span class="cat-label">${dot ? categoryDot(cat) : ''}<span>${esc(formatCategory(cat))}</span></span>`;
+}
+
+/** The category chip in the detail sheet is also the control: change it there. */
 function categoryButtonHtml(t, { dot = true } = {}) {
   const cat = txCategory(t) || 'OTHERS';
   const label = esc(formatCategory(cat));
@@ -505,7 +511,7 @@ async function loadTransactions(userId) {
           const title = settlement ? settlementTitle(t, userId) : humanizeNamesIn(t.name || 'Transaction');
           const categoryCell = settlement
             ? `<span class="chip chip--neutral">Settlement</span>`
-            : categoryButtonHtml(t);
+            : categoryDisplayHtml(t);
 
           return `<tr data-txn='${escAttr(JSON.stringify(t))}' tabindex="0" class="txn-row ${settlement ? 'is-settlement' : ''}" style="cursor:pointer">
             <td>
@@ -535,7 +541,7 @@ async function loadTransactions(userId) {
 
       tbody.querySelectorAll('tr[data-txn]').forEach(tr => {
         tr.onclick = (e) => {
-          if (e.target.closest('.cat-edit-btn') || e.target.closest('.attach-btn') || e.target.closest('select')) return;
+          if (e.target.closest('.attach-btn')) return;
           const t = JSON.parse(tr.dataset.txn);
           openTransactionDetailsModal(t, userId);
         };
@@ -553,12 +559,6 @@ async function loadTransactions(userId) {
         };
       });
 
-      tbody.querySelectorAll('.cat-edit-btn').forEach(btn => {
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          startCategoryEdit(btn, JSON.parse(btn.closest('tr').dataset.txn), userId);
-        };
-      });
       tbody.querySelectorAll('[data-receipt]').forEach(btn => {
         btn.onclick = (e) => { e.stopPropagation(); window.openReceiptLightbox(btn.dataset.receipt); };
       });
@@ -601,7 +601,7 @@ function renderMobileTransactions(items, currency, userId) {
       const title = settlement ? settlementTitle(t, userId) : humanizeNamesIn(t.name || 'Transaction');
       const sub = settlement
         ? esc(settlementGroup(t) || 'Settlement')
-        : `${categoryButtonHtml(t, { dot: false })}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}`;
+        : `${categoryDisplayHtml(t, { dot: false })}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}`;
       return `
         <div class="ledger-row ${settlement ? 'is-settlement' : ''}" role="button" tabindex="0" data-txn-id="${esc(String(t.id || ''))}">
           ${settlement
@@ -622,26 +622,15 @@ function renderMobileTransactions(items, currency, userId) {
     : '');
 
   el.querySelectorAll('[data-txn-id]').forEach(row => {
-    const open = (e) => {
-      // The category chip edits in place; do not also open the detail sheet.
-      if (e && e.target.closest('.cat-edit-btn, select')) return;
+    const open = () => {
       const t = items.find(i => String(i.id) === row.dataset.txnId);
       if (t) openTransactionDetailsModal(t, userId);
     };
     row.onclick = open;
     row.onkeydown = (e) => {
       if (e.key !== 'Enter') return;
-      if (e.target.closest('.cat-edit-btn, select')) return;
       e.preventDefault();
-      open(e);
-    };
-  });
-
-  el.querySelectorAll('.cat-edit-btn').forEach(btn => {
-    btn.onclick = (e) => {
-      e.stopPropagation();
-      const t = items.find(i => String(i.id) === btn.dataset.catId);
-      if (t) startCategoryEdit(btn, t, userId);
+      open();
     };
   });
 }

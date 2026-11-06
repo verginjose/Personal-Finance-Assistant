@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    app.js — Router + application shell
    ═══════════════════════════════════════════════════════════════════════════ */
-import { Auth, SseManager, api, toast } from './utils/api.js';
+import { Auth, SseManager, api, toast, requestBrowserNotificationPermission } from './utils/api.js';
 import { icon } from './utils/icons.js';
 import { renderAuth }          from './views/auth.js';
 import {
@@ -38,6 +38,123 @@ const MORE_VIEWS = NAV_ITEMS
 
 let currentView = viewFromPath();
 
+/* ── Notification inbox ─────────────────────────────────────────────────── */
+const NOTIF = { items: [], unread: 0, announced: false };
+
+async function refreshNotifications() {
+  if (!Auth.isLoggedIn()) return;
+  try {
+    const [page, count] = await Promise.all([
+      api.get('/upsert/notifications', { page: 0, size: 25 }),
+      api.get('/upsert/notifications/unread-count'),
+    ]);
+    NOTIF.items = page.items || [];
+    NOTIF.unread = count.unread ?? page.unread ?? 0;
+    updateNotifBadges();
+    if (!NOTIF.announced && NOTIF.unread > 0) {
+      NOTIF.announced = true;
+      toast(`${NOTIF.unread} notification${NOTIF.unread === 1 ? '' : 's'} while you were away`,
+        'info', { duration: 8000 });
+    }
+  } catch { /* the inbox is best-effort; never break the shell for it */ }
+}
+
+function updateNotifBadges() {
+  document.querySelectorAll('[data-notif-badge]').forEach(b => {
+    if (NOTIF.unread > 0) {
+      b.textContent = NOTIF.unread > 99 ? '99+' : String(NOTIF.unread);
+      b.hidden = false;
+    } else {
+      b.hidden = true;
+    }
+  });
+}
+
+function notifTime(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const diff = Date.now() - d.getTime();
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+function openNotificationsPanel() {
+  const rows = NOTIF.items.length ? NOTIF.items.map(n => `
+    <button type="button" class="notif-item ${n.readAt ? '' : 'is-unread'}"
+            data-notif-id="${n.id}" data-notif-group="${n.groupId ?? ''}">
+      <span class="notif-dot ${n.status === 'ERROR' ? 'is-neg' : n.status === 'SUCCESS' ? 'is-pos' : ''}"></span>
+      <span class="notif-body">
+        <span class="notif-msg">${esc(n.message)}</span>
+        <span class="notif-time">${esc(notifTime(n.createdAt))}</span>
+      </span>
+    </button>`).join('')
+    : '<p class="meta" style="padding:16px 0">No notifications yet.</p>';
+
+  openModal('Notifications', `
+    <div class="notif-toolbar">
+      <button type="button" class="btn btn-ghost btn-sm" id="notif-read-all">Mark all read</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="notif-permission">
+        ${icon('bell', 'sm')} Enable browser notifications
+      </button>
+    </div>
+    <div class="notif-list">${rows}</div>`);
+
+  setTimeout(() => {
+    document.getElementById('notif-read-all')?.addEventListener('click', async () => {
+      try { await api.post('/upsert/notifications/read-all', null); } catch { /* ignore */ }
+      NOTIF.items.forEach(n => { n.readAt = n.readAt || new Date().toISOString(); });
+      NOTIF.unread = 0;
+      updateNotifBadges();
+      document.querySelector('.modal-close')?.click();
+      openNotificationsPanel();
+    });
+
+    document.getElementById('notif-permission')?.addEventListener('click', async () => {
+      const state = await requestBrowserNotificationPermission();
+      toast(state === 'granted' ? 'Browser notifications enabled' : 'Browser notifications not enabled',
+        state === 'granted' ? 'success' : 'info');
+    });
+
+    document.querySelectorAll('[data-notif-id]').forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.dataset.notifId;
+        try { await api.post(`/upsert/notifications/${id}/read`, null); } catch { /* ignore */ }
+        const item = NOTIF.items.find(n => String(n.id) === String(id));
+        if (item && !item.readAt) {
+          item.readAt = new Date().toISOString();
+          NOTIF.unread = Math.max(0, NOTIF.unread - 1);
+          updateNotifBadges();
+        }
+        const groupId = btn.dataset.notifGroup;
+        document.querySelector('.modal-close')?.click();
+        if (groupId) {
+          window._pfaOpenGroupId = groupId;
+          navigateTo('split');
+        } else {
+          openNotificationsPanel();
+        }
+      };
+    });
+  }, 20);
+}
+
+window.addEventListener('app-notification', (e) => {
+  if (!Auth.isLoggedIn()) return;
+  const id = e.detail?.notificationId;
+  // Seen live → read. Arrived while the tab was in the background → keep it
+  // unread so the inbox badge is honest when the user comes back.
+  if (document.visibilityState === 'visible' && id != null) {
+    api.post(`/upsert/notifications/${id}/read`, null)
+      .catch(() => { /* the next badge refresh recovers */ })
+      .finally(refreshNotifications);
+  } else {
+    refreshNotifications();
+  }
+});
+
 function viewFromPath() {
   const path = location.pathname.replace(/\/+$/, '') || '/';
   return VIEW_BY_PATH[path] || 'dashboard';
@@ -48,6 +165,9 @@ function renderShell() {
 
   if (!Auth.isLoggedIn()) {
     SseManager.disconnect();
+    NOTIF.items = [];
+    NOTIF.unread = 0;
+    NOTIF.announced = false;
     root.innerHTML = '<div id="view-root"></div>';
     renderAuth(document.getElementById('view-root'));
     return;
@@ -75,7 +195,12 @@ function renderShell() {
           <a class="logo" href="/dashboard" data-view="dashboard" aria-label="PFA — Personal Finance Assistant" title="PFA — Personal Finance Assistant">
             <span class="logo-text">PFA</span>
           </a>
-          <button type="button" class="sidebar-collapse" id="sidebar-collapse" aria-label="Collapse navigation" title="Collapse navigation">${icon('chevron-left', 'sm')}</button>
+          <div class="sidebar-head-tools">
+            <button type="button" class="sidebar-bell" id="sidebar-bell" aria-label="Notifications" title="Notifications">
+              ${icon('bell', 'sm')}<span class="notif-badge" data-notif-badge hidden></span>
+            </button>
+            <button type="button" class="sidebar-collapse" id="sidebar-collapse" aria-label="Collapse navigation" title="Collapse navigation">${icon('chevron-left', 'sm')}</button>
+          </div>
         </div>
         <nav id="sidebar-nav" aria-label="Main navigation">
           ${NAV_ITEMS.map(n => `
@@ -108,6 +233,9 @@ function renderShell() {
       </aside>
       <div class="main-content">
         <button type="button" class="sidebar-expand" id="sidebar-expand" aria-label="Expand navigation" title="Expand navigation">${icon('menu')}</button>
+        <button type="button" class="mobile-notif" id="mobile-notif" aria-label="Notifications" title="Notifications">
+          ${icon('bell', 'sm')}<span class="notif-badge" data-notif-badge hidden></span>
+        </button>
         <div id="view-root"></div>
       </div>
 
@@ -144,6 +272,7 @@ function renderShell() {
   wireShell();
   updateNavActive(currentView);
   renderView();
+  refreshNotifications();
 
   api.get('/auth/me').then(me => {
     Auth.setDefaultCurrency(me.defaultCurrency);
@@ -157,6 +286,9 @@ function renderShell() {
 }
 
 function wireShell() {
+  document.getElementById('sidebar-bell')?.addEventListener('click', openNotificationsPanel);
+  document.getElementById('mobile-notif')?.addEventListener('click', openNotificationsPanel);
+
   document.querySelectorAll('#sidebar-nav a, .logo[data-view]').forEach(a => {
     a.onclick = (e) => { e.preventDefault(); navigateTo(a.dataset.view); };
   });

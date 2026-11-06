@@ -105,16 +105,35 @@ public class SplitController {
         return ResponseEntity.ok(Map.of("message", "Invitation rejected"));
     }
 
+    /**
+     * Leave the group (self) or remove a member (admins only). Unless
+     * {@code settle=false}, the member's residual balance is settled first; the
+     * removal fails if a balance still remains afterwards.
+     */
     @DeleteMapping("/{groupId}/members/{memberUserId}")
-    public ResponseEntity<Map<String, String>> leaveGroup(
+    public ResponseEntity<Map<String, String>> removeOrLeave(
             @RequestHeader("X-User-Id") String xUserId,
             @PathVariable Long groupId,
-            @PathVariable UUID memberUserId) {
-        if (!requireUserId(xUserId).equals(memberUserId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot remove another user");
+            @PathVariable UUID memberUserId,
+            @RequestParam(defaultValue = "true") boolean settle) {
+        UUID actorId = requireUserId(xUserId);
+        if (actorId.equals(memberUserId)) {
+            splitService.leaveGroup(groupId, memberUserId);
+            return ResponseEntity.ok(Map.of("message", "Successfully left the group"));
         }
-        splitService.leaveGroup(groupId, memberUserId);
-        return ResponseEntity.ok(Map.of("message", "Successfully left the group"));
+        splitService.removeMember(groupId, memberUserId, actorId, settle);
+        return ResponseEntity.ok(Map.of("message", "Member removed from the group"));
+    }
+
+    /** Promote ({@code admin=true}) or demote a member. Admins only. */
+    @PutMapping("/{groupId}/members/{memberUserId}/admin")
+    public ResponseEntity<Map<String, String>> setMemberAdmin(
+            @RequestHeader("X-User-Id") String xUserId,
+            @PathVariable Long groupId,
+            @PathVariable UUID memberUserId,
+            @RequestParam boolean admin) {
+        splitService.setAdmin(groupId, memberUserId, admin, requireUserId(xUserId));
+        return ResponseEntity.ok(Map.of("message", admin ? "Member promoted to admin" : "Admin role removed"));
     }
 
 

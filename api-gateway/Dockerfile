@@ -4,11 +4,13 @@ WORKDIR /app
 
 COPY pom.xml .
 
-RUN mvn dependency:go-offline -B
+# BuildKit cache mount: keeps ~/.m2 on the buildkitd cache volume across
+# builds, so repeat builds do not re-download the same dependencies.
+RUN --mount=type=cache,target=/root/.m2,sharing=locked mvn dependency:go-offline -B
 
 COPY src ./src
 
-RUN mvn clean package
+RUN --mount=type=cache,target=/root/.m2,sharing=locked mvn clean package
 
 FROM eclipse-temurin:21-jre-alpine AS runner
 

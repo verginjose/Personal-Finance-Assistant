@@ -809,6 +809,17 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
     </div>`;
   document.body.appendChild(overlay);
 
+  // Modal forms hold app data (descriptions, amounts, group names), not the
+  // user's address book. Stop the browser offering old form entries as
+  // dropdown suggestions. Explicit autocomplete hints (email, password) win.
+  overlay.querySelectorAll('form').forEach((form) => {
+    if (!form.hasAttribute('autocomplete')) form.setAttribute('autocomplete', 'off');
+    form.querySelectorAll('input, textarea').forEach((field) => {
+      if (['hidden', 'file', 'checkbox', 'radio', 'date'].includes(field.type)) return;
+      if (!field.hasAttribute('autocomplete')) field.setAttribute('autocomplete', 'off');
+    });
+  });
+
   const close = () => {
     overlay.remove();
     document.removeEventListener('keydown', onKeydown);
@@ -984,3 +995,62 @@ export function skeletonRows(count = 5) {
       <div class="skeleton skeleton-amount"></div>
     </div>`).join('');
 }
+
+/* ── Themed tooltips ─────────────────────────────────────────────────────
+   Native `title` tooltips are drawn by the OS (black on most Linux desktops)
+   and cannot be themed. Any element carrying a title gets the same text in a
+   themed bubble; the title is moved to data-tooltip so the native one never
+   appears. Delegated, so elements rendered later work automatically. */
+let appTooltip = null;
+
+function tooltipTarget(node) {
+  const el = node instanceof Element ? node.closest('[title], [data-tooltip]') : null;
+  if (!el) return null;
+  return (el.getAttribute('title') || el.getAttribute('data-tooltip')) ? el : null;
+}
+
+function showAppTooltip(el) {
+  const text = el.getAttribute('data-tooltip') || el.getAttribute('title');
+  if (!text) return;
+  if (el.hasAttribute('title')) {
+    el.setAttribute('data-tooltip', el.getAttribute('title'));
+    el.removeAttribute('title');
+  }
+  if (!appTooltip) {
+    appTooltip = document.createElement('div');
+    appTooltip.className = 'app-tooltip';
+    appTooltip.setAttribute('role', 'tooltip');
+    document.body.appendChild(appTooltip);
+  }
+  appTooltip.textContent = text;
+  appTooltip.classList.add('is-visible');
+
+  const r = el.getBoundingClientRect();
+  const t = appTooltip.getBoundingClientRect();
+  let left = r.left + r.width / 2 - t.width / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - t.width - 8));
+  let top = r.top - t.height - 8;
+  if (top < 8) top = r.bottom + 8;
+  appTooltip.style.left = `${left}px`;
+  appTooltip.style.top = `${top}px`;
+}
+
+function hideAppTooltip() {
+  if (appTooltip) appTooltip.classList.remove('is-visible');
+}
+
+document.addEventListener('mouseover', (e) => {
+  const el = tooltipTarget(e.target);
+  if (el) showAppTooltip(el);
+  else hideAppTooltip();
+});
+document.addEventListener('mouseout', (e) => {
+  const el = tooltipTarget(e.target);
+  if (el && el.contains(e.relatedTarget)) return;
+  if (el) hideAppTooltip();
+});
+document.addEventListener('focusin', (e) => {
+  const el = tooltipTarget(e.target);
+  if (el) showAppTooltip(el);
+});
+document.addEventListener('focusout', hideAppTooltip);

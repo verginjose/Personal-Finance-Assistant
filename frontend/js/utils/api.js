@@ -21,6 +21,7 @@ export const Auth = {
     localStorage.setItem('pfa_email',   data.email);
     localStorage.setItem('pfa_name',    data.name || data.username || '');
     if (data.defaultCurrency) this.setDefaultCurrency(data.defaultCurrency);
+    scheduleProactiveRefresh();
   },
 
   clear() {
@@ -57,8 +58,11 @@ export const SseManager = {
       try {
         const data = JSON.parse(e.data);
         if (data.status === 'SUCCESS' || data.status === 'ERROR' || data.status === 'INFO') {
-          // INFO type is new, typically for alerts. Toast the message.
-          toast(data.message, data.status === 'SUCCESS' ? 'success' : (data.status === 'ERROR' ? 'error' : 'info'));
+          const type = data.status === 'SUCCESS' ? 'success' : (data.status === 'ERROR' ? 'error' : 'info');
+          // When the tab is in the background, an OS notification is the only
+          // thing the user will actually see; in the foreground a toast is.
+          showBrowserNotification(data);
+          toast(data.message, type, { duration: type === 'error' ? 9000 : 7000 });
 
           // Dispatch specific event if provided, otherwise a generic one
           if (data.event) {
@@ -119,6 +123,119 @@ export const SseManager = {
 
 let isRefreshing = false;
 let refreshPromise = null;
+let proactiveRefreshTimer = null;
+
+/** Access-token expiry from the JWT payload, or null when it cannot be read. */
+function tokenExpiryMs(token) {
+  try {
+    const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(part.padEnd(Math.ceil(part.length / 4) * 4, '=')));
+    return payload.exp ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ask the browser for notification permission (must be a user gesture). */
+export async function requestBrowserNotificationPermission() {
+  if (!('Notification' in window)) return 'unsupported';
+  if (Notification.permission !== 'default') return Notification.permission;
+  try { return await Notification.requestPermission(); } catch { return 'default'; }
+}
+
+function showBrowserNotification(data) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  // A toast already covers the foreground case; the OS notification is for
+  // tabs the user cannot see.
+  if (document.visibilityState === 'visible') return;
+  try {
+    const n = new Notification('PFA', {
+      body: data.message || 'New notification',
+      tag: 'pfa-' + (data.event || data.type || 'notification'),
+      icon: '/favicon.ico',
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch { /* some browsers reject notifications without a service worker */ }
+}
+
+async function refreshTokens() {
+  if (!isRefreshing) {
+    isRefreshing = true;
+    const usedRefreshToken = Auth.getRefresh();
+    refreshPromise = fetch(API_BASE + '/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: usedRefreshToken })
+    }).then(async (refreshRes) => {
+      if (!refreshRes.ok) {
+        // Another tab may have rotated first and written a new pair; in that
+        // case this 401 is not a dead session.
+        if (Auth.getRefresh() && Auth.getRefresh() !== usedRefreshToken) {
+          return Auth.getToken();
+        }
+        const err = new Error('Refresh failed');
+        err.fatal = refreshRes.status === 401;
+        throw err;
+      }
+      const data = await refreshRes.json();
+      localStorage.setItem('pfa_token', data.token);
+      localStorage.setItem('pfa_refresh', data.refreshToken);
+      scheduleProactiveRefresh();
+      // Re-establish SSE connection with the fresh token immediately
+      SseManager.disconnect();
+      SseManager.connect();
+      return data.token;
+    }).catch((err) => {
+      // A network error or a 5xx must not end the session; the reactive path
+      // can retry. Only an explicit 401 (and nobody else refreshing) does.
+      if (err.fatal) {
+        Auth.clear();
+        window.dispatchEvent(new Event('auth-expired'));
+      }
+      throw err;
+    }).finally(() => {
+      isRefreshing = false;
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+/**
+ * Refresh before the access token expires instead of waiting for a 401. Long-idle
+ * tabs used to wake up holding a stale token; with rotation racing across tabs
+ * that could end in a hard logout. Refreshing 5 minutes early avoids the race.
+ */
+export function scheduleProactiveRefresh() {
+  clearTimeout(proactiveRefreshTimer);
+  const token = Auth.getToken();
+  if (!token) return;
+  const exp = tokenExpiryMs(token);
+  if (!exp) return;
+  const delay = Math.max(30_000, exp - Date.now() - 5 * 60_000);
+  proactiveRefreshTimer = setTimeout(() => {
+    refreshTokens().catch(() => { /* reactive path will retry on 401 */ });
+  }, Math.min(delay, 24 * 60 * 60_000));
+}
+
+// Another tab refreshing the session writes new tokens; follow along instead
+// of replaying the consumed refresh token later.
+window.addEventListener('storage', (e) => {
+  if (e.key === 'pfa_token' || e.key === 'pfa_refresh') scheduleProactiveRefresh();
+});
+
+// A tab brought back to the foreground may have slept past its timer.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !Auth.getToken()) return;
+  const exp = tokenExpiryMs(Auth.getToken());
+  if (exp && exp - Date.now() < 2 * 60_000) {
+    refreshTokens().catch(() => {});
+  } else {
+    scheduleProactiveRefresh();
+  }
+});
+
+scheduleProactiveRefresh();
 
 async function request(method, path, { body, params, headers = {}, raw = false } = {}) {
   const url = new URL(API_BASE + path, location.origin);
@@ -143,41 +260,16 @@ async function request(method, path, { body, params, headers = {}, raw = false }
 
   let res = await fetch(url.toString(), getOpts());
 
+  // These endpoints report "wrong password" as a 401 too. Never treat that as an
+  // expired session: pass the response through so the form shows the real error.
+  const isAuthRequest = path === '/auth/login' || path === '/auth/refresh' || path === '/auth/register';
+
   // Handle 401 Unauthorized for token refresh
-  if (res.status === 401 && path !== '/auth/login' && path !== '/auth/refresh' && path !== '/auth/register') {
+  if (res.status === 401 && !isAuthRequest) {
     const refreshToken = Auth.getRefresh();
     if (refreshToken) {
-      if (!isRefreshing) {
-        isRefreshing = true;
-        refreshPromise = fetch(API_BASE + '/auth/refresh', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken })
-        }).then(async (refreshRes) => {
-          if (!refreshRes.ok) throw new Error('Refresh failed');
-          const data = await refreshRes.json();
-          // Update tokens without overwriting existing email/name with undefined
-          localStorage.setItem('pfa_token', data.token);
-          localStorage.setItem('pfa_refresh', data.refreshToken);
-          
-          // Re-establish SSE connection with the fresh token immediately
-          // This prevents missed background events (like OCR completion)
-          SseManager.disconnect();
-          SseManager.connect();
-
-          return data.token;
-        }).catch((err) => {
-          Auth.clear();
-          window.dispatchEvent(new Event('auth-expired'));
-          throw err;
-        }).finally(() => {
-          isRefreshing = false;
-          refreshPromise = null;
-        });
-      }
-
       try {
-        await refreshPromise; // Wait for the refresh to finish
+        await refreshTokens(); // Wait for the refresh to finish
         try {
           res = await fetch(url.toString(), getOpts()); // Retry the original request
         } catch (networkErr) {
@@ -195,7 +287,7 @@ async function request(method, path, { body, params, headers = {}, raw = false }
     }
   }
 
-  if (res.status === 401) {
+  if (res.status === 401 && !isAuthRequest) {
       Auth.clear();
       window.dispatchEvent(new Event('auth-expired'));
       throw new Error('Session expired');
@@ -243,7 +335,9 @@ let toastContainer;
  */
 export function toast(message, type = 'info', opts = {}) {
   const options = typeof opts === 'number' ? { duration: opts } : (opts || {});
-  const duration = options.duration ?? 4000;
+  // Errors stay long enough to read; everything else gets a relaxed default.
+  // Hovering pauses the countdown so it never disappears mid-read.
+  const duration = options.duration ?? (type === 'error' ? 9000 : 6500);
 
   if (!toastContainer) {
     toastContainer = document.createElement('div');
@@ -259,12 +353,61 @@ export function toast(message, type = 'info', opts = {}) {
   label.textContent = message;
   el.appendChild(label);
 
-  let timer;
+  // A burst of identical messages (e.g. a repeatedly failing action) should
+  // read as one toast, and the stack never grows past three. Premium apps feel
+  // calm because the interface does not shout over itself.
+  const toastKey = `${type}\u0000${message}`;
+  el.dataset.toastKey = toastKey;
+  const live = [...toastContainer.querySelectorAll('.toast:not(.toast--leaving)')];
+  const duplicate = live.find((t) => t.dataset.toastKey === toastKey);
+  if (duplicate && duplicate._restart) {
+    duplicate._restart();
+    return duplicate._dismiss;
+  }
+  while (live.length >= 3) {
+    const oldest = live.shift();
+    if (oldest._dismiss) oldest._dismiss();
+  }
+
+  let timer = null;
+  let remaining = duration;
+  let expiresAt = 0;
+
   const dismiss = () => {
     clearTimeout(timer);
+    timer = null;
     el.classList.add('toast--leaving');
     setTimeout(() => el.remove(), 200);
   };
+
+  const startTimer = () => {
+    expiresAt = Date.now() + remaining;
+    timer = setTimeout(dismiss, remaining);
+  };
+  const pauseTimer = () => {
+    if (timer === null) return;
+    clearTimeout(timer);
+    timer = null;
+    remaining = Math.max(250, expiresAt - Date.now());
+  };
+  const resumeTimer = () => {
+    if (timer === null) startTimer();
+  };
+
+  // Identical toasts share a lifetime: a repeat resets the clock instead of
+  // stacking. Exposed so the dedupe/cap above can reach this toast's controls.
+  el._restart = () => {
+    remaining = duration;
+    clearTimeout(timer);
+    timer = null;
+    startTimer();
+  };
+  el._dismiss = dismiss;
+
+  el.addEventListener('mouseenter', pauseTimer);
+  el.addEventListener('mouseleave', resumeTimer);
+  el.addEventListener('focusin', pauseTimer);
+  el.addEventListener('focusout', resumeTimer);
 
   if (typeof options.undo === 'function') {
     const btn = document.createElement('button');
@@ -279,6 +422,6 @@ export function toast(message, type = 'info', opts = {}) {
   }
 
   toastContainer.appendChild(el);
-  timer = setTimeout(dismiss, duration);
+  startTimer();
   return dismiss;
 }

@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.UUID;
@@ -26,6 +27,20 @@ public class UserService {
         long offset = (long) safePage * capped;
         
         return userRepository.searchByUsernameOrEmail(query.trim(), capped, offset)
+                .map(u -> new UserSearchResult(
+                        u.getId().toString(),
+                        u.getActualUsername(),
+                        u.getEmail(),
+                        u.getProfilePicture()));
+    }
+
+    /**
+     * Public profile of another registered user. Group members use this to see
+     * each other; it exposes only the same fields the user search already does.
+     */
+    @Transactional(readOnly = true)
+    public Mono<UserSearchResult> getUser(UUID userId) {
+        return userRepository.findById(userId)
                 .map(u -> new UserSearchResult(
                         u.getId().toString(),
                         u.getActualUsername(),

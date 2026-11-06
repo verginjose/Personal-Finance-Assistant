@@ -7,7 +7,6 @@ import com.authservice.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,11 +47,11 @@ public class AuthService {
     @Transactional(readOnly = true)
     public Mono<LoginResponse> login(LoginRequest request) {
         return userRepository.findByEmail(request.email())
-                .switchIfEmpty(Mono.error(new BadCredentialsException("Bad credentials")))
+                .switchIfEmpty(Mono.error(new InvalidCredentialsException("Invalid email or password")))
                 .flatMap(user -> offload(() -> passwordEncoder.matches(request.password(), user.getPassword()))
                         .flatMap(matches -> {
                             if (!matches) {
-                                return Mono.error(new BadCredentialsException("Bad credentials"));
+                                return Mono.error(new InvalidCredentialsException("Invalid email or password"));
                             }
                             String token = jwtService.generateToken(user);
                             String refreshToken = UUID.randomUUID().toString();
@@ -95,24 +94,53 @@ public class AuthService {
     }
 
     public Mono<LoginResponse> refresh(RefreshTokenRequest request) {
-        // GETDEL: exactly one concurrent replay of a token wins the rotation;
-        // the others see an empty value and get 401.
-        return tokenRedisService.consumeRefreshTokenReactive(request.refreshToken())
-                .switchIfEmpty(Mono.error(new InvalidRefreshTokenException("Invalid or expired refresh token")))
-                .flatMap(value -> {
-                    String[] parts = value.split("\\|");
-                    if (parts.length < 3) return Mono.error(new InvalidRefreshTokenException("Malformed refresh token session"));
-                    String userId = parts[0], email = parts[1], role = parts[2];
+        String oldToken = request.refreshToken();
+        // GETDEL: exactly one concurrent replay of a token wins the rotation.
+        // A loser falls back to the 60 s grace record written by the winner, so
+        // two tabs refreshing at once both end up with the same live session.
+        return tokenRedisService.consumeRefreshTokenReactive(oldToken)
+                .flatMap(value -> rotate(oldToken, value))
+                .switchIfEmpty(Mono.defer(() -> fromRefreshGrace(oldToken, 10)));
+    }
 
-                    return tokenRedisService.removeUserTokenReactive(request.refreshToken(), email)
-                            .then(Mono.defer(() -> {
-                                String newAccessToken = jwtService.generateToken(email, userId, role);
-                                String newRefreshToken = UUID.randomUUID().toString();
-                                return tokenRedisService.saveRefreshTokenReactive(newRefreshToken, email, userId, role, refreshExpirationMs)
-                                        .thenReturn(new LoginResponse(newAccessToken, newRefreshToken, userId, email, "", role, null))
-                                        .doOnSuccess(r -> log.info("Tokens rotated for user: {}", email));
-                            }));
-                });
+    private Mono<LoginResponse> rotate(String oldToken, String value) {
+        String[] parts = value.split("\\|");
+        if (parts.length < 3) {
+            return Mono.error(new InvalidRefreshTokenException("Malformed refresh token session"));
+        }
+        String userId = parts[0], email = parts[1], role = parts[2];
+
+        return tokenRedisService.removeUserTokenReactive(oldToken, email)
+                .then(Mono.defer(() -> {
+                    String newAccessToken = jwtService.generateToken(email, userId, role);
+                    String newRefreshToken = UUID.randomUUID().toString();
+                    String graceValue = newAccessToken + "|" + newRefreshToken + "|"
+                            + userId + "|" + email + "|" + role;
+                    return tokenRedisService.saveRefreshTokenReactive(
+                                    newRefreshToken, email, userId, role, refreshExpirationMs)
+                            .then(tokenRedisService.saveRefreshGraceReactive(oldToken, graceValue))
+                            .thenReturn(new LoginResponse(newAccessToken, newRefreshToken, userId, email, "", role, null))
+                            .doOnSuccess(r -> log.info("Tokens rotated for user: {}", email));
+                }));
+    }
+
+    /**
+     * Recover the pair issued when a concurrent request already rotated this
+     * token. Polls briefly so the loser does not beat the winner's grace write.
+     */
+    private Mono<LoginResponse> fromRefreshGrace(String oldToken, int attemptsLeft) {
+        return tokenRedisService.getRefreshGraceReactive(oldToken)
+                .map(value -> {
+                    String[] parts = value.split("\\|");
+                    return new LoginResponse(parts[0], parts[1], parts[2], parts[3], "", parts[4], null);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    if (attemptsLeft <= 0) {
+                        return Mono.error(new InvalidRefreshTokenException("Invalid or expired refresh token"));
+                    }
+                    return Mono.delay(java.time.Duration.ofMillis(40))
+                            .then(fromRefreshGrace(oldToken, attemptsLeft - 1));
+                }));
     }
 
     public Mono<Void> logout(String refreshToken, String authHeader) {
@@ -162,5 +190,6 @@ public class AuthService {
     public static class EmailAlreadyExistsException     extends RuntimeException { public EmailAlreadyExistsException(String e)     { super("Email already registered: " + e); } }
     public static class UsernameAlreadyExistsException  extends RuntimeException { public UsernameAlreadyExistsException(String u)   { super("Username already taken: " + u); } }
     public static class InvalidCurrentPasswordException extends RuntimeException { public InvalidCurrentPasswordException(String m)  { super(m); } }
+    public static class InvalidCredentialsException     extends RuntimeException { public InvalidCredentialsException(String m)     { super(m); } }
     public static class InvalidRefreshTokenException    extends RuntimeException { public InvalidRefreshTokenException(String m)     { super(m); } }
 }

@@ -52,6 +52,8 @@ public class GroupActivity {
     public enum ActivityType {
         GROUP_CREATED,
         MEMBER_ADDED,
+        MEMBER_REMOVED,
+        ADMIN_CHANGED,
         EXPENSE_ADDED,
         EXPENSE_UPDATED,
         EXPENSE_DELETED,

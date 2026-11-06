@@ -8,12 +8,13 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="api-gateway" />
+        <module name="auth-service" />
         <module name="query-service" />
+        <module name="command-service" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
       <module name="analytics-service" target="21" />
-      <module name="auth-service" target="21" />
       <module name="bill-parser-service" target="21" />
       <module name="finance-service" target="21" />
       <module name="untitled" target="21" />
@@ -26,6 +27,7 @@
       <module name="api-gateway" options="-parameters" />
       <module name="auth-service" options="-parameters" />
       <module name="bill-parser-service" options="-parameters --add-opens jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED" />
+      <module name="command-service" options="-parameters" />
       <module name="finance-service" options="-parameters" />
       <module name="query-service" options="-parameters" />
       <module name="upsert-service" options="-parameters" />

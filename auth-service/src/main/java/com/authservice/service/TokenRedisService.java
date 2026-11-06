@@ -16,6 +16,23 @@ public class TokenRedisService {
     private static final String REFRESH_TOKEN_PREFIX = "refresh_token:";
     private static final String USER_TOKENS_PREFIX = "user_tokens:";
     private static final String BLACKLIST_PREFIX = "token_blacklist:";
+    private static final String GRACE_PREFIX = "refresh_grace:";
+
+    /**
+     * Refresh rotation is single-use (GETDEL). Two tabs or parallel requests in
+     * the same browser can replay the same token; the winner rotates, the loser
+     * must be able to recover the freshly issued pair instead of being logged
+     * out. The grace value is short-lived on purpose.
+     */
+    public Mono<Void> saveRefreshGraceReactive(String consumedToken, String value) {
+        return redisTemplate.opsForValue()
+                .set(GRACE_PREFIX + consumedToken, value, Duration.ofSeconds(60))
+                .then();
+    }
+
+    public Mono<String> getRefreshGraceReactive(String consumedToken) {
+        return redisTemplate.opsForValue().get(GRACE_PREFIX + consumedToken);
+    }
 
     public Mono<Void> saveRefreshTokenReactive(String token, String email, String userId, String role, long expiryMs) {
         String tokenKey = REFRESH_TOKEN_PREFIX + token;

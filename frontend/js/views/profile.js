@@ -32,7 +32,7 @@ export async function renderProfile(container) {
         <div class="profile-identity">
           <button type="button" class="profile-avatar-lg" id="p-avatar"
             ${profilePicture ? `style="background-image:url('${esc(profilePicture)}')"` : ''}
-            aria-label="Change profile picture" title="Change profile picture">
+            aria-label="View profile picture" title="View profile picture">
             ${profilePicture ? '' : avatar(displayName, 64)}
           </button>
           <div>
@@ -202,7 +202,27 @@ export async function renderProfile(container) {
   /* Profile picture */
   const avatarBtn = document.getElementById('p-avatar');
   const uploadInput = document.getElementById('p-avatar-upload');
-  avatarBtn.onclick = () => uploadInput.click();
+
+  /* Clicking the avatar opens a large preview — changing the picture is an
+     explicit choice inside that popup, not a surprise file picker. */
+  avatarBtn.onclick = () => {
+    const { overlay, close } = openModal('Profile picture', `
+      <div class="avatar-popup">
+        ${profilePicture
+          ? `<img src="${esc(profilePicture)}" alt="${esc(displayName)}">`
+          : avatar(displayName, 180)}
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-modal-cancel>Close</button>
+        <button type="button" class="btn btn-primary" id="p-avatar-change">
+          ${profilePicture ? 'Change picture' : 'Add picture'}
+        </button>
+      </div>`, { size: 'lg' });
+    overlay.querySelector('#p-avatar-change').onclick = () => {
+      close();
+      uploadInput.click();
+    };
+  };
 
   uploadInput.onchange = (e) => {
     const file = e.target.files[0];
@@ -230,8 +250,14 @@ export async function renderProfile(container) {
       saveBtn.onclick = async () => {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Saving…';
-        const canvas = cropper ? cropper.getCroppedCanvas({ width: 250, height: 250 }) : null;
-        const blob = canvas ? await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85)) : file;
+        // Store the crop losslessly at a generous size: the preview shows the
+        // picture large, so downscaling/JPEG artefacts would be visible.
+        const canvas = cropper
+          ? cropper.getCroppedCanvas({ maxWidth: 2048, maxHeight: 2048, imageSmoothingQuality: 'high' })
+          : null;
+        const blob = canvas
+          ? await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
+          : file;
         if (!blob) {
           toast('Could not process that image', 'error');
           saveBtn.disabled = false;
@@ -241,7 +267,9 @@ export async function renderProfile(container) {
 
         try {
           const formData = new FormData();
-          formData.append('file', blob, 'profile.jpg');
+          // The canvas is encoded as PNG (lossless); name it to match so the
+          // stored Content-Type is image/png rather than a mismatched image/jpeg.
+          formData.append('file', blob, 'profile.png');
           const uploadRes = await fetch('/api/profile/upload', {
             method: 'POST',
             body: formData,

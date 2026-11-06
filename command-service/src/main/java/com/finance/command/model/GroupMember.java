@@ -21,6 +21,11 @@ public class GroupMember {
         PENDING, ACCEPTED, REJECTED
     }
 
+    /** Admins can edit the group, invite, promote and remove members. */
+    public enum Role {
+        ADMIN, MEMBER
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -49,6 +54,18 @@ public class GroupMember {
 
     @Column(name = "is_archived", nullable = false)
     private boolean isArchived = false;
+
+    /**
+     * Nullable so Hibernate's ddl-auto=update can add the column to an existing
+     * table without a default; a null role is treated as MEMBER everywhere.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", length = 20)
+    private Role role = Role.MEMBER;
+
+    public boolean isAdmin() {
+        return role == Role.ADMIN;
+    }
 
     @PrePersist
     protected void onCreate() {

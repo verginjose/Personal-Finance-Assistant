@@ -28,6 +28,15 @@ public class UserController {
                 .map(ResponseEntity::ok);
     }
 
+    /** Profile of another user (visible to any signed-in user, e.g. group peers). */
+    @GetMapping("/{userId}")
+    @PreAuthorize("isAuthenticated()")
+    public Mono<ResponseEntity<UserSearchResult>> getUser(@PathVariable UUID userId) {
+        return userService.getUser(userId)
+                .map(ResponseEntity::ok)
+                .defaultIfEmpty(ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/bulk")
     @PreAuthorize("isAuthenticated()")
     public Mono<ResponseEntity<List<UserSearchResult>>> getBulkUsers(

@@ -21,6 +21,10 @@ public class GroupMember {
         PENDING, ACCEPTED, REJECTED
     }
 
+    public enum Role {
+        ADMIN, MEMBER
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -49,6 +53,14 @@ public class GroupMember {
 
     @Column(name = "is_archived", nullable = false)
     private boolean isArchived = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "role", length = 20)
+    private Role role = Role.MEMBER;
+
+    public boolean isAdmin() {
+        return role == Role.ADMIN;
+    }
 
     @PrePersist
     protected void onCreate() {

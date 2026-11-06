@@ -3,13 +3,15 @@ FROM maven:3.9.6-eclipse-temurin-21 AS builder
 
 WORKDIR /app
 
-# Copy pom.xml and download dependencies (layer caching optimization)
+# Copy pom.xml and download dependencies (layer caching optimization).
+# The BuildKit cache mount keeps ~/.m2 on the buildkitd cache volume across
+# builds, so repeat builds do not re-download the same dependencies.
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+RUN --mount=type=cache,target=/root/.m2,sharing=locked mvn dependency:go-offline -B
 
 # Copy the rest of the source code and build the jar
 COPY src ./src
-RUN mvn clean package -Dmaven.test.skip=true
+RUN --mount=type=cache,target=/root/.m2,sharing=locked mvn clean package -Dmaven.test.skip=true
 
 # Step 2: Runtime stage
 FROM eclipse-temurin:21-jdk-jammy

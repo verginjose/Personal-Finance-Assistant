@@ -49,6 +49,9 @@ public class ExpenseGroup {
     private String currentUserStatus;
 
     @Transient
+    private String currentUserRole;
+
+    @Transient
     private java.math.BigDecimal currentUserNetBalance;
 
     @PrePersist

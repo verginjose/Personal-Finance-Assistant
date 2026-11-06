@@ -36,6 +36,13 @@ public class QuerySplitController {
         return ResponseEntity.ok(splitService.getUserGroups(requireUserId(xUserId)));
     }
 
+    @GetMapping("/shared-people")
+    @Operation(summary = "People the current user shares a group with")
+    public ResponseEntity<List<com.finance.query.dto.SharedPerson>> getSharedPeople(
+            @RequestHeader("X-User-Id") String xUserId) {
+        return ResponseEntity.ok(splitService.getPeopleYouShareGroupsWith(requireUserId(xUserId)));
+    }
+
     @GetMapping("/{groupId}")
     @Operation(summary = "Get details of a specific group")
     public ResponseEntity<ExpenseGroup> getGroup(

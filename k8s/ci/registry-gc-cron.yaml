@@ -141,6 +141,16 @@ spec:
                   cleanup() { writable; restore_sync; }
                   trap cleanup EXIT
 
+                  # A push landing while the registry is read-only gets a 405 and
+                  # fails the build, wasting it. The runner spawns one
+                  # Runner.Worker per job, so its absence means no build can be
+                  # pushing; defer to the next tick rather than gamble.
+                  if kubectl -n "$NS" exec deploy/ci-runner -- \
+                       pgrep -f Runner.Worker >/dev/null 2>&1; then
+                    log "a CI job is running; deferring the sweep"
+                    exit 0
+                  fi
+
                   # Safe against a live registry: it only reads the store.
                   pending="$(kubectl -n "$NS" exec "deploy/$DEPLOY" -- \
                     registry garbage-collect --dry-run --delete-untagged "$CONFIG" 2>/dev/null \

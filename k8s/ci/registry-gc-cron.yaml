@@ -152,9 +152,12 @@ spec:
                   fi
 
                   # Safe against a live registry: it only reads the store.
+                  # Anchor the match: the summary line ("N blobs and M
+                  # manifests eligible for deletion") contains the same phrase
+                  # and would keep the gate open on an idle registry.
                   pending="$(kubectl -n "$NS" exec "deploy/$DEPLOY" -- \
                     registry garbage-collect --dry-run --delete-untagged "$CONFIG" 2>/dev/null \
-                    | grep -c 'eligible for deletion' || true)"
+                    | grep -Ec '^(blob|manifest) eligible for deletion' || true)"
                   if [ "${pending:-0}" -eq 0 ]; then
                     log "nothing to collect; registry left untouched"
                     exit 0

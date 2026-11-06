@@ -1048,8 +1048,8 @@ function viewMembersModal(members, groupId, userId, group) {
               ${avatar(m.displayName || m.name, 44, m.profilePicture)}
             </button>
             <div class="member-identity">
-              <button type="button" class="member-name member-profile-btn" data-profile="${m.userId}"
-                      aria-label="View profile of ${esc(m.displayName || m.name)}">
+              <button type="button" class="member-name member-profile-btn" data-picture="${m.userId}"
+                      aria-label="View ${esc(m.displayName || m.name)}'s picture">
                 <span>${esc(m.displayName || displayName(m.name))}${isSelf ? ' (you)' : ''}</span>
               </button>
               ${m.email ? `<span class="member-email">${esc(m.email)}</span>` : ''}
@@ -1085,27 +1085,13 @@ function viewMembersModal(members, groupId, userId, group) {
       };
     }
 
-    // The avatar is a shortcut to the picture itself; the name opens the full
-    // profile (which also carries the admin actions).
+    // Both the avatar and the name go straight to the large picture. The email
+    // is shown inline and admin actions live on the row, so the intermediate
+    // profile modal is not needed here.
     document.querySelectorAll('[data-picture]').forEach(btn => {
       btn.onclick = () => {
         const member = members.find(m => String(m.userId) === String(btn.dataset.picture));
         if (member) openMemberPicture(member);
-      };
-    });
-
-    document.querySelectorAll('[data-profile]').forEach(btn => {
-      btn.onclick = () => {
-        const member = members.find(m => m.userId === btn.dataset.profile);
-        openMemberProfile(btn.dataset.profile, member, {
-          groupId,
-          viewerUserId: userId,
-          canManage: iAmAdmin,
-          onChanged: () => {
-            document.querySelector('.modal-overlay .modal-close')?.click();
-            loadGroupDetail(groupId, userId, { preserveView: true });
-          },
-        });
       };
     });
 

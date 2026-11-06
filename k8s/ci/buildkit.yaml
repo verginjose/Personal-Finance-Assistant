@@ -34,13 +34,14 @@ data:
     [worker.oci]
       gc = true
 
-      # Docker Hub base images (maven, eclipse-temurin, nginx, nvidia/cuda):
-      # pulled over the internet, slow to re-fetch on this link. The budget is
-      # deliberately above the disk's expected cache use, so this rule stays
-      # dormant and these layers are never evicted. Raise it only if it starts
-      # firing; the real signal is buildctl du -f 'description~=docker\.io'.
+      # The base images every service build needs - maven, eclipse-temurin and
+      # nginx from Docker Hub, plus the dockerfile frontend: pulled over the
+      # internet, slow to re-fetch on this link. The budget is deliberately
+      # above the disk's expected cache use, so this rule stays dormant and
+      # these layers are never evicted. Raise it only if it starts firing; the
+      # real signal is buildctl du -f 'description~=docker\.io'.
       [[worker.oci.gcpolicy]]
-        filters = ['description~=docker\.io']
+        filters = ['description~=docker\.io/(library/(maven|eclipse-temurin|nginx)|docker/dockerfile)']
         keepBytes = "64GB"
 
       # finance/ocr-base layers (~28 GB unpacked) come from the in-cluster
@@ -50,6 +51,16 @@ data:
       [[worker.oci.gcpolicy]]
         filters = ['description~=registry\.pfa\.svc\.cluster\.local']
         keepBytes = "2GB"
+
+      # nvidia/cuda (~10 GB) is only needed when the ocr-base image itself is
+      # rebuilt, which is rare. Not pinned: released once idle for two weeks.
+      # keepBytes is small only so the rule stays armed - the global cache is
+      # always above it - and keepDuration does the actual work here, by
+      # protecting anything used within the last 14 days.
+      [[worker.oci.gcpolicy]]
+        filters = ['description~=docker\.io/nvidia']
+        keepBytes = "1GB"
+        keepDuration = "336h"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

@@ -158,8 +158,14 @@ spec:
                     kubectl -n argocd patch app "$APP" --type merge -p '{"spec":{"syncPolicy":null}}'
                   fi
 
+                  # The value must be the whole map as YAML, not a per-key env
+                  # var: the env parser builds map[string]interface{} for nested
+                  # keys, while handlers.NewApp asserts map[interface{}]interface{}
+                  # and panics ("readonly config key must contain additional
+                  # keys"). `{enabled: true}` round-trips through yaml.v2 as the
+                  # type it expects. Verified: GET /v2/ 200, writes 405.
                   log "switching the registry to read-only"
-                  kubectl -n "$NS" set env "deploy/$DEPLOY" "$READONLY=true"
+                  kubectl -n "$NS" set env "deploy/$DEPLOY" "$READONLY={enabled: true}"
                   kubectl -n "$NS" rollout status "deploy/$DEPLOY" --timeout=180s
 
                   log "running garbage-collect"

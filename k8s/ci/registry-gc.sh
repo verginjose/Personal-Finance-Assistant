@@ -2,11 +2,12 @@
 # Trim and garbage-collect the in-cluster registry.
 #
 #   ./k8s/ci/registry-gc.sh --dry-run        # show what would be removed
-#   ./k8s/ci/registry-gc.sh                  # keep the 3 newest tags per repo
+#   ./k8s/ci/registry-gc.sh                  # keep the 2 newest tags per repo
 #   ./k8s/ci/registry-gc.sh --keep=1         # keep only the newest tag
 #
 # Two phases, because deleting a tag does not free its layers:
-#   1. delete manifests beyond --keep (newest by image creation time)
+#   1. delete manifests beyond --keep (newest by image creation time), and drop
+#      dangling tags, whose tag link outlived the manifest it points at
 #   2. scale the registry to 0 and run `registry garbage-collect`
 #
 # Phase 2 stops the registry for ~10-30 s. Do not run it during a build.
@@ -14,9 +15,11 @@ set -euo pipefail
 
 NS=pfa
 REGISTRY="http://127.0.0.1:30500"
-KEEP=3
+KEEP=2
 DRY_RUN=false
 ACCEPT="application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json"
+# REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY on the registry Deployment.
+STORAGE_ROOT=/var/lib/registry
 
 for arg in "$@"; do
   case "${arg}" in
@@ -81,6 +84,15 @@ manifest_created() {  # repo tag -> RFC3339 creation time from the image config
   curl -fsSL "${REGISTRY}/v2/$1/blobs/${cfg}" 2>/dev/null | jq -r '.created // empty' || true
 }
 
+# The distribution API has no tag-delete endpoint, and garbage-collect leaves
+# broken tag links alone, so a tag whose manifest is gone can only be dropped
+# from the filesystem. Safe while the registry is running: it re-reads the tag
+# directory per request.
+drop_dangling_tag() {  # repo tag -> remove the tag link directory
+  kubectl -n "${NS}" exec deploy/registry -- \
+    rm -rf "${STORAGE_ROOT}/docker/registry/v2/repositories/$1/_manifests/tags/$2"
+}
+
 echo "==> Pruning tags (keep ${KEEP} per repository)"
 curl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[]' | while read -r repo; do
   tags="$(curl -fsS "${REGISTRY}/v2/${repo}/tags/list" | jq -r '.tags[]?')" || continue
@@ -90,7 +102,11 @@ curl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[]' | while read -r re
   for tag in ${tags}; do
     digest="$(manifest_digest "${repo}" "${tag}")"
     if [[ -z "${digest}" ]]; then
-      echo "    skip ${repo}:${tag} (dangling tag, no manifest)"
+      echo "    delete ${repo}:${tag} (dangling tag, no manifest)"
+      if [[ "${DRY_RUN}" == false ]]; then
+        drop_dangling_tag "${repo}" "${tag}" >/dev/null 2>&1 \
+          || echo "    warn: could not drop dangling tag ${repo}:${tag}"
+      fi
       continue
     fi
     created="$(manifest_created "${repo}" "${tag}")"

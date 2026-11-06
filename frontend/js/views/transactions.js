@@ -91,23 +91,34 @@ function startCategoryEdit(btn, t, userId, onDone) {
 
   const select = document.createElement('select');
   select.className = 'form-select';
-  select.style.fontSize = '0.82rem';
-  select.style.padding = '4px 8px';
   select.innerHTML = categoryOptions(cats, current);
   btn.replaceWith(select);
-  select.focus();
 
   let settled = false;
+  let picker = null;
+
+  const onKey = (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    // Cancel the correction, not the whole transaction sheet behind it.
+    e.stopPropagation();
+    cancel();
+  };
+
   const cancel = () => {
     if (settled) return;
     settled = true;
-    select.replaceWith(btn);
+    document.removeEventListener('keydown', onKey, true);
+    if (picker) { picker.destroy(); picker = null; }
+    if (select.isConnected) select.replaceWith(btn);
   };
 
-  select.onchange = async () => {
+  const commit = async (value) => {
+    if (settled) return;
     settled = true;
-    const value = select.value;
+    document.removeEventListener('keydown', onKey, true);
     select.disabled = true;
+    if (picker) picker.disable();
     try {
       await api.put('/upsert/update', { ...t, category: value, userId });
       t.category = value;
@@ -120,19 +131,35 @@ function startCategoryEdit(btn, t, userId, onDone) {
           loadTransactions(userId);
         },
       });
+      if (picker) { picker.destroy(); picker = null; }
       if (onDone) onDone(value);
       loadTransactions(userId);
     } catch (err) {
       toast(err.message || 'Could not update category', 'error');
       select.disabled = false;
+      if (picker) picker.enable();
       settled = false;
+      document.addEventListener('keydown', onKey, true);
     }
   };
-  select.onkeydown = (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); cancel(); }
-    if (e.key === 'Enter') { e.preventDefault(); select.blur(); }
-  };
-  select.onblur = () => setTimeout(cancel, 150);
+
+  document.addEventListener('keydown', onKey, true);
+
+  // A searchable picker beats a hundred-item native dropdown: type to filter.
+  if (window.TomSelect) {
+    picker = new TomSelect(select, {
+      create: false,
+      sortField: { field: 'text', direction: 'asc' },
+      placeholder: 'Search category…',
+      maxOptions: 100,
+      onChange: commit,
+    });
+    picker.focus();
+  } else {
+    select.focus();
+    select.onchange = () => commit(select.value);
+    select.onblur = () => setTimeout(cancel, 150);
+  }
 }
 
 export async function renderTransactions(container) {

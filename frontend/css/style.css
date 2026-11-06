@@ -1451,6 +1451,11 @@ tbody tr:hover { background: transparent; }
 /* In the detail sheet the row reads as a value, so keep the affordance visible. */
 .modal-detail-row .cat-edit-btn { margin-right: -6px; }
 .modal-detail-row .cat-edit-btn .icon-svg { opacity: 1; }
+/* The inline category picker sits where the chip was, so it stays compact. */
+.detail-value:has(> .ts-wrapper) { flex: 0 1 240px; min-width: 0; }
+.detail-value .ts-wrapper { width: 100%; }
+.detail-value .ts-wrapper .ts-control { min-height: 34px; padding: 4px 8px; font-size: 0.82rem; }
+.detail-value .ts-dropdown { text-align: left; }
 .txn-row-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .txn-row-text { min-width: 0; }
 .row-actions { display: flex; align-items: center; gap: 4px; opacity: 0; transition: opacity 100ms ease-out; }

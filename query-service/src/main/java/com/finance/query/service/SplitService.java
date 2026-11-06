@@ -31,6 +31,7 @@ public class SplitService {
     private final ExpenseSplitRepository splitRepo;
     private final org.springframework.cache.CacheManager cacheManager;
     private final GroupActivityRepository groupActivityRepo;
+    private final com.finance.query.cache.CacheConsistencyGuard consistencyGuard;
 
     @Lazy
     @Autowired
@@ -128,6 +129,17 @@ public class SplitService {
 
     @Transactional(readOnly = true)
     public List<GroupMember> getGroupMembers(Long groupId) {
+        // The member list is not cached and is read from the replica, so a
+        // member added a moment ago can still be missing when the client
+        // re-fetches immediately (replication lag, made longer by the
+        // primary's synchronous_commit=off flush window). Wait for the group's
+        // last write to become visible, exactly like a cached read would.
+        com.finance.query.cache.CacheConsistencyGuard.Snapshot before =
+                consistencyGuard.snapshot("group:" + groupId);
+        if (before != null && !before.replicaCaughtUp()) {
+            consistencyGuard.awaitReplica(before.wal(),
+                    com.finance.query.cache.CacheConsistencyGuard.REPLICA_WAIT_MS);
+        }
         return memberRepo.findByGroupId(groupId);
     }
 

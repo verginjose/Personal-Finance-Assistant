@@ -3,6 +3,7 @@ import {
   esc, escAttr, emptyState, formatMoney, formatDate, formatCategory, dateTooltip,
   openModal, confirmModal, modalActions, avatar, displayName, chip, displayAmountFor,
   skeletonRows, EXPENSE_CATS, categoryOptions, currencyOptionHtml, categoryDot,
+  pictureLightbox,
 } from '../utils/ui.js';
 import { icon } from '../utils/icons.js';
 
@@ -137,7 +138,7 @@ async function loadGroups(userId) {
     let html = summary;
 
     if (activeGroups.length) {
-      html += `<div class="card-grid card-grid-3">${activeGroups.map(g => groupCard(g, memberMap.get(g.id) || [], userId)).join('')}</div>`;
+      html += `<div class="card-grid card-grid-3">${activeGroups.map(g => groupCard(g, memberMap.get(g.id) || [])).join('')}</div>`;
     } else {
       html += `<p class="meta" style="padding:20px 0">No active groups.</p>`;
     }
@@ -150,7 +151,7 @@ async function loadGroups(userId) {
           </button>
           <div id="archived-groups-container" hidden style="margin-top:var(--s4)">
             <div class="card-grid card-grid-3">
-              ${archivedGroups.map(g => groupCard(g, memberMap.get(g.id) || [], userId)).join('')}
+              ${archivedGroups.map(g => groupCard(g, memberMap.get(g.id) || [])).join('')}
             </div>
           </div>
         </div>`;
@@ -186,12 +187,11 @@ function wireListHeader(userId) {
   if (create) create.onclick = () => createGroupModal(userId);
 }
 
-function groupCard(g, members, userId) {
+function groupCard(g, members) {
   const isPending = g.currentUserStatus === 'PENDING';
   const isArchived = g.isArchived;
   const balance = Number(g.currentUserNetBalance) || 0;
   const currency = g.currency || Auth.getDefaultCurrency();
-  const canManage = g.currentUserRole === 'ADMIN' || String(g.createdBy || '') === String(userId || '');
 
   let balanceHtml = '<div class="group-balance is-zero">Settled up</div>';
   if (balance > 0) balanceHtml = `<div class="group-balance is-pos">You get back ${formatMoney(balance, currency)}</div>`;
@@ -201,8 +201,10 @@ function groupCard(g, members, userId) {
   const extra = Math.max(0, members.length - shown.length);
   const memberHtml = shown.length ? `
     <div class="group-members">
-      ${shown.map(m => `<button type="button" class="group-member-avatar" data-profile="${m.userId}"
-          data-name="${esc(m.name || m.userName || '')}" data-role="${esc(m.role || '')}" data-manage="${canManage ? '1' : ''}" aria-label="View ${esc(displayName(m.name || m.userName, 'member'))}'s profile">${avatar(displayName(m.name || m.userName, 'Member'), 26, m.profilePicture)}</button>`).join('')}
+      ${shown.map(m => `<button type="button" class="group-member-avatar"
+          data-picture-src="${esc(m.profilePicture || '')}"
+          data-name="${esc(m.name || m.userName || '')}"
+          aria-label="View ${esc(displayName(m.name || m.userName, 'member'))}'s picture">${avatar(displayName(m.name || m.userName, 'Member'), 26, m.profilePicture)}</button>`).join('')}
       ${extra ? `<span class="group-members-count">+${extra}</span>` : `<span class="group-members-count">${members.length} member${members.length === 1 ? '' : 's'}</span>`}
     </div>` : '';
 
@@ -230,13 +232,7 @@ function wireGroupCardActions(el, userId) {
   el.querySelectorAll('.group-member-avatar').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
-      const card = btn.closest('.group-card');
-      openMemberProfile(btn.dataset.profile, { displayName: btn.dataset.name, role: btn.dataset.role }, {
-        groupId: card ? card.dataset.id : null,
-        viewerUserId: userId,
-        canManage: btn.dataset.manage === '1',
-        onChanged: () => loadGroups(userId),
-      });
+      pictureLightbox(btn.dataset.pictureSrc || '', displayName(btn.dataset.name, 'Member'));
     };
   });
 
@@ -1059,15 +1055,18 @@ function viewMembersModal(members, groupId, userId, group) {
             ${isAdmin ? chip('Admin', 'brand') : (m.status === 'PENDING' ? '' : chip('Member', 'neutral'))}
             ${m.status === 'PENDING' ? chip('Pending', 'warn') : ''}
           </span>
-          ${iAmAdmin && !isSelf && m.status === 'ACCEPTED' ? `
+          ${iAmAdmin && !isSelf ? `
             <span class="member-actions">
-              <button type="button" class="btn-icon" data-admin-toggle="${m.userId}" data-admin="${isAdmin ? 'false' : 'true'}"
-                      title="${isAdmin ? 'Remove admin' : 'Make admin'}" aria-label="${isAdmin ? 'Remove admin' : 'Make admin'}">
-                ${icon(isAdmin ? 'user-x' : 'user-check', 'sm')}
-              </button>
+              ${m.status === 'ACCEPTED' ? `
+                <button type="button" class="btn-icon" data-admin-toggle="${m.userId}" data-admin="${isAdmin ? 'false' : 'true'}"
+                        title="${isAdmin ? 'Remove admin' : 'Make admin'}" aria-label="${isAdmin ? 'Remove admin' : 'Make admin'}">
+                  ${icon(isAdmin ? 'user-x' : 'user-check', 'sm')}
+                </button>` : ''}
               <button type="button" class="btn-icon" data-remove-member="${m.userId}"
                       data-name="${esc(m.displayName || m.name)}"
-                      title="Remove from group" aria-label="Remove from group">
+                      data-pending="${m.status === 'PENDING' ? '1' : ''}"
+                      title="${m.status === 'PENDING' ? 'Cancel invitation' : 'Remove from group'}"
+                      aria-label="${m.status === 'PENDING' ? 'Cancel invitation' : 'Remove from group'}">
                 ${icon('trash', 'sm')}
               </button>
             </span>` : ''}
@@ -1111,12 +1110,18 @@ function viewMembersModal(members, groupId, userId, group) {
     document.querySelectorAll('[data-remove-member]').forEach(btn => {
       btn.onclick = async () => {
         const name = btn.dataset.name;
-        if (!(await confirmModal('Remove member',
-          `Remove ${name} from the group? Any remaining balance will be settled first; removal only happens if their balance is zero.`,
-          'Remove member'))) return;
+        const pending = btn.dataset.pending === '1';
+        const ok = pending
+          ? await confirmModal('Cancel invitation',
+              `Withdraw the invitation to ${name}? They will not be able to join this group.`,
+              'Cancel invitation')
+          : await confirmModal('Remove member',
+              `Remove ${name} from the group? Any remaining balance will be settled first; removal only happens if their balance is zero.`,
+              'Remove member');
+        if (!ok) return;
         try {
           await api.delete(`/upsert/groups/${groupId}/members/${btn.dataset.removeMember}`, { settle: true });
-          toast(`${name} removed from the group`, 'success');
+          toast(pending ? `Invitation to ${name} cancelled` : `${name} removed from the group`, 'success');
           document.querySelector('.modal-close')?.click();
           loadGroupDetail(groupId, userId, { preserveView: true });
         } catch (err) { toast(err.message, 'error'); }
@@ -1127,86 +1132,8 @@ function viewMembersModal(members, groupId, userId, group) {
 
 /** Direct picture viewer — opened by the avatar in the member list. */
 function openMemberPicture(member) {
-  const label = member.displayName || displayName(member.name, 'Member');
-  openModal('Profile picture', `
-    <div class="avatar-popup">
-      ${member.profilePicture
-        ? `<img src="${esc(member.profilePicture)}" alt="${esc(label)}">`
-        : avatar(label, 220)}
-    </div>`, { size: 'lg' });
-}
-
-/** Public profile of another group member, with admin actions when allowed. */
-async function openMemberProfile(memberUserId, fallback = {}, context = {}) {
-  let profile = {
-    username: fallback.username || fallback.displayName || fallback.name || 'Member',
-    email: fallback.email || '',
-    profilePicture: fallback.profilePicture || null,
-  };
-  try {
-    const fetched = await api.get(`/auth/users/${memberUserId}`);
-    if (fetched) profile = { ...profile, ...fetched };
-  } catch { /* fall back to what the member row already knows */ }
-
-  const label = profile.username || fallback.displayName || 'Member';
-  const isAdmin = fallback.role === 'ADMIN';
-  const canManage = !!context.canManage
-    && context.groupId != null
-    && String(memberUserId) !== String(context.viewerUserId || '');
-
-  const { overlay, close } = openModal('Profile', `
-    <div class="member-profile">
-      <div class="member-profile-avatar">
-        ${profile.profilePicture
-          ? `<button type="button" class="member-profile-avatar-btn" id="mp-avatar" aria-label="View ${esc(label)}'s picture">${avatar(label, 120, profile.profilePicture)}</button>`
-          : avatar(label, 120)}
-      </div>
-      <div class="member-profile-name">${esc(label)}</div>
-      <div class="member-profile-tags">
-        ${isAdmin ? chip('Admin', 'brand') : chip('Member', 'neutral')}
-      </div>
-      ${profile.email ? `<div class="member-profile-email">${icon('mail', 'xs')} ${esc(profile.email)}</div>` : ''}
-      ${canManage ? `
-        <div class="member-profile-actions">
-          <button type="button" class="btn btn-secondary" id="mp-admin-toggle">
-            ${isAdmin ? 'Remove admin' : 'Make admin'}
-          </button>
-          <button type="button" class="btn btn-danger" id="mp-remove-member">Remove from group</button>
-        </div>` : ''}
-    </div>`);
-
-  overlay.querySelector('#mp-avatar')?.addEventListener('click', () => {
-    openMemberPicture({ displayName: label, profilePicture: profile.profilePicture });
-  });
-
-  if (!canManage) return;
-
-  const adminBtn = overlay.querySelector('#mp-admin-toggle');
-  adminBtn.onclick = async () => {
-    adminBtn.disabled = true;
-    try {
-      await api.put(`/upsert/groups/${context.groupId}/members/${memberUserId}/admin`,
-        null, { params: { admin: !isAdmin } });
-      toast(isAdmin ? 'Admin role removed' : 'Member promoted to admin', 'success');
-      close();
-      context.onChanged?.();
-    } catch (err) {
-      toast(err.message, 'error');
-      adminBtn.disabled = false;
-    }
-  };
-
-  overlay.querySelector('#mp-remove-member').onclick = async () => {
-    if (!(await confirmModal('Remove member',
-      `Remove ${label} from the group? Any remaining balance will be settled first; removal only happens if their balance is zero.`,
-      'Remove member'))) return;
-    try {
-      await api.delete(`/upsert/groups/${context.groupId}/members/${memberUserId}`, { settle: true });
-      toast(`${label} removed from the group`, 'success');
-      close();
-      context.onChanged?.();
-    } catch (err) { toast(err.message, 'error'); }
-  };
+  const label = displayName(member.displayName || member.name, 'Member');
+  pictureLightbox(member.profilePicture, label);
 }
 
 function editGroupModal(group, userId) {

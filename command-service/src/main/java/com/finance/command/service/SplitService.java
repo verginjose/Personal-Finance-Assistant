@@ -318,9 +318,10 @@ public class SplitService {
     }
 
     /**
-     * Remove a member (admin only). With {@code settleFirst}, any residual
-     * balance is recorded as settlement payments and the member is removed
-     * only once their net balance reaches zero.
+     * Remove a member (admin only). A pending invitation is simply withdrawn:
+     * there is no balance and no history to settle. An accepted member is
+     * removed only once their net balance reaches zero; with {@code settleFirst}
+     * their residual balance is recorded as settlement payments first.
      */
     @Caching(evict = {
             @CacheEvict(value = "group-expenses", key = "#groupId"),
@@ -331,7 +332,15 @@ public class SplitService {
         if (memberUserId.equals(actorUserId)) {
             throw new IllegalArgumentException("Use leave group to remove yourself.");
         }
-        GroupMember member = requireAcceptedMembership(groupId, memberUserId);
+        GroupMember member = requireMembership(groupId, memberUserId);
+
+        // An invitation that was never accepted has nothing to settle: removing
+        // it just takes the invite back.
+        if (member.getStatus() != GroupMember.InvitationStatus.ACCEPTED) {
+            cancelInvitation(groupId, member, actorUserId);
+            return;
+        }
+
         if (member.isAdmin() && countOtherAdmins(groupId, memberUserId) == 0) {
             throw new IllegalArgumentException(
                     "Cannot remove the group's only admin. Promote another admin first.");
@@ -391,6 +400,43 @@ public class SplitService {
         return memberRepo.findByGroupIdAndUserId(groupId, userId)
                 .filter(m -> m.getStatus() == GroupMember.InvitationStatus.ACCEPTED)
                 .orElseThrow(() -> new IllegalArgumentException("User is not an active member of this group"));
+    }
+
+    private GroupMember requireMembership(Long groupId, UUID userId) {
+        return memberRepo.findByGroupIdAndUserId(groupId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("User is not a member of this group"));
+    }
+
+    /**
+     * Withdraw an invitation that was never accepted. Mirrors
+     * {@link #rejectInvitation} but is driven by an admin rather than the
+     * invitee, and tells the invitee their invitation was taken back.
+     */
+    private void cancelInvitation(Long groupId, GroupMember member, UUID actorUserId) {
+        String memberName = member.getName();
+        String actorName = resolveMemberName(groupId, actorUserId);
+        String name = groupName(groupId);
+        Set<UUID> affected = memberIds(groupId);
+
+        memberRepo.delete(member);
+
+        var userGroupsCache = cacheManager.getCache("user-groups");
+        if (userGroupsCache != null) {
+            affected.forEach(userGroupsCache::evict);
+        }
+
+        groupActivityService.log(groupId, actorUserId, actorName,
+                ActivityType.MEMBER_REMOVED,
+                "@" + actorName + " cancelled @" + memberName + "'s invitation to the group",
+                groupId);
+
+        notificationService.sendNotification(member.getUserId(), Map.of(
+                "status", "INFO",
+                "message", "Your invitation to join " + name + " was cancelled",
+                "event", "group-invite-cancelled",
+                "groupId", groupId));
+
+        queryCacheEvictor.evictGroupKeys(groupId, affected);
     }
 
     private long countOtherAdmins(Long groupId, UUID excludingUserId) {

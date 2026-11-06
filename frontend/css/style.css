@@ -2255,49 +2255,47 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
 .member-actions .btn-icon { color: var(--text-2); }
 .member-actions .btn-icon:hover { color: var(--text); background: var(--hover); }
 
-/* Member profile popup — large centred avatar, WhatsApp-style */
-.member-profile { text-align: center; padding: var(--s2) 0 var(--s1); }
-.member-profile-avatar { display: flex; justify-content: center; margin-bottom: var(--s3); }
-.member-profile-avatar-btn {
-  padding: 0;
+/* Picture viewer — image floats on the scrim, WhatsApp-style: no panel, no
+   header, a floating close button and only a hair of padding around it. */
+.modal-overlay--lightbox { padding: var(--s3); background: rgba(12, 16, 22, 0.84); }
+.modal--lightbox {
+  position: relative;
+  max-width: min(94vw, 1100px);
+  max-height: none;
+  overflow: visible;
+  background: transparent;
   border: 0;
-  background: none;
+  box-shadow: none;
+}
+.modal--lightbox .modal-body { padding: 0; }
+.modal--lightbox .modal-close {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  color: #fff;
+  background: rgba(16, 20, 28, 0.55);
   border-radius: var(--r-pill);
-  cursor: zoom-in;
-  line-height: 0;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
-.member-profile-name { font-size: var(--fs-lg); font-weight: 600; }
-.member-profile-tags { display: flex; justify-content: center; gap: 6px; margin-top: 6px; }
-.member-profile-email {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: var(--s3);
-  font-size: var(--fs-sm);
-  color: var(--text-2);
-  word-break: break-word;
-}
-.member-profile-actions {
-  display: flex;
-  gap: var(--s2);
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: var(--s5);
-  padding-top: var(--s4);
-  border-top: 1px solid var(--line);
-}
-.member-profile-actions .btn { flex: 1 1 150px; }
-
-/* Large preview when your own avatar is clicked */
-.avatar-popup { display: flex; justify-content: center; padding: 0 0 var(--s3); }
-.avatar-popup img {
-  max-width: min(78vw, 720px);
-  max-height: 70vh;
+.modal--lightbox .modal-close:hover { background: rgba(16, 20, 28, 0.75); }
+.picture-lightbox { display: flex; flex-direction: column; align-items: center; gap: var(--s3); }
+.picture-lightbox-stage { display: flex; justify-content: center; min-width: 0; }
+.picture-lightbox-stage img {
+  display: block;
   width: auto;
   height: auto;
-  border-radius: var(--r-panel);
+  max-width: 100%;
+  max-height: 78vh;
   object-fit: contain;
+  border-radius: var(--r-panel);
+  background: var(--raised);
+  box-shadow: var(--shadow-float);
 }
+.picture-lightbox-actions { display: flex; justify-content: center; gap: var(--s2); }
 
 .receipt-lightbox { text-align: center; }
 .receipt-lightbox img { max-width: 100%; max-height: 76vh; object-fit: contain; border-radius: var(--r-control); }
@@ -2712,6 +2710,11 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
   .modal { max-height: calc(100dvh - 24px); }
   .modal-overlay { padding: 12px; align-items: end; }
   .modal { border-radius: var(--r-panel); }
+  /* The picture viewer is not a bottom sheet: it stays centred with 8px of air. */
+  .modal-overlay--lightbox { padding: 8px; align-items: center; }
+  .modal--lightbox { max-height: none; overflow: visible; }
+  .picture-lightbox-stage img { max-height: 74vh; }
+  .modal--lightbox .modal-close { top: 8px; right: 8px; }
   .toast-container { bottom: calc(76px + env(safe-area-inset-bottom)); }
   .split-summary strong { font-size: 1.875rem; }
   .balances-block { max-width: none; }

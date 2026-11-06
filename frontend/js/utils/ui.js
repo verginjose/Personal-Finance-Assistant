@@ -795,16 +795,20 @@ export function renderAiData(prefix, ai, onRefresh, { scopeLabel = '' } = {}) {
 /* ── Modals ─────────────────────────────────────────────────────────────── */
 let lastFocused = null;
 
-export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', size = '' } = {}) {
+export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', size = '', variant = '' } = {}) {
   lastFocused = document.activeElement;
+  const isLightbox = variant === 'lightbox';
   const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
+  overlay.className = isLightbox ? 'modal-overlay modal-overlay--lightbox' : 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal ${size}" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div class="modal-header">
-        <h2 id="modal-title">${esc(title)}</h2>
-        <button type="button" class="btn btn-icon btn-ghost modal-close" aria-label="Close">${icon('close', 'sm')}</button>
-      </div>
+    <div class="modal ${size}${isLightbox ? ' modal--lightbox' : ''}" role="dialog" aria-modal="true"
+         ${isLightbox ? `aria-label="${escAttr(title)}"` : 'aria-labelledby="modal-title"'}>
+      ${isLightbox
+        ? `<button type="button" class="btn btn-icon modal-close" aria-label="Close">${icon('close', 'sm')}</button>`
+        : `<div class="modal-header">
+             <h2 id="modal-title">${esc(title)}</h2>
+             <button type="button" class="btn btn-icon btn-ghost modal-close" aria-label="Close">${icon('close', 'sm')}</button>
+           </div>`}
       <div class="modal-body">${bodyHtml}</div>
     </div>`;
   document.body.appendChild(overlay);
@@ -893,6 +897,24 @@ export function openModal(title, bodyHtml, { onSubmit, submitLabel = 'Save', siz
   }, 20);
 
   return { overlay, close };
+}
+
+/**
+ * Picture viewer with almost no chrome, in the manner of WhatsApp's photo view:
+ * the image (or the initial avatar when there is no picture) floats over the
+ * page at its natural size, with a floating close button instead of a titled
+ * panel. Use this for every "view a picture" popup so they all look the same.
+ */
+export function pictureLightbox(src, label, { actionsHtml = '' } = {}) {
+  return openModal('Profile picture', `
+    <div class="picture-lightbox">
+      <div class="picture-lightbox-stage">
+        ${src
+          ? `<img src="${esc(src)}" alt="${esc(label)}">`
+          : avatar(label, 240)}
+      </div>
+      ${actionsHtml ? `<div class="picture-lightbox-actions">${actionsHtml}</div>` : ''}
+    </div>`, { variant: 'lightbox' });
 }
 
 export function confirmModal(title, message, confirmText = 'Confirm', cancelText = 'Cancel') {

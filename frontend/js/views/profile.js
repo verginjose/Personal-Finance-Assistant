@@ -2,7 +2,7 @@ import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
   esc, pageHeader, openModal, currencyOptionHtml, formatMoney,
-  getThemePreference, setThemePreference, avatar,
+  getThemePreference, setThemePreference, avatar, pictureLightbox,
 } from '../utils/ui.js';
 
 export async function renderProfile(container) {
@@ -206,18 +206,11 @@ export async function renderProfile(container) {
   /* Clicking the avatar opens a large preview — changing the picture is an
      explicit choice inside that popup, not a surprise file picker. */
   avatarBtn.onclick = () => {
-    const { overlay, close } = openModal('Profile picture', `
-      <div class="avatar-popup">
-        ${profilePicture
-          ? `<img src="${esc(profilePicture)}" alt="${esc(displayName)}">`
-          : avatar(displayName, 180)}
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" data-modal-cancel>Close</button>
-        <button type="button" class="btn btn-primary" id="p-avatar-change">
-          ${profilePicture ? 'Change picture' : 'Add picture'}
-        </button>
-      </div>`, { size: 'lg' });
+    const { overlay, close } = pictureLightbox(profilePicture, displayName, {
+      actionsHtml: `<button type="button" class="btn btn-primary" id="p-avatar-change">
+        ${profilePicture ? 'Change picture' : 'Add picture'}
+      </button>`,
+    });
     overlay.querySelector('#p-avatar-change').onclick = () => {
       close();
       uploadInput.click();

@@ -4,19 +4,26 @@
 #   ./k8s/ci/registry-gc.sh --dry-run        # show what would be removed
 #   ./k8s/ci/registry-gc.sh                  # keep the 2 newest tags per repo
 #   ./k8s/ci/registry-gc.sh --keep=1         # keep only the newest tag
+#   ./k8s/ci/registry-gc.sh --retention-only # phase 1 only; no cluster access
+#                                            # needed, safe during a build
 #
 # Two phases, because deleting a tag does not free its layers:
 #   1. delete manifests beyond --keep (newest by image creation time), and drop
 #      dangling tags, whose tag link outlived the manifest it points at
 #   2. scale the registry to 0 and run `registry garbage-collect`
 #
-# Phase 2 stops the registry for ~10-30 s. Do not run it during a build.
+# Phase 2 stops the registry for ~10-30 s. Do not run it during a build, and
+# only phase 1 is safe to run without cluster credentials.
+# Set REGISTRY= to point at another endpoint (the CI runner uses the ClusterIP).
 set -euo pipefail
 
 NS=pfa
-REGISTRY="http://127.0.0.1:30500"
+# Overridable so the CI runner can reach the registry over its ClusterIP
+# instead of the node's NodePort on loopback.
+REGISTRY="${REGISTRY:-http://127.0.0.1:30500}"
 KEEP=2
 DRY_RUN=false
+RETENTION_ONLY=false
 ACCEPT="application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json"
 # REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY on the registry Deployment.
 STORAGE_ROOT=/var/lib/registry
@@ -24,13 +31,19 @@ STORAGE_ROOT=/var/lib/registry
 for arg in "$@"; do
   case "${arg}" in
     --dry-run) DRY_RUN=true ;;
+    --retention-only) RETENTION_ONLY=true ;;
     --keep=*)  KEEP="${arg#*=}" ;;
-    -h|--help) sed -n '2,10p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "Unknown argument: ${arg}" >&2; exit 1 ;;
   esac
 done
 
 command -v jq >/dev/null 2>&1 || { echo "jq is required" >&2; exit 1; }
+
+# The CI runner has no cluster credentials by design, so the retention-only
+# path must work with nothing but curl and jq.
+HAVE_KUBECTL=false
+command -v kubectl >/dev/null 2>&1 && HAVE_KUBECTL=true
 
 # k3s keeps its kubeconfig at ~/.kube/k3s.yaml, not the default path.
 if [[ -z "${KUBECONFIG:-}" && -s "${HOME}/.kube/k3s.yaml" ]]; then
@@ -102,10 +115,16 @@ curl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[]' | while read -r re
   for tag in ${tags}; do
     digest="$(manifest_digest "${repo}" "${tag}")"
     if [[ -z "${digest}" ]]; then
-      echo "    delete ${repo}:${tag} (dangling tag, no manifest)"
-      if [[ "${DRY_RUN}" == false ]]; then
-        drop_dangling_tag "${repo}" "${tag}" >/dev/null 2>&1 \
-          || echo "    warn: could not drop dangling tag ${repo}:${tag}"
+      if [[ "${HAVE_KUBECTL}" == false ]]; then
+        # No cluster access (CI runner): the tag link can only be removed from
+        # the registry's filesystem, so leave it for the periodic GC job.
+        echo "    skip ${repo}:${tag} (dangling tag, no manifest)"
+      else
+        echo "    delete ${repo}:${tag} (dangling tag, no manifest)"
+        if [[ "${DRY_RUN}" == false ]]; then
+          drop_dangling_tag "${repo}" "${tag}" >/dev/null 2>&1 \
+            || echo "    warn: could not drop dangling tag ${repo}:${tag}"
+        fi
       fi
       continue
     fi
@@ -127,6 +146,14 @@ done
 
 if [[ "${DRY_RUN}" == true ]]; then
   echo "Dry run: skipping garbage collection (registry left running)."
+  exit 0
+fi
+
+if [[ "${RETENTION_ONLY}" == true ]]; then
+  # Used by the CI build right after it pushes: tags stay bounded, but the
+  # blobs behind them are only freed by the garbage-collect phase, which needs
+  # the registry stopped.
+  echo "==> Retention only: skipping garbage collection"
   exit 0
 fi
 

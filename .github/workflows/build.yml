@@ -141,6 +141,15 @@ jobs:
             --opt filename=Dockerfile \
             --output "type=image,name=${PUSH_REGISTRY}/finance/${SERVICE}:${TAG},push=true"
 
+      - name: Trim old registry tags
+        # Phase 1 of registry-gc.sh only: pure HTTP, so it needs no cluster
+        # credentials, and it leaves the registry running. It bounds how many
+        # tags pile up, but frees no disk on its own — the blob sweep needs the
+        # registry stopped (./k8s/stop.sh --gc, or the registry-gc CronJob).
+        run: |
+          set -euo pipefail
+          REGISTRY="http://${PUSH_REGISTRY}" ./k8s/ci/registry-gc.sh --retention-only --keep=2
+
       - name: Bump image tag in the manifest
         run: |
           set -euo pipefail

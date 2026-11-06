@@ -6,7 +6,7 @@ import { icon } from './utils/icons.js';
 import { renderAuth }          from './views/auth.js';
 import {
   esc, avatar, applyTheme, getThemePreference, setThemePreference,
-  openModal, displayName,
+  openModal, displayName, confirmModal,
 } from './utils/ui.js';
 import { renderDashboard }     from './views/dashboard.js';
 import { renderTransactions }  from './views/transactions.js';
@@ -96,6 +96,7 @@ function openNotificationsPanel() {
   openModal('Notifications', `
     <div class="notif-toolbar">
       <button type="button" class="btn btn-ghost btn-sm" id="notif-read-all">Mark all read</button>
+      ${NOTIF.items.length ? '<button type="button" class="btn btn-ghost btn-sm" id="notif-clear">Clear all</button>' : ''}
       <button type="button" class="btn btn-ghost btn-sm" id="notif-permission">
         ${icon('bell', 'sm')} Enable browser notifications
       </button>
@@ -107,6 +108,23 @@ function openNotificationsPanel() {
       try { await api.post('/upsert/notifications/read-all', null); } catch { /* ignore */ }
       NOTIF.items.forEach(n => { n.readAt = n.readAt || new Date().toISOString(); });
       NOTIF.unread = 0;
+      updateNotifBadges();
+      document.querySelector('.modal-close')?.click();
+      openNotificationsPanel();
+    });
+
+    document.getElementById('notif-clear')?.addEventListener('click', async () => {
+      if (!(await confirmModal('Clear notifications',
+          'Every notification in your inbox will be removed. This cannot be undone.', 'Clear all'))) return;
+      try {
+        await api.delete('/upsert/notifications');
+      } catch (err) {
+        toast(err.message || 'Could not clear notifications', 'error');
+        return;
+      }
+      NOTIF.items = [];
+      NOTIF.unread = 0;
+      NOTIF.announced = true;      // nothing left to announce later
       updateNotifBadges();
       document.querySelector('.modal-close')?.click();
       openNotificationsPanel();

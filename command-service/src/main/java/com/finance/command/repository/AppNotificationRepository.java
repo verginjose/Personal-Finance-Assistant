@@ -22,6 +22,10 @@ public interface AppNotificationRepository extends JpaRepository<AppNotification
     long deleteByCreatedAtBefore(LocalDateTime cutoff);
 
     @Modifying
+    @Query("delete from AppNotification n where n.userId = :userId")
+    int deleteAllByUserId(@Param("userId") UUID userId);
+
+    @Modifying
     @Query("update AppNotification n set n.readAt = :readAt " +
            "where n.userId = :userId and n.readAt is null")
     int markAllRead(@Param("userId") UUID userId, @Param("readAt") LocalDateTime readAt);

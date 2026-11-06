@@ -60,4 +60,14 @@ public class NotificationController {
         notificationService.markAllRead(userId);
         return ResponseEntity.ok(Map.of("message", "All notifications marked read"));
     }
+
+    /** Clear the whole inbox for the caller. */
+    @DeleteMapping
+    public ResponseEntity<Map<String, Object>> clearAll(
+            @RequestHeader("X-User-Id") UUID userId) {
+        int removed = notificationService.clearAll(userId);
+        return ResponseEntity.ok(Map.of(
+                "message", "Notifications cleared",
+                "removed", removed));
+    }
 }

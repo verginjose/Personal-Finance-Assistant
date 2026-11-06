@@ -1,0 +1,178 @@
+# Hourly garbage collection for the in-cluster registry.
+#
+# `registry garbage-collect` frees the blobs behind tags that phase 1 of
+# registry-gc.sh deleted. It is a mark-and-sweep: it marks the blobs reachable
+# from every manifest, then deletes the rest. If a push lands between the mark
+# and the sweep, its blobs look unreferenced and get deleted, corrupting the
+# image - the filesystem driver takes no lock between the registry and the GC
+# process.
+#
+# Stopping the registry would close that hole but also break pulls, so this job
+# uses the read-only variant instead: the Deployment gets
+# REGISTRY_STORAGE_MAINTENANCE_READONLY=true, which makes the registry refuse
+# writes (503 on push) while continuing to serve pulls, deploys and readiness
+# probes. GC then runs inside that pod against the same store. Cost is one
+# Recreate rollout each way, and builds that try to push in that window fail.
+#
+# Argo CD manages the registry Deployment with selfHeal, so it would revert the
+# read-only env mid-sweep. The job disables automated sync for the duration and
+# restores the exact policy from a trap.
+#
+# The dry run at the top means most hours do nothing: if no tag was deleted
+# since the last sweep there is no garbage, so the registry is never touched.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: registry-gc
+  namespace: pfa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: registry-gc
+  namespace: pfa
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: registry-gc
+  namespace: pfa
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: registry-gc
+subjects:
+  - kind: ServiceAccount
+    name: registry-gc
+    namespace: pfa
+---
+# Cross-namespace: the job has to stop Argo from reverting the read-only patch.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: registry-gc-argocd
+  namespace: argocd
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: registry-gc-argocd
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: registry-gc-argocd
+subjects:
+  - kind: ServiceAccount
+    name: registry-gc
+    namespace: pfa
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: registry-gc
+  namespace: pfa
+  labels:
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  # Offset off the hour so it does not collide with tag-bump commits landing.
+  schedule: "17 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          serviceAccountName: registry-gc
+          restartPolicy: Never
+          containers:
+            - name: gc
+              # Pinned to the cluster's minor version; `registry` is not needed
+              # here because garbage-collect runs inside the registry pod.
+              image: alpine/k8s:1.36.5
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  NS=pfa
+                  APP=pfa-ci
+                  DEPLOY=registry
+                  CONFIG=/etc/docker/registry/config.yml
+                  READONLY=REGISTRY_STORAGE_MAINTENANCE_READONLY
+
+                  log() { echo "==> $*"; }
+
+                  writable() {
+                    kubectl -n "$NS" set env "deploy/$DEPLOY" "$READONLY-" >/dev/null 2>&1 || true
+                    kubectl -n "$NS" rollout status "deploy/$DEPLOY" --timeout=180s >/dev/null 2>&1 || true
+                  }
+
+                  restore_sync() {
+                    if [ -n "${SYNCPOLICY:-}" ]; then
+                      kubectl -n argocd patch app "$APP" --type merge \
+                        -p "{\"spec\":{\"syncPolicy\":$SYNCPOLICY}}" >/dev/null 2>&1 || true
+                    fi
+                  }
+
+                  # Whatever happens, never leave the registry read-only or Argo
+                  # with its automated sync disabled.
+                  cleanup() { writable; restore_sync; }
+                  trap cleanup EXIT
+
+                  # Safe against a live registry: it only reads the store.
+                  pending="$(kubectl -n "$NS" exec "deploy/$DEPLOY" -- \
+                    registry garbage-collect --dry-run --delete-untagged "$CONFIG" 2>/dev/null \
+                    | grep -c 'eligible for deletion' || true)"
+                  if [ "${pending:-0}" -eq 0 ]; then
+                    log "nothing to collect; registry left untouched"
+                    exit 0
+                  fi
+                  log "$pending blobs eligible; collecting"
+
+                  SYNCPOLICY="$(kubectl -n argocd get app "$APP" \
+                    -o jsonpath='{.spec.syncPolicy}' 2>/dev/null || true)"
+                  if [ -n "$SYNCPOLICY" ]; then
+                    log "suspending automated sync for $APP"
+                    kubectl -n argocd patch app "$APP" --type merge -p '{"spec":{"syncPolicy":null}}'
+                  fi
+
+                  log "switching the registry to read-only"
+                  kubectl -n "$NS" set env "deploy/$DEPLOY" "$READONLY=true"
+                  kubectl -n "$NS" rollout status "deploy/$DEPLOY" --timeout=180s
+
+                  log "running garbage-collect"
+                  kubectl -n "$NS" exec "deploy/$DEPLOY" -- \
+                    registry garbage-collect --delete-untagged "$CONFIG"
+
+                  log "restoring write access"
+                  writable
+                  log "done"
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi

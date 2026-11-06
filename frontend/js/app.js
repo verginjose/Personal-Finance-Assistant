@@ -210,8 +210,9 @@ function renderShell() {
     <div id="app-shell" class="${sidebarCollapsed ? 'sidebar-collapsed' : ''}">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-head">
-          <a class="logo" href="/dashboard" data-view="dashboard" aria-label="PFA — Personal Finance Assistant">
-            <span class="logo-text">PFA</span>
+          <a class="logo" href="/dashboard" data-view="dashboard" aria-label="Varavu — home">
+            <img class="logo-mark" src="/assets/varavu-mark.svg" alt="" width="26" height="26">
+            <span class="logo-text">Varavu</span>
           </a>
           <div class="sidebar-head-tools">
             <button type="button" class="sidebar-bell" id="sidebar-bell" aria-label="Notifications">

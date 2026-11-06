@@ -149,10 +149,10 @@ function showBrowserNotification(data) {
   // tabs the user cannot see.
   if (document.visibilityState === 'visible') return;
   try {
-    const n = new Notification('PFA', {
+    const n = new Notification('Varavu', {
       body: data.message || 'New notification',
-      tag: 'pfa-' + (data.event || data.type || 'notification'),
-      icon: '/favicon.ico',
+      tag: 'varavu-' + (data.event || data.type || 'notification'),
+      icon: '/assets/varavu-mark.svg',
     });
     n.onclick = () => { window.focus(); n.close(); };
   } catch { /* some browsers reject notifications without a service worker */ }

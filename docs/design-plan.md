@@ -1,4 +1,4 @@
-# PFA — design plan
+# Varavu — design plan
 
 ## The idea
 
@@ -79,7 +79,7 @@ Dashboard wireframe:
 
 ```
 ┌ sidebar ┬──────────────────────────────────────────────────────────┐
-│ PFA     │  November 2026                              [period ▾]   │
+│ Varavu  │  November 2026                              [period ▾]   │
 │         │                                                          │
 │ Dashboard│  Net this month                             −₹3,240.00  │
 │ Trans…  │  Earned ₹62,000  ██████████████████░░░░  Spent ₹65,240  │

@@ -1,4 +1,6 @@
-# Personal Finance Assistant
+# Varavu
+
+*Personal finance, kept straight.*
 
 [![Java](https://img.shields.io/badge/java-21%20%28OpenJDK%29-ED8B00?style=for-the-badge&logo=java)](https://openjdk.org/)
 [![JavaScript](https://img.shields.io/badge/javascript-ES6+-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
@@ -14,7 +16,7 @@
 [![Vector](https://img.shields.io/badge/vector-0.41.1-000000?style=for-the-badge&logo=vector&logoColor=white)](https://vector.dev/)
 [![Grafana](https://img.shields.io/badge/grafana-11.1.4-F46800?style=for-the-badge&logo=grafana)](https://grafana.com/)
 
-A comprehensive, production-ready personal finance platform built on a microservices architecture. This application enables users to track income and expenses, manage split bills, define savings goals, automatically extract structured data from scanned receipts, and receive AI-generated financial insights. 
+A comprehensive, production-ready personal finance platform built on a microservices architecture. Varavu (Tamil *varavu*, the credit side of a ledger) enables users to track income and expenses, manage split bills, define savings goals, automatically extract structured data from scanned receipts, and receive AI-generated financial insights. 
 
 All services communicate securely via a JWT-secured API Gateway, utilizing Redis for high-performance caching and RabbitMQ for asynchronous event propagation. The system is also equipped with an enterprise-grade observability pipeline powered by Vector, ClickHouse, and Grafana for centralized logging and telemetry.
 

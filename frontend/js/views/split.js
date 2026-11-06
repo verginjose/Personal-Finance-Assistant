@@ -368,6 +368,12 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       const m = members.find(x => x.userId === id);
       return m ? m.profilePicture : null;
     };
+    /** Small avatar that opens the same picture viewer when clicked. */
+    const pictureAvatar = (id, size = 18) => `
+      <button type="button" class="avatar-pic-btn" data-picture-src="${escAttr(avatarOf(id) || '')}"
+              data-name="${escAttr(nameOf(id))}" aria-label="View ${escAttr(nameOf(id))}'s picture">
+        ${avatar(nameOf(id), size, avatarOf(id))}
+      </button>`;
 
     const currency = group.currency || Auth.getDefaultCurrency();
     // `currentUserRole` is derived by the API, but older groups migrated before
@@ -401,7 +407,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       const owesMe = direction === 'owed';
       return `
         <div class="side-balance-row">
-          ${avatar(member.displayName, 30, member.profilePicture)}
+          ${pictureAvatar(member.userId, 30)}
           <span class="side-balance-name">${esc(member.displayName)}</span>
           <span class="side-balance-amount ${owesMe ? 'is-pos' : ''}">
             ${formatMoney(amount, currency)}
@@ -416,7 +422,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
 
     const settledRowHtml = (member) => `
       <div class="side-balance-row is-settled">
-        ${avatar(member.displayName, 26, member.profilePicture)}
+        ${pictureAvatar(member.userId, 26)}
         <span class="side-balance-name">${esc(member.displayName)}</span>
         <span class="side-balance-settled">Settled up</span>
       </div>`;
@@ -531,7 +537,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
                 const to = s.toUserId === userId ? 'you' : nameOf(s.toUserId);
                 return `
                   <div class="balance-person-row">
-                    ${avatar(nameOf(s.fromUserId), 28, avatarOf(s.fromUserId))}
+                    ${pictureAvatar(s.fromUserId, 28)}
                     <span class="balance-person-name">${esc(from)} ${s.fromUserId === userId ? 'owe' : 'owes'} ${esc(to)}</span>
                     <span class="balance-person-amount ${s.toUserId === userId ? 'is-pos' : ''}">${formatMoney(s.amount, currency)}</span>
                     <button class="btn btn-secondary btn-sm settle-btn"
@@ -568,6 +574,18 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       loadGroups(userId);
     };
     document.getElementById('sp-view-members').onclick = () => viewMembersModal(members, groupId, userId, group);
+
+    // Any avatar in the detail view (side panel, who-owes-who, expense meta)
+    // opens the same picture viewer as the members list.
+    if (!el.dataset.pictureWired) {
+      el.dataset.pictureWired = '1';
+      el.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-picture-src]');
+        if (!btn) return;
+        e.stopPropagation();
+        pictureLightbox(btn.dataset.pictureSrc || '', btn.dataset.name || 'Member');
+      });
+    }
 
     const settledToggle = document.getElementById('sp-settled-toggle');
     if (settledToggle) {
@@ -663,8 +681,14 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
 
       list.querySelectorAll('.expense-row').forEach(row => {
         const open = () => openExpenseDetailsModal(JSON.parse(row.dataset.exp), groupId, userId, eligibleMembers);
-        row.onclick = (e) => { if (e.target.closest('[data-receipt]')) return; open(); };
-        row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+        row.onclick = (e) => {
+          if (e.target.closest('[data-receipt]') || e.target.closest('[data-picture-src]')) return;
+          open();
+        };
+        row.onkeydown = (e) => {
+          if (e.target.closest('[data-picture-src]')) return;
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+        };
       });
       list.querySelectorAll('[data-receipt]').forEach(btn => {
         btn.onclick = (e) => { e.stopPropagation(); window.openReceiptLightbox(btn.dataset.receipt); };
@@ -695,7 +719,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
           <div class="expense-row payment-row" data-exp='${escAttr(JSON.stringify({ ...e, paidByName: nameOf(e.paidBy) }))}' role="button" tabindex="0">
             <span class="row-icon">${icon('arrow-right', 'sm')}</span>
             <div class="expense-row-main">
-              <div class="expense-row-title">${esc(settlementRowTitle(e, userId, nameOf))}</div>
+              <div class="expense-row-title expense-paidby">${pictureAvatar(e.paidBy, 16)}<span>${esc(settlementRowTitle(e, userId, nameOf))}</span></div>
             </div>
             <div class="expense-row-amount"><span class="expense-row-total">${formatMoney(shown.amount, shown.currency)}</span></div>
           </div>`;
@@ -712,7 +736,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
           <div class="expense-row-main">
             <div class="expense-row-title">${esc(e.description || 'Expense')}</div>
             <div class="expense-row-meta">
-              <span>${esc(mine)}</span>
+              <span class="expense-paidby">${pictureAvatar(e.paidBy, 16)}<span>${esc(mine)}</span></span>
               ${chip(splitTypeLabel(e.splitType), 'neutral')}
               ${metaSecondary}
               ${e.receiptUrl ? `<button type="button" class="attach-btn" data-receipt="${esc(e.receiptUrl)}" aria-label="Receipt attached" title="Receipt attached">${icon('paperclip', 'xs')}</button>` : ''}

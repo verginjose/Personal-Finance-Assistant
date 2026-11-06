@@ -2255,6 +2255,21 @@ tr:hover .row-actions, tr:focus-within .row-actions, .ledger-row:hover .row-acti
 .member-actions .btn-icon { color: var(--text-2); }
 .member-actions .btn-icon:hover { color: var(--text); background: var(--hover); }
 
+/* Avatars that open the picture viewer (side panel, who-owes-who, paid-by) */
+.avatar-pic-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  line-height: 0;
+}
+.avatar-pic-btn:hover { outline: 2px solid var(--brand); outline-offset: 2px; }
+.expense-paidby { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.expense-row-title.expense-paidby { display: flex; }
+
 /* Picture viewer — image floats on the scrim, WhatsApp-style: no panel, no
    header, a floating close button and only a hair of padding around it. */
 .modal-overlay--lightbox { padding: var(--s3); background: rgba(12, 16, 22, 0.84); }

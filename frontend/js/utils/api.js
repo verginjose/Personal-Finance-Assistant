@@ -152,7 +152,7 @@ function showBrowserNotification(data) {
     const n = new Notification('Varavu', {
       body: data.message || 'New notification',
       tag: 'varavu-' + (data.event || data.type || 'notification'),
-      icon: '/assets/varavu-mark.svg',
+      icon: '/assets/varavu-mark.png',
     });
     n.onclick = () => { window.focus(); n.close(); };
   } catch { /* some browsers reject notifications without a service worker */ }

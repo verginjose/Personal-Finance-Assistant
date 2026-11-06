@@ -287,9 +287,8 @@ img { max-width: 100%; }
 }
 .logo-mark {
   display: block;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
 }
 .logo-text {
@@ -1282,11 +1281,10 @@ tbody tr:hover { background: transparent; }
 .auth-brand h1 {
   display: flex;
   align-items: center;
-  gap: 10px;
   font-size: var(--fs-xl);
-  margin-bottom: var(--s3);
+  margin-bottom: var(--s4);
 }
-.auth-brand h1 .logo-mark { width: 34px; height: 34px; border-radius: 9px; }
+.auth-brand h1 .auth-lockup { display: block; width: 190px; height: auto; }
 .auth-brand > p { font-size: var(--fs-base); max-width: 420px; }
 .auth-features { display: flex; flex-direction: column; gap: var(--s4); margin-top: var(--s6); }
 .auth-feature { display: flex; gap: var(--s3); font-size: 0.875rem; color: var(--text-2); }

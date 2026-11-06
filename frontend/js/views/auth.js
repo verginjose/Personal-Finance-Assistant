@@ -23,7 +23,7 @@ export function renderAuth(container) {
     container.innerHTML = `
     <div class="auth-page">
       <div class="auth-brand">
-        <h1><img class="logo-mark" src="/assets/varavu-mark.svg" alt="" width="34" height="34"> Varavu</h1>
+        <h1><img class="auth-lockup" src="/assets/varavu-logo.png" alt="Varavu" width="190" height="203"></h1>
         <p>Every account, receipt and shared bill in one calm ledger.</p>
         <div class="auth-features">
           <div class="auth-feature">

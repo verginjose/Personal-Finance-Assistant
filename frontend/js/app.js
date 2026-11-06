@@ -192,20 +192,20 @@ function renderShell() {
     <div id="app-shell" class="${sidebarCollapsed ? 'sidebar-collapsed' : ''}">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-head">
-          <a class="logo" href="/dashboard" data-view="dashboard" aria-label="PFA — Personal Finance Assistant" title="PFA — Personal Finance Assistant">
+          <a class="logo" href="/dashboard" data-view="dashboard" aria-label="PFA — Personal Finance Assistant">
             <span class="logo-text">PFA</span>
           </a>
           <div class="sidebar-head-tools">
-            <button type="button" class="sidebar-bell" id="sidebar-bell" aria-label="Notifications" title="Notifications">
+            <button type="button" class="sidebar-bell" id="sidebar-bell" aria-label="Notifications">
               ${icon('bell', 'sm')}<span class="notif-badge" data-notif-badge hidden></span>
             </button>
-            <button type="button" class="sidebar-collapse" id="sidebar-collapse" aria-label="Collapse navigation" title="Collapse navigation">${icon('chevron-left', 'sm')}</button>
+            <button type="button" class="sidebar-collapse" id="sidebar-collapse" aria-label="Collapse navigation">${icon('chevron-left', 'sm')}</button>
           </div>
         </div>
         <nav id="sidebar-nav" aria-label="Main navigation">
           ${NAV_ITEMS.map(n => `
             <a href="${n.path}" data-view="${n.id}" class="${n.id === currentView ? 'active' : ''}"
-               aria-current="${n.id === currentView ? 'page' : 'false'}" title="${esc(n.label)}">
+               aria-current="${n.id === currentView ? 'page' : 'false'}" aria-label="${esc(n.label)}">
               <span class="icon">${icon(n.icon, 'sm')}</span><span class="nav-label">${esc(n.label)}</span>
             </a>`).join('')}
         </nav>
@@ -213,8 +213,8 @@ function renderShell() {
           <button type="button" class="sidebar-user" id="sidebar-user" aria-haspopup="menu" aria-expanded="false" aria-label="Open account menu">
             <span id="shell-avatar">${initial}</span>
             <span class="sidebar-user-info">
-              <span class="sidebar-user-name" title="${esc(name)}">${esc(name)}</span>
-              <span class="sidebar-user-email" title="${esc(email)}">${esc(email)}</span>
+              <span class="sidebar-user-name">${esc(name)}</span>
+              <span class="sidebar-user-email">${esc(email)}</span>
             </span>
           </button>
           <div class="user-menu" id="user-menu" role="menu" hidden>
@@ -232,8 +232,8 @@ function renderShell() {
         </div>
       </aside>
       <div class="main-content">
-        <button type="button" class="sidebar-expand" id="sidebar-expand" aria-label="Expand navigation" title="Expand navigation">${icon('menu')}</button>
-        <button type="button" class="mobile-notif" id="mobile-notif" aria-label="Notifications" title="Notifications">
+        <button type="button" class="sidebar-expand" id="sidebar-expand" aria-label="Expand navigation">${icon('menu')}</button>
+        <button type="button" class="mobile-notif" id="mobile-notif" aria-label="Notifications">
           ${icon('bell', 'sm')}<span class="notif-badge" data-notif-badge hidden></span>
         </button>
         <div id="view-root"></div>

@@ -34,25 +34,46 @@ data:
     [worker.oci]
       gc = true
 
-      # One unfiltered rule, deliberately.
+      # Pin by omission: the Docker Hub base images every service build needs
+      # (maven, eclipse-temurin, nginx, dockerfile frontend) match no rule
+      # below, so nothing deletes them by size - they survive a quiet period.
+      # Only the backstop at the end can evict them, and only if the cache
+      # exceeds 60 GB.
       #
-      # The earlier version filtered by description (`description~=docker\.io`,
-      # `description~=registry\.pfa…`) to pin Docker Hub images and evict the
-      # OCR pull. That failed in two ways: build-result records ("mount / from
-      # exec …", "[4/4] COPY app/ .") match no description filter, so 46 GB of
-      # them was never a candidate; and containerd filter syntax has no
-      # negation, so a filtered cap cannot mean "everything else".
+      # The rules below instead name the categories that are cheap to rebuild.
+      # A rule with keepDuration and no keepBytes deletes every matching record
+      # idle for longer than the duration, in one pass - unlike a keepBytes cap,
+      # which removes one record per GC run.
       #
-      # An unfiltered budget still protects the base images in practice: maven,
-      # eclipse-temurin and nginx are referenced by every service build, so
-      # their last-used time is always fresh and LRU reaches the stale ocr-base
-      # and old build layers first.
-      #
-      # Note each rule deletes at most one record per GC run, and GC runs about
-      # once per build, so a burst (an ocr-service build pulls 16 layers) can
-      # stay above the cap until enough builds have run.
+      # Filters within one rule are ANDed, so each category needs its own rule.
+
+      # finance/ocr-base layers come from the in-cluster registry over loopback
+      # and a partial set is useless (a build needs all 16), so they go as soon
+      # as the build that pulled them finishes. keepDuration 0 = no protection.
       [[worker.oci.gcpolicy]]
-        keepBytes = "20GB"
+        filters = ['description~=registry\.pfa\.svc\.cluster\.local']
+        keepDuration = "0s"
+
+      # Build results: mvn/rm stage layers and the COPY/WORKDIR layers of newer
+      # Dockerfiles. Worth keeping while the same source is being rebuilt, stale
+      # after two idle days.
+      [[worker.oci.gcpolicy]]
+        filters = ['description~=^mount']
+        keepDuration = "48h"
+
+      [[worker.oci.gcpolicy]]
+        filters = ['description~=^\[']
+        keepDuration = "48h"
+
+      # nvidia/cuda is only needed to rebuild the ocr-base image itself.
+      [[worker.oci.gcpolicy]]
+        filters = ['description~=docker\.io/nvidia']
+        keepDuration = "336h"
+
+      # Backstop: a plain LRU cap, so a record type nobody thought of cannot
+      # grow without bound. At 60 GB it should never fire in normal use.
+      [[worker.oci.gcpolicy]]
+        keepBytes = "60GB"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

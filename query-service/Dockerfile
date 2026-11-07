@@ -1,5 +1,8 @@
 # Step 1: Build stage
-FROM maven:3.9.6-eclipse-temurin-21 AS builder
+# Base images come from the in-cluster mirror in CI (k8s/ci/mirror-base-images.sh)
+# and from Docker Hub when this Dockerfile is built outside the cluster.
+ARG BASE_IMAGE_REGISTRY=docker.io/library
+FROM ${BASE_IMAGE_REGISTRY}/maven:3.9.6-eclipse-temurin-21 AS builder
 
 WORKDIR /app
 
@@ -14,7 +17,7 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.m2,sharing=locked mvn clean package -Dmaven.test.skip=true
 
 # Step 2: Runtime stage
-FROM eclipse-temurin:21-jdk-jammy
+FROM ${BASE_IMAGE_REGISTRY}/eclipse-temurin:21-jdk-jammy
 
 WORKDIR /app
 

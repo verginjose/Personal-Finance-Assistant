@@ -66,10 +66,12 @@ spec:
 
                   # ocr-base pulls: cheap over the local registry, useless
                   # partially. Drained in repeated calls because of
-                  # maxPruneBatch = 10.
+                  # maxPruneBatch = 10. Names the repository, not just the
+                  # host: base/maven, base/eclipse-temurin and base/nginx are
+                  # mirrored into the same registry and must survive.
                   echo "==> ocr-base pulls"
                   for _ in 1 2 3; do
-                    prune -f 'description~=registry\.pfa\.svc\.cluster\.local'
+                    prune -f 'description~=registry\.pfa\.svc\.cluster\.local:5000/finance/ocr-base'
                   done
 
                   # Build results, after two idle days.

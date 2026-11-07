@@ -34,11 +34,11 @@ data:
     [worker.oci]
       gc = true
 
-      # Pin by omission: the Docker Hub base images every service build needs
-      # (maven, eclipse-temurin, nginx, dockerfile frontend) match no rule
-      # below, so nothing deletes them by size - they survive a quiet period.
-      # Only the backstop at the end can evict them, and only if the cache
-      # exceeds 60 GB.
+      # Pin by omission: the base images every service build needs (maven,
+      # eclipse-temurin, nginx, dockerfile frontend) match no rule below, so
+      # nothing deletes them by duration. They are pulled from the in-cluster
+      # mirror (base/*, see k8s/ci/mirror-base-images.sh), so a cold cache
+      # costs a loopback pull rather than a Docker Hub download.
       #
       # The rules below instead name the categories that are cheap to rebuild.
       # A rule with keepDuration and no keepBytes deletes every matching record
@@ -50,8 +50,12 @@ data:
       # finance/ocr-base layers come from the in-cluster registry over loopback
       # and a partial set is useless (a build needs all 16), so they go as soon
       # as the build that pulled them finishes. keepDuration 0 = no protection.
+      #
+      # The filter names the repository, not just the registry host: the
+      # mirrored base images (base/maven, base/eclipse-temurin, base/nginx)
+      # also come from that host and must NOT match this rule.
       [[worker.oci.gcpolicy]]
-        filters = ['description~=registry\.pfa\.svc\.cluster\.local']
+        filters = ['description~=registry\.pfa\.svc\.cluster\.local:5000/finance/ocr-base']
         keepDuration = "0s"
 
       # Build results: mvn/rm stage layers and the COPY/WORKDIR layers of newer

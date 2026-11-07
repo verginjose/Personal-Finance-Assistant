@@ -27,7 +27,7 @@ k8s/
 │   ├── registry.yaml          # registry:2 + NodePort 30500 + 50 Gi PVC
 │   ├── buildkit.yaml          # rootless BuildKit + 40 Gi cache PVC
 │   ├── runner.yaml            # self-hosted GitHub Actions runner
-│   └── apply.sh, setup-registry.sh, registry-gc.sh, debug.sh, README.md
+│   └── apply.sh, setup-registry.sh, registry-gc.sh, mirror-base-images.sh, debug.sh, README.md
 ├── infrastructure/            # stateful deps + observability
 │   ├── postgres-primary.yaml
 │   ├── postgres-replica.yaml

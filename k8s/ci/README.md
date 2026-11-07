@@ -91,6 +91,28 @@ git push            # done
 
 Deploys can also be triggered from the Actions tab (`workflow_dispatch`).
 
+### Base images
+
+The service Dockerfiles take their base images from the registry mirror
+(`base/maven`, `base/eclipse-temurin`, `base/nginx`) rather than Docker Hub, so
+a cold BuildKit cache costs a loopback pull instead of an internet download.
+The CI build passes `BASE_IMAGE_REGISTRY=$PUSH_REGISTRY/base`; outside the
+cluster the Dockerfiles default to `docker.io/library`, so `docker compose
+build` is unchanged.
+
+After changing a base image tag in any Dockerfile, re-seed the mirror:
+
+```bash
+./k8s/ci/mirror-base-images.sh             # copies what is missing
+./k8s/ci/mirror-base-images.sh --force     # re-copies existing tags
+./k8s/ci/mirror-base-images.sh --dry-run
+```
+
+The script runs `crane` as a one-shot pod and copies linux/amd64 only (the
+cluster is single-arch). Both GC paths are scoped so the mirror survives:
+`registry-gc.sh` trims tags only under `finance/`, and the BuildKit ocr-base
+rule matches `finance/ocr-base` specifically.
+
 ## Deployment: Argo CD
 
 Argo CD watches `k8s/apps` on `master` and syncs automatically (no prune,
@@ -186,7 +208,8 @@ Deployment — if the runner ever needs `kubectl`, something is wrong with Argo.
 | `runner.yaml` | ServiceAccount + `myoung34/github-runner` Deployment |
 | `apply.sh` | Deploys all three and syncs `pfa-ci-secrets` from `.env` |
 | `setup-registry.sh` | (root) writes `/etc/rancher/k3s/registries.yaml`, restarts k3s |
-| `registry-gc.sh` | Tag retention + garbage-collects untagged manifests |
+| `registry-gc.sh` | Tag retention (finance/* only) + garbage-collects untagged manifests |
+| `mirror-base-images.sh` | Seeds `base/*` in the registry with the Docker Hub base images |
 | `debug.sh` | Read-only health report for the whole chain |
 | `argocd/` | Argo CD install + the `pfa-apps` Application |
 | `.github/workflows/build.yml` | The pipeline |

@@ -133,12 +133,15 @@ jobs:
           TAG="${GITHUB_SHA::12}"
           echo "TAG=$TAG" >> "$GITHUB_ENV"
           echo "Building ${PUSH_REGISTRY}/finance/${SERVICE}:${TAG} from ./${SERVICE}"
+          # Base images are mirrored into the registry (k8s/ci/mirror-base-images.sh),
+          # so a cold BuildKit cache costs a loopback pull instead of Docker Hub.
           buildctl build \
             --progress plain \
             --frontend dockerfile.v0 \
             --local context="./${SERVICE}" \
             --local dockerfile="./${SERVICE}" \
             --opt filename=Dockerfile \
+            --opt build-arg:BASE_IMAGE_REGISTRY="${PUSH_REGISTRY}/base" \
             --output "type=image,name=${PUSH_REGISTRY}/finance/${SERVICE}:${TAG},push=true"
 
       - name: Reclaim cache for this build
@@ -153,10 +156,14 @@ jobs:
         # ocr-base rule is repeated because each call removes at most 10
         # records (maxPruneBatch) and an image pull is 16 layers. Keep in sync
         # with k8s/ci/buildkit-prune-cron.yaml.
+        #
+        # The rule names /finance/ocr-base specifically: the mirrored base
+        # images also live on that registry, and a bare host match would drop
+        # them from the cache after every build.
         run: |
           set -euo pipefail
           for _ in 1 2 3; do
-            buildctl prune -f 'description~=registry\.pfa\.svc\.cluster\.local'
+            buildctl prune -f 'description~=registry\.pfa\.svc\.cluster\.local:5000/finance/ocr-base'
           done
           buildctl prune --keep-storage 61440
 

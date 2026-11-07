@@ -107,7 +107,11 @@ drop_dangling_tag() {  # repo tag -> remove the tag link directory
 }
 
 echo "==> Pruning tags (keep ${KEEP} per repository)"
-curl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[]' | while read -r repo; do
+# Only finance/* - CI's immutable per-build tags. The registry also holds the
+# mirrored Docker Hub base images under base/* (k8s/ci/mirror-base-images.sh);
+# those are referenced by digest from the Dockerfiles, so trimming a tag would
+# delete a manifest a build still needs, not just an old build.
+curl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[] | select(startswith("finance/"))' | while read -r repo; do
   tags="$(curl -fsS "${REGISTRY}/v2/${repo}/tags/list" | jq -r '.tags[]?')" || continue
   [[ -z "${tags}" ]] && continue
 

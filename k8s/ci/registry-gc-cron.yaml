@@ -20,6 +20,13 @@
 #
 # The dry run at the top means most hours do nothing: if no tag was deleted
 # since the last sweep there is no garbage, so the registry is never touched.
+#
+# Tag retention runs before that gate, using the same k8s/ci/registry-gc.sh the
+# CI build calls (published as a ConfigMap by kustomization.yaml). The runner
+# has no cluster credentials, so over HTTP it can only skip a tag that shares
+# its manifest with a kept tag. Here kubectl is available, so it drops the tag
+# link from the registry's storage and the now-untagged manifest is collected
+# by the sweep in the same run.
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -155,6 +162,12 @@ spec:
                     exit 0
                   fi
 
+                  # Retention first, so the dry-run gate below sees the manifests
+                  # it untags. Phase 1 only: this job owns the sweep. Keep 2 in
+                  # step with build.yml's `registry-gc.sh --keep=2`.
+                  log "trimming tags to 2 per repository"
+                  bash /scripts/registry-gc.sh --retention-only --keep=2
+
                   # Safe against a live registry: it only reads the store.
                   # Anchor the match: the summary line ("N blobs and M
                   # manifests eligible for deletion") contains the same phrase
@@ -192,6 +205,15 @@ spec:
                   log "restoring write access"
                   writable
                   log "done"
+              env:
+                # The script defaults to the node's NodePort on loopback, which
+                # does not exist in the pod network.
+                - name: REGISTRY
+                  value: http://registry.pfa.svc.cluster.local:5000
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
               resources:
                 requests:
                   cpu: 50m
@@ -199,3 +221,8 @@ spec:
                 limits:
                   cpu: 500m
                   memory: 256Mi
+          volumes:
+            - name: scripts
+              configMap:
+                name: registry-gc-script
+                defaultMode: 0555

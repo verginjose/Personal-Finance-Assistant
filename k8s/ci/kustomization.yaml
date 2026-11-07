@@ -1,0 +1,32 @@
+# Argo CD auto-detects kustomize when this file is present, and that is the only
+# reason it exists: configMapGenerator publishes registry-gc.sh to the CronJob
+# from the file itself, so there is exactly one copy of the retention logic.
+#
+# A hand-copied ConfigMap would drift. Stale retention is not cosmetic: on
+# 2026-11-07 an older trim deleted a manifest digest still referenced by a kept
+# tag and took the just-pushed image with it (`command-service:cc1ea84aab75`,
+# ImagePullBackOff). The CronJob must never run yesterday's version of that
+# guard.
+#
+# Every YAML in this directory has to be listed under resources: kustomize, and
+# therefore Argo, silently ignores files it is not told about.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - buildkit-prune-cron.yaml
+  - buildkit.yaml
+  - registry-gc-cron.yaml
+  - registry.yaml
+  - runner.yaml
+
+configMapGenerator:
+  - name: registry-gc-script
+    namespace: pfa
+    files:
+      - registry-gc.sh
+    options:
+      # No name-suffix hash: the CronJob re-reads the file on every run, and
+      # pfa-ci syncs with prune: false, so a hash would leave one orphaned
+      # ConfigMap behind per edit.
+      disableNameSuffixHash: true

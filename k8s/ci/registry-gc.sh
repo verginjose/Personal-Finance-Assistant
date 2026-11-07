@@ -100,8 +100,9 @@ manifest_created() {  # repo tag -> RFC3339 creation time from the image config
 # The distribution API has no tag-delete endpoint, and garbage-collect leaves
 # broken tag links alone, so a tag whose manifest is gone can only be dropped
 # from the filesystem. Safe while the registry is running: it re-reads the tag
-# directory per request.
-drop_dangling_tag() {  # repo tag -> remove the tag link directory
+# directory per request. Also used to retire a tag that shares its manifest with
+# a tag being kept (see the shared-digest guard below).
+drop_tag_link() {  # repo tag -> remove the tag link directory
   kubectl -n "${NS}" exec deploy/registry -- \
     rm -rf "${STORAGE_ROOT}/docker/registry/v2/repositories/$1/_manifests/tags/$2"
 }
@@ -126,7 +127,7 @@ curl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[] | select(startswith
       else
         echo "    delete ${repo}:${tag} (dangling tag, no manifest)"
         if [[ "${DRY_RUN}" == false ]]; then
-          drop_dangling_tag "${repo}" "${tag}" >/dev/null 2>&1 \
+          drop_tag_link "${repo}" "${tag}" >/dev/null 2>&1 \
             || echo "    warn: could not drop dangling tag ${repo}:${tag}"
         fi
       fi
@@ -136,7 +137,34 @@ curl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[] | select(startswith
     printf '%s %s %s\n' "${created:-1970-01-01T00:00:00Z}" "${tag}" "${digest}" >> "${TMP}/tags"
   done
 
-  sort -r "${TMP}/tags" | tail -n +"$((KEEP + 1))" | while read -r _ tag digest; do
+  # Resolve what is being kept before deleting anything. Several tags commonly
+  # share one manifest digest: builds are byte-for-byte reproducible here, so a
+  # service rebuilt without a code change pushes a tag that resolves to the same
+  # digest as the tag it replaces. The registry has no tag-delete endpoint -
+  # DELETE /manifests/<digest> removes the manifest AND every tag pointing at it
+  # - so deleting an old tag whose digest a kept tag still shares unpublishes
+  # the image the build just pushed. That is how command-service:cc1ea84aab75
+  # disappeared one second after BuildKit pushed it (2026-11-07 13:23:01).
+  sort -r "${TMP}/tags" > "${TMP}/sorted"
+  kept_digests="$(head -n "${KEEP}" "${TMP}/sorted" | awk '{print $3}' | sort -u)"
+
+  tail -n +"$((KEEP + 1))" "${TMP}/sorted" | while read -r _ tag digest; do
+    if printf '%s\n' "${kept_digests}" | grep -qxF "${digest}"; then
+      # Retire the tag link only. Without cluster access (the CI runner) there
+      # is no way to remove a single tag over HTTP, so leave it: harmless, and
+      # the next run from a host with kubectl reaps it.
+      if [[ "${HAVE_KUBECTL}" == true ]]; then
+        echo "    drop tag ${repo}:${tag} (shares ${digest:0:19} with a kept tag)"
+        if [[ "${DRY_RUN}" == false ]]; then
+          drop_tag_link "${repo}" "${tag}" >/dev/null 2>&1 \
+            || echo "    warn: could not drop tag ${repo}:${tag}"
+        fi
+      else
+        echo "    skip ${repo}:${tag} (shares ${digest:0:19} with a kept tag)"
+      fi
+      continue
+    fi
+
     echo "    delete ${repo}:${tag} (${digest:0:19})"
     if [[ "${DRY_RUN}" == false ]]; then
       # A failed delete must not abort the run: the next phase's GC still frees

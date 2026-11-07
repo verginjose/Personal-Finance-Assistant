@@ -1,0 +1,87 @@
+# Periodic cache cleanup for buildkitd.
+#
+# buildkitd's own GC cannot clean a freshly pulled image. It runs about a second
+# after each build and never releases the leases that a pull registers in
+# util/imageutil's process-global lease list, so those layers keep refs and
+# cache/manager.go skips them before it even evaluates the rules. Only an
+# explicit prune while no build is running calls imageutil.CancelCacheLeases()
+# (control/control.go:186) and then actually sees refs == 0. With no builds
+# running, nothing ever triggers that, so pulled layers linger until a daemon
+# restart.
+#
+# This job is that trigger.
+#
+# It cannot simply run `buildctl prune`: with no flags the client sends
+# KeepDuration=0, KeepBytes=0 and no filter, which means "delete every record"
+# - including the pinned base images. The daemon has no RPC for "apply your
+# configured gcpolicy", so the categories are spelled out here. Keep this in
+# sync with the [[worker.oci.gcpolicy]] rules in buildkit.yaml: the ConfigMap
+# still governs the daemon's own post-build pass, this job is what makes those
+# rules effective for freshly pulled layers.
+#
+# Each call removes at most 10 records (maxPruneBatch), so the pull rule is
+# repeated to drain a 16-layer image in one run.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: buildkit-prune
+  namespace: pfa
+  labels:
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  # Offset from the registry sweep, which runs at :17.
+  schedule: "47 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: prune
+              image: moby/buildkit:v0.15.2-rootless
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  ADDR=tcp://buildkitd.pfa.svc.cluster.local:1234
+                  prune() { buildctl --addr "$ADDR" prune "$@"; }
+
+                  echo "==> before"
+                  buildctl --addr "$ADDR" du | tail -1
+
+                  # ocr-base pulls: cheap over the local registry, useless
+                  # partially. Drained in repeated calls because of
+                  # maxPruneBatch = 10.
+                  echo "==> ocr-base pulls"
+                  for _ in 1 2 3; do
+                    prune -f 'description~=registry\.pfa\.svc\.cluster\.local'
+                  done
+
+                  # Build results, after two idle days.
+                  echo "==> build results (>48h)"
+                  prune -f 'description~=^mount' --keep-duration 48h
+                  prune -f 'description~=^\[' --keep-duration 48h
+
+                  # Only needed to rebuild the ocr-base image itself.
+                  echo "==> nvidia/cuda (>14d)"
+                  prune -f 'description~=docker\.io/nvidia' --keep-duration 336h
+
+                  # Backstop, same 60 GB as the ConfigMap rule.
+                  echo "==> backstop (60 GB)"
+                  prune --keep-storage 61440
+
+                  echo "==> after"
+                  buildctl --addr "$ADDR" du | tail -1
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi

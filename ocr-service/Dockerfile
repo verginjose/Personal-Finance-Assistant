@@ -15,14 +15,18 @@
 ARG OCR_BASE=registry.pfa.svc.cluster.local:5000/finance/ocr-base:cu126-py311-v1
 FROM ${OCR_BASE}
 
-WORKDIR /app
-# Clear the base image's copy of the app so deleted/renamed files do not linger.
-RUN rm -rf /app/*
-COPY app/ .
+# One COPY, deliberately: buildkitd uses the native snapshotter, which stores a
+# full copy of the root filesystem for every Dockerfile step, so each extra
+# instruction costs ~11 GB of cache on this image. WORKDIR plus
+# `RUN rm -rf /app/*` were two more of those. Copying to a fresh directory
+# instead of overwriting the base image's /app removes the need for both, and
+# nothing stale can linger because the directory starts empty.
+COPY app/ /srv/app
 
 EXPOSE 8100
 
 CMD ["uvicorn", "main:app", \
+     "--app-dir", "/srv/app", \
      "--host", "0.0.0.0", \
      "--port", "8100", \
      "--workers", "1", \

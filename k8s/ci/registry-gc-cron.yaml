@@ -103,6 +103,10 @@ spec:
     spec:
       backoffLimit: 1
       activeDeadlineSeconds: 1800
+      # Delete the Job and its pod once it finishes. A sweep that does nothing
+      # still leaves a completed Job behind; without this they accumulate.
+      # Ten minutes leaves time to read the log of a sweep that changed things.
+      ttlSecondsAfterFinished: 600
       template:
         spec:
           serviceAccountName: registry-gc

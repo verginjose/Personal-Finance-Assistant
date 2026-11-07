@@ -141,6 +141,25 @@ jobs:
             --opt filename=Dockerfile \
             --output "type=image,name=${PUSH_REGISTRY}/finance/${SERVICE}:${TAG},push=true"
 
+      - name: Reclaim cache for this build
+        # The post-build GC runs ~1s after Solve returns, before the build's
+        # own leases have all dropped, so it skips the layers this build just
+        # pulled and never revisits them. Re-running the prune here - idle by
+        # definition - takes the lease-releasing path and reclaims them now
+        # instead of leaving ~50 GB for the ocr-service build to sit on until
+        # the next buildkit-prune run.
+        #
+        # Only the categories this build can have created are named. The
+        # ocr-base rule is repeated because each call removes at most 10
+        # records (maxPruneBatch) and an image pull is 16 layers. Keep in sync
+        # with k8s/ci/buildkit-prune-cron.yaml.
+        run: |
+          set -euo pipefail
+          for _ in 1 2 3; do
+            buildctl prune -f 'description~=registry\.pfa\.svc\.cluster\.local'
+          done
+          buildctl prune --keep-storage 61440
+
       - name: Trim old registry tags
         # Phase 1 of registry-gc.sh only: pure HTTP, so it needs no cluster
         # credentials, and it leaves the registry running. It bounds how many

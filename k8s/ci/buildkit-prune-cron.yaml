@@ -29,8 +29,13 @@ metadata:
   labels:
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
-  # Offset from the registry sweep, which runs at :17.
-  schedule: "47 * * * *"
+  # Every 15 minutes, offset from the registry sweep at :17.
+  #
+  # Hourly was enough to bound the cache, but it left records that were freed
+  # just after a build sitting for up to an hour (observed: 54 GB idle for 3
+  # minutes in the 2026-11-07 run). A no-op run on a clean cache is seven
+  # `prune` calls that delete nothing, so the tighter cadence is cheap.
+  schedule: "7,22,37,52 * * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 600
   successfulJobsHistoryLimit: 2
@@ -39,6 +44,10 @@ spec:
     spec:
       backoffLimit: 1
       activeDeadlineSeconds: 900
+      # Delete the Job and its pod once it finishes, so completed runs (scheduled
+      # and `kubectl create job --from=cronjob/...`) do not pile up. Five
+      # minutes leaves time to read `kubectl logs` before it is gone.
+      ttlSecondsAfterFinished: 300
       template:
         spec:
           restartPolicy: Never

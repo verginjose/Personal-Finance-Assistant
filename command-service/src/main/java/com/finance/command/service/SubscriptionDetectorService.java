@@ -114,11 +114,22 @@ public class SubscriptionDetectorService {
         sub.setAmount(request.getAmount());
         
         if (sub.getPeriod() != request.getPeriod()) {
+            // The stored next_charge_date describes the OLD cadence, so it can be
+            // weeks away. Rolling it forward by one new period is what made a
+            // subscription switched to DAILY show its next charge a month out.
+            // Anchor on the last charge of the old cadence instead, then roll
+            // forward with the new one.
+            LocalDate lastCharge = sub.getNextChargeDate() != null
+                    ? previousChargeDate(sub.getNextChargeDate(), sub.getPeriod())
+                    : LocalDate.now();
             sub.setPeriod(request.getPeriod());
-            LocalDate nextCharge = calculateNextChargeDate(sub.getNextChargeDate() != null ? sub.getNextChargeDate() : LocalDate.now(), request.getPeriod());
+            LocalDate nextCharge = calculateNextChargeDate(lastCharge, request.getPeriod());
             sub.setNextChargeDate(nextCharge);
             int daysUntil = Math.max(0, (int) ChronoUnit.DAYS.between(LocalDate.now(), nextCharge));
             sub.setDaysUntilCharge(daysUntil);
+            // Remember the user's choice: the nightly detector must not quietly
+            // revert the frequency to whatever the transaction was marked as.
+            sub.setPeriodLocked(true);
         }
         
         subscriptionRepository.save(sub);
@@ -219,14 +230,31 @@ public class SubscriptionDetectorService {
         return nextCharge;
     }
 
+    /** The occurrence immediately before {@code nextChargeDate}, for the given cadence. */
+    LocalDate previousChargeDate(LocalDate nextChargeDate, RecurringPeriod period) {
+        return switch (period) {
+            case DAILY   -> nextChargeDate.minusDays(1);
+            case WEEKLY  -> nextChargeDate.minusWeeks(1);
+            case MONTHLY -> nextChargeDate.minusMonths(1);
+            case YEARLY  -> nextChargeDate.minusYears(1);
+        };
+    }
+
     /** Insert or update a subscription record. */
     private void upsertSubscription(UUID userId, String name, BigDecimal amount,
                                      String currency, RecurringPeriod period, LocalDate lastDate) {
-        LocalDate nextCharge = calculateNextChargeDate(lastDate, period);
-        int daysUntil = Math.max(0, (int) ChronoUnit.DAYS.between(LocalDate.now(), nextCharge));
-
         Optional<Subscription> existing = subscriptionRepository
                 .findFirstByUserIdAndNameIgnoreCaseOrderByIdAsc(userId, name);
+
+        // A frequency picked in the UI outranks the detector's guess. Without
+        // this, every startup/nightly pass silently undid the user's edit.
+        RecurringPeriod effectivePeriod = existing
+                .filter(Subscription::isPeriodLocked)
+                .map(Subscription::getPeriod)
+                .orElse(period);
+
+        LocalDate nextCharge = calculateNextChargeDate(lastDate, effectivePeriod);
+        int daysUntil = Math.max(0, (int) ChronoUnit.DAYS.between(LocalDate.now(), nextCharge));
 
         Subscription sub = existing.orElseGet(Subscription::new);
         // "Not a subscription" has to stick. The merchant keeps being detected,
@@ -238,7 +266,7 @@ public class SubscriptionDetectorService {
         sub.setName(name);
         sub.setAmount(amount);
         sub.setCurrency(currency);
-        sub.setPeriod(period);
+        sub.setPeriod(effectivePeriod);
         sub.setNextChargeDate(nextCharge);
         sub.setDaysUntilCharge(daysUntil);
         sub.setActive(!dismissed);

@@ -1,5 +1,6 @@
 package com.finance.command.service;
 
+import com.finance.command.dto.UpdateSubscriptionRequest;
 import com.finance.command.model.*;
 import com.finance.command.repository.SubscriptionRepository;
 import com.finance.command.repository.TransactionEntryRepository;
@@ -158,6 +159,108 @@ class SubscriptionDetectorServiceTest {
         service.processRecurringTransactions(List.of(entry));
 
         verify(subscriptionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("processRecurringTransactions: a manual frequency edit survives detection")
+    void processRecurringTransactions_lockedPeriod_notOverwritten() {
+        TransactionEntry entry = buildEntry("PAal", new BigDecimal("55.00"), RecurringPeriod.MONTHLY);
+        entry.setCreatedAt(LocalDateTime.now().minusDays(2));
+
+        Subscription edited = new Subscription();
+        edited.setId(5L);
+        edited.setUserId(userId);
+        edited.setName("PAal");
+        edited.setAmount(new BigDecimal("55.00"));
+        edited.setPeriod(RecurringPeriod.DAILY);
+        edited.setPeriodLocked(true);
+        edited.setNextChargeDate(LocalDate.now().plusDays(1));
+        when(subscriptionRepository.findFirstByUserIdAndNameIgnoreCaseOrderByIdAsc(any(), eq("PAal")))
+                .thenReturn(Optional.of(edited));
+        when(subscriptionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service.processRecurringTransactions(List.of(entry));
+
+        // The transaction still says MONTHLY, but the user's DAILY choice wins.
+        assertThat(edited.getPeriod()).isEqualTo(RecurringPeriod.DAILY);
+        assertThat(edited.getNextChargeDate()).isEqualTo(LocalDate.now().plusDays(1));
+    }
+
+    @Test
+    @DisplayName("processRecurringTransactions: an unlocked period follows the transaction")
+    void processRecurringTransactions_unlockedPeriod_followsTransaction() {
+        TransactionEntry entry = buildEntry("Netflix", new BigDecimal("649.00"), RecurringPeriod.WEEKLY);
+        entry.setCreatedAt(LocalDateTime.now().minusDays(2));
+
+        Subscription existing = new Subscription();
+        existing.setId(6L);
+        existing.setUserId(userId);
+        existing.setName("Netflix");
+        existing.setAmount(new BigDecimal("649.00"));
+        existing.setPeriod(RecurringPeriod.MONTHLY);
+        existing.setNextChargeDate(LocalDate.now().plusMonths(1));
+        when(subscriptionRepository.findFirstByUserIdAndNameIgnoreCaseOrderByIdAsc(any(), eq("Netflix")))
+                .thenReturn(Optional.of(existing));
+        when(subscriptionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service.processRecurringTransactions(List.of(entry));
+
+        assertThat(existing.getPeriod()).isEqualTo(RecurringPeriod.WEEKLY);
+    }
+
+    // ── updateSubscription ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("updateSubscription: MONTHLY -> DAILY charges tomorrow, not next month")
+    void updateSubscription_monthlyToDaily_recomputesFromLastCharge() {
+        LocalDate lastCharge = LocalDate.now().minusDays(2);
+
+        Subscription sub = new Subscription();
+        sub.setId(1L);
+        sub.setUserId(userId);
+        sub.setName("PAal");
+        sub.setAmount(new BigDecimal("55.00"));
+        sub.setPeriod(RecurringPeriod.MONTHLY);
+        // Old cadence: the next charge is almost a month away.
+        sub.setNextChargeDate(lastCharge.plusMonths(1));
+        when(subscriptionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(subscriptionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        UpdateSubscriptionRequest request = new UpdateSubscriptionRequest();
+        request.setName("PAal");
+        request.setAmount(new BigDecimal("55.00"));
+        request.setPeriod(RecurringPeriod.DAILY);
+
+        service.updateSubscription(1L, userId, request);
+
+        assertThat(sub.getPeriod()).isEqualTo(RecurringPeriod.DAILY);
+        assertThat(sub.getNextChargeDate()).isEqualTo(LocalDate.now().plusDays(1));
+        assertThat(sub.getDaysUntilCharge()).isEqualTo(1);
+        assertThat(sub.isPeriodLocked()).isTrue();
+    }
+
+    @Test
+    @DisplayName("updateSubscription: an unchanged period leaves the lock alone")
+    void updateSubscription_samePeriod_doesNotLock() {
+        Subscription sub = new Subscription();
+        sub.setId(1L);
+        sub.setUserId(userId);
+        sub.setName("Netflix");
+        sub.setAmount(new BigDecimal("649.00"));
+        sub.setPeriod(RecurringPeriod.MONTHLY);
+        sub.setNextChargeDate(LocalDate.now().plusDays(10));
+        when(subscriptionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(subscriptionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        UpdateSubscriptionRequest request = new UpdateSubscriptionRequest();
+        request.setName("Netflix");
+        request.setAmount(new BigDecimal("699.00"));
+        request.setPeriod(RecurringPeriod.MONTHLY);
+
+        service.updateSubscription(1L, userId, request);
+
+        assertThat(sub.getNextChargeDate()).isEqualTo(LocalDate.now().plusDays(10));
+        assertThat(sub.isPeriodLocked()).isFalse();
     }
 
     // ── deactivateSubscription ────────────────────────────────────────────────

@@ -51,6 +51,13 @@ public class Subscription {
     @Column(nullable = false)
     private boolean active = true;
 
+    /**
+     * True once the user sets the frequency in the UI. Detection then keeps
+     * that period instead of reverting to the transaction's recurring period.
+     */
+    @Column(name = "period_locked", columnDefinition = "boolean not null default false")
+    private boolean periodLocked;
+
     @Column(name = "detected_at", nullable = false, updatable = false)
     private LocalDateTime detectedAt;
 

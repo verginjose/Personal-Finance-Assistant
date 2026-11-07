@@ -1,0 +1,25 @@
+# Pin CoreDNS's upstream resolver instead of inheriting the node's
+# /etc/resolv.conf.
+#
+# CoreDNS runs with dnsPolicy: Default, so it snapshots the host's DNS servers
+# when its pod is created and never notices later changes. On this laptop the
+# Wi-Fi network (and therefore the DHCP-provided resolver and IP) changes
+# regularly; a stale upstream turns every in-cluster lookup into
+# "lookup ... on 10.43.0.10:53: server misbehaving". Using public resolvers
+# decouples cluster DNS from whichever network the host is currently on.
+#
+# k3s imports /etc/coredns/custom/*.override before its built-in
+# `forward . /etc/resolv.conf`, so this replaces the host-derived upstream.
+#
+# ConfigMap changes need a CoreDNS restart to take effect:
+#   kubectl -n kube-system rollout restart deploy/coredns
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  forward.override: |
+    forward . 1.1.1.1 8.8.8.8

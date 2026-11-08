@@ -115,6 +115,9 @@ export async function renderBillScanner(container) {
       const target = encodeURIComponent(Auth.getDefaultCurrency());
       const res = await api.upload(`/bill/process/${userId}?targetCurrency=${target}`, fd);
       if (res && res.url) window._bsReceiptUrl = res.url;
+      // The gateway returns the id of this upload; the OCR callback echoes it
+      // back, so a stale notification cannot overwrite a newer scan.
+      window._bsReceiptId = (res && res.receiptId) || null;
       // Move to the review layout immediately so the receipt is visible while
       // the extractor works; the fields fill in when the event arrives.
       const uploadStage = document.getElementById('bs-upload-stage');
@@ -352,11 +355,15 @@ export async function renderBillScanner(container) {
     document.getElementById('bs-drop')?.classList.remove('drag-over');
     fileInput.value = '';
     window._bsReceiptUrl = null;
+    window._bsReceiptId = null;
   }
 
   if (window._bsOcrListener) window.removeEventListener('ocr-completed', window._bsOcrListener);
   window._bsOcrListener = (e) => {
     const detail = e.detail;
+    // Ignore a result for a different upload than the one in flight.
+    if (detail.receiptId && window._bsReceiptId && detail.receiptId !== window._bsReceiptId) return;
+    if (detail.receiptId && detail.receiptId === window._bsReceiptId) window._bsReceiptId = null;
     if (detail.status === 'SUCCESS' && detail.data) {
       showReview(detail.data);
       const reason = document.getElementById('bs-reason');

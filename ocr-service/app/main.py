@@ -32,6 +32,14 @@ GROQ_URL     = os.getenv("GROQ_URL", "https://api.groq.com/openai/v1/chat/comple
 UPSERT_URL     = os.getenv("UPSERT_SERVICE_URL", "http://command-service:8081")
 CURRENCY_URL   = "https://api.frankfurter.dev/v1/latest?from=USD"
 
+# Where a parsed result goes when command-service cannot accept it. The job is
+# parked rather than acked away, so it can be replayed by hand.
+DEAD_LETTER_EXCHANGE = "finance-events-dlx"
+DEAD_LETTER_QUEUE    = "ocr-jobs-dead"
+DEAD_LETTER_ROUTING  = "ocr.job.dead"
+CALLBACK_ATTEMPTS    = int(os.getenv("OCR_CALLBACK_ATTEMPTS", "4"))
+CALLBACK_BACKOFF     = float(os.getenv("OCR_CALLBACK_BACKOFF_SECONDS", "2"))
+
 # No credential defaults: an unset variable must fail loudly at boot rather
 # than silently using the well-known admin/password123 or guest/guest pair.
 RABBITMQ_URL   = os.getenv("RABBITMQ_URL", "")
@@ -79,6 +87,7 @@ ocr_engine: Optional[PaddleOCR] = None
 http_client: Optional[httpx.AsyncClient] = None
 minio_client: Optional[Minio] = None
 mq_connection: Optional[aio_pika.RobustConnection] = None
+dead_letter_exchange: Optional[aio_pika.abc.AbstractExchange] = None
 
 # PaddleOCR's predictors are not thread-safe: concurrent calls on one engine
 # fail with Paddle predictor RuntimeErrors. Every inference (RabbitMQ jobs and
@@ -87,45 +96,67 @@ _ocr_lock = threading.Lock()
 
 
 async def process_mq_message(message: aio_pika.abc.AbstractIncomingMessage):
-    async with message.process():
+    # requeue=True: the only path that puts the job back on the queue is a
+    # failure to park it. A delivered result acks on normal exit; a result that
+    # cannot be delivered, or a job that cannot be processed, is parked on the
+    # dead-letter queue so it is never acked away silently.
+    async with message.process(requeue=True):
         try:
             body = json.loads(message.body.decode("utf-8"))
             user_id = body.get("userId")
+            receipt_id = body.get("receiptId")
             object_name = body.get("objectName")
             bucket = body.get("bucket", "receipts")
-            
+
             is_batch = str(body.get("isBatch")).lower() == "true"
             target_currency = body.get("targetCurrency") or "INR"
-            
-            log.info("Received OCR job from RabbitMQ for user %s: s3://%s/%s (batch: %s)", user_id, bucket, object_name, is_batch)
-            
+
+            log.info("Received OCR job from RabbitMQ for user %s, receipt %s: s3://%s/%s (batch: %s)",
+                     user_id, receipt_id, bucket, object_name, is_batch)
+
             # Download file from Minio in a background thread to avoid blocking asyncio loop
             def download_minio():
                 response = minio_client.get_object(bucket, object_name)
                 return response.read()
-                
+
             data = await asyncio.to_thread(download_minio)
-            
+
             # Process OCR
             content_type = "application/pdf" if object_name.lower().endswith(".pdf") else "image/jpeg"
             if object_name.lower().endswith(".csv"):
                 content_type = "text/csv"
-                
-            await _process_and_notify(user_id, data, object_name, content_type, is_batch, target_currency)
-            
+
+            delivered = await _process_and_notify(
+                user_id, data, object_name, content_type, is_batch, target_currency, receipt_id)
+            reason = None if delivered else "command-service callback failed"
         except Exception as e:
-            log.error("Failed to process RabbitMQ message: %s", e)
+            log.exception("OCR job failed")
+            reason = f"processing failed: {e}"
+
+        if reason is not None:
+            # Ack the original only once the job is parked; otherwise requeue.
+            if not await _park_unparsed(message, reason):
+                await asyncio.sleep(5)
+                raise RuntimeError(f"OCR job could not be delivered or parked: {reason}")
 
 
 async def start_rabbitmq_consumer():
-    global mq_connection
+    global mq_connection, dead_letter_exchange
     while True:
         try:
             log.info("Connecting to RabbitMQ at %s", RABBITMQ_URL)
             mq_connection = await aio_pika.connect_robust(RABBITMQ_URL)
             channel = await mq_connection.channel()
+
+            # Parked jobs: the gateway declares the same exchange/queue, and
+            # declare_exchange/declare_queue are idempotent.
+            dead_letter_exchange = await channel.declare_exchange(
+                DEAD_LETTER_EXCHANGE, aio_pika.ExchangeType.DIRECT, durable=True)
+            dead_queue = await channel.declare_queue(DEAD_LETTER_QUEUE, durable=True)
+            await dead_queue.bind(dead_letter_exchange, routing_key=DEAD_LETTER_ROUTING)
+
             queue = await channel.declare_queue("ocr-jobs", durable=True)
-            
+
             log.info("Started consuming from RabbitMQ queue 'ocr-jobs'")
             async with queue.iterator() as queue_iter:
                 async for message in queue_iter:
@@ -459,26 +490,77 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
 
 
 async def _process_and_notify(user_id: str, data: bytes, filename: str, content_type: str, is_batch: bool = False,
-                              target_currency: str = "INR"):
+                              target_currency: str = "INR", receipt_id: str | None = None) -> bool:
+    """Parse the file and hand the result to command-service.
+
+    Returns True only after command-service accepted the callback with a 2xx.
+    The caller uses that to decide whether the RabbitMQ message may be acked.
+    """
     try:
         result = await _parse_bill(user_id, data, filename, content_type, is_batch, target_currency)
-        payload = {"userId": user_id, "status": "SUCCESS", "data": result, "message": "Bill parsed successfully"}
+        payload = {"userId": user_id, "receiptId": receipt_id, "status": "SUCCESS",
+                   "data": result, "message": "Bill parsed successfully"}
     except Exception as e:
         log.error("Bill parsing failed: %s", e)
-        payload = {"userId": user_id, "status": "ERROR", "message": f"Failed to parse bill: {e}"}
+        payload = {"userId": user_id, "receiptId": receipt_id, "status": "ERROR",
+                   "message": f"Failed to parse bill: {e}"}
 
+    endpoint = f"{UPSERT_URL}/internal/batch-ocr-complete" if is_batch else f"{UPSERT_URL}/internal/ocr-complete"
+    client = http_client if http_client else httpx.AsyncClient()
+    delay = CALLBACK_BACKOFF
+    last_error = "unknown error"
+    for attempt in range(1, CALLBACK_ATTEMPTS + 1):
+        try:
+            res = await client.post(
+                endpoint,
+                json=payload,
+                headers={INTERNAL_TOKEN_HEADER: INTERNAL_API_TOKEN},
+                timeout=10.0,
+            )
+            if res.is_success:
+                log.info("Notified command-service for receipt %s (attempt %d): %s",
+                         receipt_id, attempt, res.status_code)
+                return True
+            last_error = f"HTTP {res.status_code}"
+        except Exception as e:
+            last_error = str(e)
+        log.warning("OCR callback attempt %d/%d failed for receipt %s: %s",
+                    attempt, CALLBACK_ATTEMPTS, receipt_id, last_error)
+        if attempt < CALLBACK_ATTEMPTS:
+            await asyncio.sleep(delay)
+            delay *= 2
+
+    log.error("Could not deliver OCR result for receipt %s after %d attempts: %s",
+              receipt_id, CALLBACK_ATTEMPTS, last_error)
+    return False
+
+
+async def _park_unparsed(message: "aio_pika.abc.AbstractIncomingMessage", reason: str) -> bool:
+    """Publish a job whose result could not be delivered to the dead-letter queue.
+
+    The original message is acked by the caller if this returns True; if the
+    publish itself fails the message is requeued instead of lost.
+    """
+    if dead_letter_exchange is None:
+        return False
     try:
-        client = http_client if http_client else httpx.AsyncClient()
-        endpoint = f"{UPSERT_URL}/internal/batch-ocr-complete" if is_batch else f"{UPSERT_URL}/internal/ocr-complete"
-        res = await client.post(
-            endpoint,
-            json=payload,
-            headers={INTERNAL_TOKEN_HEADER: INTERNAL_API_TOKEN},
-            timeout=10.0,
+        headers = dict(message.headers or {})
+        headers["x-ocr-parked-reason"] = reason
+        headers["x-ocr-parked-at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        await dead_letter_exchange.publish(
+            aio_pika.Message(
+                body=message.body,
+                headers=headers,
+                content_type=message.content_type or "application/json",
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+            ),
+            routing_key=DEAD_LETTER_ROUTING,
         )
-        log.info("Notified command-service: %s", res.status_code)
+        log.error("Parked OCR job on %s (%s): %s", DEAD_LETTER_QUEUE, DEAD_LETTER_ROUTING, reason)
+        return True
     except Exception as e:
-        log.error("Failed to notify command-service: %s", e)
+        log.error("Failed to park OCR job on %s: %s", DEAD_LETTER_QUEUE, e)
+        return False
 
 
 @app.get("/health")

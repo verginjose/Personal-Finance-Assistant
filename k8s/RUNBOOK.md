@@ -236,8 +236,15 @@ kubectl -n pfa exec postgres-replica-0 -- \
 kubectl -n pfa exec redis-0 -- redis-cli -a "$REDIS_PW" --no-auth-warning info keyspace
 kubectl -n pfa exec redis-0 -- redis-cli -a "$REDIS_PW" --no-auth-warning info replication
 
-# RabbitMQ queues (expect ocr-jobs, consumers=1)
+# RabbitMQ queues (expect ocr-jobs, consumers=1; ocr-jobs-dead should be 0)
 kubectl -n pfa exec rabbitmq-0 -- rabbitmqctl list_queues name messages consumers
+
+# OCR jobs whose result command-service could not accept are parked here
+# instead of being acked away. Inspect them (ack_requeue_true leaves them in
+# the queue); replay by republishing the `payload` body to exchange
+# finance-events with routing key ocr.job.
+kubectl -n pfa exec rabbitmq-0 -- rabbitmqadmin --username guest --password guest \
+  get queue=ocr-jobs-dead count=5 ackmode=ack_requeue_true
 
 # ClickHouse logs
 kubectl -n pfa exec clickhouse-0 -- clickhouse-client --password "$CH_PW" \

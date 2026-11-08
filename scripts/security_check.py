@@ -725,28 +725,33 @@ def check_rate_limit(client: Client, report: Report) -> None:
     report.section("Login throttling / lockout")
     probe_email = f"sec-probe-{uuid.uuid4().hex[:12]}@example.invalid"
     statuses: list[int] = []
+    # 35 attempts cross the gateway's 5/s burst-20 bucket even while the
+    # per-account lockout (10 failures) applies to registered addresses.
     try:
-        for _ in range(15):
+        for _ in range(35):
             r = client.post("/api/auth/login",
                             body={"email": probe_email, "password": "not-the-password"},
                             auth=False, timeout=10)
             statuses.append(r.status)
             if r.status == 429:
                 break
-            time.sleep(0.05)
+            time.sleep(0.02)
     except TargetUnreachable as e:
-        report.add("medium", "Account lockout after repeated failures", SKIP, str(e))
+        report.add("medium", "Login endpoint throttles repeated failures", SKIP, str(e))
         return
 
     if 429 in statuses:
         idx = statuses.index(429) + 1
-        report.add("medium", "Account lockout after repeated failures", PASS,
+        report.add("medium", "Login endpoint throttles repeated failures", PASS,
                    f"429 on attempt {idx}")
     else:
-        report.add("medium", "Account lockout after repeated failures", WARN,
+        report.add("medium", "Login endpoint throttles repeated failures", WARN,
                    f"no 429 in {len(statuses)} attempts (statuses {sorted(set(statuses))}); "
-                   "the gateway IP bucket may not have been hit, or lockout is missing")
-    report.add("info", f"Rate-limit probe used the throwaway address {probe_email}", INFO)
+                   "the gateway IP bucket may not be hitting")
+    report.add("info", f"Rate-limit probe used the throwaway address {probe_email}. "
+                       "A registered disposable account is required to exercise the "
+                       "per-account lockout itself; this probe exercises the IP bucket.",
+               INFO)
 
 
 def check_optional_services(client: Client, report: Report, args: argparse.Namespace) -> None:

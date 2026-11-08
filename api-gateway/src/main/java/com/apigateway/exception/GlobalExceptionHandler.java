@@ -51,6 +51,20 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
             return exchange.getResponse().writeWith(Mono.just(buffer));
         }
 
+        // Controllers raise ResponseStatusException for 400/404/403. Without
+        // this branch the catch-all below turns every one of them into a 500.
+        if (ex instanceof org.springframework.web.server.ResponseStatusException rse) {
+            HttpStatus status = HttpStatus.resolve(rse.getStatusCode().value());
+            if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
+            exchange.getResponse().setStatusCode(status);
+            exchange.getResponse().getHeaders().add("Content-Type", MediaType.APPLICATION_JSON_VALUE);
+            String reason = rse.getReason() == null ? status.getReasonPhrase() : rse.getReason();
+            String body = String.format("{\"error\":\"%s\",\"message\":\"%s\"}",
+                    status.getReasonPhrase(), SensitiveDataRedactor.redact(reason).replace("\"", "'"));
+            DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(body.getBytes());
+            return exchange.getResponse().writeWith(Mono.just(buffer));
+        }
+
         if (ex instanceof IllegalArgumentException) {
             exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
             exchange.getResponse().getHeaders().add("Content-Type", MediaType.APPLICATION_JSON_VALUE);

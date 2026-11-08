@@ -77,6 +77,7 @@ spec:
       annotations:
         reloader.stakater.com/auto: "true"
     spec:
+      automountServiceAccountToken: false
       terminationGracePeriodSeconds: 60
       # Remove the GPU request below (and set FLAGS_fraction_of_gpu_memory_to_use=0)
       # if you run this on a cluster/node without an NVIDIA GPU.
@@ -88,6 +89,17 @@ spec:
         - name: ocr-service
           image: 127.0.0.1:30500/finance/ocr-service:0e1ad6176d68
           imagePullPolicy: IfNotPresent
+          # Stays root: PaddleOCR keeps its model cache under /root/.paddleocr
+          # (the PVC below) and the CUDA stack expects a root home. The rest is
+          # hardened - no capability escalation, read-only root filesystem, and
+          # the two places Paddle writes to at runtime are mounted below.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - name: http
               containerPort: 8100
@@ -136,7 +148,22 @@ spec:
           volumeMounts:
             - name: paddle-cache
               mountPath: /root/.paddleocr
+            # Paddle creates /root/.cache/paddle and NVIDIA creates /root/.nv
+            # at startup; without these the read-only root filesystem would
+            # make the pod fail before the first model load.
+            - name: paddle-cache-tmp
+              mountPath: /root/.cache
+            - name: nv-cache
+              mountPath: /root/.nv
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: paddle-cache
           persistentVolumeClaim:
             claimName: paddle-model-cache
+        - name: paddle-cache-tmp
+          emptyDir: {}
+        - name: nv-cache
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

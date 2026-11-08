@@ -4,3 +4,10 @@ metadata:
   name: pfa
   labels:
     app.kubernetes.io/part-of: personal-finance-assistant
+    # Pod Security Admission. Warn and audit only: the Vector DaemonSet
+    # legitimately needs hostPath /var/log/pods to read container logs, and
+    # Baseline forbids hostPath volumes, so enforcing it here would reject
+    # Vector on its next restart. Every other workload is Restricted-shaped;
+    # flip `enforce` on once Vector is moved to its own namespace.
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/audit: baseline

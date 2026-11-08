@@ -247,8 +247,17 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+          # Root is required to read the kubelet's pod log files (hostPath
+          # below). Everything else is locked down: no privilege escalation,
+          # read-only root filesystem, no capabilities.
           securityContext:
             runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             - name: config
               mountPath: /etc/vector/vector.yaml
@@ -261,6 +270,8 @@ spec:
               readOnly: true
             - name: data
               mountPath: /var/lib/vector
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 100m
@@ -281,4 +292,6 @@ spec:
             path: /var/log/containers
             type: Directory
         - name: data
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}

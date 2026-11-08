@@ -18,6 +18,24 @@ metadata:
     app: ci-runner
     app.kubernetes.io/part-of: personal-finance-assistant
 ---
+# buildctl cache. Was a hostPath (/var/lib/pfa-ci/buildctl), which gave the
+# runner a write primitive on the host. A PVC keeps the "download once" saving
+# without exposing the host filesystem.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ci-buildctl
+  namespace: pfa
+  labels:
+    app: ci-runner
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 256Mi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -39,10 +57,19 @@ spec:
         app.kubernetes.io/part-of: personal-finance-assistant
     spec:
       serviceAccountName: ci-runner
+      # The runner deliberately holds no RBAC: it builds, pushes and commits.
+      # There is no kubectl in the workflow, so it never needs a token.
+      automountServiceAccountToken: false
       containers:
         - name: runner
           image: myoung34/github-runner:2.338.2-ubuntu-jammy
           imagePullPolicy: IfNotPresent
+          # Runs as root because the myoung34 image's entrypoint configures
+          # the runner as root; job steps only use git/buildctl/curl.
+          securityContext:
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
           env:
             - name: REPO_URL
               value: https://github.com/verginjose/Personal-Finance-Assistant
@@ -101,9 +128,8 @@ spec:
         - name: work
           emptyDir: {}
         - name: buildctl
-          hostPath:
-            path: /var/lib/pfa-ci/buildctl
-            type: DirectoryOrCreate
+          persistentVolumeClaim:
+            claimName: ci-buildctl
         - name: ci-tls
           secret:
             secretName: ci-tls-client

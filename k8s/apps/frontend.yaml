@@ -34,12 +34,25 @@ spec:
         app: frontend
         app.kubernetes.io/part-of: personal-finance-assistant
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 101
       initContainers:
         # nginx resolves proxy_pass upstreams once at startup; wait until the
         # gateway Service exists so the first boot does not crash-loop.
         - name: wait-for-gateway
           image: busybox:1.36
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
           # Use the FQDN: busybox nslookup otherwise also queries the search
           # domains and exits non-zero even when the short name resolved.
           command: ["sh", "-c", "until nslookup api-gateway.pfa.svc.cluster.local >/dev/null 2>&1; do echo waiting for api-gateway; sleep 2; done"]
@@ -47,6 +60,21 @@ spec:
         - name: frontend
           image: 127.0.0.1:30500/finance/frontend:996354883733
           imagePullPolicy: IfNotPresent
+          # nginx:alpine's nginx user. Port 80 needs NET_BIND_SERVICE, which
+          # Restricted PSA allows as the only added capability once ALL is
+          # dropped. Keeping port 80 avoids rebuilding the image; the writable
+          # paths nginx needs are mounted below.
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            runAsGroup: 101
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_BIND_SERVICE"]
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - name: http
               containerPort: 80
@@ -69,3 +97,17 @@ spec:
               port: 80
             initialDelaySeconds: 15
             periodSeconds: 20
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

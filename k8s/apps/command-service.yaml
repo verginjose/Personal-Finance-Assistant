@@ -60,10 +60,27 @@ spec:
         reloader.stakater.com/auto: "true"
     spec:
       terminationGracePeriodSeconds: 30
+      automountServiceAccountToken: false
+      # Writable /tmp for the JVM (hsperfdata, Tomcat work dir); the rest of
+      # the root filesystem is read-only. 65534 is `nobody`, which exists in
+      # both the Alpine and the Ubuntu base images, so no passwd entry is
+      # missing when the process resolves its own uid.
+      securityContext:
+        fsGroup: 65534
       containers:
         - name: command-service
           image: 127.0.0.1:30500/finance/command-service:996354883733
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - name: http
               containerPort: 8081
@@ -118,3 +135,9 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 4
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

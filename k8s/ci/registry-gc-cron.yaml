@@ -40,15 +40,22 @@ metadata:
   name: registry-gc
   namespace: pfa
 rules:
+  # Scoped to the two Deployments this job touches. RBAC cannot restrict list
+  # or watch by resourceName, so the script polls status with `kubectl get`
+  # instead of `kubectl rollout status`.
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "watch", "patch", "update"]
+    resourceNames: ["registry", "ci-runner"]
+    verbs: ["get", "patch", "update"]
   - apiGroups: ["apps"]
     resources: ["deployments/scale"]
+    resourceNames: ["registry"]
     verbs: ["get", "patch", "update"]
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list"]
+  # `create` on pods/exec cannot be restricted to a named pod; the namespace is
+  # the boundary. Everything else above is as narrow as RBAC allows.
   - apiGroups: [""]
     resources: ["pods/exec"]
     verbs: ["create"]
@@ -76,6 +83,7 @@ metadata:
 rules:
   - apiGroups: ["argoproj.io"]
     resources: ["applications"]
+    resourceNames: ["pfa-ci"]
     verbs: ["get", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -138,9 +146,24 @@ spec:
 
                   log() { echo "==> $*"; }
 
+                  # kubectl rollout status watches the Deployment, and the
+                  # Role cannot scope watch by resourceName. Poll with get.
+                  wait_rollout() {
+                    deadline=$(( $(date +%s) + ${1:-180} ))
+                    while [ "$(date +%s)" -lt "$deadline" ]; do
+                      want="$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.spec.replicas}' 2>/dev/null || true)"
+                      ready="$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
+                      if [ -n "$want" ] && [ -n "$ready" ] && [ "$ready" = "$want" ]; then
+                        return 0
+                      fi
+                      sleep 2
+                    done
+                    return 1
+                  }
+
                   writable() {
                     kubectl -n "$NS" set env "deploy/$DEPLOY" "$READONLY-" >/dev/null 2>&1 || true
-                    kubectl -n "$NS" rollout status "deploy/$DEPLOY" --timeout=180s >/dev/null 2>&1 || true
+                    wait_rollout 180 >/dev/null 2>&1 || true
                   }
 
                   restore_sync() {
@@ -199,7 +222,7 @@ spec:
                   # type it expects. Verified: GET /v2/ 200, writes 405.
                   log "switching the registry to read-only"
                   kubectl -n "$NS" set env "deploy/$DEPLOY" "$READONLY={enabled: true}"
-                  kubectl -n "$NS" rollout status "deploy/$DEPLOY" --timeout=180s
+                  wait_rollout 180 || { log "registry did not become ready"; exit 1; }
 
                   log "running garbage-collect"
                   kubectl -n "$NS" exec "deploy/$DEPLOY" -- \

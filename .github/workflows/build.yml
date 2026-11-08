@@ -20,11 +20,13 @@ on:
         type: choice
         options: [all, auth-service, api-gateway, command-service, query-service, frontend, ocr-service]
 
-# Pushing the propose-branch and opening the PR. The workflow never pushes to
-# the deployment branch itself; that requires a human merge.
+# Pushing the propose-branch only. The workflow never pushes to the deployment
+# branch itself, and it cannot open the PR either: GitHub's token can only do
+# that if "Allow GitHub Actions to create and approve pull requests" is on,
+# which would also let a compromised run approve its own bump. The run summary
+# carries a one-click compare link instead.
 permissions:
   contents: write
-  pull-requests: write
 
 # Never run two builds at once: a Maven build and an OCR build together will
 # exceed the node's memory, and the tag-bump commits would race.
@@ -229,11 +231,10 @@ jobs:
       - name: Propose the tag bump
         env:
           SERVICES: ${{ needs.detect.outputs.services }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           TAG="${GITHUB_SHA::12}"
-          BRANCH="ci/tag-bump-${GITHUB_RUN_ID}"
+          BRANCH="ci/tag-bump-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
           for svc in $(echo "$SERVICES" | jq -r '.[]'); do
             file="k8s/apps/${svc}.yaml"
@@ -253,17 +254,22 @@ jobs:
           git commit -m "ci: bump images to ${TAG}"
           git push origin "$BRANCH"
 
-          body=$(printf 'Images built and pushed by run %s.\n\n```\n%s\n```\n\nMerging this PR makes Argo CD deploy them.' \
-            "$GITHUB_RUN_ID" "$(git show --stat --format= HEAD)")
-          jq -n --arg title "ci: bump images to ${TAG}" \
-                --arg head "$BRANCH" --arg base "$GITHUB_REF_NAME" \
-                --arg body "$body" \
-                '{title: $title, head: $head, base: $base, body: $body}' \
-          | curl -fsS -X POST \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" \
-              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls" \
-              --data-binary @- >/dev/null
+          # A human must open and merge this. The link is prefilled with the
+          # title and body so it is two clicks: "Create pull request", then
+          # "Merge". See the permissions note at the top of this file for why
+          # the job does not open it itself.
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${GITHUB_REF_NAME}...${BRANCH}?expand=1"
+          {
+            echo "## Images built: ${TAG}"
+            echo ""
+            echo '```'
+            git show --stat --format= HEAD
+            echo '```'
+            echo ""
+            echo "**Open the pull request:** ${url}"
+            echo ""
+            echo "Merging it makes Argo CD deploy these images."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Deployment is Argo CD's job: it watches k8s/apps and syncs the new
       # image tag once the PR is merged. The runner needs no cluster

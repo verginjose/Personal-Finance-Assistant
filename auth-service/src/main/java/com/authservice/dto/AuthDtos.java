@@ -1,9 +1,7 @@
 package com.authservice.dto;
 
-import com.authservice.model.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -35,10 +33,10 @@ public class AuthDtos {
             String password,
 
             @Size(min = 3, max = 3, message = "Default currency must be a 3-letter ISO code")
-            String defaultCurrency,
-
-            @NotNull(message = "Role is required")
-            Role role
+            String defaultCurrency
+            // Role is deliberately absent: self-registration always creates a
+            // USER. Accepting a client-supplied role is privilege escalation
+            // waiting for the enum to grow.
     ) {}
 
     // ── Outbound ──────────────────────────────────────────────────────────────
@@ -75,14 +73,19 @@ public class AuthDtos {
 
     // ── Additional Inbound ─────────────────────────────────────────────────────
 
+    // The refresh credential now travels in an HttpOnly cookie. The body field
+    // is accepted only for non-browser API clients and is optional.
     public record RefreshTokenRequest(
-            @NotBlank
             String refreshToken
     ) {}
 
     public record LogoutRequest(
-            @NotBlank
             String refreshToken
+    ) {}
+
+    /** Short-lived credential for EventSource, which cannot send a header. */
+    public record StreamTicketResponse(
+            String ticket
     ) {}
 
 

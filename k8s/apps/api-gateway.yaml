@@ -13,6 +13,11 @@ spec:
     - name: http
       port: 8080
       targetPort: 8080
+    # Metrics/health only. The ingress routes to :8080, so /actuator/prometheus
+    # is not reachable from the internet; Prometheus scrapes this port.
+    - name: management
+      port: 9090
+      targetPort: 9090
 ---
 # Non-secret configuration for this service only. Credentials live in the
 # api-gateway-secrets Secret, rendered by k8s/apply.sh from env/api-gateway.env.
@@ -68,6 +73,8 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+            - name: management
+              containerPort: 9090
           envFrom:
             - configMapRef:
                 name: api-gateway-config
@@ -96,20 +103,20 @@ spec:
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: 8080
+              port: 9090
             periodSeconds: 5
             failureThreshold: 40
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: 8080
+              port: 9090
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: 8080
+              port: 9090
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 4

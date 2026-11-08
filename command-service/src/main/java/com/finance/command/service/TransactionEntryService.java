@@ -100,9 +100,26 @@ public class TransactionEntryService {
 
     @Transactional
     public List<CreateEntryResponse> createBulkEntries(List<CreateEntryRequest> requests) {
+        UUID userId = requests.isEmpty() ? null : requests.get(0).getUserId();
+        return createBulkEntries(requests, userId);
+    }
+
+    /**
+     * Bulk create for an authenticated caller. Every request must belong to
+     * {@code authenticatedUserId}; the controller already rejects a mismatch,
+     * this is the service-level invariant so no future caller can skip it.
+     */
+    @Transactional
+    public List<CreateEntryResponse> createBulkEntries(List<CreateEntryRequest> requests,
+                                                       UUID authenticatedUserId) {
         List<CreateEntryResponse> responses = new ArrayList<>();
         UUID userId = null;
         for (CreateEntryRequest req : requests) {
+            if (authenticatedUserId == null || !authenticatedUserId.equals(req.getUserId())) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.FORBIDDEN,
+                        "Access denied: User ID mismatch");
+            }
             if (userId == null) userId = req.getUserId();
             responses.add(createEntry(req, null, false));
         }

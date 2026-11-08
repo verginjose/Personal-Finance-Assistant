@@ -83,15 +83,42 @@ public class RateLimiterConfig {
         return exchange -> Mono.just("global");
     }
 
+    /**
+     * The client address as seen by our edge, never a value the client chose.
+     *
+     * The old code took the *first* X-Forwarded-For hop, which is whatever the
+     * caller wrote; nginx appends the real peer, so an attacker could rotate a
+     * fake address on every request and never hit the bucket. Cloudflare and
+     * nginx both overwrite the headers trusted here:
+     *   CF-Connecting-IP  (Cloudflare, when the tunnel is in front)
+     *   X-Real-IP         (nginx $remote_addr)
+     *   last XFF hop      (appended by our own proxy)
+     */
     private String extractIp(
             org.springframework.http.server.reactive.ServerHttpRequest request) {
+        String cf = request.getHeaders().getFirst("CF-Connecting-IP");
+        if (looksLikeIp(cf)) return cf.trim();
+
+        String real = request.getHeaders().getFirst("X-Real-IP");
+        if (looksLikeIp(real)) return real.trim();
+
         String forwarded = request.getHeaders().getFirst("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+            String[] hops = forwarded.split(",");
+            String last = hops[hops.length - 1].trim();
+            if (looksLikeIp(last)) return last;
         }
         return Optional.ofNullable(request.getRemoteAddress())
                 .map(addr -> addr.getAddress().getHostAddress())
                 .orElse("unknown");
+    }
+
+    /** Allow IPv4 or IPv6 literals only; never a header value with spaces or commas. */
+    private static boolean looksLikeIp(String value) {
+        if (value == null) return false;
+        String v = value.trim();
+        if (v.isEmpty() || v.length() > 45) return false;
+        return v.matches("^[0-9a-fA-F:.]+$");
     }
 
     private SecretKey buildKey(String secret) {

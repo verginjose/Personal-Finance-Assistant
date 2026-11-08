@@ -1,6 +1,8 @@
-import { api, Auth, toast } from '../utils/api.js?v=2026110417';
-import { icon } from '../utils/icons.js?v=2026110417';
-import { currencyOptionHtml } from '../utils/ui.js?v=2026110417';
+// Import the shared modules without a version query: a distinct specifier
+// would load a second module instance with its own in-memory access token.
+import { api, Auth, toast } from '../utils/api.js';
+import { icon } from '../utils/icons.js';
+import { currencyOptionHtml } from '../utils/ui.js';
 
 /** Best-effort default from the browser locale; the user can always change it. */
 function localCurrencyGuess() {

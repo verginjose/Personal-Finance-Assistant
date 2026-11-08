@@ -37,11 +37,10 @@ public class UserHeaderFilter implements GlobalFilter, Ordered {
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
-        } else {
-            String queryToken = exchange.getRequest().getQueryParams().getFirst("token");
-            if (queryToken != null && !queryToken.isEmpty()) {
-                token = queryToken;
-            }
+        } else if (JwtAuthenticationConverter.isNotificationStream(exchange)) {
+            // Short-lived stream ticket; see JwtAuthenticationConverter.
+            String ticket = exchange.getRequest().getQueryParams().getFirst("ticket");
+            if (ticket != null && !ticket.isEmpty()) token = ticket;
         }
 
         if (token != null) {
@@ -51,6 +50,11 @@ public class UserHeaderFilter implements GlobalFilter, Ordered {
                         .build()
                         .parseSignedClaims(t)
                         .getPayload());
+                // Re-check expiry on cache hits (see the auth manager).
+                if (claims.getExpiration() == null
+                        || claims.getExpiration().before(new java.util.Date())) {
+                    return chain.filter(exchange);
+                }
                 String userId = claims.get("userId", String.class);
                 if (userId != null) {
                     // Remove any client-supplied X-User-Id header first (prevent injection),

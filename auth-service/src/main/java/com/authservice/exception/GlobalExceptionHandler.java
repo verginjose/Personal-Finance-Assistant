@@ -26,6 +26,11 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
             return respond(exchange, HttpStatus.UNAUTHORIZED, "Unauthorized", "Invalid email or password");
         }
 
+        if (ex instanceof AuthService.TooManyLoginAttemptsException) {
+            return respond(exchange, HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests",
+                    "Too many failed attempts. Try again later.");
+        }
+
         if (ex instanceof org.springframework.security.core.AuthenticationException
                 || ex instanceof AuthService.InvalidRefreshTokenException) {
             return respond(exchange, HttpStatus.UNAUTHORIZED, "Unauthorized", "Invalid or expired token");

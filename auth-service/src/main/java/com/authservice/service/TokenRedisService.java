@@ -17,6 +17,55 @@ public class TokenRedisService {
     private static final String USER_TOKENS_PREFIX = "user_tokens:";
     private static final String BLACKLIST_PREFIX = "token_blacklist:";
     private static final String GRACE_PREFIX = "refresh_grace:";
+    private static final String SESSION_VERSION_PREFIX = "session_version:";
+    private static final String LOGIN_FAIL_PREFIX = "login_fail:";
+
+    /** A failed-login window that is short enough to be safe, long enough to matter. */
+    private static final int MAX_LOGIN_FAILURES = 10;
+    private static final Duration LOGIN_FAIL_WINDOW = Duration.ofMinutes(15);
+
+    /**
+     * The user's current session version. Access tokens carry the version they
+     * were minted with; bumping it invalidates every live access token without
+     * needing to enumerate them.
+     */
+    public Mono<Long> getSessionVersion(String userId) {
+        if (userId == null || userId.isBlank()) return Mono.just(0L);
+        return redisTemplate.opsForValue().get(SESSION_VERSION_PREFIX + userId)
+                .map(v -> {
+                    try { return Long.parseLong(v); } catch (NumberFormatException e) { return 0L; }
+                })
+                .defaultIfEmpty(0L);
+    }
+
+    public Mono<Long> bumpSessionVersion(String userId) {
+        return redisTemplate.opsForValue().increment(SESSION_VERSION_PREFIX + userId)
+                .defaultIfEmpty(0L);
+    }
+
+    public Mono<Boolean> isLoginLocked(String email) {
+        return redisTemplate.opsForValue().get(LOGIN_FAIL_PREFIX + normalize(email))
+                .map(v -> {
+                    try { return Long.parseLong(v) >= MAX_LOGIN_FAILURES; }
+                    catch (NumberFormatException e) { return false; }
+                })
+                .defaultIfEmpty(false);
+    }
+
+    public Mono<Long> recordLoginFailure(String email) {
+        String key = LOGIN_FAIL_PREFIX + normalize(email);
+        return redisTemplate.opsForValue().increment(key)
+                .flatMap(count -> redisTemplate.expire(key, LOGIN_FAIL_WINDOW).thenReturn(count))
+                .defaultIfEmpty(1L);
+    }
+
+    public Mono<Void> clearLoginFailures(String email) {
+        return redisTemplate.delete(LOGIN_FAIL_PREFIX + normalize(email)).then();
+    }
+
+    private static String normalize(String email) {
+        return email == null ? "" : email.trim().toLowerCase();
+    }
 
     /**
      * Refresh rotation is single-use (GETDEL). Two tabs or parallel requests in

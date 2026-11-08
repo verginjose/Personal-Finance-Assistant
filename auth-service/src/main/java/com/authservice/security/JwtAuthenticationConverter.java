@@ -17,12 +17,7 @@ public class JwtAuthenticationConverter
         if (token != null && token.startsWith("Bearer ")) {
             return Mono.just(new JwtAuthenticationToken(token.substring(7)));
         }
-        
-        String queryToken = exchange.getRequest().getQueryParams().getFirst("token");
-        if (queryToken != null && !queryToken.isEmpty()) {
-            return Mono.just(new JwtAuthenticationToken(queryToken));
-        }
-        
+        // No query-string tokens: they leak into logs, history and Referer.
         return Mono.empty();
     }
 }

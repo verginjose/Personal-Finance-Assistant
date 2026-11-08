@@ -1,6 +1,6 @@
 import { api, Auth, toast } from '../utils/api.js';
 import {
-  esc, escAttr, emptyState, formatMoney, formatDate, formatCategory, dateTooltip,
+  esc, escAttr, safeImageUrl, emptyState, formatMoney, formatDate, formatCategory, dateTooltip,
   openModal, confirmModal, modalActions, avatar, displayName, chip, displayAmountFor,
   skeletonRows, EXPENSE_CATS, categoryOptions, currencyOptionHtml, categoryDot,
   pictureLightbox,
@@ -202,8 +202,8 @@ function groupCard(g, members) {
   const memberHtml = shown.length ? `
     <div class="group-members">
       ${shown.map(m => `<button type="button" class="group-member-avatar"
-          data-picture-src="${esc(m.profilePicture || '')}"
-          data-name="${esc(m.name || m.userName || '')}"
+          data-picture-src="${escAttr(m.profilePicture || '')}"
+          data-name="${escAttr(m.name || m.userName || '')}"
           aria-label="View ${esc(displayName(m.name || m.userName, 'member'))}'s picture">${avatar(displayName(m.name || m.userName, 'Member'), 26, m.profilePicture)}</button>`).join('')}
       ${extra ? `<span class="group-members-count">+${extra}</span>` : `<span class="group-members-count">${members.length} member${members.length === 1 ? '' : 's'}</span>`}
     </div>` : '';
@@ -682,7 +682,8 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
       list.querySelectorAll('.expense-row').forEach(row => {
         const open = () => openExpenseDetailsModal(JSON.parse(row.dataset.exp), groupId, userId, eligibleMembers);
         row.onclick = (e) => {
-          if (e.target.closest('[data-receipt]') || e.target.closest('[data-picture-src]')) return;
+          if (e.target.closest('[data-receipt]') || e.target.closest('[data-open-receipt]')
+              || e.target.closest('[data-picture-src]')) return;
           open();
         };
         row.onkeydown = (e) => {
@@ -739,7 +740,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
               <span class="expense-paidby">${pictureAvatar(e.paidBy, 16)}<span>${esc(mine)}</span></span>
               ${chip(splitTypeLabel(e.splitType), 'neutral')}
               ${metaSecondary}
-              ${e.receiptUrl ? `<button type="button" class="attach-btn" data-receipt="${esc(e.receiptUrl)}" aria-label="Receipt attached" title="Receipt attached">${icon('paperclip', 'xs')}</button>` : ''}
+              ${e.receiptUrl ? `<button type="button" class="attach-btn" data-receipt="${escAttr(e.receiptUrl)}" aria-label="Receipt attached" title="Receipt attached">${icon('paperclip', 'xs')}</button>` : ''}
             </div>
           </div>
           <div class="expense-row-amount">
@@ -1011,8 +1012,8 @@ function openExpenseDetailsModal(e, groupId, userId, members = []) {
           <span class="detail-label">Receipt</span>
           <div style="margin-top:6px">
             ${e.receiptUrl.toLowerCase().endsWith('.pdf')
-              ? `<button type="button" class="btn btn-secondary" onclick="window.openReceiptLightbox('${esc(e.receiptUrl)}')">${icon('document', 'sm')} Open PDF receipt</button>`
-              : `<button type="button" style="padding:0;border:0;background:none" onclick="window.openReceiptLightbox('${esc(e.receiptUrl)}')"><img src="${esc(e.receiptUrl)}" alt="Receipt" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--line);display:block"></button>`}
+              ? `<button type="button" class="btn btn-secondary" data-open-receipt="${escAttr(e.receiptUrl)}">${icon('document', 'sm')} Open PDF receipt</button>`
+              : `<button type="button" style="padding:0;border:0;background:none" data-open-receipt="${escAttr(e.receiptUrl)}"><img src="${escAttr(safeImageUrl(e.receiptUrl))}" alt="Receipt" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--line);display:block"></button>`}
           </div>
         </div>` : ''}
     </div>
@@ -1324,7 +1325,7 @@ function addExpenseModal(groupId, members, userId, initialData = null, groupCurr
   const defaultCur = initialData && initialData.currency ? esc(initialData.currency) : (groupCurrency || Auth.getDefaultCurrency());
   const defaultDate = initialData && (initialData.expenseDate || initialData.createdAt)
     ? esc(String(initialData.expenseDate || initialData.createdAt).split('T')[0]) : '';
-  const defaultReceipt = initialData && initialData.receiptUrl ? esc(initialData.receiptUrl) : '';
+  const defaultReceipt = initialData && initialData.receiptUrl ? escAttr(initialData.receiptUrl) : '';
   const hasReceipt = !!defaultReceipt;
   const defaultPaidBy = initialData && initialData.paidBy ? initialData.paidBy : userId;
   const defaultSplitType = initialData && initialData.splitType ? initialData.splitType : 'EQUAL';

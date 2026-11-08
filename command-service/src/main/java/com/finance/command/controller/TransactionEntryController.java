@@ -55,10 +55,17 @@ public class TransactionEntryController {
         if (requests.isEmpty()) {
             return ResponseEntity.ok(List.of());
         }
-        if (!requests.get(0).getUserId().toString().equalsIgnoreCase(xUserId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: User ID mismatch");
+        // Every row must belong to the caller, not just the first one. The
+        // service stamps the authenticated id as a second line of defence.
+        UUID authenticatedUserId = parseUserId(xUserId);
+        for (CreateEntryRequest request : requests) {
+            if (request.getUserId() == null
+                    || !request.getUserId().equals(authenticatedUserId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: User ID mismatch");
+            }
         }
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.createBulkEntries(requests));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.createBulkEntries(requests, authenticatedUserId));
     }
 
     // ── Update (full) ─────────────────────────────────────────────────────────
@@ -189,5 +196,14 @@ public class TransactionEntryController {
     @Operation(summary = "Health check")
     public ResponseEntity<Map<String, String>> healthCheck() {
         return ResponseEntity.ok(Map.of("status", "UP", "service", "upsert-service"));
+    }
+
+    /** The gateway always sets X-User-Id from the signed JWT; treat it as a UUID. */
+    private static UUID parseUserId(String xUserId) {
+        try {
+            return UUID.fromString(xUserId);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid user context");
+        }
     }
 }

@@ -48,6 +48,11 @@ spring:
           max-wait: 200ms
 
 
+# Shared secret for the OCR HTTP API (X-Internal-Token).
+internal:
+  api:
+    token: ${INTERNAL_API_TOKEN:}
+
 # ── Groq AI Configuration (for AI Insights feature) ──────────────────────────
 groq:
   api:

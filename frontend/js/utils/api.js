@@ -4,28 +4,44 @@
 
 const API_BASE = '/api';
 
+/**
+ * Session storage policy.
+ *
+ * The access token lives only in this module (memory). The refresh token is an
+ * HttpOnly, SameSite cookie set by auth-service and is never readable from
+ * JavaScript. A localStorage flag records that a session may exist so the
+ * shell can render and silently refresh after a page reload; it carries no
+ * credential, so it is safe for scripts to see.
+ */
+const SESSION_FLAG = 'pfa_session';
+let accessToken = null;
+
 export const Auth = {
-  getToken()       { return localStorage.getItem('pfa_token'); },
-  getRefresh()     { return localStorage.getItem('pfa_refresh'); },
+  getToken()       { return accessToken; },
+  // Kept for callers that predate the cookie migration. There is no
+  // JS-readable refresh token any more.
+  getRefresh()     { return null; },
   getUserId()      { return localStorage.getItem('pfa_userId'); },
   getEmail()       { return localStorage.getItem('pfa_email'); },
   getName()               { return localStorage.getItem('pfa_name');},
   getDefaultCurrency()    { return localStorage.getItem('pfa_defaultCurrency') || 'INR'; },
   setDefaultCurrency(c)   { if (c) localStorage.setItem('pfa_defaultCurrency', String(c).toUpperCase()); },
-  isLoggedIn()     { return !!this.getToken(); },
+  hasSession()     { try { return localStorage.getItem(SESSION_FLAG) === '1'; } catch { return false; } },
+  isLoggedIn()     { return !!accessToken || this.hasSession(); },
 
   save(data) {
-    localStorage.setItem('pfa_token',   data.token);
-    localStorage.setItem('pfa_refresh', data.refreshToken);
+    accessToken = data.token || null;
     localStorage.setItem('pfa_userId',  data.userId);
     localStorage.setItem('pfa_email',   data.email);
     localStorage.setItem('pfa_name',    data.name || data.username || '');
     if (data.defaultCurrency) this.setDefaultCurrency(data.defaultCurrency);
+    try { localStorage.setItem(SESSION_FLAG, '1'); } catch { /* storage unavailable */ }
     scheduleProactiveRefresh();
   },
 
   clear() {
-    ['pfa_token','pfa_refresh','pfa_userId','pfa_email','pfa_name','pfa_defaultCurrency']
+    accessToken = null;
+    ['pfa_token','pfa_refresh','pfa_userId','pfa_email','pfa_name','pfa_defaultCurrency', SESSION_FLAG]
       .forEach(k => localStorage.removeItem(k));
   }
 };
@@ -33,19 +49,34 @@ export const Auth = {
 export const SseManager = {
   eventSource: null,
   _reconnectTimer: null,
+  _connecting: false,
   _retryDelay: 3000,
   _maxRetryDelay: 30000,
 
   connect() {
     if (this.eventSource) return;          // already connected
     if (this._reconnectTimer) return;      // reconnect already scheduled
+    if (this._connecting) return;          // ticket request in flight
 
     const userId = Auth.getUserId();
-    const token = Auth.getToken();
-    if (!userId || !token) return;
+    if (!userId) return;
 
-    this.eventSource = new EventSource(`${API_BASE}/upsert/notifications/stream?token=${encodeURIComponent(token)}`);
+    // EventSource cannot set an Authorization header. Rather than put the
+    // long-lived access token in the URL (history, Referer, nginx logs), ask
+    // auth-service for a short-lived single-purpose stream ticket.
+    this._connecting = true;
+    request('POST', '/auth/stream-ticket')
+      .then((data) => {
+        if (!data || !data.ticket) throw new Error('No stream ticket');
+        this.eventSource = new EventSource(
+          `${API_BASE}/upsert/notifications/stream?ticket=${encodeURIComponent(data.ticket)}`);
+        this._wireSource();
+      })
+      .catch(() => { this._scheduleReconnect(); })
+      .finally(() => { this._connecting = false; });
+  },
 
+  _wireSource() {
     this.eventSource.onopen = () => {
       console.log('SSE connected');
       this._retryDelay = 3000;             // reset backoff on successful connect
@@ -158,36 +189,38 @@ function showBrowserNotification(data) {
   } catch { /* some browsers reject notifications without a service worker */ }
 }
 
+/**
+ * Rotate the session using the HttpOnly refresh cookie. The cookie is sent
+ * automatically (same-origin), and the new access token is kept in memory.
+ */
 async function refreshTokens() {
   if (!isRefreshing) {
     isRefreshing = true;
-    const usedRefreshToken = Auth.getRefresh();
     refreshPromise = fetch(API_BASE + '/auth/refresh', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: usedRefreshToken })
+      body: '{}',
     }).then(async (refreshRes) => {
       if (!refreshRes.ok) {
-        // Another tab may have rotated first and written a new pair; in that
-        // case this 401 is not a dead session.
-        if (Auth.getRefresh() && Auth.getRefresh() !== usedRefreshToken) {
-          return Auth.getToken();
-        }
         const err = new Error('Refresh failed');
-        err.fatal = refreshRes.status === 401;
+        err.fatal = refreshRes.status === 401 || refreshRes.status === 403;
         throw err;
       }
       const data = await refreshRes.json();
-      localStorage.setItem('pfa_token', data.token);
-      localStorage.setItem('pfa_refresh', data.refreshToken);
+      if (!data || !data.token) throw new Error('Refresh returned no token');
+      // Only the access token changes. Keep the stored identity fields: a
+      // refresh response does not repeat the display name.
+      accessToken = data.token;
+      try { localStorage.setItem(SESSION_FLAG, '1'); } catch { /* storage unavailable */ }
       scheduleProactiveRefresh();
-      // Re-establish SSE connection with the fresh token immediately
+      // Re-establish SSE connection with a fresh ticket immediately.
       SseManager.disconnect();
       SseManager.connect();
       return data.token;
     }).catch((err) => {
       // A network error or a 5xx must not end the session; the reactive path
-      // can retry. Only an explicit 401 (and nobody else refreshing) does.
+      // can retry. Only an explicit 401/403 does.
       if (err.fatal) {
         Auth.clear();
         window.dispatchEvent(new Event('auth-expired'));
@@ -199,6 +232,16 @@ async function refreshTokens() {
     });
   }
   return refreshPromise;
+}
+
+/**
+ * Restore the in-memory access token after a page reload. The refresh cookie
+ * is the only credential that survives a reload, so one silent refresh is
+ * enough to re-establish the session.
+ */
+export async function ensureSession() {
+  if (Auth.getToken() || !Auth.hasSession()) return;
+  try { await refreshTokens(); } catch { /* auth-expired handles the UI */ }
 }
 
 /**
@@ -218,10 +261,16 @@ export function scheduleProactiveRefresh() {
   }, Math.min(delay, 24 * 60 * 60_000));
 }
 
-// Another tab refreshing the session writes new tokens; follow along instead
-// of replaying the consumed refresh token later.
+// Another tab signing in or out changes the shared session flag. Follow it:
+// reuse the cookie session, or drop the in-memory token.
 window.addEventListener('storage', (e) => {
-  if (e.key === 'pfa_token' || e.key === 'pfa_refresh') scheduleProactiveRefresh();
+  if (e.key !== SESSION_FLAG) return;
+  if (e.newValue === '1') {
+    ensureSession();
+  } else if (e.newValue === null) {
+    accessToken = null;
+    window.dispatchEvent(new Event('auth-expired'));
+  }
 });
 
 // A tab brought back to the foreground may have slept past its timer.
@@ -242,7 +291,7 @@ async function request(method, path, { body, params, headers = {}, raw = false }
   if (params) Object.entries(params).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, v); });
 
   const getOpts = () => {
-    const opts = { method, headers: { ...headers } };
+    const opts = { method, headers: { ...headers }, credentials: 'same-origin' };
     const token = Auth.getToken();
     if (token) opts.headers['Authorization'] = `Bearer ${token}`;
 
@@ -264,33 +313,27 @@ async function request(method, path, { body, params, headers = {}, raw = false }
   // expired session: pass the response through so the form shows the real error.
   const isAuthRequest = path === '/auth/login' || path === '/auth/refresh' || path === '/auth/register';
 
-  // Handle 401 Unauthorized for token refresh
-  if (res.status === 401 && !isAuthRequest) {
-    const refreshToken = Auth.getRefresh();
-    if (refreshToken) {
+  // Handle 401 Unauthorized for token refresh. The refresh credential is an
+  // HttpOnly cookie, so the only question is whether a session flag exists.
+  if (res.status === 401 && !isAuthRequest && Auth.hasSession()) {
+    try {
+      await refreshTokens(); // Wait for the refresh to finish
       try {
-        await refreshTokens(); // Wait for the refresh to finish
-        try {
-          res = await fetch(url.toString(), getOpts()); // Retry the original request
-        } catch (networkErr) {
-          // Give the network 1 second to stabilize on wake-up and try one last time
-          await new Promise(r => setTimeout(r, 1000));
-          res = await fetch(url.toString(), getOpts());
-        }
-      } catch (e) {
-        throw new Error('Session expired. Please log in again.');
+        res = await fetch(url.toString(), getOpts()); // Retry the original request
+      } catch (networkErr) {
+        // Give the network 1 second to stabilize on wake-up and try one last time
+        await new Promise(r => setTimeout(r, 1000));
+        res = await fetch(url.toString(), getOpts());
       }
-    } else {
-      Auth.clear();
-      window.dispatchEvent(new Event('auth-expired'));
-      throw new Error('Session expired');
+    } catch (e) {
+      throw new Error('Session expired. Please log in again.');
     }
   }
 
   if (res.status === 401 && !isAuthRequest) {
-      Auth.clear();
-      window.dispatchEvent(new Event('auth-expired'));
-      throw new Error('Session expired');
+    Auth.clear();
+    window.dispatchEvent(new Event('auth-expired'));
+    throw new Error('Session expired');
   }
 
   if (raw) return res;

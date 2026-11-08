@@ -1,7 +1,7 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
-  esc, escAttr, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
+  esc, escAttr, safeImageUrl, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
   openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions,
   setupCategorySearch, currencyOptionHtml, formatDayLabel, skeletonRows,
   displayAmountFor, displayName, dateTooltip, humanizeNamesIn, humanizeSystemText,
@@ -530,7 +530,7 @@ async function loadTransactions(userId) {
           if (shown.secondary) subParts.push(`<span class="amount-hint">${esc(shown.secondary)}</span>`);
 
           const receipt = t.receiptUrl
-            ? `<button type="button" class="attach-btn" data-receipt="${esc(t.receiptUrl)}" aria-label="Receipt attached" title="Receipt attached">${icon('paperclip', 'sm')}</button>`
+            ? `<button type="button" class="attach-btn" data-receipt="${escAttr(t.receiptUrl)}" aria-label="Receipt attached" title="Receipt attached">${icon('paperclip', 'sm')}</button>`
             : '';
           const recurring = t.recurring
             ? `<span class="txn-tag" title="Recurring">${icon('repeat', 'xs')} ${esc(titleCase(t.recurringPeriod || 'Recurring'))}</span>`
@@ -733,7 +733,7 @@ async function showModal(userId, existing, onDone) {
       <div class="form-group" style="margin-top:4px">
         <label>Receipt or bill</label>
         <div id="m-receipt-preview" class="receipt-preview-wrap" style="display:${hasReceipt ? 'block' : 'none'}">
-          ${hasReceipt ? `<img src="${esc(existing.receiptUrl)}" alt="Receipt"><button type="button" class="receipt-remove" id="m-receipt-remove" aria-label="Remove receipt">×</button>` : ''}
+          ${hasReceipt ? `<img src="${escAttr(safeImageUrl(existing.receiptUrl))}" alt="Receipt"><button type="button" class="receipt-remove" id="m-receipt-remove" aria-label="Remove receipt">×</button>` : ''}
         </div>
         <label id="m-receipt-upload" class="receipt-upload-zone" style="display:${hasReceipt ? 'none' : 'flex'}" for="m-receipt-file">
           ${icon('upload', 'sm')}
@@ -741,7 +741,7 @@ async function showModal(userId, existing, onDone) {
           <span class="upload-hint">Image or PDF, up to 10 MB</span>
           <input type="file" id="m-receipt-file" accept="image/*,application/pdf">
         </label>
-        <input type="hidden" id="m-receipt-url" value="${existing?.receiptUrl || ''}">
+        <input type="hidden" id="m-receipt-url" value="${escAttr(existing?.receiptUrl || '')}">
       </div>
       ${modalActions('Cancel', isEdit ? 'Save changes' : 'Add transaction')}
     </form>`, {
@@ -946,8 +946,8 @@ async function openTransactionDetailsModal(t, userId) {
           <span class="detail-label">Receipt</span>
           <div style="margin-top:6px">
             ${t.receiptUrl.toLowerCase().endsWith('.pdf')
-              ? `<button type="button" class="btn btn-secondary" onclick="window.openReceiptLightbox('${esc(t.receiptUrl)}')">${icon('document', 'sm')} Open PDF receipt</button>`
-              : `<button type="button" style="padding:0;border:0;background:none" onclick="window.openReceiptLightbox('${esc(t.receiptUrl)}')"><img src="${esc(t.receiptUrl)}" alt="Receipt" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--line);display:block"></button>`
+              ? `<button type="button" class="btn btn-secondary" data-open-receipt="${escAttr(t.receiptUrl)}">${icon('document', 'sm')} Open PDF receipt</button>`
+              : `<button type="button" style="padding:0;border:0;background:none" data-open-receipt="${escAttr(t.receiptUrl)}"><img src="${escAttr(safeImageUrl(t.receiptUrl))}" alt="Receipt" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--line);display:block"></button>`
             }
           </div>
         </div>` : ''}

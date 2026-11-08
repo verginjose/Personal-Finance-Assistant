@@ -17,9 +17,25 @@ describe('Auth', () => {
   it('saves and retrieves session data', () => {
     Auth.save({ token: 'tok', refreshToken: 'ref', userId: 'uid-1', email: 'a@b.com' });
     expect(Auth.getToken()).toBe('tok');
-    expect(Auth.getRefresh()).toBe('ref');
     expect(Auth.getUserId()).toBe('uid-1');
     expect(Auth.getEmail()).toBe('a@b.com');
+    expect(Auth.isLoggedIn()).toBe(true);
+  });
+
+  it('never exposes the refresh token to script', () => {
+    // The refresh credential lives in an HttpOnly cookie; the JS wrapper keeps
+    // no copy of it even if a legacy response includes one.
+    Auth.save({ token: 'tok', refreshToken: 'ref', userId: 'uid-1', email: 'a@b.com' });
+    expect(Auth.getRefresh()).toBeNull();
+    expect(localStorage.getItem('pfa_refresh')).toBeNull();
+    expect(localStorage.getItem('pfa_token')).toBeNull();
+  });
+
+  it('knows a session exists after a reload even with no memory token', () => {
+    // The access token is memory-only; the flag is what survives a reload.
+    localStorage.setItem('pfa_session', '1');
+    expect(Auth.getToken()).toBeNull();
+    expect(Auth.hasSession()).toBe(true);
     expect(Auth.isLoggedIn()).toBe(true);
   });
 

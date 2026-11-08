@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   esc,
+  escAttr,
+  safeImageUrl,
   formatCurrency,
   formatMoney,
   formatCompact,
@@ -30,6 +32,20 @@ describe('ui utilities', () => {
   it('escapes HTML in user strings', () => {
     expect(esc('<script>alert(1)</script>')).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(esc(null)).toBe('');
+  });
+
+  it('escapes quotes for attribute contexts', () => {
+    expect(escAttr('x" onerror="alert(1)')).toContain('&quot;');
+  });
+
+  it('accepts only safe image URLs', () => {
+    expect(safeImageUrl('/api/storage/profiles/a.png')).toBe('/api/storage/profiles/a.png');
+    expect(safeImageUrl('https://example.com/a.png')).toBe('https://example.com/a.png');
+    expect(safeImageUrl('javascript:alert(1)')).toBe('');
+    expect(safeImageUrl('data:text/html,<script>')).toBe('');
+    expect(safeImageUrl('//evil.example/a.png')).toBe('');
+    expect(safeImageUrl('x" onerror="alert(1)')).toBe('');
+    expect(safeImageUrl(null)).toBe('');
   });
 
   it('formats currency with INR symbol', () => {

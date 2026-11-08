@@ -40,6 +40,12 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
             return respond(exchange, HttpStatus.FORBIDDEN, "Forbidden", "Access Denied");
         }
 
+        // A body that is not valid JSON raises ServerWebInputException before
+        // argument binding; treat it as a client error, not a 500.
+        if (ex instanceof org.springframework.web.server.ServerWebInputException) {
+            return respond(exchange, HttpStatus.BAD_REQUEST, "Bad Request", "Malformed request body");
+        }
+
         if (ex instanceof WebExchangeBindException bind) {
             String msg = bind.getFieldErrors().isEmpty()
                     ? "Invalid request body"

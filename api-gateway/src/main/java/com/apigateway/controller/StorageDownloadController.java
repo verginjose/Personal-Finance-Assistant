@@ -53,14 +53,17 @@ public class StorageDownloadController {
         if (!allowedBucket(bucket)) {
             return Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND));
         }
-        if (object == null || object.isBlank() || object.startsWith("/")
-                || object.contains("..") || object.contains("\\")) {
+        // `{*object}` captures the rest of the path *including* the leading
+        // slash (e.g. "/<uuid>-receipt.png). Strip it before treating the value
+        // as a MinIO object name.
+        String name = object == null ? "" : object.replaceAll("^/+", "");
+        if (name.isBlank() || name.contains("..") || name.contains("\\")) {
             return Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST));
         }
 
         var response = exchange.getResponse();
-        String contentType = MinioStorageService.contentTypeOf(object);
-        boolean image = MinioStorageService.isImage(object);
+        String contentType = MinioStorageService.contentTypeOf(name);
+        boolean image = MinioStorageService.isImage(name);
 
         response.getHeaders().setContentType(MediaType.parseMediaType(contentType));
         response.getHeaders().set("X-Content-Type-Options", "nosniff");
@@ -68,9 +71,9 @@ public class StorageDownloadController {
         response.getHeaders().set("X-Frame-Options", "DENY");
         response.getHeaders().set("Cache-Control", "private, max-age=300");
         response.getHeaders().set("Content-Disposition",
-                (image ? "inline; " : "attachment; ") + "filename=\"" + safeFileName(object) + "\"");
+                (image ? "inline; " : "attachment; ") + "filename=\"" + safeFileName(name) + "\"");
 
-        return storage.open(bucket, object)
+        return storage.open(bucket, name)
                 .flatMap(obj -> {
                     String length = obj.headers().get("Content-Length");
                     if (length != null) {
@@ -85,7 +88,7 @@ public class StorageDownloadController {
                     }));
                 })
                 .onErrorResume(e -> {
-                    log.debug("Storage object {} not served: {}", object, e.getMessage());
+                    log.debug("Storage object {} not served: {}", name, e.getMessage());
                     if (!response.isCommitted()) {
                         response.setStatusCode(HttpStatus.NOT_FOUND);
                     }

@@ -84,3 +84,12 @@ management:
   metrics:
     tags:
       application: auth-service
+    # Without this Micrometer exports only _count/_sum/_max for
+    # http.server.requests. The dashboards compute p95/p99 with
+    # histogram_quantile(rate(..._bucket[5m])), so auth-service was silently
+    # missing from every latency panel. Gateway/command/query already set it.
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true

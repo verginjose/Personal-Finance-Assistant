@@ -16,7 +16,7 @@ What it blocks, and why:
 | Cross-process access | `ptrace`, `process_vm_readv`, `process_vm_writev` | A build step can no longer inspect or control the daemon (`--oci-worker-no-process-sandbox` shares its namespaces). |
 | Kernel observability | `bpf`, `perf_event_open`, `io_uring_*` | Removes the common memory-corruption/escape surface. |
 | Memory trickery | `userfaultfd` | Removes the classic heap-grooming primitive. |
-| Credentials | `add_key`, `request_key`, `keyctl` | No kernel keyring access. |
+| Credentials | *(not denied)* | `runc` joins a session keyring when initialising every container, so denying `keyctl`/`add_key`/`request_key` breaks every `RUN` with `unable to join session keyring`. Left allowed; the process sandbox was the layer that would have isolated it. |
 | Kernel code | `init_module`, `finit_module`, `delete_module`, `kexec_load`, `kexec_file_load` | No module loading or kexec. |
 | Misc | `reboot`, `acct`, `swapon`, `swapoff`, `open_by_handle_at`, `nfsservctl`, `lookup_dcookie` | Not needed by a build; cheap to deny. |
 

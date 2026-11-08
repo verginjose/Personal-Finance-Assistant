@@ -101,16 +101,10 @@ spec:
                 secretKeyRef:
                   name: pfa-ci-secrets
                   key: GITHUB_PAT
-            # Client certificate for buildkitd and for the registry API calls
-            # build.yml makes from this pod (registry-gc.sh). The same files
-            # are mounted at /certs; these paths are what the scripts default
-            # to when they are given no explicit flags.
-            - name: REGISTRY_CA
-              value: /certs/ca.crt
-            - name: REGISTRY_CERT
-              value: /certs/client.cert
-            - name: REGISTRY_KEY
-              value: /certs/client.key
+            # /certs holds the *buildkitd* client certificate only. The
+            # registry uses a separate identity (ci-tls-registry-client) that
+            # this pod deliberately does not mount, so a compromised build
+            # cannot push or delete images.
           volumeMounts:
             - name: work
               mountPath: /tmp/runner
@@ -119,9 +113,7 @@ spec:
             # to dominate every OCR build.
             - name: buildctl
               mountPath: /opt/buildctl
-            # mTLS material shared by buildctl (buildkitd) and curl
-            # (registry-gc.sh). skopeo-style naming (client.cert/client.key)
-            # so the same directory also works for mirror-base-images.sh.
+            # buildkitd client identity (skopeo-style client.cert/client.key).
             - name: ci-tls
               mountPath: /certs
               readOnly: true

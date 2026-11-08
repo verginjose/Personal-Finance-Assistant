@@ -8,7 +8,8 @@
 # BuildKit pushes through the ClusterIP DNS name (registry.pfa.svc:5000).
 #
 # Transport is mutually authenticated TLS: every client must present a
-# certificate signed by the CI CA (key `ci-tls-registry`, produced by
+# certificate signed by the dedicated registry-client CA (keys
+# `ci-tls-registry`/`ci-tls-registry-client`, produced by
 # ./k8s/ci/gen-tls-certs.sh). `clientcas` is set without `clientauth`, so
 # distribution's default applies - require-and-verify-client-cert. That means
 # the readiness/liveness probes cannot be HTTP: kubelet probes present no
@@ -29,13 +30,11 @@ data:
       tls:
         certificate: /tls/tls.crt
         key: /tls/tls.key
-        # Phase 1 of the credential split: both the old CI CA and the new
-        # registry-client CA are trusted, so existing clients keep working.
-        # Phase 2 removes /tls/ca.crt once host containerd and every pod use
-        # the registry-client certificate; only then is the runner's buildkit
-        # certificate rejected here.
+        # Only the registry-client CA. The CI CA is intentionally absent: the
+        # runner holds a certificate signed by it for buildkitd, and the
+        # registry must not accept that identity. buildkitd, the GC/mirror
+        # jobs and host containerd use ci-tls-registry-client instead.
         clientcas:
-          - /tls/ca.crt
           - /tls/client-ca.crt
     storage:
       filesystem:

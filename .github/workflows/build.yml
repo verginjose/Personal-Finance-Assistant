@@ -203,16 +203,9 @@ jobs:
           done
           "${BCTL[@]}" prune --keep-storage 61440
 
-      - name: Trim old registry tags
-        # Phase 1 of registry-gc.sh only: pure HTTPS API calls, so it needs no
-        # cluster credentials, and it leaves the registry running. It bounds
-        # how many tags pile up, but frees no disk on its own — the blob sweep
-        # needs the registry stopped (./k8s/stop.sh --gc, or the registry-gc
-        # CronJob). The registry is mTLS-only; the client certificate paths
-        # come from the runner Deployment's environment (/certs).
-        run: |
-          set -euo pipefail
-          REGISTRY="https://${PUSH_REGISTRY}" ./k8s/ci/registry-gc.sh --retention-only --keep=2
+      # Tag retention used to run here. It needs a registry client
+      # certificate, which this pod no longer has (by design); the hourly
+      # registry-gc CronJob owns retention now.
 
   # The runner must never write master: anything that can push to master can
   # make Argo deploy. It proposes the tag bump on a branch and opens a PR

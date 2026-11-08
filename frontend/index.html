@@ -8,17 +8,7 @@
   <meta name="theme-color" content="#F2F3EE">
   <link rel="icon" type="image/png" href="/assets/varavu-mark.png">
   <link rel="apple-touch-icon" href="/assets/varavu-mark.png">
-  <script>
-    // Resolve the theme before first paint so there is no flash.
-    (function () {
-      try {
-        var pref = localStorage.getItem('pfa_theme') || 'system';
-        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-        document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#141A22' : '#F2F3EE');
-      } catch (e) { /* storage unavailable */ }
-    })();
-  </script>
+  <script src="js/theme-init.js?v=2026110801"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
@@ -41,6 +31,6 @@
 </head>
 <body>
   <div id="app"></div>
-  <script type="module" src="js/app.js?v=2026110504"></script>
+  <script type="module" src="js/app.js?v=2026110801"></script>
 </body>
 </html>

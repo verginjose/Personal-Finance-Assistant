@@ -1,6 +1,7 @@
 package com.authservice.service;
 
 import com.authservice.dto.AuthDtos.*;
+import com.authservice.model.Role;
 import com.authservice.model.User;
 import com.authservice.repository.UserRepository;
 import com.authservice.security.JwtService;
@@ -46,25 +47,39 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public Mono<LoginResponse> login(LoginRequest request) {
-        return userRepository.findByEmail(request.email())
-                .switchIfEmpty(Mono.error(new InvalidCredentialsException("Invalid email or password")))
-                .flatMap(user -> offload(() -> passwordEncoder.matches(request.password(), user.getPassword()))
-                        .flatMap(matches -> {
-                            if (!matches) {
-                                return Mono.error(new InvalidCredentialsException("Invalid email or password"));
-                            }
-                            String token = jwtService.generateToken(user);
-                            String refreshToken = UUID.randomUUID().toString();
-                            return tokenRedisService.saveRefreshTokenReactive(
-                                            refreshToken, user.getEmail(), user.getId().toString(),
-                                            user.getRole().name(), refreshExpirationMs)
-                                    .then(Mono.fromCallable(() -> {
-                                        log.info("User logged in: {} [{}]", user.getEmail(), user.getRole());
-                                        return new LoginResponse(token, refreshToken, user.getId().toString(),
-                                                user.getEmail(), user.getActualUsername(), user.getRole().name(),
-                                                normalizeCurrency(user.getDefaultCurrency()));
-                                    }).subscribeOn(Schedulers.boundedElastic()));
-                        }));
+        return tokenRedisService.isLoginLocked(request.email())
+                .flatMap(locked -> {
+                    if (locked) {
+                        // Deliberately generic: do not reveal whether the
+                        // address is registered or merely locked.
+                        return Mono.error(new TooManyLoginAttemptsException(
+                                "Too many failed attempts. Try again later."));
+                    }
+                    return userRepository.findByEmail(request.email())
+                            .switchIfEmpty(Mono.error(new InvalidCredentialsException("Invalid email or password")))
+                            .flatMap(user -> offload(() -> passwordEncoder.matches(request.password(), user.getPassword()))
+                                    .flatMap(matches -> {
+                                        if (!matches) {
+                                            return tokenRedisService.recordLoginFailure(request.email())
+                                                    .then(Mono.error(new InvalidCredentialsException("Invalid email or password")));
+                                        }
+                                        return tokenRedisService.clearLoginFailures(request.email())
+                                                .then(tokenRedisService.getSessionVersion(user.getId().toString()))
+                                                .flatMap(sessionVersion -> {
+                                                    String token = jwtService.generateToken(user, sessionVersion);
+                                                    String refreshToken = UUID.randomUUID().toString();
+                                                    return tokenRedisService.saveRefreshTokenReactive(
+                                                                    refreshToken, user.getEmail(), user.getId().toString(),
+                                                                    user.getRole().name(), refreshExpirationMs)
+                                                            .then(Mono.fromCallable(() -> {
+                                                                log.info("User logged in: {} [{}]", user.getEmail(), user.getRole());
+                                                                return new LoginResponse(token, refreshToken, user.getId().toString(),
+                                                                        user.getEmail(), user.getActualUsername(), user.getRole().name(),
+                                                                        normalizeCurrency(user.getDefaultCurrency()));
+                                                            }).subscribeOn(Schedulers.boundedElastic()));
+                                                });
+                                    }));
+                });
     }
 
     @Transactional
@@ -80,7 +95,8 @@ public class AuthService {
                                                 .email(request.email())
                                                 .username(request.username())
                                                 .password(hash)
-                                                .role(request.role())
+                                                // Self-registration is always a USER.
+                                                .role(Role.USER)
                                                 .defaultCurrency(normalizeCurrency(request.defaultCurrency()))
                                                 .build()))
                                         .map(saved -> {
@@ -91,6 +107,10 @@ public class AuthService {
                                         });
                             });
                 });
+    }
+
+    public Mono<LoginResponse> refresh(String refreshToken) {
+        return refresh(new RefreshTokenRequest(refreshToken));
     }
 
     public Mono<LoginResponse> refresh(RefreshTokenRequest request) {
@@ -111,8 +131,9 @@ public class AuthService {
         String userId = parts[0], email = parts[1], role = parts[2];
 
         return tokenRedisService.removeUserTokenReactive(oldToken, email)
-                .then(Mono.defer(() -> {
-                    String newAccessToken = jwtService.generateToken(email, userId, role);
+                .then(tokenRedisService.getSessionVersion(userId))
+                .flatMap(sessionVersion -> {
+                    String newAccessToken = jwtService.generateToken(email, userId, role, sessionVersion);
                     String newRefreshToken = UUID.randomUUID().toString();
                     String graceValue = newAccessToken + "|" + newRefreshToken + "|"
                             + userId + "|" + email + "|" + role;
@@ -121,7 +142,7 @@ public class AuthService {
                             .then(tokenRedisService.saveRefreshGraceReactive(oldToken, graceValue))
                             .thenReturn(new LoginResponse(newAccessToken, newRefreshToken, userId, email, "", role, null))
                             .doOnSuccess(r -> log.info("Tokens rotated for user: {}", email));
-                }));
+                });
     }
 
     /**
@@ -168,7 +189,7 @@ public class AuthService {
     }
 
     @Transactional
-    public Mono<Void> changePassword(String email, ChangePasswordRequest request) {
+    public Mono<Void> changePassword(String email, ChangePasswordRequest request, String currentAccessToken) {
         return userRepository.findByEmail(email)
                 .switchIfEmpty(Mono.error(new RuntimeException("User not found")))
                 .flatMap(user -> offload(() -> passwordEncoder.matches(request.currentPassword(), user.getPassword()))
@@ -182,8 +203,33 @@ public class AuthService {
                                         return userRepository.save(user);
                                     });
                         }))
-                .flatMap(user -> tokenRedisService.revokeAllUserTokensReactive(email))
-                .doOnSuccess(v -> log.info("Password changed for user: {}", email));
+                .flatMap(user -> {
+                    // Kill every refresh token and bump the session version, so
+                    // live access tokens (default 15 min) die immediately too.
+                    Mono<Void> revokeRefresh = tokenRedisService.revokeAllUserTokensReactive(email);
+                    Mono<Void> bumpVersion = tokenRedisService.bumpSessionVersion(user.getId().toString()).then();
+                    Mono<Void> blacklistCurrent = currentAccessToken == null ? Mono.empty()
+                            : blacklistBearer(currentAccessToken);
+                    return revokeRefresh.then(bumpVersion).then(blacklistCurrent);
+                })
+                .doOnSuccess(v -> log.info("Password changed and sessions revoked for user: {}", email));
+    }
+
+    private Mono<Void> blacklistBearer(String bearer) {
+        try {
+            var claims = jwtService.extractAllClaims(bearer);
+            long ttl = claims.getExpiration().getTime() - System.currentTimeMillis();
+            return tokenRedisService.blacklistAccessTokenReactive(bearer, ttl);
+        } catch (Exception e) {
+            log.warn("Failed to blacklist the current access token: {}", e.getMessage());
+            return Mono.empty();
+        }
+    }
+
+    /** A two-minute, single-purpose ticket for the SSE stream. */
+    public Mono<String> streamTicket(String email, String userId, String role) {
+        return tokenRedisService.getSessionVersion(userId)
+                .map(sv -> jwtService.generateStreamTicket(email, userId, role, sv));
     }
 
     // ── Exceptions ────────────────────────────────────────────────────────────
@@ -192,4 +238,5 @@ public class AuthService {
     public static class InvalidCurrentPasswordException extends RuntimeException { public InvalidCurrentPasswordException(String m)  { super(m); } }
     public static class InvalidCredentialsException     extends RuntimeException { public InvalidCredentialsException(String m)     { super(m); } }
     public static class InvalidRefreshTokenException    extends RuntimeException { public InvalidRefreshTokenException(String m)     { super(m); } }
+    public static class TooManyLoginAttemptsException   extends RuntimeException { public TooManyLoginAttemptsException(String m)    { super(m); } }
 }

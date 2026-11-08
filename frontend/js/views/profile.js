@@ -1,7 +1,7 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
-  esc, pageHeader, openModal, currencyOptionHtml, formatMoney,
+  esc, escAttr, safeImageUrl, pageHeader, openModal, currencyOptionHtml, formatMoney,
   getThemePreference, setThemePreference, avatar, pictureLightbox,
 } from '../utils/ui.js';
 
@@ -31,9 +31,9 @@ export async function renderProfile(container) {
         </div>
         <div class="profile-identity">
           <button type="button" class="profile-avatar-lg" id="p-avatar"
-            ${profilePicture ? `style="background-image:url('${esc(profilePicture)}')"` : ''}
+            ${safeImageUrl(profilePicture) ? `style="background-image:url('${escAttr(safeImageUrl(profilePicture))}')"` : ''}
             aria-label="View profile picture" title="View profile picture">
-            ${profilePicture ? '' : avatar(displayName, 64)}
+            ${safeImageUrl(profilePicture) ? '' : avatar(displayName, 64)}
           </button>
           <div>
             <div class="profile-name">${esc(displayName)}</div>
@@ -172,7 +172,12 @@ export async function renderProfile(container) {
         const confirm = document.getElementById('pw-confirm').value;
         if (next !== confirm) throw new Error('The new passwords do not match');
         await api.post('/auth/change-password', { currentPassword: current, newPassword: next });
-        toast('Password changed', 'success');
+        // The server revokes every session (refresh tokens and live access
+        // tokens) on a password change. Sign out here so the UI reflects that
+        // instead of failing on the next request.
+        toast('Password changed. Please sign in again.', 'success');
+        Auth.clear();
+        window.dispatchEvent(new Event('auth-change'));
       }
     });
 
@@ -191,8 +196,8 @@ export async function renderProfile(container) {
 
   document.getElementById('p-logout').onclick = async () => {
     try {
-      const refresh = Auth.getRefresh();
-      if (refresh) await api.post('/auth/logout', { refreshToken: refresh });
+      // The refresh credential is an HttpOnly cookie; the server clears it.
+      await api.post('/auth/logout', {});
     } catch { /* sign out locally regardless */ }
     Auth.clear();
     toast('Signed out', 'info');
@@ -273,7 +278,7 @@ export async function renderProfile(container) {
 
           await api.put('/auth/profile', { profilePicture: imageUrl });
           profilePicture = imageUrl;
-          avatarBtn.style.backgroundImage = `url('${imageUrl}')`;
+          avatarBtn.style.backgroundImage = `url('${safeImageUrl(imageUrl)}')`;
           avatarBtn.innerHTML = '';
           const sidebarAvatar = document.getElementById('shell-avatar');
           if (sidebarAvatar) sidebarAvatar.innerHTML = avatar(displayName, 32, imageUrl);

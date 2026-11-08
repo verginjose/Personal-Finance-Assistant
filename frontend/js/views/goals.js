@@ -308,6 +308,18 @@ async function deleteBudget(id, uid, cardElement) {
   }
 }
 
+/* Delegated so the generated row markup carries no inline handler. */
+document.addEventListener('click', (e) => {
+  const btn = e.target instanceof Element ? e.target.closest('[data-delete-contribution]') : null;
+  if (!btn) return;
+  e.preventDefault();
+  window.deleteContribution(
+    Number(btn.dataset.deleteContribution),
+    Number(btn.dataset.goalId),
+    btn.dataset.userId,
+  );
+});
+
 window.deleteContribution = async function (txnId, goalId, uid) {
   if (!(await confirmModal('Delete contribution', 'The goal progress will go down by this amount.', 'Delete'))) return;
   try {
@@ -409,7 +421,7 @@ async function viewGoalDetails(goalParam, uid, reloadData = false) {
               <div style="font-weight:600">${formatMoney(t.amount, t.currency || goal.currency)}</div>
               <div class="meta">${esc(formatDate(t.createdAt))} · ${esc(t.description || 'Contribution')}</div>
             </div>
-            <button class="btn btn-ghost btn-icon btn-sm" onclick="window.deleteContribution(${t.id}, ${goal.id}, '${uid}')" aria-label="Delete contribution">${icon('trash', 'sm')}</button>
+            <button class="btn btn-ghost btn-icon btn-sm" data-delete-contribution="${t.id}" data-goal-id="${goal.id}" data-user-id="${escAttr(uid)}" aria-label="Delete contribution">${icon('trash', 'sm')}</button>
           </div>`).join('');
       }
       renderTxnsPagination();

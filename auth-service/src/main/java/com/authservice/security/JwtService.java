@@ -29,24 +29,46 @@ public class JwtService {
     this.accessExpirationMs = accessExpirationMs;
   }
 
-  public String generateToken(User user) {
-    return buildToken(user.getEmail(), user.getId().toString(), user.getRole().name());
+  /** Stream tickets are deliberately short-lived: EventSource only needs to
+   *  establish the connection, and the stream stays open after that. */
+  private static final long STREAM_TICKET_MS = 120_000;
+
+  public String generateToken(User user, long sessionVersion) {
+    return buildToken(user.getEmail(), user.getId().toString(), user.getRole().name(),
+            sessionVersion, accessExpirationMs);
   }
 
-  public String generateToken(String email, String userId, String role) {
-    return buildToken(email, userId, role);
+  public String generateToken(String email, String userId, String role, long sessionVersion) {
+    return buildToken(email, userId, role, sessionVersion, accessExpirationMs);
   }
 
-  private String buildToken(String email, String userId, String role) {
-    return Jwts.builder()
+  /**
+   * A single-purpose credential for the SSE stream. It carries the same user
+   * claims (the gateway needs them to set X-User-Id) but expires in two
+   * minutes and is marked `purpose=stream`.
+   */
+  public String generateStreamTicket(String email, String userId, String role, long sessionVersion) {
+    return buildToken(email, userId, role, sessionVersion, STREAM_TICKET_MS, "stream");
+  }
+
+  private String buildToken(String email, String userId, String role, long sessionVersion, long ttlMs) {
+    return buildToken(email, userId, role, sessionVersion, ttlMs, null);
+  }
+
+  private String buildToken(String email, String userId, String role, long sessionVersion,
+                            long ttlMs, String purpose) {
+    var builder = Jwts.builder()
             .subject(email)
             .claim("userId", userId)
             .claim("role", role)
+            // Session version: bumping it invalidates every live access token
+            // for that user (e.g. on password change).
+            .claim("sv", sessionVersion)
             .id(UUID.randomUUID().toString())
             .issuedAt(new Date())
-            .expiration(new Date(System.currentTimeMillis() + accessExpirationMs))
-            .signWith(secretKey)
-            .compact();
+            .expiration(new Date(System.currentTimeMillis() + ttlMs));
+    if (purpose != null) builder.claim("purpose", purpose);
+    return builder.signWith(secretKey).compact();
   }
 
   public boolean isTokenValid(String token) {

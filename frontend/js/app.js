@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    app.js — Router + application shell
    ═══════════════════════════════════════════════════════════════════════════ */
-import { Auth, SseManager, api, toast, requestBrowserNotificationPermission } from './utils/api.js';
+import { Auth, SseManager, api, toast, requestBrowserNotificationPermission, ensureSession } from './utils/api.js';
 import { icon } from './utils/icons.js';
 import { renderAuth }          from './views/auth.js';
 import {
@@ -420,8 +420,8 @@ function wireUserMenu() {
   document.getElementById('user-menu-signout').onclick = async () => {
     closeUserMenu();
     try {
-      const refresh = Auth.getRefresh();
-      if (refresh) await api.post('/auth/logout', { refreshToken: refresh });
+      // The refresh credential is an HttpOnly cookie; the server clears it.
+      await api.post('/auth/logout', {});
     } catch { /* ignore */ }
     Auth.clear();
     toast('Signed out', 'info');
@@ -591,8 +591,11 @@ window.addEventListener('auth-change', () => {
 });
 window.addEventListener('auth-expired', () => renderShell());
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   applyTheme();
+  // The access token is memory-only; restore it from the HttpOnly refresh
+  // cookie before rendering so /auth/me and the notification stream work.
+  await ensureSession();
   renderShell();
   if (Auth.isLoggedIn() && !VIEW_BY_PATH[location.pathname.replace(/\/+$/, '') || '/']) {
     history.replaceState({ view: 'dashboard' }, '', '/dashboard');

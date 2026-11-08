@@ -57,6 +57,12 @@ public class JwtReactiveAuthenticationManager
                                 .parseSignedClaims(t)
                                 .getPayload());
 
+                        // The cache skips signature/expiry validation on a hit.
+                        if (claims.getExpiration() == null
+                                || claims.getExpiration().before(new java.util.Date())) {
+                            return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Token has expired"));
+                        }
+
                         String email = claims.getSubject();
 
                         Object rolesObj = claims.get("roles");

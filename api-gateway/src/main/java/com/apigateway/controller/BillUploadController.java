@@ -14,6 +14,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -28,20 +29,31 @@ public class BillUploadController {
     @Value("${minio.bucket:receipts}")
     private String minioBucket;
 
+    private static final Set<String> ALLOWED = Set.of(
+            "image/png", "image/jpeg", "image/webp", "image/gif", "application/pdf");
+
     @PostMapping(value = "/process/{userId}", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
     public Mono<ResponseEntity<Map<String, String>>> uploadBill(
+            @RequestHeader("X-User-Id") String xUserId,
             @PathVariable String userId,
             @RequestPart("file") FilePart filePart,
             @RequestParam(value = "targetCurrency", required = false) String targetCurrency) {
 
+        if (!xUserId.equalsIgnoreCase(userId)) {
+            return Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: user mismatch")));
+        }
         String receiptId = UUID.randomUUID().toString();
-        return storage.store(filePart, minioBucket, userId, true)
-                .flatMap(object -> publishOcrJob(userId, receiptId, object.objectName(), "false", targetCurrency))
+        return storage.store(filePart, minioBucket, xUserId, ALLOWED)
+                .flatMap(object -> publishOcrJob(xUserId, receiptId, object.objectName(), "false", targetCurrency))
                 .map(sent -> ResponseEntity.status(HttpStatus.ACCEPTED)
                         .body(Map.of(
                                 "message", "Receipt accepted for OCR processing",
                                 "receiptId", receiptId,
                                 "url", "/api/storage/" + minioBucket + "/" + sent)))
+                .onErrorResume(IllegalArgumentException.class, e -> Mono.just(ResponseEntity
+                        .status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                        .body(Map.of("message", e.getMessage()))))
                 .onErrorResume(e -> {
                     log.error("Failed to upload bill and publish event", e);
                     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -51,19 +63,27 @@ public class BillUploadController {
 
     @PostMapping(value = "/batch-process/{userId}", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
     public Mono<ResponseEntity<Map<String, String>>> uploadBatchBill(
+            @RequestHeader("X-User-Id") String xUserId,
             @PathVariable String userId,
             @RequestPart("file") FilePart filePart,
             @RequestParam(value = "targetCurrency", required = false) String targetCurrency) {
 
+        if (!xUserId.equalsIgnoreCase(userId)) {
+            return Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: user mismatch")));
+        }
         String receiptId = UUID.randomUUID().toString();
-        String prefix = userId + "-batch-" + UUID.randomUUID();
-        return storage.store(filePart, minioBucket, prefix, true)
-                .flatMap(object -> publishOcrJob(userId, receiptId, object.objectName(), "true", targetCurrency))
+        String prefix = xUserId + "-batch-" + UUID.randomUUID();
+        return storage.store(filePart, minioBucket, prefix, ALLOWED)
+                .flatMap(object -> publishOcrJob(xUserId, receiptId, object.objectName(), "true", targetCurrency))
                 .map(sent -> ResponseEntity.status(HttpStatus.ACCEPTED)
                         .body(Map.of(
                                 "message", "Batch statement accepted for processing",
                                 "receiptId", receiptId,
                                 "url", "/api/storage/" + minioBucket + "/" + sent)))
+                .onErrorResume(IllegalArgumentException.class, e -> Mono.just(ResponseEntity
+                        .status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                        .body(Map.of("message", e.getMessage()))))
                 .onErrorResume(e -> {
                     log.error("Failed to upload batch statement and publish event", e);
                     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

@@ -43,6 +43,10 @@ public class AnalyticsService {
     @Value("${ocr.service.url:http://ocr-service:8100}")
     private String ocrServiceUrl;
 
+    /** Shared credential for the OCR HTTP API (X-Internal-Token). */
+    @Value("${internal.api.token:}")
+    private String internalApiToken;
+
     private RestClient ocrRestClient;
 
     @jakarta.annotation.PostConstruct
@@ -328,6 +332,7 @@ public class AnalyticsService {
             Map<?, ?> body = ocrRestClient.post()
                     .uri("/analyze")
                     .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .header("X-Internal-Token", internalApiToken)
                     .body(payload)
                     .retrieve()
                     .body(Map.class);

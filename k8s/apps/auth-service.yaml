@@ -26,6 +26,9 @@ metadata:
     app.kubernetes.io/part-of: personal-finance-assistant
 data:
   REDIS_HOST: redis
+  # The browser reaches auth-service over HTTPS through the edge, so the
+  # refresh cookie is marked Secure.
+  COOKIE_SECURE: "true"
   JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
 ---
 apiVersion: apps/v1

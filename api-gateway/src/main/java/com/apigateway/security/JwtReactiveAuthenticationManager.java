@@ -56,6 +56,14 @@ public class JwtReactiveAuthenticationManager
                                 .parseSignedClaims(t)
                                 .getPayload());
 
+                        // A cached parse skips JWT validation, so re-check
+                        // expiry on every hit: otherwise a token stays valid
+                        // for up to the 5-minute cache lifetime after it expired.
+                        if (claims.getExpiration() == null
+                                || claims.getExpiration().before(new java.util.Date())) {
+                            return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Token has expired"));
+                        }
+
                         String email = claims.getSubject();
 
                         Object rolesObj = claims.get("roles");
@@ -83,11 +91,26 @@ public class JwtReactiveAuthenticationManager
                                         "ROLE_" + role.toUpperCase()))
                                 .toList();
 
-                        return Mono.just(
-                                new JwtAuthenticationToken(
-                                        email,
-                                        token,
-                                        authorities));
+                        // A password change bumps the user's session version.
+                        // Any access token carrying an older `sv` is revoked
+                        // immediately instead of living out its 15 minutes.
+                        String userId = claims.get("userId", String.class);
+                        long tokenVersion = claimAsLong(claims.get("sv"));
+
+                        return redisTemplate.opsForValue()
+                                .get("session_version:" + userId)
+                                .defaultIfEmpty("0")
+                                .flatMap(raw -> {
+                                    if (parseLong(raw) != tokenVersion) {
+                                        log.warn("Rejected an access token with a stale session version for user {}", userId);
+                                        return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Session has been revoked"));
+                                    }
+                                    return Mono.just(
+                                            new JwtAuthenticationToken(
+                                                    email,
+                                                    token,
+                                                    authorities));
+                                });
 
                     } catch (JwtException ex) {
                         log.error("JWT Exception while authenticating token: {}", ex.getMessage());
@@ -97,6 +120,20 @@ public class JwtReactiveAuthenticationManager
                         return Mono.error(new org.springframework.security.authentication.BadCredentialsException("Invalid JWT token"));
                     }
                 });
+    }
+
+    private static long claimAsLong(Object value) {
+        if (value instanceof Number n) return n.longValue();
+        if (value instanceof String s) return parseLong(s);
+        return 0L;
+    }
+
+    private static long parseLong(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
     }
 
     private SecretKey buildKey(String secret) {

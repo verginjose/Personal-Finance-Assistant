@@ -1,8 +1,10 @@
 import asyncio
 import hashlib
+import hmac
 import json
 import logging
 import os
+import threading
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -12,7 +14,7 @@ import cv2
 import httpx
 import numpy as np
 from cachetools import TTLCache
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from minio import Minio
 from paddleocr import PaddleOCR
 
@@ -30,11 +32,18 @@ GROQ_URL     = os.getenv("GROQ_URL", "https://api.groq.com/openai/v1/chat/comple
 UPSERT_URL     = os.getenv("UPSERT_SERVICE_URL", "http://command-service:8081")
 CURRENCY_URL   = "https://api.frankfurter.dev/v1/latest?from=USD"
 
-RABBITMQ_URL   = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
+# No credential defaults: an unset variable must fail loudly at boot rather
+# than silently using the well-known admin/password123 or guest/guest pair.
+RABBITMQ_URL   = os.getenv("RABBITMQ_URL", "")
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "admin")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "password123")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "")
 MINIO_SECURE   = os.getenv("MINIO_SECURE", "false").lower() == "true"
+
+# Shared secret for the internal HTTP surface (/ocr, /analyze) and for the
+# completion callbacks to command-service. Must match command-service.
+INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "")
+INTERNAL_TOKEN_HEADER = "X-Internal-Token"
 
 # ── In-memory caches ─────────────────────────────────────────────────────────
 ocr_cache: TTLCache   = TTLCache(maxsize=500, ttl=86400)  # 24h
@@ -70,6 +79,11 @@ ocr_engine: Optional[PaddleOCR] = None
 http_client: Optional[httpx.AsyncClient] = None
 minio_client: Optional[Minio] = None
 mq_connection: Optional[aio_pika.RobustConnection] = None
+
+# PaddleOCR's predictors are not thread-safe: concurrent calls on one engine
+# fail with Paddle predictor RuntimeErrors. Every inference (RabbitMQ jobs and
+# the /ocr endpoint alike) goes through this lock.
+_ocr_lock = threading.Lock()
 
 
 async def process_mq_message(message: aio_pika.abc.AbstractIncomingMessage):
@@ -126,7 +140,20 @@ async def start_rabbitmq_consumer():
 async def lifespan(app: FastAPI):
     global ocr_engine, http_client, minio_client, mq_connection
     log.info("Initializing OCR Service resources...")
-    
+
+    missing = [name for name, value in (
+        ("RABBITMQ_URL", RABBITMQ_URL),
+        ("MINIO_ACCESS_KEY", MINIO_ACCESS_KEY),
+        ("MINIO_SECRET_KEY", MINIO_SECRET_KEY),
+    ) if not value]
+    if missing:
+        raise RuntimeError("Missing required configuration: " + ", ".join(missing))
+    if not INTERNAL_API_TOKEN:
+        # The endpoints and the OCR callback fail closed, so the pod starts but
+        # cannot be used until the shared secret is provided.
+        log.error("INTERNAL_API_TOKEN is not set: internal endpoints and OCR "
+                  "completion callbacks will be rejected")
+
     use_angle_cls = os.getenv("OCR_USE_ANGLE_CLS", "false").lower() == "true"
     det_limit_side_len = int(os.getenv("OCR_DET_LIMIT_SIDE_LEN", "736"))
     
@@ -166,6 +193,20 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Asynchronous OCR Service", version="3.0.0", lifespan=lifespan)
 
 
+def require_internal_token(
+    x_internal_token: Optional[str] = Header(default=None, alias=INTERNAL_TOKEN_HEADER),
+) -> None:
+    """Reject callers that do not present the shared internal credential.
+
+    /analyze forwards the body to Groq using the service API key, so an open
+    endpoint is both a spend risk and a way to probe the model.
+    """
+    if not INTERNAL_API_TOKEN:
+        raise HTTPException(status_code=503, detail="Internal API token is not configured")
+    if not hmac.compare_digest(x_internal_token or "", INTERNAL_API_TOKEN):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Core Logic (Same as before)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -179,9 +220,12 @@ def _decode_image(data: bytes) -> np.ndarray:
 
 
 def _run_ocr_on_image(img: np.ndarray) -> dict:
+    if ocr_engine is None:
+        raise RuntimeError("PaddleOCR engine is not initialized yet")
     t0 = time.perf_counter()
     use_angle_cls = os.getenv("OCR_USE_ANGLE_CLS", "false").lower() == "true"
-    result = ocr_engine.ocr(img, cls=use_angle_cls)
+    with _ocr_lock:
+        result = ocr_engine.ocr(img, cls=use_angle_cls)
     ms = round((time.perf_counter() - t0) * 1000, 2)
     lines, texts = [], []
     if result and result[0]:
@@ -426,7 +470,12 @@ async def _process_and_notify(user_id: str, data: bytes, filename: str, content_
     try:
         client = http_client if http_client else httpx.AsyncClient()
         endpoint = f"{UPSERT_URL}/internal/batch-ocr-complete" if is_batch else f"{UPSERT_URL}/internal/ocr-complete"
-        res = await client.post(endpoint, json=payload, timeout=10.0)
+        res = await client.post(
+            endpoint,
+            json=payload,
+            headers={INTERNAL_TOKEN_HEADER: INTERNAL_API_TOKEN},
+            timeout=10.0,
+        )
         log.info("Notified command-service: %s", res.status_code)
     except Exception as e:
         log.error("Failed to notify command-service: %s", e)
@@ -436,8 +485,65 @@ async def _process_and_notify(user_id: str, data: bytes, filename: str, content_
 def health():
     return {"status": "ok", "engine": "PaddleOCR", "async_mq": True}
 
+
+def _full_ocr_result(data: bytes) -> dict:
+    img = _decode_image(data)
+    result = _run_ocr_on_image(img)
+    result["width"], result["height"] = int(img.shape[1]), int(img.shape[0])
+    return result
+
+
+@app.post("/ocr")
+async def ocr_text(
+    file: UploadFile = File(..., description="Receipt image (JPEG/PNG/WebP/BMP)"),
+    boxes: bool = False,
+    _auth: None = Depends(require_internal_token),
+):
+    """Run PaddleOCR on an uploaded image and return the text it produced.
+
+    Debug/ops endpoint: no Groq call, no MinIO, no queue. Useful to see
+    exactly what the OCR model reads from a receipt. Pass ?boxes=true to also
+    get the per-line bounding boxes and confidences.
+    """
+    if ocr_engine is None:
+        raise HTTPException(status_code=503, detail="OCR engine is still loading")
+
+    name = file.filename or ""
+    content_type = (file.content_type or "").lower()
+    allowed = (content_type.startswith("image/")
+               or name.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".bmp")))
+    if not allowed:
+        raise HTTPException(status_code=415,
+                            detail="Only image uploads are supported (JPEG/PNG/WebP/BMP)")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    try:
+        result = await asyncio.to_thread(_full_ocr_result, data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        log.exception("OCR request failed")
+        raise HTTPException(status_code=500, detail=f"OCR failed: {e}")
+
+    body = {
+        "filename": name,
+        "content_type": content_type,
+        "width": result["width"],
+        "height": result["height"],
+        "text": result["full_text"],
+        "line_count": result["line_count"],
+        "chars": len(result["full_text"]),
+        "inference_ms": result["inference_ms"],
+    }
+    if boxes:
+        body["lines"] = result["lines"]
+    return body
+
 @app.post("/analyze")
-async def analyze_transactions(payload: dict):
+async def analyze_transactions(payload: dict, _auth: None = Depends(require_internal_token)):
     if "transactions" not in payload:
         return {"error": "transactions field required"}
     

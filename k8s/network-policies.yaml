@@ -1,0 +1,207 @@
+# Namespace-internal east-west restrictions.
+#
+# Before this file every pod in the cluster could call command-service with an
+# arbitrary X-User-Id and write into another account's ledger. These policies
+# make the only allowed path to each service the one the architecture intends:
+#
+#   Traefik -> frontend -> api-gateway -> {auth,command,query}
+#   query-service -> ocr-service /analyze
+#   ocr-service -> command-service /internal/**
+#
+# Only Ingress is restricted; egress (DNS, external HTTPS for Groq and FX
+# rates) is untouched. k3s enforces NetworkPolicy with its built-in controller.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: frontend }
+  policyTypes: [Ingress]
+  ingress:
+    # The ingress controller (Traefik) and any tunnel pod may live in another
+    # namespace, so the public entry point stays open.
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - { protocol: TCP, port: 80 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: api-gateway }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: frontend } }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - from:
+        - podSelector: { matchLabels: { app: prometheus } }
+      ports:
+        - { protocol: TCP, port: 9090 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: auth-service-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: auth-service }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: api-gateway } }
+        - podSelector: { matchLabels: { app: prometheus } }
+      ports:
+        - { protocol: TCP, port: 8082 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: command-service-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: command-service }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: api-gateway } }
+        - podSelector: { matchLabels: { app: prometheus } }
+      ports:
+        - { protocol: TCP, port: 8081 }
+    # /internal/** callbacks only come from the OCR worker.
+    - from:
+        - podSelector: { matchLabels: { app: ocr-service } }
+      ports:
+        - { protocol: TCP, port: 8081 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: query-service-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: query-service }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: api-gateway } }
+        - podSelector: { matchLabels: { app: prometheus } }
+      ports:
+        - { protocol: TCP, port: 8084 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ocr-service-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: ocr-service }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: query-service } }
+      ports:
+        - { protocol: TCP, port: 8100 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: redis }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: api-gateway } }
+        - podSelector: { matchLabels: { app: auth-service } }
+        - podSelector: { matchLabels: { app: command-service } }
+        - podSelector: { matchLabels: { app: query-service } }
+        - podSelector: { matchLabels: { app: grafana } }
+      ports:
+        - { protocol: TCP, port: 6379 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rabbitmq-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: rabbitmq }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: api-gateway } }
+        - podSelector: { matchLabels: { app: command-service } }
+        - podSelector: { matchLabels: { app: ocr-service } }
+      ports:
+        - { protocol: TCP, port: 5672 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: minio-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: minio }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: api-gateway } }
+        - podSelector: { matchLabels: { app: ocr-service } }
+      ports:
+        - { protocol: TCP, port: 9000 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-primary-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: postgres-primary }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: auth-service } }
+        - podSelector: { matchLabels: { app: command-service } }
+        - podSelector: { matchLabels: { app: grafana } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+    # The replica bootstraps with pg_basebackup and then streams WAL.
+    - from:
+        - podSelector: { matchLabels: { app: postgres-replica } }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-replica-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: postgres-replica }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: query-service } }
+        - podSelector: { matchLabels: { app: grafana } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+    # pg_basebackup replication stream from the primary.
+    - from:
+        - podSelector: { matchLabels: { app: postgres-primary } }

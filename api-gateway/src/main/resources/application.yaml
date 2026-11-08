@@ -7,8 +7,12 @@ jwt:
 
 minio:
   endpoint: ${MINIO_ENDPOINT:http://minio:9000}
-  accessKey: ${MINIO_ACCESS_KEY:admin}
-  secretKey: ${MINIO_SECRET_KEY:password123}
+  # No defaults: a missing credential must fail at startup, not silently fall
+  # back to the well-known admin/password123 pair.
+  accessKey: ${MINIO_ACCESS_KEY}
+  secretKey: ${MINIO_SECRET_KEY}
+  bucket: ${MINIO_BUCKET:receipts}
+  profileBucket: ${MINIO_PROFILE_BUCKET:profiles}
 
 spring:
   codec:
@@ -20,8 +24,8 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:rabbitmq}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:guest}
-    password: ${RABBITMQ_PASSWORD:guest}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
 
   data:
     redis:
@@ -59,8 +63,29 @@ spring:
           # pending, created) so pool behaviour is visible during load tests.
           metrics: true
       routes:
+        # Credential endpoints get a human-sized bucket (IP + path), separate
+        # from the general auth route. 200/s let a credential-stuffing run
+        # proceed unhindered. Must come before the /api/auth/** route because
+        # the first matching route wins.
+        - id: auth-credentials
+          uri: http://auth-service:8082
+          predicates:
+            - Path=/api/auth/login,/api/auth/register
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@ipPathKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: auth-cb
+                fallbackUri: forward:/fallback/auth
+
         # Auth lives in its own service now. The path is forwarded unchanged
-        # (/api/auth/** -> auth-service /api/auth/**).
+        # (/api/auth/** -> auth-service /api/auth/**). Refresh and /me are
+        # legitimately bursty (multiple tabs), so they keep the wider bucket.
         - id: auth-service
           uri: http://auth-service:8082
           predicates:
@@ -68,9 +93,6 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
-                # Production sizing: many users can share one NAT/proxy IP and
-                # the key is IP+path, so a low rate throttled normal login
-                # bursts. The stack has the headroom; 200/s still bounds abuse.
                 redis-rate-limiter.replenishRate: 200
                 redis-rate-limiter.burstCapacity: 400
                 redis-rate-limiter.requestedTokens: 1
@@ -145,12 +167,9 @@ spring:
 
 
 
-        - id: minio-storage
-          uri: http://minio:9000
-          predicates:
-            - Path=/api/storage/**
-          filters:
-            - StripPrefix=2
+        # /api/storage/** is NOT proxied to MinIO. It is served by
+        # StorageDownloadController, which is the only reader and hardens the
+        # response headers. Objects are private (no bucket policy).
 
 resilience4j:
   circuitbreaker:
@@ -258,6 +277,11 @@ logging:
     org.springframework.security: INFO
 
 management:
+  # Metrics/health live on their own port. The public Service (and therefore
+  # the ingress) only maps 8080, so /actuator/prometheus is not reachable from
+  # the internet; Prometheus scrapes the pod directly on 9090.
+  server:
+    port: ${MANAGEMENT_PORT:9090}
   endpoints:
     web:
       exposure:

@@ -18,11 +18,22 @@ public class JwtAuthenticationConverter
             return Mono.just(new JwtAuthenticationToken(token.substring(7)));
         }
         
-        String queryToken = exchange.getRequest().getQueryParams().getFirst("token");
-        if (queryToken != null && !queryToken.isEmpty()) {
-            return Mono.just(new JwtAuthenticationToken(queryToken));
+        // EventSource cannot set an Authorization header. The notification
+        // stream is the only route that may authenticate from the query
+        // string, and only with the short-lived, single-purpose ticket issued
+        // by auth-service — never the access token itself.
+        if (isNotificationStream(exchange)) {
+            String ticket = exchange.getRequest().getQueryParams().getFirst("ticket");
+            if (ticket != null && !ticket.isEmpty()) {
+                return Mono.just(new JwtAuthenticationToken(ticket));
+            }
         }
-        
+
         return Mono.empty();
+    }
+
+    static boolean isNotificationStream(ServerWebExchange exchange) {
+        return exchange.getRequest().getURI().getPath()
+                .startsWith("/api/upsert/notifications/stream");
     }
 }

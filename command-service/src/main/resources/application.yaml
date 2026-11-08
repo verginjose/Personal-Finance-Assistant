@@ -40,6 +40,12 @@ analytics:
   service:
     url: ${ANALYTICS_SERVICE_URL:http://analytics-service:8084}
 
+# Shared secret for /internal/** (set from the command-service Secret). When
+# empty, InternalController refuses every request rather than trusting callers.
+internal:
+  api:
+    token: ${INTERNAL_API_TOKEN:}
+
 # ── Custom DataSources for Read/Write Split ──────────────────────────────────
 app:
   datasource:

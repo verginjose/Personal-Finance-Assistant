@@ -146,6 +146,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
       ANALYTICS_SERVICE_URL: http://query-service:8084
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token-change-me}
     ports:
       - "127.0.0.1:${UPSERT_SERVICE_PORT}:8081"
     networks:
@@ -180,6 +181,7 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY}
       GROQ_MODEL: ${GROQ_MODEL}
       GROQ_URL: ${GROQ_URL}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token-change-me}
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
     ports:
       - "127.0.0.1:${ANALYTICS_SERVICE_PORT}:8084"
@@ -214,6 +216,11 @@ services:
       GROQ_MODEL: ${GROQ_MODEL}
       GROQ_URL: ${GROQ_URL}
       UPSERT_SERVICE_URL: http://command-service:8081
+      # Local-only RabbitMQ credentials. The service no longer carries a
+      # guest/guest default in code.
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      # Shared with command-service /internal/**; set a real value in .env.
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token-change-me}
       OCR_USE_ANGLE_CLS: "false"
       OCR_DET_LIMIT_SIDE_LEN: "736"
       MINIO_ENDPOINT: minio:9000

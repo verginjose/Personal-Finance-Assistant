@@ -19,6 +19,23 @@ export function escAttr(s) {
   return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/**
+ * Accept only image URLs that cannot break out of an attribute or point at a
+ * `javascript:`/`data:` payload. Profile pictures are user-controlled and are
+ * rendered in other people's browsers, so the URL is validated rather than
+ * merely escaped. Allowed: same-origin absolute paths (`/api/storage/...`) and
+ * `https://` URLs. Quotes, control characters and backslashes are rejected.
+ */
+export function safeImageUrl(url) {
+  const s = String(url ?? '').trim();
+  if (!s) return '';
+  if (/[\u0000-\u001f\u007f"'<>\\]/.test(s)) return '';
+  if (s.startsWith('//')) return '';              // protocol-relative
+  if (s.startsWith('/')) return s;                // same-origin path
+  if (/^https:\/\/[^\s]+$/i.test(s)) return s;
+  return '';
+}
+
 /* ── Names ──────────────────────────────────────────────────────────────── */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NAME_ACRONYMS = new Set(['OTT', 'EMI', 'SIP', 'GST', 'PDF', 'UPI', 'ATM', 'US', 'UK', 'AI', 'SME']);
@@ -129,8 +146,9 @@ export function categoryDot(category) {
 
 export function avatar(name, size = 32, profilePicUrl = null) {
   const label = displayName(name, 'User');
-  if (profilePicUrl) {
-    return `<img src="${esc(profilePicUrl)}" alt="${esc(label)}" class="avatar" style="width:${size}px;height:${size}px;border-radius:999px;vertical-align:middle;object-fit:cover;">`;
+  const src = safeImageUrl(profilePicUrl);
+  if (src) {
+    return `<img src="${escAttr(src)}" alt="${escAttr(label)}" class="avatar" style="width:${size}px;height:${size}px;border-radius:999px;vertical-align:middle;object-fit:cover;">`;
   }
   return `<span class="avatar avatar--tone-${toneFor(label)}" style="width:${size}px;height:${size}px;font-size:${Math.max(11, Math.round(size * 0.38))}px" aria-hidden="true">${esc(initials(label))}</span>`;
 }
@@ -687,7 +705,7 @@ function aiInsightHtml(ins) {
       <div class="advisor-insight-body">
         <strong class="advisor-insight-title">${esc(title)}</strong>
         ${message ? `<p class="advisor-insight-message">${esc(message)}</p>` : ''}
-        <button type="button" class="insight-action" onclick="window.navigateTo('${action.target}')">${esc(action.label)}</button>
+        <button type="button" class="insight-action" data-nav-to="${escAttr(action.target)}">${esc(action.label)}</button>
       </div>
     </article>`;
 }
@@ -920,8 +938,8 @@ export function pictureLightbox(src, label, { actionsHtml = '' } = {}) {
   return openModal('Profile picture', `
     <div class="picture-lightbox">
       <div class="picture-lightbox-stage">
-        ${src
-          ? `<img src="${esc(src)}" alt="${esc(label)}">`
+        ${src && safeImageUrl(src)
+          ? `<img src="${escAttr(safeImageUrl(src))}" alt="${escAttr(label)}">`
           : avatar(label, 240)}
       </div>
       ${actionsHtml ? `<div class="picture-lightbox-actions">${actionsHtml}</div>` : ''}
@@ -997,14 +1015,32 @@ export function setupCategorySearch(inputId, selectId) {
 }
 
 export function openReceiptLightbox(url) {
-  const isPdf = String(url).toLowerCase().endsWith('.pdf');
+  const safe = safeImageUrl(url);
+  if (!safe) return;
+  const isPdf = String(safe).toLowerCase().endsWith('.pdf');
   if (isPdf) {
-    window.open(url, '_blank');
+    window.open(safe, '_blank', 'noopener,noreferrer');
   } else {
-    openModal('Receipt', `<div class="receipt-lightbox"><img src="${esc(url)}" alt="Receipt"></div>`, { size: 'lg' });
+    openModal('Receipt', `<div class="receipt-lightbox"><img src="${escAttr(safe)}" alt="Receipt"></div>`, { size: 'lg' });
   }
 }
 window.openReceiptLightbox = openReceiptLightbox;
+
+/* Delegated handlers keep the generated markup free of inline `onclick`
+   attributes, which a Content-Security-Policy would otherwise have to allow. */
+document.addEventListener('click', (e) => {
+  const nav = e.target instanceof Element ? e.target.closest('[data-nav-to]') : null;
+  if (nav) {
+    e.preventDefault();
+    if (typeof window.navigateTo === 'function') window.navigateTo(nav.dataset.navTo);
+    return;
+  }
+  const receipt = e.target instanceof Element ? e.target.closest('[data-open-receipt]') : null;
+  if (receipt) {
+    e.preventDefault();
+    openReceiptLightbox(receipt.dataset.openReceipt);
+  }
+});
 
 /* ── Skeletons ──────────────────────────────────────────────────────────── */
 export function skeletonKpiRow(count = 4) {

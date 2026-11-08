@@ -226,13 +226,18 @@ seal() {  # secret-name namespace file=path...
   echo "---"
   # Separate registry *client* identity. The runner never gets this Secret;
   # buildkitd, the GC CronJob and the mirror job do.
+  #
+  # ca.crt is the CI CA (the registry's *server* certificate issuer), not the
+  # client CA: skopeo's --dest-cert-dir and registry-gc.sh's REGISTRY_CA read
+  # one directory and use this file to verify the server. A client does not
+  # need its own issuer's CA to present its certificate.
   seal ci-tls-registry-client pfa \
-    "ca.crt=${CERT_DIR}/registry-client-ca.crt" \
+    "ca.crt=${CERT_DIR}/ca.crt" \
     "client.cert=${CERT_DIR}/registry-client.crt" \
     "client.key=${CERT_DIR}/registry-client.key"
   echo "---"
   seal ci-tls-registry-client pfa-system \
-    "ca.crt=${CERT_DIR}/registry-client-ca.crt" \
+    "ca.crt=${CERT_DIR}/ca.crt" \
     "client.cert=${CERT_DIR}/registry-client.crt" \
     "client.key=${CERT_DIR}/registry-client.key"
   echo "---"

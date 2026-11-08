@@ -184,11 +184,13 @@ spec:
               type: spc_t
             seccompProfile:
               type: Unconfined
-            # Rootless BuildKit needs none of these. Keeping them explicit
-            # limits what a build can do even while seccomp is Unconfined.
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
+            # Do NOT add allowPrivilegeEscalation: false or drop ALL caps
+            # here. rootlesskit starts through the setuid newuidmap helper;
+            # no_new_privs blocks it and an empty bounding set would strip
+            # CAP_SETUID/CAP_SETGID, so buildkitd crash-loops with
+            # "newuidmap: operation not permitted" (tested 2026-11-08).
+            # The container still runs as uid 1000 and gets no effective
+            # capabilities itself.
           ports:
             - name: tcp
               containerPort: 1234

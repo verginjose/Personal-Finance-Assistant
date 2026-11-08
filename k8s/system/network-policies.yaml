@@ -1,0 +1,95 @@
+# NetworkPolicies for pfa-system (vector + buildkitd).
+#
+# Cross-namespace counterparts live in k8s/ci/network-policies.yaml and
+# k8s/infrastructure: a policy only applies in the namespace it is created in,
+# so each side of a cross-namespace connection names the other with a
+# namespaceSelector.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: buildkitd
+  namespace: pfa-system
+spec:
+  podSelector:
+    matchLabels: { app: buildkitd }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Build submissions and prunes arrive from pfa (runner and the prune job).
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa }
+          podSelector:
+            matchLabels: { app: ci-runner }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa }
+          podSelector:
+            matchLabels: { app: buildkit-prune }
+      ports:
+        - { protocol: TCP, port: 1234 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Push/pull against the registry, which stays in pfa.
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa }
+          podSelector:
+            matchLabels: { app: registry }
+      ports:
+        - { protocol: TCP, port: 5000 }
+    # Docker Hub / the mirrored base images' CDN.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { protocol: TCP, port: 443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vector
+  namespace: pfa-system
+spec:
+  podSelector:
+    matchLabels: { app: vector }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Prometheus scrapes the error counters on :9090 from pfa.
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa }
+          podSelector:
+            matchLabels: { app: prometheus }
+      ports:
+        - { protocol: TCP, port: 9090 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # ClickHouse ingestion (HTTP interface).
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa }
+          podSelector:
+            matchLabels: { app: clickhouse }
+      ports:
+        - { protocol: TCP, port: 8123 }
+    # The kubernetes_logs source annotates events with pod/node metadata.
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }
+    - to:
+        - ipBlock:
+            cidr: 10.99.99.1/32
+      ports:
+        - { protocol: TCP, port: 6443 }

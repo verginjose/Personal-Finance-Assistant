@@ -40,7 +40,7 @@ env:
   # registry-gc.sh.
   PUSH_REGISTRY: registry.pfa.svc.cluster.local:5000
   PULL_REGISTRY: 127.0.0.1:30500
-  BUILDKIT_HOST: tcp://buildkitd.pfa.svc.cluster.local:1234
+  BUILDKIT_HOST: tcp://buildkitd.pfa-system.svc.cluster.local:1234
   BUILDKIT_TLS_DIR: /certs
   BUILDKIT_VERSION: v0.15.2
   ALL_SERVICES: auth-service api-gateway command-service query-service frontend ocr-service

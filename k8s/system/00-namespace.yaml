@@ -1,0 +1,19 @@
+# Namespace for workloads that legitimately need privileges Pod Security
+# Baseline forbids:
+#
+#   vector     hostPath /var/log/pods and /var/log/containers (container logs)
+#   buildkitd  seccompProfile: Unconfined + SELinux spc_t (rootless BuildKit on
+#              Fedora; rootlesskit fails to fork under RuntimeDefault)
+#
+# Keeping them here lets `pfa` enforce baseline for everything else. This
+# namespace is deliberately NOT where untrusted workloads run: only these two
+# daemons, both first-party.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pfa-system
+  labels:
+    app.kubernetes.io/part-of: personal-finance-assistant
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/audit: privileged

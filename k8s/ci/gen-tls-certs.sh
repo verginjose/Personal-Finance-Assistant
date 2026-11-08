@@ -37,14 +37,16 @@ CONTROLLER_NAME="${SEALED_SECRETS_CONTROLLER:-sealed-secrets-controller}"
 # the GC jobs, and over the NodePort on loopback by containerd. Both names must
 # be in the SAN list or one of the two clients fails verification.
 REGISTRY_SANS="DNS:registry,DNS:registry.pfa,DNS:registry.pfa.svc,DNS:registry.pfa.svc.cluster.local,IP:127.0.0.1"
-BUILDKIT_SANS="DNS:buildkitd,DNS:buildkitd.pfa,DNS:buildkitd.pfa.svc,DNS:buildkitd.pfa.svc.cluster.local,IP:127.0.0.1"
+BUILDKIT_SANS="DNS:buildkitd,DNS:buildkitd.pfa,DNS:buildkitd.pfa.svc,DNS:buildkitd.pfa.svc.cluster.local,DNS:buildkitd.pfa-system,DNS:buildkitd.pfa-system.svc,DNS:buildkitd.pfa-system.svc.cluster.local,IP:127.0.0.1"
 
 FORCE=false
 APPLY=false
+RESEAL=false
 for arg in "$@"; do
   case "${arg}" in
     --force) FORCE=true ;;
     --apply) APPLY=true ;;
+    --reseal) RESEAL=true ;;
     -h|--help) sed -n '2,26p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "Unknown argument: ${arg}" >&2; exit 1 ;;
   esac
@@ -59,11 +61,23 @@ if [[ -z "${KUBECONFIG:-}" && -s "${HOME}/.kube/k3s.yaml" ]]; then
   export KUBECONFIG="${HOME}/.kube/k3s.yaml"
 fi
 
-if [[ -f "${CERT_DIR}/ca.crt" && "${FORCE}" == false ]]; then
+if [[ "${RESEAL}" == true ]]; then
+  # Re-seal the existing material (e.g. after the buildkitd server cert gained
+  # SANs or a Secret moved namespace) without touching the CA or rotating
+  # anything the running workloads already trust.
+  for f in ca.crt ca.key client.crt client.key registry.crt registry.key \
+           buildkitd.crt buildkitd.key; do
+    [[ -f "${CERT_DIR}/${f}" ]] || {
+      echo "--reseal needs the existing material in ${CERT_DIR}; ${f} is missing." >&2
+      exit 1
+    }
+  done
+elif [[ -f "${CERT_DIR}/ca.crt" && "${FORCE}" == false ]]; then
   echo "Certificates already exist in ${CERT_DIR}." >&2
   echo "Refusing to overwrite them: rotating the CA invalidates every mounted" >&2
   echo "certificate and restarts the registry, buildkitd and the runner." >&2
-  echo "Re-run with --force when you actually mean to rotate." >&2
+  echo "Re-run with --force when you actually mean to rotate, or --reseal to" >&2
+  echo "re-seal the existing files unchanged." >&2
   exit 1
 fi
 
@@ -84,6 +98,7 @@ write_ext() {  # file eku sans
   } > "${file}"
 }
 
+if [[ "${RESEAL}" == false ]]; then
 # ── CA ──────────────────────────────────────────────────────────────────────
 echo "==> Generating CA (${DAYS} days)"
 openssl req -x509 -newkey rsa:4096 -nodes -sha256 -days "${DAYS}" \
@@ -125,6 +140,7 @@ openssl x509 -req -sha256 -days "${DAYS}" \
 
 chmod 0600 "${CERT_DIR}"/*.key
 chmod 0644 "${CERT_DIR}"/*.crt
+fi   # RESEAL
 
 # ── Seal ────────────────────────────────────────────────────────────────────
 echo "==> Sealing into ${OUT_FILE}"
@@ -134,11 +150,11 @@ kubeseal --controller-namespace "${CONTROLLER_NS}" \
          --controller-name "${CONTROLLER_NAME}" \
          --fetch-cert > "${CERT_SEAL}"
 
-seal() {  # secret-name file=path...
-  local name="$1"; shift
+seal() {  # secret-name namespace file=path...
+  local name="$1" ns="$2"; shift 2
   local args=() kv
   for kv in "$@"; do args+=(--from-file="${kv%%=*}=${kv#*=}"); done
-  kubectl create secret generic "${name}" -n pfa "${args[@]}" \
+  kubectl create secret generic "${name}" -n "${ns}" "${args[@]}" \
     --dry-run=client -o yaml \
   | kubeseal --cert "${CERT_SEAL}" --format yaml
 }
@@ -146,19 +162,21 @@ seal() {  # secret-name file=path...
 : > "${OUT_FILE}"
 {
   echo "---"
-  seal ci-tls-registry \
+  seal ci-tls-registry pfa \
     "tls.crt=${CERT_DIR}/registry.crt" \
     "tls.key=${CERT_DIR}/registry.key" \
     "ca.crt=${CERT_DIR}/ca.crt"
   echo "---"
-  seal ci-tls-buildkitd \
+  # buildkitd runs in pfa-system, so its private key is sealed for that
+  # namespace only.
+  seal ci-tls-buildkitd pfa-system \
     "server.crt=${CERT_DIR}/buildkitd.crt" \
     "server.key=${CERT_DIR}/buildkitd.key" \
     "client.crt=${CERT_DIR}/client.crt" \
     "client.key=${CERT_DIR}/client.key" \
     "ca.crt=${CERT_DIR}/ca.crt"
   echo "---"
-  seal ci-tls-client \
+  seal ci-tls-client pfa \
     "ca.crt=${CERT_DIR}/ca.crt" \
     "client.cert=${CERT_DIR}/client.crt" \
     "client.key=${CERT_DIR}/client.key"

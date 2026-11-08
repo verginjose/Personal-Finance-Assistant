@@ -47,6 +47,7 @@ else
   exit 1
 fi
 NS=pfa
+SYS_NS=pfa-system
 # The registry is mTLS-only. This script runs on the host as the invoking user,
 # so it reads the client material from .certs/ (gen-tls-certs.sh).
 CERT_DIR="${CERT_DIR:-${ROOT_DIR}/.certs}"
@@ -298,11 +299,11 @@ build_ocr_base() {
   local pod ctx rc line last="" started
 
   step "ocr base image (${OCR_BASE_TAG})"
-  if ! kubectl -n "${NS}" rollout status deployment/buildkitd --timeout=300s >/dev/null 2>&1; then
-    fail "buildkitd did not become ready (see k8s/ci/buildkit.yaml)"
+  if ! kubectl -n "${SYS_NS}" rollout status deployment/buildkitd --timeout=300s >/dev/null 2>&1; then
+    fail "buildkitd did not become ready (see k8s/system/buildkit.yaml)"
     exit 1
   fi
-  pod="$(kubectl -n "${NS}" get pod -l app=buildkitd -o jsonpath='{.items[0].metadata.name}')"
+  pod="$(kubectl -n "${SYS_NS}" get pod -l app=buildkitd -o jsonpath='{.items[0].metadata.name}')"
   ok "buildkitd pod ${pod}"
 
   wait_for_registry 120 || exit 1
@@ -318,15 +319,15 @@ build_ocr_base() {
   echo "    uploading build context ($(du -sh "${ctx}" | cut -f1))"
   # `kubectl cp` nests into an existing destination, so a leftover /tmp/ocr-ctx
   # from an interrupted run would leave the context one level too deep.
-  kubectl -n "${NS}" exec "${pod}" -- rm -rf /tmp/ocr-ctx >/dev/null 2>&1 || true
-  kubectl -n "${NS}" cp "${ctx}" "${pod}:/tmp/ocr-ctx" >/dev/null
+  kubectl -n "${SYS_NS}" exec "${pod}" -- rm -rf /tmp/ocr-ctx >/dev/null 2>&1 || true
+  kubectl -n "${SYS_NS}" cp "${ctx}" "${pod}:/tmp/ocr-ctx" >/dev/null
   ok "context staged at ${pod}:/tmp/ocr-ctx"
 
   # Detach inside the pod: BuildKit cancels the build when its client goes
   # away, and this takes 30+ minutes. A sentinel file records the exit status
   # so progress can be polled without pgrep (which would also match the
   # `sh -c` wrapper that contains the pattern).
-  kubectl -n "${NS}" exec "${pod}" -- sh -c "
+  kubectl -n "${SYS_NS}" exec "${pod}" -- sh -c "
     rm -f /tmp/ocr-build.log /tmp/ocr-build.rc
     nohup sh -c 'buildctl --addr tcp://127.0.0.1:1234 \
       --tlscacert /tls/ca.crt --tlscert /tls/client.crt --tlskey /tls/client.key \
@@ -343,8 +344,8 @@ build_ocr_base() {
 
   started=${SECONDS}
   while :; do
-    rc="$(kubectl -n "${NS}" exec "${pod}" -- cat /tmp/ocr-build.rc 2>/dev/null | tr -d '[:space:]' || true)"
-    line="$(kubectl -n "${NS}" exec "${pod}" -- sh -c \
+    rc="$(kubectl -n "${SYS_NS}" exec "${pod}" -- cat /tmp/ocr-build.rc 2>/dev/null | tr -d '[:space:]' || true)"
+    line="$(kubectl -n "${SYS_NS}" exec "${pod}" -- sh -c \
       "grep -v '^[[:space:]]*$' /tmp/ocr-build.log 2>/dev/null | tail -n 1" 2>/dev/null | tr -d '\r' || true)"
     if [[ -n "${line}" && "${line}" != "${last}" ]]; then
       printf '    %s\n' "${line}"
@@ -364,13 +365,13 @@ build_ocr_base() {
         "${REGISTRY_URL}/v2/finance/ocr-base/manifests/${OCR_BASE_TAG}" >/dev/null 2>&1; then
     fail "build failed (buildctl exit ${rc:-unknown})"
     echo "    last log lines:" >&2
-    kubectl -n "${NS}" exec "${pod}" -- tail -n 25 /tmp/ocr-build.log >&2 || true
+    kubectl -n "${SYS_NS}" exec "${pod}" -- tail -n 25 /tmp/ocr-build.log >&2 || true
     echo "    full log: kubectl -n ${NS} exec ${pod} -- cat /tmp/ocr-build.log" >&2
     exit 1
   fi
   ok "pushed ${OCR_BASE_REPO}:${OCR_BASE_TAG}"
 
-  kubectl -n "${NS}" exec "${pod}" -- rm -rf /tmp/ocr-ctx >/dev/null 2>&1 || true
+  kubectl -n "${SYS_NS}" exec "${pod}" -- rm -rf /tmp/ocr-ctx >/dev/null 2>&1 || true
   echo
   echo "    next steps:"
   echo "      - new tag? bump OCR_BASE in ocr-service/Dockerfile and docker-compose.yml"

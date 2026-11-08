@@ -36,8 +36,11 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
-        # BuildKit pushes new images and pulls base/ocr-base layers.
-        - podSelector: { matchLabels: { app: buildkitd } }
+        # BuildKit pushes new images and pulls base/ocr-base layers. It now
+        # lives in pfa-system, so both the namespace and pod label are named.
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa-system }
+          podSelector: { matchLabels: { app: buildkitd } }
         # build.yml runs registry-gc.sh (tag retention) from the runner.
         - podSelector: { matchLabels: { app: ci-runner } }
         # The hourly sweep's own retention pass.
@@ -68,41 +71,6 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: buildkitd
-  namespace: pfa
-spec:
-  podSelector:
-    matchLabels: { app: buildkitd }
-  policyTypes: [Ingress, Egress]
-  ingress:
-    - from:
-        - podSelector: { matchLabels: { app: ci-runner } }
-        - podSelector: { matchLabels: { app: buildkit-prune } }
-      ports:
-        - { protocol: TCP, port: 1234 }
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels: { kubernetes.io/metadata.name: kube-system }
-      ports:
-        - { protocol: UDP, port: 53 }
-        - { protocol: TCP, port: 53 }
-    # Push/pull against the in-cluster registry.
-    - to:
-        - podSelector: { matchLabels: { app: registry } }
-      ports:
-        - { protocol: TCP, port: 5000 }
-    # Docker Hub / quay.io / GHCR: Dockerfile frontend, nvidia/cuda for the
-    # ocr-base rebuild, and any base image not in the local mirror.
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-      ports:
-        - { protocol: TCP, port: 443 }
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
   name: ci-runner
   namespace: pfa
 spec:
@@ -124,9 +92,11 @@ spec:
             cidr: 0.0.0.0/0
       ports:
         - { protocol: TCP, port: 443 }
-    # buildctl submits builds and prunes.
+    # buildctl submits builds and prunes (buildkitd is in pfa-system).
     - to:
-        - podSelector: { matchLabels: { app: buildkitd } }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa-system }
+          podSelector: { matchLabels: { app: buildkitd } }
       ports:
         - { protocol: TCP, port: 1234 }
     # registry-gc.sh --retention-only from the build step.
@@ -153,7 +123,9 @@ spec:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
     - to:
-        - podSelector: { matchLabels: { app: buildkitd } }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa-system }
+          podSelector: { matchLabels: { app: buildkitd } }
       ports:
         - { protocol: TCP, port: 1234 }
 ---

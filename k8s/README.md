@@ -25,7 +25,7 @@ k8s/
 ├── SERVICE(S).md etc.         # SERVICES.md, RUNBOOK.md, START-STOP.md, CHEATSHEET.md
 ├── ci/                        # CI/CD: in-cluster registry, BuildKit, runner
 │   ├── registry.yaml          # registry:2 + NodePort 30500 + 50 Gi PVC
-│   ├── buildkit.yaml          # rootless BuildKit + 40 Gi cache PVC
+│   ├── buildkit.yaml          # rootless BuildKit + 40 Gi cache PVC (namespace pfa-system)
 │   ├── runner.yaml            # self-hosted GitHub Actions runner
 │   └── apply.sh, setup-registry.sh, registry-gc.sh, mirror-base-images.sh, debug.sh, README.md
 ├── infrastructure/            # stateful deps + observability
@@ -224,7 +224,7 @@ dependencies (`postgres-primary/replica`, `redis`,
 participants: they notice it only when their Deployment's `image:` changes.
 
 **Cluster plumbing** — `kube-system`: `traefik` (ingress, binds :80),
-`coredns` (Service DNS, e.g. `buildkitd.pfa.svc`), `metrics-server`,
+`coredns` (Service DNS, e.g. `buildkitd.pfa-system.svc`), `metrics-server`,
 `local-path-provisioner` (creates the PVC directories), `nvidia-device-plugin`
 (advertises the GPU), `svclb-traefik`.
 
@@ -271,7 +271,7 @@ the work:
 | any `kubectl apply` | k3s binaries (API server, controllers, scheduler, kubelet, containerd) | Kubernetes / k3s |
 | `Deployment`, `Service`, `PVC` | k3s controllers (continuous reconciliation) | Kubernetes |
 | `registry.yaml` | `registry:2.8.3` image | distribution/distribution |
-| `buildkit.yaml` | `moby/buildkit` image | moby/buildkit |
+| `system/buildkit.yaml` | `moby/buildkit` image (namespace `pfa-system`) | moby/buildkit |
 | `runner.yaml` | `myoung34/github-runner` image | actions/runner |
 | `argocd/apply.sh` | installs the `argocd` image (controller + repo-server) | argoproj/argo-cd |
 | `build.yml` steps | shell executed inside `ci-runner` | **this repo** |

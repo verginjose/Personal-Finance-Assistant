@@ -61,7 +61,7 @@ data:
 
       - job_name: vector
         static_configs:
-          - targets: ['vector:9090']
+          - targets: ['vector.pfa-system.svc.cluster.local:9090']
 
       # Per-pod CPU / memory / network. This is the kubelet's cAdvisor endpoint and
       # the only source of container_* metrics (the "Pods" Grafana dashboard).

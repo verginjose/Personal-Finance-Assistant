@@ -15,7 +15,6 @@ kind: Kustomization
 
 resources:
   - buildkit-prune-cron.yaml
-  - buildkit.yaml
   - network-policies.yaml
   - registry-gc-cron.yaml
   - registry.yaml

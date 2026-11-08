@@ -38,7 +38,7 @@ fi
 
 echo "This will:"
 ${DO_CI}      && echo "  - delete namespace argocd, the runner secret, and the host registry TLS config"
-${DO_APP}     && echo "  - delete namespace pfa and all local-path volume data"
+${DO_APP}     && echo "  - delete namespaces pfa and pfa-system and all local-path volume data"
 ${DO_IMAGES}  && echo "  - remove the finance images from containerd/Docker and .pipeline artifacts"
 ${DO_HOST}    && echo "  - remove firewalld trusted sources, the inotify sysctl, and the finance.local hosts entry"
 ${DO_CLUSTER} && echo "  - uninstall k3s and delete ~/.kube/k3s.yaml"
@@ -66,8 +66,9 @@ if ${DO_CI}; then
 fi
 
 if ${DO_APP}; then
-  echo "==> Deleting namespace pfa"
+  echo "==> Deleting namespaces pfa and pfa-system"
   kubectl delete namespace pfa --ignore-not-found --wait=true
+  kubectl delete namespace pfa-system --ignore-not-found --wait=true
   echo "==> Deleting local-path volume data"
   sudo rm -rf /var/lib/rancher/k3s/storage/*
 fi

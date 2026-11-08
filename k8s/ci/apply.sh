@@ -10,8 +10,10 @@
 set -euo pipefail
 
 K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SYSTEM_DIR="$(cd "${K8S_DIR}/../system" && pwd)"
 ROOT_DIR="$(cd "${K8S_DIR}/../.." && pwd)"
 NS=pfa
+SYS_NS=pfa-system
 REGISTRY_ADDR="127.0.0.1:30500"
 CERT_DIR="${CERT_DIR:-${ROOT_DIR}/.certs}"
 
@@ -43,6 +45,9 @@ env_value() {
 # ── mTLS Secrets ────────────────────────────────────────────────────────────
 # ci-tls-registry / ci-tls-buildkitd / ci-tls-client, sealed in k8s/sealed/ and
 # decrypted by the controller. They must exist before the Deployments roll.
+echo "==> Creating pfa-system namespace (vector + BuildKit)"
+kubectl apply -f "${SYSTEM_DIR}/00-namespace.yaml"
+
 echo "==> Applying CI TLS secrets"
 kubectl apply -f "${ROOT_DIR}/k8s/sealed/ci-tls-secrets.yaml"
 for _ in $(seq 1 30); do
@@ -92,10 +97,10 @@ kubectl -n "${NS}" get secret pfa-ci-secrets >/dev/null 2>&1 || {
 
 # ── BuildKit ────────────────────────────────────────────────────────────────
 echo "==> Deploying rootless BuildKit"
-kubectl apply -f "${K8S_DIR}/buildkit.yaml"
-kubectl -n "${NS}" rollout status deploy/buildkitd --timeout=180s || {
+kubectl apply -f "${SYSTEM_DIR}"
+kubectl -n "${SYS_NS}" rollout status deploy/buildkitd --timeout=180s || {
   echo "BuildKit did not become ready. Check:" >&2
-  echo "  kubectl -n ${NS} logs deploy/buildkitd" >&2
+  echo "  kubectl -n ${SYS_NS} logs deploy/buildkitd" >&2
   echo "SELinux/rootless issues are the usual cause; see k8s/ci/README.md." >&2
   exit 1
 }
@@ -116,7 +121,7 @@ cat <<EOF
 CI stack is up.
 
   Registry   https://${REGISTRY_ADDR}  (images: ${REGISTRY_ADDR}/finance/<service>)
-  BuildKit   tcp://buildkitd.pfa.svc.cluster.local:1234  (mTLS, client cert in .certs/)
+  BuildKit   tcp://buildkitd.pfa-system.svc.cluster.local:1234  (mTLS, client cert in .certs/)
   Runner     https://github.com/verginjose/Personal-Finance-Assistant/settings/actions/runners
 
 Backfill every image once, so all Deployments can move off the old

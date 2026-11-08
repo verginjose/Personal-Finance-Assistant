@@ -4,6 +4,11 @@
 #   * the Maven/apt layer cache survives in a PVC between builds, and
 #   * the runner pod needs no privileged container and no docker socket.
 #
+# Lives in pfa-system for the same reason as Vector: it needs
+# seccompProfile: Unconfined and SELinux spc_t to run rootless on this Fedora
+# node, and both are rejected by Baseline PSA. pfa enforces baseline; this
+# namespace does not.
+#
 # The daemon speaks mutually authenticated TLS on 1234: `--tlscacert` makes
 # BuildKit require and verify a client certificate (buildkitd main.go sets
 # ClientAuth = RequireAndVerifyClientCert when a CA is supplied). Only holders
@@ -16,7 +21,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: buildkitd-config
-  namespace: pfa
+  namespace: pfa-system
 data:
   buildkitd.toml: |
     # BuildKit pushes to the registry over its ClusterIP Service, which is
@@ -91,7 +96,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: buildkit-cache
-  namespace: pfa
+  namespace: pfa-system
   labels:
     app: buildkitd
     app.kubernetes.io/part-of: personal-finance-assistant
@@ -106,7 +111,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: buildkitd
-  namespace: pfa
+  namespace: pfa-system
   labels:
     app: buildkitd
     app.kubernetes.io/part-of: personal-finance-assistant
@@ -223,7 +228,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: buildkitd
-  namespace: pfa
+  namespace: pfa-system
   labels:
     app: buildkitd
     app.kubernetes.io/part-of: personal-finance-assistant

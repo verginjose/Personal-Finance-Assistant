@@ -1,8 +1,15 @@
+#Vector log collector and ClickHouse shipper.
+#
+# Lives in pfa-system, not pfa: it needs hostPath /var/log/pods to read the
+# kubelet's container logs, and that is forbidden by Pod Security Admission's
+# Baseline profile. pfa-system is exempt (PSA privileged) so pfa itself can
+# enforce baseline. It still logs pods from every namespace through the
+# app.kubernetes.io/part-of label selector.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: vector
-  namespace: pfa
+  namespace: pfa-system
   labels:
     app: vector
     app.kubernetes.io/part-of: personal-finance-assistant
@@ -35,13 +42,13 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: vector
-    namespace: pfa
+    namespace: pfa-system
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: vector-config
-  namespace: pfa
+  namespace: pfa-system
   labels:
     app: vector
     app.kubernetes.io/part-of: personal-finance-assistant
@@ -165,7 +172,7 @@ data:
           - type: counter
             field: level
             name: log_errors_total
-            namespace: pfa
+            namespace: pfa-system
             tags:
               service: "{{service}}"
 
@@ -195,7 +202,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: vector
-  namespace: pfa
+  namespace: pfa-system
   labels:
     app: vector
     app.kubernetes.io/part-of: personal-finance-assistant
@@ -214,7 +221,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: vector
-  namespace: pfa
+  namespace: pfa-system
   labels:
     app: vector
     app.kubernetes.io/part-of: personal-finance-assistant

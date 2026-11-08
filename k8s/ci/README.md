@@ -249,7 +249,7 @@ Deployment — if the runner ever needs `kubectl`, something is wrong with Argo.
 | File | Contents |
 |---|---|
 | `registry.yaml` | 50 Gi PVC + `registry:2` Deployment + ConfigMap + NodePort 30500 |
-| `buildkit.yaml` | rootless BuildKit Deployment (mTLS 1234), 40 Gi cache PVC |
+| `../system/buildkit.yaml` | rootless BuildKit Deployment (mTLS 1234), 40 Gi cache PVC, in `pfa-system` |
 | `runner.yaml` | ServiceAccount + `myoung34/github-runner` Deployment + client cert mount + buildctl PVC |
 | `network-policies.yaml` | Ingress/egress allow-lists for every CI pod |
 | `gen-tls-certs.sh` | Generates the CA/certs into `.certs/` and seals them into `k8s/sealed/ci-tls-secrets.yaml` |

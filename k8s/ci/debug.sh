@@ -10,6 +10,7 @@ set -uo pipefail
 K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${K8S_DIR}/../.." && pwd)"
 NS=pfa
+SYS_NS=pfa-system
 REGISTRY="https://127.0.0.1:30500"
 CERT_DIR="${CERT_DIR:-${ROOT_DIR}/.certs}"
 FAILURES=0
@@ -62,14 +63,14 @@ fi
 
 # ── buildkit ────────────────────────────────────────────────────────────────
 section "buildkit"
-if kubectl -n "${NS}" get deploy buildkitd >/dev/null 2>&1; then
-  if kubectl -n "${NS}" exec deploy/buildkitd -- \
+if kubectl -n "${SYS_NS}" get deploy buildkitd >/dev/null 2>&1; then
+  if kubectl -n "${SYS_NS}" exec deploy/buildkitd -- \
        buildctl --addr tcp://127.0.0.1:1234 \
          --tlscacert /tls/ca.crt --tlscert /tls/client.crt --tlskey /tls/client.key \
          debug workers >/dev/null 2>&1; then
     ok "daemon accepts builds (mTLS)"
   else
-    bad "buildctl cannot reach the daemon (check: kubectl -n ${NS} logs deploy/buildkitd)"
+    bad "buildctl cannot reach the daemon (check: kubectl -n ${SYS_NS} logs deploy/buildkitd)"
   fi
 else
   warn "buildkitd not deployed"

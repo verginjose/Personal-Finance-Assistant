@@ -15,7 +15,7 @@
 # KeepDuration=0, KeepBytes=0 and no filter, which means "delete every record"
 # - including the pinned base images. The daemon has no RPC for "apply your
 # configured gcpolicy", so the categories are spelled out here. Keep this in
-# sync with the [[worker.oci.gcpolicy]] rules in buildkit.yaml: the ConfigMap
+# sync with the [[worker.oci.gcpolicy]] rules in k8s/system/buildkit.yaml: the ConfigMap
 # still governs the daemon's own post-build pass, this job is what makes those
 # rules effective for freshly pulled layers.
 #
@@ -67,7 +67,7 @@ spec:
               args:
                 - |
                   set -eu
-                  ADDR=tcp://buildkitd.pfa.svc.cluster.local:1234
+                  ADDR=tcp://buildkitd.pfa-system.svc.cluster.local:1234
                   # buildkitd requires a client certificate (mTLS).
                   bctl() {
                     buildctl --addr "$ADDR" \

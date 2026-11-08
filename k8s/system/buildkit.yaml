@@ -129,6 +129,10 @@ spec:
         app: buildkitd
         app.kubernetes.io/part-of: personal-finance-assistant
     spec:
+      # BuildKit talks to the registry directly and never calls the Kubernetes
+      # API, so it needs no ServiceAccount token. Vector, by contrast, does
+      # (kubernetes_logs reads pod/node metadata through the API) and keeps it.
+      automountServiceAccountToken: false
       # Secret files are root:fsGroup with mode 0440; this makes them readable
       # by the rootless uid. OnRootMismatch keeps kubelet from recursively
       # chowning the 40 Gi cache on every start.

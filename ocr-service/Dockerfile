@@ -1,4 +1,6 @@
-# syntax=docker/dockerfile:1
+# No `# syntax=` directive on purpose: it makes BuildKit fetch the dockerfile
+# frontend image from Docker Hub, and buildkitd has no internet egress. This
+# file only uses FROM/COPY/EXPOSE/CMD, which the built-in frontend handles.
 # OCR app image.
 #
 # The Python stack (paddlepaddle-gpu 3.2.1, paddleocr, CUDA runtime) is baked

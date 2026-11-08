@@ -77,6 +77,20 @@ spec:
                   }
                   prune() { bctl prune "$@"; }
 
+                  # A freshly created pod's NetworkPolicy state is programmed
+                  # by kube-router a moment after it starts; the very first
+                  # dial can be refused. Wait for the daemon instead of
+                  # failing the run.
+                  i=0
+                  until bctl debug workers >/dev/null 2>&1; do
+                    i=$((i+1))
+                    if [ "$i" -ge 20 ]; then
+                      echo "buildkitd unreachable after ${i}s" >&2
+                      exit 1
+                    fi
+                    sleep 1
+                  done
+
                   echo "==> before"
                   bctl du | tail -1
 

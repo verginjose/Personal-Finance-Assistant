@@ -73,6 +73,13 @@ CURL_TLS=()
 }
 rcurl() { curl "${CURL_TLS[@]}" "$@"; }
 
+# Retry the reachability probe: a freshly started pod's NetworkPolicy state
+# takes a moment to be programmed by kube-router, so the first request from a
+# CronJob/Job pod can be refused even though the registry is healthy.
+for _ in $(seq 1 20); do
+  rcurl -fsS "${REGISTRY}/v2/" >/dev/null 2>&1 && break
+  sleep 1
+done
 rcurl -fsS "${REGISTRY}/v2/" >/dev/null || { echo "Registry not reachable at ${REGISTRY}" >&2; exit 1; }
 
 TMP="$(mktemp -d)"

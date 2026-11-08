@@ -146,6 +146,16 @@ spec:
 
                   log() { echo "==> $*"; }
 
+                  # Same startup race as buildkit-prune: kube-router programs
+                  # the new pod's policy a moment after start, so the first
+                  # apiserver call can be refused.
+                  i=0
+                  until kubectl -n "$NS" get deploy "$DEPLOY" >/dev/null 2>&1; do
+                    i=$((i+1))
+                    if [ "$i" -ge 20 ]; then log "apiserver unreachable"; exit 1; fi
+                    sleep 1
+                  done
+
                   # kubectl rollout status watches the Deployment, and the
                   # Role cannot scope watch by resourceName. Poll with get.
                   wait_rollout() {

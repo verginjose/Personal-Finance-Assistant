@@ -2,9 +2,16 @@
 # Generate the CA and certificates for the CI chain's mutual TLS, then seal the
 # three workload Secrets.
 #
-#   ./k8s/ci/gen-tls-certs.sh            # generate only if missing
-#   ./k8s/ci/gen-tls-certs.sh --force    # rotate: regenerate everything
-#   ./k8s/ci/gen-tls-certs.sh --apply    # ...and kubectl apply the sealed file
+#   ./k8s/ci/gen-tls-certs.sh                 # generate only if missing
+#   ./k8s/ci/gen-tls-certs.sh --force         # rotate: regenerate everything
+#   ./k8s/ci/gen-tls-certs.sh --apply         # ...and kubectl apply the sealed file
+#   ./k8s/ci/gen-tls-certs.sh --registry-client
+#       Add (or rotate) the separate registry *client* identity only, leaving
+#       the existing CA, server certs and runner certificate untouched. Used
+#       to stop the runner's buildkitd client certificate from being accepted
+#       by the registry.
+#   ./k8s/ci/gen-tls-certs.sh --reseal
+#       Re-seal the existing material unchanged.
 #
 # Why mTLS instead of the old plaintext setup: buildkitd used to accept builds
 # from anything in the cluster, and the registry accepted unauthenticated
@@ -42,12 +49,14 @@ BUILDKIT_SANS="DNS:buildkitd,DNS:buildkitd.pfa,DNS:buildkitd.pfa.svc,DNS:buildki
 FORCE=false
 APPLY=false
 RESEAL=false
+REGISTRY_CLIENT=false
 for arg in "$@"; do
   case "${arg}" in
     --force) FORCE=true ;;
     --apply) APPLY=true ;;
     --reseal) RESEAL=true ;;
-    -h|--help) sed -n '2,26p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    --registry-client) REGISTRY_CLIENT=true ;;
+    -h|--help) sed -n '2,36p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "Unknown argument: ${arg}" >&2; exit 1 ;;
   esac
 done
@@ -66,13 +75,14 @@ if [[ "${RESEAL}" == true ]]; then
   # SANs or a Secret moved namespace) without touching the CA or rotating
   # anything the running workloads already trust.
   for f in ca.crt ca.key client.crt client.key registry.crt registry.key \
-           buildkitd.crt buildkitd.key; do
+           buildkitd.crt buildkitd.key registry-client-ca.crt \
+           registry-client-ca.key registry-client.crt registry-client.key; do
     [[ -f "${CERT_DIR}/${f}" ]] || {
       echo "--reseal needs the existing material in ${CERT_DIR}; ${f} is missing." >&2
       exit 1
     }
   done
-elif [[ -f "${CERT_DIR}/ca.crt" && "${FORCE}" == false ]]; then
+elif [[ -f "${CERT_DIR}/ca.crt" && "${FORCE}" == false && "${REGISTRY_CLIENT}" == false ]]; then
   echo "Certificates already exist in ${CERT_DIR}." >&2
   echo "Refusing to overwrite them: rotating the CA invalidates every mounted" >&2
   echo "certificate and restarts the registry, buildkitd and the runner." >&2
@@ -98,7 +108,30 @@ write_ext() {  # file eku sans
   } > "${file}"
 }
 
-if [[ "${RESEAL}" == false ]]; then
+issue_registry_client() {
+  echo "==> Generating registry client CA and certificate (${DAYS} days)"
+  openssl req -x509 -newkey rsa:4096 -nodes -sha256 -days "${DAYS}" \
+    -keyout "${CERT_DIR}/registry-client-ca.key" \
+    -out "${CERT_DIR}/registry-client-ca.crt" \
+    -subj "/CN=pfa-registry-client-ca/O=personal-finance-assistant" \
+    -addext "basicConstraints=critical,CA:TRUE" \
+    -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
+
+  openssl req -new -newkey rsa:2048 -nodes \
+    -keyout "${CERT_DIR}/registry-client.key" -out "${TMP}/registry-client.csr" \
+    -subj "/CN=pfa-registry-client/O=personal-finance-assistant" >/dev/null 2>&1
+  write_ext "${TMP}/registry-client.ext" "clientAuth" ""
+  openssl x509 -req -sha256 -days "${DAYS}" \
+    -in "${TMP}/registry-client.csr" \
+    -CA "${CERT_DIR}/registry-client-ca.crt" \
+    -CAkey "${CERT_DIR}/registry-client-ca.key" -CAcreateserial \
+    -extfile "${TMP}/registry-client.ext" \
+    -out "${CERT_DIR}/registry-client.crt" >/dev/null 2>&1
+  chmod 0600 "${CERT_DIR}/registry-client-ca.key" "${CERT_DIR}/registry-client.key"
+  chmod 0644 "${CERT_DIR}/registry-client-ca.crt" "${CERT_DIR}/registry-client.crt"
+}
+
+if [[ "${RESEAL}" == false && "${REGISTRY_CLIENT}" == false ]]; then
 # ── CA ──────────────────────────────────────────────────────────────────────
 echo "==> Generating CA (${DAYS} days)"
 openssl req -x509 -newkey rsa:4096 -nodes -sha256 -days "${DAYS}" \
@@ -138,9 +171,32 @@ openssl x509 -req -sha256 -days "${DAYS}" \
   -CA "${CERT_DIR}/ca.crt" -CAkey "${CERT_DIR}/ca.key" -CAcreateserial \
   -extfile "${TMP}/client.ext" -out "${CERT_DIR}/client.crt" >/dev/null 2>&1
 
+issue_registry_client
+
 chmod 0600 "${CERT_DIR}"/*.key
 chmod 0644 "${CERT_DIR}"/*.crt
 fi   # RESEAL
+
+# ── Registry client identity ────────────────────────────────────────────────
+# The registry must not accept the certificate the runner holds for buildkitd,
+# otherwise a compromised build can push or delete any finance/* image. It is a
+# separate CA so that only identities signed here authenticate to the registry;
+# buildkitd, the GC jobs, the mirror job and host containerd use this one.
+if [[ "${REGISTRY_CLIENT}" == true ]]; then
+  if [[ -f "${CERT_DIR}/registry-client-ca.crt" && "${FORCE}" == false ]]; then
+    echo "Registry client identity already exists in ${CERT_DIR}; re-sealing only."
+  else
+    issue_registry_client
+  fi
+fi
+
+# The seal step below needs every file, including the registry client pair.
+for f in registry-client-ca.crt registry-client.crt registry-client.key; do
+  [[ -f "${CERT_DIR}/${f}" ]] || {
+    echo "Missing ${CERT_DIR}/${f}; run with --registry-client first." >&2
+    exit 1
+  }
+done
 
 # ── Seal ────────────────────────────────────────────────────────────────────
 echo "==> Sealing into ${OUT_FILE}"
@@ -165,7 +221,20 @@ seal() {  # secret-name namespace file=path...
   seal ci-tls-registry pfa \
     "tls.crt=${CERT_DIR}/registry.crt" \
     "tls.key=${CERT_DIR}/registry.key" \
-    "ca.crt=${CERT_DIR}/ca.crt"
+    "ca.crt=${CERT_DIR}/ca.crt" \
+    "client-ca.crt=${CERT_DIR}/registry-client-ca.crt"
+  echo "---"
+  # Separate registry *client* identity. The runner never gets this Secret;
+  # buildkitd, the GC CronJob and the mirror job do.
+  seal ci-tls-registry-client pfa \
+    "ca.crt=${CERT_DIR}/registry-client-ca.crt" \
+    "client.cert=${CERT_DIR}/registry-client.crt" \
+    "client.key=${CERT_DIR}/registry-client.key"
+  echo "---"
+  seal ci-tls-registry-client pfa-system \
+    "ca.crt=${CERT_DIR}/registry-client-ca.crt" \
+    "client.cert=${CERT_DIR}/registry-client.crt" \
+    "client.key=${CERT_DIR}/registry-client.key"
   echo "---"
   # buildkitd runs in pfa-system, so its private key is sealed for that
   # namespace only.
@@ -200,7 +269,7 @@ Next, in this order:
 
   1. commit + push the sealed file, or run: ./k8s/ci/gen-tls-certs.sh --apply
   2. sudo ./k8s/ci/setup-registry.sh
-     Installs ca.crt/client.crt/client.key on the host and rewrites
+     Installs the registry client CA and certificate on the host and rewrites
      /etc/rancher/k3s/registries.yaml for HTTPS + mTLS. Do this before the new
      registry Deployment rolls out; until then containerd cannot pull from it
      (running pods are unaffected).

@@ -29,8 +29,14 @@ data:
       tls:
         certificate: /tls/tls.crt
         key: /tls/tls.key
+        # Phase 1 of the credential split: both the old CI CA and the new
+        # registry-client CA are trusted, so existing clients keep working.
+        # Phase 2 removes /tls/ca.crt once host containerd and every pod use
+        # the registry-client certificate; only then is the runner's buildkit
+        # certificate rejected here.
         clientcas:
           - /tls/ca.crt
+          - /tls/client-ca.crt
     storage:
       filesystem:
         rootdirectory: /var/lib/registry

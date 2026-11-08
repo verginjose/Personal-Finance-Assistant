@@ -93,7 +93,9 @@ EOF
   volumes:
     - name: tls
       secret:
-        secretName: ci-tls-client
+        # Registry-client identity; the buildkit client cert is not accepted
+        # by the registry.
+        secretName: ci-tls-registry-client
         defaultMode: 0440
 EOF
   } | kubectl -n "${NS}" create -f - >/dev/null

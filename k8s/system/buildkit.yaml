@@ -27,12 +27,16 @@ data:
     # BuildKit pushes to the registry over its ClusterIP Service, which is
     # stable regardless of the node's LAN IP. The registry serves HTTPS and
     # requires a client certificate; `keypair` is how BuildKit presents one.
+    #
+    # This is the *registry-client* identity (its own CA), not the CI client
+    # certificate the runner holds for buildkitd. Keeping them separate stops
+    # a compromised build from pushing or deleting images.
     [registry."registry.pfa.svc.cluster.local:5000"]
       ca = ["/tls/ca.crt"]
 
       [[registry."registry.pfa.svc.cluster.local:5000".keypair]]
-        cert = "/tls/client.crt"
-        key = "/tls/client.key"
+        cert = "/registry-client/client.cert"
+        key = "/registry-client/client.key"
 
     # Cache retention. With no gcpolicy BuildKit falls back to
     # config.DetectDefaultGCCap(), which is 10% of the filesystem it can see.
@@ -190,6 +194,9 @@ spec:
             - name: tls
               mountPath: /tls
               readOnly: true
+            - name: registry-client
+              mountPath: /registry-client
+              readOnly: true
             - name: cache
               mountPath: /home/user/.local/share/buildkit
           readinessProbe:
@@ -228,6 +235,10 @@ spec:
         - name: tls
           secret:
             secretName: ci-tls-buildkitd
+            defaultMode: 0440
+        - name: registry-client
+          secret:
+            secretName: ci-tls-registry-client
             defaultMode: 0440
         - name: cache
           persistentVolumeClaim:

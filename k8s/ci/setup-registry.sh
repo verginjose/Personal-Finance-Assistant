@@ -33,7 +33,7 @@ REGISTRY_ADDR="${REGISTRY_ADDR:-127.0.0.1:30500}"
 CERT_DEST=/etc/rancher/k3s/registry-certs
 TARGET=/etc/rancher/k3s/registries.yaml
 
-for f in ca.crt client.crt client.key; do
+for f in ca.crt registry-client.crt registry-client.key; do
   [[ -f "${CERT_SRC}/${f}" ]] || {
     echo "Missing ${CERT_SRC}/${f}" >&2
     echo "Generate it first: ./k8s/ci/gen-tls-certs.sh" >&2
@@ -46,8 +46,10 @@ echo "==> Installing certificates in ${CERT_DEST}"
 mkdir -p "${CERT_DEST}"
 install -m 0644 -o root -g root "${CERT_SRC}/ca.crt"     "${CERT_DEST}/ca.crt"
 # skopeo/containers-image naming: the client cert is *.cert, the key *.key.
-install -m 0600 -o root -g root "${CERT_SRC}/client.crt" "${CERT_DEST}/client.cert"
-install -m 0600 -o root -g root "${CERT_SRC}/client.key" "${CERT_DEST}/client.key"
+# This is the registry-client identity; the runner's buildkit client cert is
+# signed by a CA the registry no longer trusts.
+install -m 0600 -o root -g root "${CERT_SRC}/registry-client.crt" "${CERT_DEST}/client.cert"
+install -m 0600 -o root -g root "${CERT_SRC}/registry-client.key" "${CERT_DEST}/client.key"
 
 echo "==> Writing ${TARGET} (mTLS endpoint https://${REGISTRY_ADDR})"
 mkdir -p /etc/rancher/k3s
@@ -71,5 +73,5 @@ systemctl restart k3s
 echo
 echo "Done. Give k3s ~30 s, then verify from the host:"
 echo "  kubectl --kubeconfig ~/.kube/k3s.yaml get nodes"
-echo "  curl --cacert ${CERT_SRC}/ca.crt --cert ${CERT_SRC}/client.crt \\"
-echo "       --key ${CERT_SRC}/client.key https://${REGISTRY_ADDR}/v2/"
+echo "  curl --cacert ${CERT_SRC}/ca.crt --cert ${CERT_SRC}/registry-client.crt \\"
+echo "       --key ${CERT_SRC}/registry-client.key https://${REGISTRY_ADDR}/v2/"

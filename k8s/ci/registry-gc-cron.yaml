@@ -274,5 +274,7 @@ spec:
                 defaultMode: 0555
             - name: tls
               secret:
-                secretName: ci-tls-client
+                # Registry-client identity, not the buildkit client cert: the
+                # registry no longer accepts the latter.
+                secretName: ci-tls-registry-client
                 defaultMode: 0440

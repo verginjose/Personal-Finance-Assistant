@@ -616,16 +616,21 @@ public class SplitService {
         final String desc = expense.getDescription();
         final Long gid = req.getGroupId();
 
-        // Push notification to involved members
-        splits.forEach(s -> {
-            if (!s.getUserId().equals(actorUserId) && s.getAmount().compareTo(BigDecimal.ZERO) > 0) {
-                notificationService.sendNotification(s.getUserId(), Map.of(
-                        "status", "INFO",
-                        "message", actorName + " added a new expense: " + desc,
-                        "event", "expense-added",
-                        "groupId", gid));
-            }
-        });
+        // Push one notification to every involved member. One saveAll and one
+        // async task for the whole fan-out instead of one per member.
+        List<UUID> recipients = splits.stream()
+                .filter(s -> !s.getUserId().equals(actorUserId)
+                        && s.getAmount().compareTo(BigDecimal.ZERO) > 0)
+                .map(ExpenseSplit::getUserId)
+                .distinct()
+                .toList();
+        if (!recipients.isEmpty()) {
+            notificationService.sendNotifications(recipients, Map.of(
+                    "status", "INFO",
+                    "message", actorName + " added a new expense: " + desc,
+                    "event", "expense-added",
+                    "groupId", gid));
+        }
 
         // Evict query-service group-scoped caches (group-balances, group-expenses,
         // group-activity, group-details). The @Caching above only clears this

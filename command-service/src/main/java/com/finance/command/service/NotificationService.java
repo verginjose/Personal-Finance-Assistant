@@ -18,8 +18,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -90,17 +93,56 @@ public class NotificationService {
         } catch (Exception e) {
             log.warn("Failed to persist notification for user {}: {}", userId, e.getMessage());
         }
+        broadcast(userId, withNotificationId(payload, saved));
+    }
 
-        // Include the inbox row id so a visible client can mark a notification
-        // read while a hidden one leaves it unread for later.
-        Object outbound = payload;
-        if (saved != null && payload instanceof Map<?, ?> data) {
-            Map<String, Object> copy = new HashMap<>();
-            data.forEach((key, value) -> copy.put(String.valueOf(key), value));
-            copy.put("notificationId", saved.getId());
-            outbound = copy;
+    /**
+     * Fan-out form for one event addressed to many users (a group expense
+     * notifies every other member). One {@code saveAll} and one executor task
+     * instead of N of each, which matters when a 10-member group tightens the
+     * write path.
+     */
+    @Async
+    public void sendNotifications(Collection<UUID> userIds, Object payload) {
+        List<UUID> targets = userIds == null ? List.of()
+                : userIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (targets.isEmpty()) {
+            return;
         }
 
+        List<AppNotification> saved;
+        try {
+            saved = notificationRepo.saveAll(
+                    targets.stream().map(userId -> toEntity(userId, payload)).toList());
+        } catch (Exception e) {
+            log.warn("Failed to persist {} notifications: {}", targets.size(), e.getMessage());
+            saved = List.of();
+        }
+
+        Map<UUID, AppNotification> byUser = new HashMap<>();
+        for (AppNotification notification : saved) {
+            byUser.put(notification.getUserId(), notification);
+        }
+        for (UUID userId : targets) {
+            broadcast(userId, withNotificationId(payload, byUser.get(userId)));
+        }
+    }
+
+    /**
+     * Include the inbox row id so a visible client can mark a notification
+     * read while a hidden one leaves it unread for later.
+     */
+    private Object withNotificationId(Object payload, AppNotification saved) {
+        if (saved == null || !(payload instanceof Map<?, ?> data)) {
+            return payload;
+        }
+        Map<String, Object> copy = new HashMap<>();
+        data.forEach((key, value) -> copy.put(String.valueOf(key), value));
+        copy.put("notificationId", saved.getId());
+        return copy;
+    }
+
+    private void broadcast(UUID userId, Object outbound) {
         Set<SseEmitter> connections = emitters.get(userId);
         if (connections == null || connections.isEmpty()) {
             log.info("No active SSE connection for user {} — notification stored for later", userId);

@@ -235,11 +235,16 @@ public class TransactionEntryService {
 
         createCounter.increment(saved.size());
 
-        // dedupe evictions — one per distinct user instead of one per entry
-        saved.stream()
-                .map(TransactionEntry::getUserId)
-                .distinct()
-                .forEach(queryCacheEvictor::evictUserKeysWithReplicationGuard);
+        // Evict the affected users' cached reads. The group-expense path passes
+        // publishCacheEvict=false because it evicts the whole split set once
+        // itself (evictAnalyticsCacheForSplits); doing it per entry here made a
+        // 10-member expense run three overlapping eviction waves.
+        if (publishCacheEvict) {
+            saved.stream()
+                    .map(TransactionEntry::getUserId)
+                    .distinct()
+                    .forEach(queryCacheEvictor::evictUserKeysWithReplicationGuard);
+        }
 
         log.info("Batch created {} transaction entries", saved.size());
 

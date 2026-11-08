@@ -79,6 +79,10 @@ spec:
       labels:
         app: registry
         app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        # distribution reads config.yml once at start; without this a
+        # ConfigMap edit (e.g. the trusted client CAs) is not picked up.
+        configmap.reloader.stakater.com/reload: "registry-config"
     spec:
       containers:
         - name: registry

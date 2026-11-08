@@ -161,9 +161,12 @@ spec:
             - --tlscert=/tls/server.crt
             - --tlskey=/tls/server.key
             - --config=/etc/buildkit/buildkitd.toml
-            # No --oci-worker-no-process-sandbox: with seccomp Unconfined the
-            # worker can create its own user namespace, so build steps get a
-            # nested sandbox instead of sharing this container's namespaces.
+            # Required in this pod. Without it the worker starts but every
+            # RUN fails at container init ("mount proc: operation not
+            # permitted"): the sandbox's user namespace cannot mount /proc
+            # here. Tested 2026-11-08; do not remove without re-testing a
+            # build that has a RUN step.
+            - --oci-worker-no-process-sandbox
             - --oci-worker-snapshotter=native
           env:
             - name: HOME

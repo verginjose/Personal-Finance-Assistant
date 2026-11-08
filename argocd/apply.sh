@@ -41,6 +41,9 @@ if ! kubectl get ns argocd >/dev/null 2>&1; then
     -f "https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml"
   kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
   kubectl -n argocd rollout status statefulset/argocd-application-controller --timeout=300s
+  kubectl -n argocd patch cm argocd-cmd-params-cm --type merge -p '{"data":{"server.insecure":"true"}}'
+    kubectl -n argocd patch svc argocd-server -p \
+      '{"spec":{"type":"NodePort","ports":[{"name":"http","port":80,"targetPort":8080,"nodePort":30080}]}}'
 fi
 
 echo "==> Registering the repository credential"

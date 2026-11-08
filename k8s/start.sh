@@ -144,11 +144,14 @@ PF_ATTEMPTS=6
 PF_RETRY_DELAY=5
 
 start_port_forward() {
-  local attempt
+  local attempt rc
   for attempt in $(seq 1 "${PF_ATTEMPTS}"); do
-    if _start_port_forward_once "$@"; then
-      return 0
-    fi
+    _start_port_forward_once "$@"
+    rc=$?
+    [[ "${rc}" -eq 0 ]] && return 0
+    # rc=2 means the local port is held by something that is not our forward;
+    # waiting for pods to settle will not help.
+    [[ "${rc}" -eq 2 ]] && return 1
     if [[ "${attempt}" -lt "${PF_ATTEMPTS}" ]]; then
       warn "${1} port-forward: pods are still settling; retry ${attempt}/${PF_ATTEMPTS} in ${PF_RETRY_DELAY}s"
       sleep "${PF_RETRY_DELAY}"
@@ -157,9 +160,24 @@ start_port_forward() {
   return 1
 }
 
+# Print the PIDs listening on a local TCP port (IPv4 and IPv6, deduplicated).
+# Requires ss; returns nothing when the port is free.
+port_listener_pids() {
+  { ss -ltnpH "sport = :$1" 2>/dev/null || true; } \
+    | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u
+}
+
+# Read a process's command line, or print nothing when it no longer exists.
+proc_cmdline() {
+  local pid="$1"
+  [[ -n "${pid}" && -r "/proc/${pid}/cmdline" ]] \
+    && tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null
+  return 0
+}
+
 _start_port_forward_once() {
   local name="$1" ns="$2" svc="$3" ports="$4" url="$5"
-  local pidfile logfile pid localport cmd
+  local pidfile logfile pid localport cmd pair lp holder_pid holder_cmd holder_pids
   pidfile="$(pf_pidfile "${name}")"
   logfile="$(pf_logfile "${name}")"
   localport="${ports%%:*}"
@@ -168,7 +186,7 @@ _start_port_forward_once() {
   # must not look like a running kubectl.
   if [[ -f "${pidfile}" ]]; then
     pid="$(cat "${pidfile}" 2>/dev/null || true)"
-    cmd="$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null || true)"
+    cmd="$(proc_cmdline "${pid}")"
     if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null \
        && [[ "${cmd}" == *port-forward*"${svc}"* ]]; then
       ok "${name} port-forward already running (pid ${pid}) → ${url}"
@@ -176,6 +194,29 @@ _start_port_forward_once() {
     fi
     rm -f "${pidfile}"
   fi
+
+  # An interrupted run can leave a nohup'ed forward behind without a pidfile
+  # (Ctrl-C, removed runtime dir), and it keeps the local port bound. Adopt it
+  # when it is the same forward; fail loudly when it is someone else's process.
+  # Otherwise kubectl just dies with "address already in use" and the retry
+  # loop misreports that as "could not reach the pod".
+  # shellcheck disable=SC2086
+  for pair in ${ports}; do
+    lp="${pair%%:*}"
+    holder_pids="$(port_listener_pids "${lp}")"
+    [[ -z "${holder_pids}" ]] && continue
+    while read -r holder_pid; do
+      [[ -z "${holder_pid}" ]] && continue
+      holder_cmd="$(proc_cmdline "${holder_pid}")"
+      if [[ "${holder_cmd}" == *port-forward*"svc/${svc}"* ]]; then
+        echo "${holder_pid}" >"${pidfile}"
+        ok "${name} port-forward already running (pid ${holder_pid}) → ${url}"
+        return 0
+      fi
+    done <<<"${holder_pids}"
+    fail "${name} port ${lp} is already in use by: $(proc_cmdline "${holder_pids%%$'\n'*}")"
+    return 2
+  done
 
   # ports may hold several pairs ("9000:9000 9001:9001"), so split them.
   # shellcheck disable=SC2086

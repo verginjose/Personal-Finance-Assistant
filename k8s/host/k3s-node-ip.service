@@ -1,0 +1,36 @@
+# Stable node IP for k3s.
+#
+# k3s is configured with node-ip: "10.99.99.1" (see
+# /etc/rancher/k3s/config.yaml) so the `kubernetes` Service endpoint does not
+# change when the laptop switches Wi-Fi networks and DHCP hands out a new
+# address. That address must exist before k3s starts, so this unit creates a
+# dummy interface and assigns it.
+#
+# Install (root, from the repo root):
+#   sudo install -m 0644 k8s/host/k3s-node-ip.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now k3s-node-ip.service
+#
+# Verify:
+#   systemctl status k3s-node-ip.service
+#   ip -4 addr show dummy0
+#   kubectl get node -o wide        # INTERNAL-IP should be 10.99.99.1
+
+[Unit]
+Description=Stable dummy interface for the k3s node IP (10.99.99.1)
+DefaultDependencies=no
+After=local-fs.target
+Before=k3s.service network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Idempotent: the leading "-" ignores "interface already exists", and
+# `ip addr replace` keeps the address correct if the unit runs again.
+ExecStart=-/usr/bin/ip link add dummy0 type dummy
+ExecStart=/usr/bin/ip addr replace 10.99.99.1/32 dev dummy0
+ExecStart=/usr/bin/ip link set dummy0 up
+
+[Install]
+WantedBy=multi-user.target

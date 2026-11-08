@@ -595,7 +595,10 @@ spec:
         - namespaceSelector:
             matchLabels: { kubernetes.io/metadata.name: kube-system }
       ports:
+        # Egress policy is evaluated after DNAT: the Traefik Service's port 80
+        # resolves to targetPort 8000 on the pod, so both must be allowed.
         - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 8000 }
     # Cloudflare Tunnel edge: QUIC first, HTTP/2 fallback, both on 7844.
     - to:
         - ipBlock:

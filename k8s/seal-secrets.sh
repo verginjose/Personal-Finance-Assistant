@@ -162,12 +162,81 @@ if wanted cloudflared-secrets; then
   fi
 fi
 
-# 2. CI secret: just the GitHub token the runner needs.
+# 2. CI secret: GitHub App credentials for the self-hosted runner.
+#
+# The app is used only to mint a runner registration token, so it needs
+# Repository → Administration: Read and write and no Contents access. A PAT
+# here would be able to push to master — which Argo deploys — so it is not
+# accepted. GITHUB_PAT may stay in .env for the operator scripts (stop.sh,
+# debug.sh); it is never sealed into the cluster.
 if wanted pfa-ci-secrets; then
-  pat="$(sed -n 's/^GITHUB_PAT=//p' "${ENV_FILE}" | tail -n 1)"
-  [[ -n "${pat}" ]] || { echo "GITHUB_PAT missing from .env" >&2; exit 1; }
+  app_id="$(sed -n 's/^CI_APP_ID=//p' "${ENV_FILE}" | tail -n 1)"
+  app_login="$(sed -n 's/^CI_APP_LOGIN=//p' "${ENV_FILE}" | tail -n 1)"
+  # Accepts all three spellings:
+  #   CI_APP_PRIVATE_KEY="-----BEGIN ...\n...\n-----END ..."   (one line)
+  #   CI_APP_PRIVATE_KEY="-----BEGIN ...                            (multi-line)
+  #   CI_APP_PRIVATE_KEY_FILE=/path/to/key.pem
+  app_key="$(awk '
+    /^CI_APP_PRIVATE_KEY=/ {
+      v = substr($0, index($0, "=") + 1)
+      if (v ~ /^".*"$/) { print v; exit }
+      if (v ~ /^"/) {
+        while ((getline line) > 0) {
+          v = v "\n" line
+          if (line ~ /"$/) break
+        }
+      }
+      print v
+      exit
+    }' "${ENV_FILE}")"
+  # Easier than escaping by hand: CI_APP_PRIVATE_KEY_FILE=/path/to/app.pem
+  # (the .pem GitHub downloads). The runner wants one line with \n escapes.
+  if [[ -z "${app_key}" ]]; then
+    app_key_file="$(sed -n 's/^CI_APP_PRIVATE_KEY_FILE=//p' "${ENV_FILE}" | tail -n 1)"
+    app_key_file="${app_key_file%\"}"; app_key_file="${app_key_file#\"}"
+    if [[ -n "${app_key_file}" ]]; then
+      [[ -f "${app_key_file}" ]] || {
+        echo "CI_APP_PRIVATE_KEY_FILE does not exist: ${app_key_file}" >&2; exit 1; }
+      app_key="$(awk 'FNR > 1 { printf "\\n" } { printf "%s", $0 }' "${app_key_file}")"
+    fi
+  fi
+  # Allow values written with surrounding double quotes.
+  app_id="${app_id%\"}"; app_id="${app_id#\"}"
+  app_login="${app_login%\"}"; app_login="${app_login#\"}"
+  app_key="${app_key%\"}"; app_key="${app_key#\"}"
+  # Pasted keys often indent the footer or leave a blank line. Trim every
+  # line, drop blanks, then flatten to one line of \n escapes: --from-env-file
+  # is line-based, and the runner's entrypoint turns \n back into newlines.
+  app_key="$(printf '%s\n' "${app_key}" \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' \
+    | awk 'FNR > 1 { printf "\\n" } { printf "%s", $0 }')"
+
+  [[ -n "${app_id}" && -n "${app_login}" && -n "${app_key}" ]] || {
+    echo "CI_APP_ID, CI_APP_LOGIN and CI_APP_PRIVATE_KEY must all be set in .env" >&2
+    exit 1
+  }
+  [[ "${app_id}" =~ ^[0-9]+$ ]] || {
+    echo "CI_APP_ID must be the numeric app id from the GitHub App page" >&2
+    exit 1
+  }
+  case "${app_key}" in
+    '-----BEGIN'*'PRIVATE KEY-----'*'-----END'*'PRIVATE KEY-----') ;;
+    *)
+      echo "CI_APP_PRIVATE_KEY does not look like a PEM private key." >&2
+      echo "Either point at the downloaded key file:" >&2
+      echo '  CI_APP_PRIVATE_KEY_FILE=/home/you/Downloads/pfa-ci-runner.pem' >&2
+      echo "or put the whole key on ONE line with \\n escapes:" >&2
+      echo '  CI_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----"' >&2
+      exit 1
+      ;;
+  esac
+
   tmp="$(mktemp)"
-  printf 'GITHUB_PAT=%s\n' "${pat}" > "${tmp}"
+  {
+    printf 'APP_ID=%s\n' "${app_id}"
+    printf 'APP_LOGIN=%s\n' "${app_login}"
+    printf 'APP_PRIVATE_KEY=%s\n' "${app_key}"
+  } > "${tmp}"
   seal_envfile pfa-ci-secrets "${tmp}"
   rm -f "${tmp}"
 fi

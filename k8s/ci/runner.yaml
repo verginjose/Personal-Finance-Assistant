@@ -4,11 +4,13 @@
 # are pushed straight to the in-cluster registry. It therefore needs no
 # privileged container and no docker socket.
 #
-# Registration uses a PAT (secret pfa-ci-secrets/GITHUB_PAT) so the runner can
-# re-register itself; the token is never written to disk by the workflow.
+# Registration uses a GitHub App (secret pfa-ci-secrets: APP_ID,
+# APP_LOGIN, APP_PRIVATE_KEY) so the runner can re-register itself. The app
+# has Repository -> Administration:write only; it cannot read or write code.
+# A PAT is not accepted: it could push to master, and Argo deploys master.
 #
-# The runner has no cluster permissions: it builds and pushes, then commits
-# the new tag. Argo CD (argocd/) applies that change to the cluster.
+# The runner has no cluster permissions: it builds and pushes a tag-bump
+# branch. Merging that branch is a human action; Argo CD then deploys it.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -96,11 +98,19 @@ spec:
             # Labels must match `runs-on:` in .github/workflows/build.yml.
             - name: LABELS
               value: self-hosted,linux,x64,pfa
-            - name: ACCESS_TOKEN
+            # GitHub App credentials (Administration:write only). The
+            # entrypoint mints an installation token to register/deregister
+            # the runner. A PAT is deliberately not accepted here: it would
+            # be able to push to master, and Argo deploys master.
+            - name: APP_ID
               valueFrom:
-                secretKeyRef:
-                  name: pfa-ci-secrets
-                  key: GITHUB_PAT
+                secretKeyRef: { name: pfa-ci-secrets, key: APP_ID }
+            - name: APP_LOGIN
+              valueFrom:
+                secretKeyRef: { name: pfa-ci-secrets, key: APP_LOGIN }
+            - name: APP_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef: { name: pfa-ci-secrets, key: APP_PRIVATE_KEY }
             # /certs holds the *buildkitd* client certificate only. The
             # registry uses a separate identity (ci-tls-registry-client) that
             # this pod deliberately does not mount, so a compromised build

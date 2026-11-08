@@ -23,9 +23,10 @@ for svc in "${SERVICES[@]}"; do
   img="${PREFIX}/${svc}:${TAG}"
   echo "==> Building ${img}"
   if [[ "${svc}" == "ocr-service" ]]; then
-    # OCR builds FROM the prebuilt dependency base (see ocr-service/Dockerfile.full);
-    # the in-cluster registry name is not resolvable from the host, so use the
-    # NodePort address instead.
+    # OCR builds FROM the prebuilt dependency base (see ocr-service/Dockerfile.full).
+    # The in-cluster registry speaks mTLS now, so the NodePort is only usable
+    # by a Docker daemon configured with the client certificate. Point OCR_BASE
+    # at a locally tagged copy if this fallback build cannot pull it.
     docker build \
       --build-arg "OCR_BASE=${OCR_BASE:-127.0.0.1:30500/finance/ocr-base:cu126-py311-v1}" \
       -t "${img}" "${ROOT_DIR}/${svc}"

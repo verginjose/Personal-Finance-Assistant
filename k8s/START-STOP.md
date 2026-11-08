@@ -134,7 +134,7 @@ count that drops to 0 or the table missing is not.)
 
 | Symptom after restart | Cause | Fix |
 |---|---|---|
-| Pods `ImagePullBackOff` on `127.0.0.1:30500/...` | registry pod not ready yet, or `registries.yaml` is missing | wait ~1 min; `curl -s http://127.0.0.1:30500/v2/` must return `{}`; if it does, rerun `sudo k8s/ci/setup-registry.sh` |
+| Pods `ImagePullBackOff` on `127.0.0.1:30500/...` | registry pod not ready yet, or the mTLS `registries.yaml`/certs are missing | wait ~1 min; `curl --cacert .certs/ca.crt --cert .certs/client.crt --key .certs/client.key -s https://127.0.0.1:30500/v2/` must return `{}`; if it does, rerun `sudo k8s/ci/setup-registry.sh` |
 | `kubectl: connection refused` after `start.sh` | API server still booting | wait 30 s; `systemctl status k3s`; `journalctl -u k3s -n 50` |
 | One StatefulSet won't start | its PVC is still bound but the pod is ordered behind another | `kubectl -n pfa get pods`; `kubectl -n pfa describe pod <pod>` |
 | `pfa-apps` shows `OutOfSync` | Argo has not polled yet (≤3 min) or the repo credential expired | `kubectl -n argocd get app pfa-apps -o yaml`; refresh the PAT if it rotated |

@@ -164,7 +164,7 @@ kubectl apply --dry-run=server -f k8s/apps/
 kubectl -n pfa get pods -l app=ci-runner
 kubectl -n pfa logs deploy/ci-runner --tail=40              # want "Listening for Jobs"
 kubectl -n pfa exec deploy/buildkitd -- buildctl --addr tcp://127.0.0.1:1234 debug workers
-curl -fsS http://127.0.0.1:30500/v2/_catalog | jq .       # images in the registry
+curl --cacert .certs/ca.crt --cert .certs/client.crt --key .certs/client.key -fsS https://127.0.0.1:30500/v2/_catalog | jq .   # images in the registry
 
 # what is deployed vs what git says
 kubectl -n pfa get deploy -o custom-columns='NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image'
@@ -227,7 +227,7 @@ rm -rf .pipeline                                     # pipeline artifacts
 ```bash
 kubectl delete namespace argocd                       # Argo CD (stops auto-sync)
 kubectl -n pfa delete secret pfa-ci-secrets           # runner credentials
-sudo rm -f /etc/rancher/k3s/registries.yaml           # insecure-registry config
+sudo rm -rf /etc/rancher/k3s/registries.yaml /etc/rancher/k3s/registry-certs  # registry mTLS config
 # registry/buildkit/runner pods and their PVC data go with `namespace pfa`
 ```
 

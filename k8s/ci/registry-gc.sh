@@ -19,13 +19,14 @@ set -euo pipefail
 
 NS=pfa
 # Overridable so the CI runner can reach the registry over its ClusterIP
-# instead of the node's NodePort on loopback.
-REGISTRY="${REGISTRY:-http://127.0.0.1:30500}"
+# instead of the node's NodePort on loopback. The registry is mTLS-only, so
+# every request below carries a client certificate.
+REGISTRY="${REGISTRY:-https://127.0.0.1:30500}"
 KEEP=2
 DRY_RUN=false
 RETENTION_ONLY=false
 ACCEPT="application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json"
-# REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY on the registry Deployment.
+# registry-config ConfigMap (`http.storage.filesystem.rootdirectory`).
 STORAGE_ROOT=/var/lib/registry
 
 for arg in "$@"; do
@@ -49,7 +50,30 @@ command -v kubectl >/dev/null 2>&1 && HAVE_KUBECTL=true
 if [[ -z "${KUBECONFIG:-}" && -s "${HOME}/.kube/k3s.yaml" ]]; then
   export KUBECONFIG="${HOME}/.kube/k3s.yaml"
 fi
-curl -fsS "${REGISTRY}/v2/" >/dev/null || { echo "Registry not reachable at ${REGISTRY}" >&2; exit 1; }
+
+# ── mTLS ───────────────────────────────────────────────────────────────────
+# The registry rejects requests without a client certificate. In the runner
+# and the GC CronJob the paths come from REGISTRY_CA/REGISTRY_CERT/REGISTRY_KEY;
+# on the host they default to .certs/, written by gen-tls-certs.sh.
+K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${K8S_DIR}/../.." && pwd)"
+if [[ -z "${REGISTRY_CA:-}" && -f "${ROOT_DIR}/.certs/ca.crt" ]]; then
+  REGISTRY_CA="${ROOT_DIR}/.certs/ca.crt"
+  REGISTRY_CERT="${ROOT_DIR}/.certs/client.crt"
+  REGISTRY_KEY="${ROOT_DIR}/.certs/client.key"
+fi
+CURL_TLS=()
+[[ -n "${REGISTRY_CA:-}"   ]] && CURL_TLS+=(--cacert "${REGISTRY_CA}")
+[[ -n "${REGISTRY_CERT:-}" ]] && CURL_TLS+=(--cert   "${REGISTRY_CERT}")
+[[ -n "${REGISTRY_KEY:-}"  ]] && CURL_TLS+=(--key    "${REGISTRY_KEY}")
+[[ ${#CURL_TLS[@]} -eq 3 ]] || {
+  echo "No client certificate: set REGISTRY_CA, REGISTRY_CERT and REGISTRY_KEY" >&2
+  echo "(host default: ${ROOT_DIR}/.certs, see k8s/ci/gen-tls-certs.sh)" >&2
+  exit 1
+}
+rcurl() { curl "${CURL_TLS[@]}" "$@"; }
+
+rcurl -fsS "${REGISTRY}/v2/" >/dev/null || { echo "Registry not reachable at ${REGISTRY}" >&2; exit 1; }
 
 TMP="$(mktemp -d)"
 
@@ -84,17 +108,17 @@ trap 'restore_registry; restore_selfheal; rm -rf "${TMP}"' EXIT
 # aborts the run under `set -e` and the remaining repositories are never
 # pruned.
 manifest_digest() {  # repo tag -> digest, empty if the tag is dangling
-  curl -fsSI -H "Accept: ${ACCEPT}" "${REGISTRY}/v2/$1/manifests/$2" 2>/dev/null \
+  rcurl -fsSI -H "Accept: ${ACCEPT}" "${REGISTRY}/v2/$1/manifests/$2" 2>/dev/null \
     | awk -F': ' 'tolower($1)=="docker-content-digest"{gsub("\r","");print $2}' \
     || true
 }
 
 manifest_created() {  # repo tag -> RFC3339 creation time from the image config
   local cfg
-  cfg="$(curl -fsS -H "Accept: ${ACCEPT}" "${REGISTRY}/v2/$1/manifests/$2" 2>/dev/null \
+  cfg="$(rcurl -fsS -H "Accept: ${ACCEPT}" "${REGISTRY}/v2/$1/manifests/$2" 2>/dev/null \
     | jq -r '.config.digest // empty' || true)"
   [[ -z "${cfg}" ]] && return 0
-  curl -fsSL "${REGISTRY}/v2/$1/blobs/${cfg}" 2>/dev/null | jq -r '.created // empty' || true
+  rcurl -fsSL "${REGISTRY}/v2/$1/blobs/${cfg}" 2>/dev/null | jq -r '.created // empty' || true
 }
 
 # The distribution API has no tag-delete endpoint, and garbage-collect leaves
@@ -112,8 +136,8 @@ echo "==> Pruning tags (keep ${KEEP} per repository)"
 # mirrored Docker Hub base images under base/* (k8s/ci/mirror-base-images.sh);
 # those are referenced by digest from the Dockerfiles, so trimming a tag would
 # delete a manifest a build still needs, not just an old build.
-curl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[] | select(startswith("finance/"))' | while read -r repo; do
-  tags="$(curl -fsS "${REGISTRY}/v2/${repo}/tags/list" | jq -r '.tags[]?')" || continue
+rcurl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[] | select(startswith("finance/"))' | while read -r repo; do
+  tags="$(rcurl -fsS "${REGISTRY}/v2/${repo}/tags/list" | jq -r '.tags[]?')" || continue
   [[ -z "${tags}" ]] && continue
 
   : > "${TMP}/tags"
@@ -169,7 +193,7 @@ curl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[] | select(startswith
     if [[ "${DRY_RUN}" == false ]]; then
       # A failed delete must not abort the run: the next phase's GC still frees
       # whatever layers are already unreferenced.
-      if ! curl -fsS -X DELETE "${REGISTRY}/v2/${repo}/manifests/${digest}" >/dev/null 2>&1; then
+      if ! rcurl -fsS -X DELETE "${REGISTRY}/v2/${repo}/manifests/${digest}" >/dev/null 2>&1; then
         echo "    warn: delete failed for ${repo}:${tag}"
       fi
     fi

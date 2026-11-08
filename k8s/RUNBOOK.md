@@ -22,7 +22,7 @@ modes): [`SERVICES.md`](SERVICES.md).
 | Argo CD UI (port-forward) | https://localhost:8080 |
 | Grafana (public, Cloudflare Access) | https://grafana.verginjose.cloud |
 | Argo CD UI (public, Cloudflare Access) | https://argocd.verginjose.cloud |
-| Image registry (in-cluster) | http://127.0.0.1:30500 (`/v2/_catalog`) |
+| Image registry (in-cluster, mTLS) | https://127.0.0.1:30500 (`/v2/_catalog`, client cert in `.certs/`) |
 | CI runs | github.com/verginjose/Personal-Finance-Assistant/actions |
 
 Add the local hostname once:
@@ -182,8 +182,8 @@ kubectl -n pfa get pods -l app=ci-runner
 kubectl -n pfa exec deploy/buildkitd -- buildctl --addr tcp://127.0.0.1:1234 debug workers
 
 # registry reachable and populated?
-curl -fsS http://127.0.0.1:30500/v2/ && echo
-curl -fsS http://127.0.0.1:30500/v2/_catalog | jq .
+curl --cacert .certs/ca.crt --cert .certs/client.crt --key .certs/client.key -fsS https://127.0.0.1:30500/v2/ && echo
+curl --cacert .certs/ca.crt --cert .certs/client.crt --key .certs/client.key -fsS https://127.0.0.1:30500/v2/_catalog | jq .
 kubectl -n pfa exec deploy/registry -- du -sh /var/lib/registry
 
 # what does Argo think?
@@ -209,8 +209,8 @@ kubectl -n pfa get deploy -o custom-columns='NAME:.metadata.name,IMAGE:.spec.tem
 
 Common CI causes are in the failure table below. If the cluster was just
 restarted and pods are `ImagePullBackOff` on `127.0.0.1:30500/...`, the
-insecure-registry config is missing or k3s has not restarted since it was
-written (`k8s/ci/setup-registry.sh`).
+registry mTLS config (or the certificates it names) is missing, or k3s has not
+restarted since it was written (`k8s/ci/setup-registry.sh`).
 
 ## Data queries
 
@@ -441,7 +441,7 @@ consumers at runtime.
 | `column users.password does not exist` | Hibernate created `auth.users` first | `db-init/007_create_auth_users.sql` |
 | OCR parse fails with an API-key error | `GROQ_URL` / `GROQ_API_KEY` in `.env` | correct the credentials, restart `ocr-service` |
 | image not found / `ErrImagePull` (legacy `finance/<svc>:latest`) | image not imported into containerd | `docker save … -o /tmp/i.tar && sudo k3s ctr images import /tmp/i.tar` |
-| `ImagePullBackOff` on `127.0.0.1:30500/...` | containerd does not know the registry is HTTP | `sudo ./k8s/ci/setup-registry.sh`, confirm `curl http://127.0.0.1:30500/v2/` |
+| `ImagePullBackOff` on `127.0.0.1:30500/...` | containerd lacks the registry mTLS config | `sudo ./k8s/ci/setup-registry.sh`, confirm with `curl --cacert .certs/ca.crt --cert .certs/client.crt --key .certs/client.key https://127.0.0.1:30500/v2/` |
 | runner shows Offline in GitHub | PAT expired or lacks Administration write | new PAT → `.env` → `./k8s/ci/apply.sh` |
 | build fails with "Push rejected / non-fast-forward" | branch moved during the build | fixed by rebase-retry; if seen again, check for overlapping runs |
 | build fails with `Resource not accessible by personal access token` | PAT lacks Actions write (only affects dispatching) | add **Actions: Read and write** to the token |

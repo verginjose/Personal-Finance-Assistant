@@ -370,7 +370,7 @@ Pods come back in place on the next start because all state is on PVCs under
 | Prometheus | `kubectl -n pfa port-forward svc/prometheus 9090:9090` | http://localhost:9090 |
 | Argo CD UI | `kubectl -n argocd port-forward svc/argocd-server 8080:443` | https://localhost:8080 |
 | Argo CD password | `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d` | user `admin` |
-| Image registry | `curl http://127.0.0.1:30500/v2/_catalog` | http://127.0.0.1:30500 |
+| Image registry (mTLS) | `curl --cacert .certs/ca.crt --cert .certs/client.crt --key .certs/client.key https://127.0.0.1:30500/v2/_catalog` | https://127.0.0.1:30500 |
 | CI runs | — | github.com/verginjose/Personal-Finance-Assistant/actions |
 
 Every `port-forward` blocks its terminal; add `&` to run others alongside it.

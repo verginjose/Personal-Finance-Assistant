@@ -255,7 +255,7 @@ kubectl -n pfa exec -it deploy/api-gateway -- sh
 
 | Symptom | First thing to check | Likely cause |
 |---|---|---|
-| `ImagePullBackOff` on `127.0.0.1:30500/...` | `curl http://127.0.0.1:30500/v2/` | registry pod down or `registries.yaml` lost (`k8s/ci/setup-registry.sh`) |
+| `ImagePullBackOff` on `127.0.0.1:30500/...` | `curl --cacert .certs/ca.crt --cert .certs/client.crt --key .certs/client.key https://127.0.0.1:30500/v2/` | registry pod down or the mTLS host config lost (`sudo k8s/ci/setup-registry.sh`) |
 | `CrashLoopBackOff` | `logs --previous` | bad config/secret, DB unreachable, port already in use |
 | `Pending` | `describe pod` → events | not enough memory/CPU, or GPU not allocatable (OCR) |
 | `OOMKilled` (exit 137) | `kubectl describe pod` | JVM heap + pod limit too tight; compare `kubectl top pod` |

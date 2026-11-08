@@ -34,9 +34,14 @@ env:
   # BuildKit runs inside the cluster, so it pushes through the Service DNS name
   # (stable, independent of the node's LAN IP). kubelet/containerd run on the
   # host and pull through the NodePort on loopback, also stable.
+  #
+  # Both buildkitd and the registry are mTLS-only. The runner pod mounts the
+  # ci-tls-client Secret at /certs; the same directory feeds buildctl and
+  # registry-gc.sh.
   PUSH_REGISTRY: registry.pfa.svc.cluster.local:5000
   PULL_REGISTRY: 127.0.0.1:30500
   BUILDKIT_HOST: tcp://buildkitd.pfa.svc.cluster.local:1234
+  BUILDKIT_TLS_DIR: /certs
   BUILDKIT_VERSION: v0.15.2
   ALL_SERVICES: auth-service api-gateway command-service query-service frontend ocr-service
 
@@ -135,7 +140,11 @@ jobs:
           echo "Building ${PUSH_REGISTRY}/finance/${SERVICE}:${TAG} from ./${SERVICE}"
           # Base images are mirrored into the registry (k8s/ci/mirror-base-images.sh),
           # so a cold BuildKit cache costs a loopback pull instead of Docker Hub.
-          buildctl build \
+          buildctl \
+            --tlscacert "$BUILDKIT_TLS_DIR/ca.crt" \
+            --tlscert "$BUILDKIT_TLS_DIR/client.cert" \
+            --tlskey "$BUILDKIT_TLS_DIR/client.key" \
+            build \
             --progress plain \
             --frontend dockerfile.v0 \
             --local context="./${SERVICE}" \
@@ -162,19 +171,24 @@ jobs:
         # them from the cache after every build.
         run: |
           set -euo pipefail
+          BCTL=(buildctl --tlscacert "$BUILDKIT_TLS_DIR/ca.crt" \
+                         --tlscert "$BUILDKIT_TLS_DIR/client.cert" \
+                         --tlskey "$BUILDKIT_TLS_DIR/client.key")
           for _ in 1 2 3; do
-            buildctl prune -f 'description~=registry\.pfa\.svc\.cluster\.local:5000/finance/ocr-base'
+            "${BCTL[@]}" prune -f 'description~=registry\.pfa\.svc\.cluster\.local:5000/finance/ocr-base'
           done
-          buildctl prune --keep-storage 61440
+          "${BCTL[@]}" prune --keep-storage 61440
 
       - name: Trim old registry tags
-        # Phase 1 of registry-gc.sh only: pure HTTP, so it needs no cluster
-        # credentials, and it leaves the registry running. It bounds how many
-        # tags pile up, but frees no disk on its own — the blob sweep needs the
-        # registry stopped (./k8s/stop.sh --gc, or the registry-gc CronJob).
+        # Phase 1 of registry-gc.sh only: pure HTTPS API calls, so it needs no
+        # cluster credentials, and it leaves the registry running. It bounds
+        # how many tags pile up, but frees no disk on its own — the blob sweep
+        # needs the registry stopped (./k8s/stop.sh --gc, or the registry-gc
+        # CronJob). The registry is mTLS-only; the client certificate paths
+        # come from the runner Deployment's environment (/certs).
         run: |
           set -euo pipefail
-          REGISTRY="http://${PUSH_REGISTRY}" ./k8s/ci/registry-gc.sh --retention-only --keep=2
+          REGISTRY="https://${PUSH_REGISTRY}" ./k8s/ci/registry-gc.sh --retention-only --keep=2
 
       - name: Bump image tag in the manifest
         run: |

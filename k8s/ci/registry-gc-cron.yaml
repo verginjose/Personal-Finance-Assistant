@@ -115,6 +115,9 @@ spec:
       # Ten minutes leaves time to read the log of a sweep that changed things.
       ttlSecondsAfterFinished: 600
       template:
+        metadata:
+          labels:
+            app: registry-gc
         spec:
           serviceAccountName: registry-gc
           restartPolicy: Never
@@ -130,7 +133,7 @@ spec:
                   NS=pfa
                   APP=pfa-ci
                   DEPLOY=registry
-                  CONFIG=/etc/docker/registry/config.yml
+                  CONFIG=/etc/registry/config.yml
                   READONLY=REGISTRY_STORAGE_MAINTENANCE_READONLY
 
                   log() { echo "==> $*"; }
@@ -207,12 +210,22 @@ spec:
                   log "done"
               env:
                 # The script defaults to the node's NodePort on loopback, which
-                # does not exist in the pod network.
+                # does not exist in the pod network. The registry is mTLS-only,
+                # so the client certificate is mounted at /certs.
                 - name: REGISTRY
-                  value: http://registry.pfa.svc.cluster.local:5000
+                  value: https://registry.pfa.svc.cluster.local:5000
+                - name: REGISTRY_CA
+                  value: /certs/ca.crt
+                - name: REGISTRY_CERT
+                  value: /certs/client.cert
+                - name: REGISTRY_KEY
+                  value: /certs/client.key
               volumeMounts:
                 - name: scripts
                   mountPath: /scripts
+                  readOnly: true
+                - name: tls
+                  mountPath: /certs
                   readOnly: true
               resources:
                 requests:
@@ -226,3 +239,7 @@ spec:
               configMap:
                 name: registry-gc-script
                 defaultMode: 0555
+            - name: tls
+              secret:
+                secretName: ci-tls-client
+                defaultMode: 0440

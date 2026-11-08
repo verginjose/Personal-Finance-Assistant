@@ -4,8 +4,8 @@
 #   ./k8s/ci/apply.sh
 #
 # Prerequisites (one-time, see README.md):
-#   1. /etc/rancher/k3s/registries.yaml marks 127.0.0.1:30500 as plain HTTP
-#      and k3s was restarted.
+#   1. ./k8s/ci/gen-tls-certs.sh has run and the sealed file is committed, and
+#      sudo ./k8s/ci/setup-registry.sh has installed the host certificates.
 #   2. GITHUB_PAT is present in the repo-level .env.
 set -euo pipefail
 
@@ -13,6 +13,7 @@ K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${K8S_DIR}/../.." && pwd)"
 NS=pfa
 REGISTRY_ADDR="127.0.0.1:30500"
+CERT_DIR="${CERT_DIR:-${ROOT_DIR}/.certs}"
 
 command -v kubectl >/dev/null 2>&1 || { echo "kubectl is required" >&2; exit 1; }
 
@@ -27,23 +28,49 @@ kubectl config current-context >/dev/null 2>&1 || {
 }
 
 [[ -f "${ROOT_DIR}/.env" ]] || { echo "Missing ${ROOT_DIR}/.env" >&2; exit 1; }
+for f in ca.crt client.crt client.key; do
+  [[ -f "${CERT_DIR}/${f}" ]] || {
+    echo "Missing ${CERT_DIR}/${f}; run ./k8s/ci/gen-tls-certs.sh first." >&2
+    exit 1
+  }
+done
 
 env_value() {
   # Read .env without sourcing it: values may contain spaces or shell metacharacters.
   sed -n "s/^$1=//p" "${ROOT_DIR}/.env" | tail -n 1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
+# ── mTLS Secrets ────────────────────────────────────────────────────────────
+# ci-tls-registry / ci-tls-buildkitd / ci-tls-client, sealed in k8s/sealed/ and
+# decrypted by the controller. They must exist before the Deployments roll.
+echo "==> Applying CI TLS secrets"
+kubectl apply -f "${ROOT_DIR}/k8s/sealed/ci-tls-secrets.yaml"
+for _ in $(seq 1 30); do
+  kubectl -n "${NS}" get secret ci-tls-client >/dev/null 2>&1 && break
+  sleep 1
+done
+kubectl -n "${NS}" get secret ci-tls-client >/dev/null 2>&1 || {
+  echo "ci-tls-* Secrets were not created by the controller." >&2
+  echo "Check: kubectl -n kube-system logs deploy/sealed-secrets-controller" >&2
+  exit 1
+}
+
+# ── NetworkPolicies ─────────────────────────────────────────────────────────
+echo "==> Applying CI NetworkPolicies"
+kubectl apply -f "${K8S_DIR}/network-policies.yaml"
+
 # ── Registry ────────────────────────────────────────────────────────────────
-echo "==> Deploying in-cluster registry"
+echo "==> Deploying in-cluster registry (mTLS)"
 kubectl apply -f "${K8S_DIR}/registry.yaml"
 kubectl -n "${NS}" rollout status deploy/registry --timeout=120s
 
-if ! curl -fsS "http://${REGISTRY_ADDR}/v2/" >/dev/null 2>&1; then
+if ! curl -fsS --cacert "${CERT_DIR}/ca.crt" --cert "${CERT_DIR}/client.crt" \
+     --key "${CERT_DIR}/client.key" "https://${REGISTRY_ADDR}/v2/" >/dev/null 2>&1; then
   echo
-  echo "WARNING: ${REGISTRY_ADDR} is not answering over plain HTTP." >&2
-  echo "         containerd will not be able to pull from it until you have" >&2
-  echo "         added it to /etc/rancher/k3s/registries.yaml and restarted k3s" >&2
-  echo "         (see k8s/ci/README.md, step 1)." >&2
+  echo "WARNING: ${REGISTRY_ADDR} is not answering over HTTPS with the client" >&2
+  echo "         certificate. containerd will not be able to pull from it until" >&2
+  echo "         you run: sudo ./k8s/ci/setup-registry.sh" >&2
+  echo "         (see k8s/ci/README.md, one-time setup)." >&2
   echo
 fi
 
@@ -88,8 +115,8 @@ cat <<EOF
 
 CI stack is up.
 
-  Registry   http://${REGISTRY_ADDR}   (images: ${REGISTRY_ADDR}/finance/<service>)
-  BuildKit   tcp://buildkitd.pfa.svc.cluster.local:1234
+  Registry   https://${REGISTRY_ADDR}  (images: ${REGISTRY_ADDR}/finance/<service>)
+  BuildKit   tcp://buildkitd.pfa.svc.cluster.local:1234  (mTLS, client cert in .certs/)
   Runner     https://github.com/verginjose/Personal-Finance-Assistant/settings/actions/runners
 
 Backfill every image once, so all Deployments can move off the old

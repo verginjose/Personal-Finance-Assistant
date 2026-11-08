@@ -4,10 +4,14 @@
 #   * the Maven/apt layer cache survives in a PVC between builds, and
 #   * the runner pod needs no privileged container and no docker socket.
 #
-# The daemon listens on plain TCP inside the cluster. That is unauthenticated:
-# anything in pfa can submit builds as this pod. Acceptable for a single-node
-# homelab; if you ever add untrusted workloads, put mTLS or a NetworkPolicy
-# allowing only the runner SA in front of it.
+# The daemon speaks mutually authenticated TLS on 1234: `--tlscacert` makes
+# BuildKit require and verify a client certificate (buildkitd main.go sets
+# ClientAuth = RequireAndVerifyClientCert when a CA is supplied). Only holders
+# of a CI client certificate can submit builds. NetworkPolicies narrow it
+# further to the runner and the prune CronJob.
+#
+# Its registry client is mTLS too (the `keypair` block below): the registry
+# rejects unauthenticated pushes and pulls.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -16,10 +20,14 @@ metadata:
 data:
   buildkitd.toml: |
     # BuildKit pushes to the registry over its ClusterIP Service, which is
-    # stable regardless of the node's LAN IP. The registry speaks plain HTTP.
+    # stable regardless of the node's LAN IP. The registry serves HTTPS and
+    # requires a client certificate; `keypair` is how BuildKit presents one.
     [registry."registry.pfa.svc.cluster.local:5000"]
-      http = true
-      insecure = true
+      ca = ["/tls/ca.crt"]
+
+      [[registry."registry.pfa.svc.cluster.local:5000".keypair]]
+        cert = "/tls/client.crt"
+        key = "/tls/client.key"
 
     # Cache retention. With no gcpolicy BuildKit falls back to
     # config.DetectDefaultGCCap(), which is 10% of the filesystem it can see.
@@ -116,6 +124,12 @@ spec:
         app: buildkitd
         app.kubernetes.io/part-of: personal-finance-assistant
     spec:
+      # Secret files are root:fsGroup with mode 0440; this makes them readable
+      # by the rootless uid. OnRootMismatch keeps kubelet from recursively
+      # chowning the 40 Gi cache on every start.
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
       # local-path volumes are created root:root; the rootless daemon runs as
       # uid 1000, so hand the cache directory over first.
       initContainers:
@@ -134,6 +148,9 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --addr=tcp://0.0.0.0:1234
+            - --tlscacert=/tls/ca.crt
+            - --tlscert=/tls/server.crt
+            - --tlskey=/tls/server.key
             - --config=/etc/buildkit/buildkitd.toml
             - --oci-worker-no-process-sandbox
             - --oci-worker-snapshotter=native
@@ -156,11 +173,25 @@ spec:
             - name: config
               mountPath: /etc/buildkit
               readOnly: true
+            - name: tls
+              mountPath: /tls
+              readOnly: true
             - name: cache
               mountPath: /home/user/.local/share/buildkit
           readinessProbe:
             exec:
-              command: ["buildctl", "--addr", "tcp://127.0.0.1:1234", "debug", "workers"]
+              command:
+                - buildctl
+                - --addr
+                - tcp://127.0.0.1:1234
+                - --tlscacert
+                - /tls/ca.crt
+                - --tlscert
+                - /tls/client.crt
+                - --tlskey
+                - /tls/client.key
+                - debug
+                - workers
             initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 30
@@ -180,6 +211,10 @@ spec:
         - name: config
           configMap:
             name: buildkitd-config
+        - name: tls
+          secret:
+            secretName: ci-tls-buildkitd
+            defaultMode: 0440
         - name: cache
           persistentVolumeClaim:
             claimName: buildkit-cache

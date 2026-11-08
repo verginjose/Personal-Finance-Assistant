@@ -49,6 +49,9 @@ spec:
       # minutes leaves time to read `kubectl logs` before it is gone.
       ttlSecondsAfterFinished: 300
       template:
+        metadata:
+          labels:
+            app: buildkit-prune
         spec:
           restartPolicy: Never
           containers:
@@ -59,10 +62,17 @@ spec:
                 - |
                   set -eu
                   ADDR=tcp://buildkitd.pfa.svc.cluster.local:1234
-                  prune() { buildctl --addr "$ADDR" prune "$@"; }
+                  # buildkitd requires a client certificate (mTLS).
+                  bctl() {
+                    buildctl --addr "$ADDR" \
+                      --tlscacert /certs/ca.crt \
+                      --tlscert /certs/client.cert \
+                      --tlskey /certs/client.key "$@"
+                  }
+                  prune() { bctl prune "$@"; }
 
                   echo "==> before"
-                  buildctl --addr "$ADDR" du | tail -1
+                  bctl du | tail -1
 
                   # ocr-base pulls: cheap over the local registry, useless
                   # partially. Drained in repeated calls because of
@@ -88,7 +98,11 @@ spec:
                   prune --keep-storage 61440
 
                   echo "==> after"
-                  buildctl --addr "$ADDR" du | tail -1
+                  bctl du | tail -1
+              volumeMounts:
+                - name: tls
+                  mountPath: /certs
+                  readOnly: true
               resources:
                 requests:
                   cpu: 50m
@@ -96,3 +110,8 @@ spec:
                 limits:
                   cpu: 500m
                   memory: 256Mi
+          volumes:
+            - name: tls
+              secret:
+                secretName: ci-tls-client
+                defaultMode: 0440

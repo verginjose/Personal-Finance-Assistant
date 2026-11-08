@@ -1,0 +1,225 @@
+# NetworkPolicies for the CI chain.
+#
+# Defence in depth for the mTLS rollout: certificates decide who may talk to
+# buildkitd and the registry, these policies decide which pods may even open a
+# connection. Together they replace the old "anything in pfa can submit builds
+# and push images" model.
+#
+#   ci-runner  --1234-->  buildkitd  --5000-->  registry
+#   buildkit-prune --1234--> buildkitd
+#   registry-gc / mirror-base-images --5000--> registry
+#
+# Egress is restricted too, because a compromised runner holding a CI
+# certificate should not double as a proxy to the rest of the cluster. Each
+# pod keeps exactly the destinations it needs:
+#   * DNS in kube-system, for everything;
+#   * the CI pods above;
+#   * 443 to the internet where GitHub / Docker Hub / quay.io are contacted;
+#   * the Kubernetes API for the registry-gc job (it patches the registry
+#     Deployment and execs into it).
+#
+# Host-originated traffic (kubelet probes, containerd pulling through the
+# NodePort) is locally routed and so normally bypasses these policies; the
+# registry ingress additionally names the node's static InternalIP and
+# loopback so that a change in k3s's enforcement path cannot break image pulls.
+# k3s enforces NetworkPolicy with its built-in controller (same mechanism as
+# k8s/apps/network-policies.yaml).
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: registry
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: registry }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        # BuildKit pushes new images and pulls base/ocr-base layers.
+        - podSelector: { matchLabels: { app: buildkitd } }
+        # build.yml runs registry-gc.sh (tag retention) from the runner.
+        - podSelector: { matchLabels: { app: ci-runner } }
+        # The hourly sweep's own retention pass.
+        - podSelector: { matchLabels: { app: registry-gc } }
+        # One-shot pods from mirror-base-images.sh.
+        - podSelector: { matchLabels: { app: mirror-base-images } }
+        # Host-side containerd pulls through the NodePort on loopback. k3s
+        # enforces policies in the FORWARD chain, so locally originated traffic
+        # normally bypasses this; these two entries keep pulls working if the
+        # enforcement path ever changes. 10.99.99.1 is the node InternalIP
+        # (static address on dummy0).
+        - ipBlock:
+            cidr: 10.99.99.1/32
+        - ipBlock:
+            cidr: 127.0.0.1/32
+      ports:
+        - { protocol: TCP, port: 5000 }
+  egress:
+    # The registry never calls out; it only needs to resolve nothing at all,
+    # but DNS is kept so a future storage driver does not fail silently.
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: buildkitd
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: buildkitd }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: ci-runner } }
+        - podSelector: { matchLabels: { app: buildkit-prune } }
+      ports:
+        - { protocol: TCP, port: 1234 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Push/pull against the in-cluster registry.
+    - to:
+        - podSelector: { matchLabels: { app: registry } }
+      ports:
+        - { protocol: TCP, port: 5000 }
+    # Docker Hub / quay.io / GHCR: Dockerfile frontend, nvidia/cuda for the
+    # ocr-base rebuild, and any base image not in the local mirror.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { protocol: TCP, port: 443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ci-runner
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: ci-runner }
+  policyTypes: [Ingress, Egress]
+  ingress: []          # nothing connects *to* the runner
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # GitHub: runner registration/API, action downloads, git push over HTTPS,
+    # and the buildctl release download.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { protocol: TCP, port: 443 }
+    # buildctl submits builds and prunes.
+    - to:
+        - podSelector: { matchLabels: { app: buildkitd } }
+      ports:
+        - { protocol: TCP, port: 1234 }
+    # registry-gc.sh --retention-only from the build step.
+    - to:
+        - podSelector: { matchLabels: { app: registry } }
+      ports:
+        - { protocol: TCP, port: 5000 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: buildkit-prune
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: buildkit-prune }
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        - podSelector: { matchLabels: { app: buildkitd } }
+      ports:
+        - { protocol: TCP, port: 1234 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: registry-gc
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: registry-gc }
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        - podSelector: { matchLabels: { app: registry } }
+      ports:
+        - { protocol: TCP, port: 5000 }
+    # kubectl: scale/env the registry Deployment, patch the Argo Application,
+    # and exec garbage-collect inside the registry pod. All of that goes
+    # through the apiserver Service. Depending on whether the policy chain sees
+    # the packet before or after kube-proxy's DNAT, the destination is either
+    # the Service IP (10.43.0.1:443) or the node's API endpoint
+    # (10.99.99.1:6443), so both are allowed.
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }
+    - to:
+        - ipBlock:
+            cidr: 10.99.99.1/32
+      ports:
+        - { protocol: TCP, port: 6443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mirror-base-images
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: mirror-base-images }
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # docker.io and the CDN it redirects blobs to.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { protocol: TCP, port: 443 }
+    # Push the mirrored copy into the in-cluster registry.
+    - to:
+        - podSelector: { matchLabels: { app: registry } }
+      ports:
+        - { protocol: TCP, port: 5000 }

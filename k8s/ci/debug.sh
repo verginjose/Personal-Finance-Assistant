@@ -10,7 +10,8 @@ set -uo pipefail
 K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${K8S_DIR}/../.." && pwd)"
 NS=pfa
-REGISTRY="http://127.0.0.1:30500"
+REGISTRY="https://127.0.0.1:30500"
+CERT_DIR="${CERT_DIR:-${ROOT_DIR}/.certs}"
 FAILURES=0
 
 if [[ -z "${KUBECONFIG:-}" && -s "${HOME}/.kube/k3s.yaml" ]]; then
@@ -48,9 +49,10 @@ fi
 
 # ── registry ────────────────────────────────────────────────────────────────
 section "registry ${REGISTRY}"
-if curl -fsS --max-time 5 "${REGISTRY}/v2/" >/dev/null 2>&1; then
-  ok "API responds"
-  repos="$(curl -fsS --max-time 5 "${REGISTRY}/v2/_catalog" 2>/dev/null | jq -r '.repositories[]?' 2>/dev/null | wc -l)"
+CURL_TLS=(--cacert "${CERT_DIR}/ca.crt" --cert "${CERT_DIR}/client.crt" --key "${CERT_DIR}/client.key")
+if curl -fsS --max-time 5 "${CURL_TLS[@]}" "${REGISTRY}/v2/" >/dev/null 2>&1; then
+  ok "API responds (mTLS)"
+  repos="$(curl -fsS --max-time 5 "${CURL_TLS[@]}" "${REGISTRY}/v2/_catalog" 2>/dev/null | jq -r '.repositories[]?' 2>/dev/null | wc -l)"
   printf '   repositories: %s\n' "${repos}"
   usage="$(kubectl -n "${NS}" exec deploy/registry -- du -sh /var/lib/registry 2>/dev/null | awk '{print $1}')"
   [[ -n "${usage}" ]] && printf '   data: %s\n' "${usage}"
@@ -62,8 +64,10 @@ fi
 section "buildkit"
 if kubectl -n "${NS}" get deploy buildkitd >/dev/null 2>&1; then
   if kubectl -n "${NS}" exec deploy/buildkitd -- \
-       buildctl --addr tcp://127.0.0.1:1234 debug workers >/dev/null 2>&1; then
-    ok "daemon accepts builds"
+       buildctl --addr tcp://127.0.0.1:1234 \
+         --tlscacert /tls/ca.crt --tlscert /tls/client.crt --tlskey /tls/client.key \
+         debug workers >/dev/null 2>&1; then
+    ok "daemon accepts builds (mTLS)"
   else
     bad "buildctl cannot reach the daemon (check: kubectl -n ${NS} logs deploy/buildkitd)"
   fi

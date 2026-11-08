@@ -47,6 +47,11 @@ else
   exit 1
 fi
 NS=pfa
+# The registry is mTLS-only. This script runs on the host as the invoking user,
+# so it reads the client material from .certs/ (gen-tls-certs.sh).
+CERT_DIR="${CERT_DIR:-${ROOT_DIR}/.certs}"
+REGISTRY_URL="https://127.0.0.1:30500"
+REGISTRY_CURL=(--cacert "${CERT_DIR}/ca.crt" --cert "${CERT_DIR}/client.crt" --key "${CERT_DIR}/client.key")
 ENV_FILE="${ROOT_DIR}/.env"
 
 SHOW_SECRETS=false
@@ -259,9 +264,10 @@ command -v kubectl >/dev/null 2>&1 || { fail "kubectl not installed"; exit 1; }
 # thin app layer, never the 1.9 GB paddlepaddle-gpu stack.
 #
 # The build runs in the in-cluster BuildKit daemon, so the push originates from
-# the pod: it can resolve registry.pfa.svc.cluster.local and buildkitd.toml
-# already marks that endpoint http/insecure. Your host's loopback NodePort is
-# not reachable from inside the pod, so never push to 127.0.0.1:30500 here.
+# the pod: it can resolve registry.pfa.svc.cluster.local, and buildkitd.toml
+# gives BuildKit a client certificate for that host. Your host's loopback
+# NodePort is not reachable from inside the pod, so never push to
+# 127.0.0.1:30500 here.
 OCR_BASE_REPO="${OCR_BASE_REPO:-registry.pfa.svc.cluster.local:5000/finance/ocr-base}"
 OCR_BASE_TAG="${OCR_BASE_TAG:-cu126-py311-v1}"
 OCR_BASE_BUILD_TIMEOUT="${OCR_BASE_BUILD_TIMEOUT:-7200}"   # seconds; the wheel is slow
@@ -271,6 +277,17 @@ wait_for_url() {   # <url> <seconds> <description>
   until curl -fsS --max-time 5 "${url}" >/dev/null 2>&1; do
     if [[ ${SECONDS} -ge ${deadline} ]]; then
       fail "${desc} is not answering at ${url}"
+      return 1
+    fi
+    sleep 3
+  done
+}
+
+wait_for_registry() {   # <seconds>
+  local deadline=$((SECONDS + $1))
+  until curl -fsS --max-time 5 "${REGISTRY_CURL[@]}" "${REGISTRY_URL}/v2/" >/dev/null 2>&1; do
+    if [[ ${SECONDS} -ge ${deadline} ]]; then
+      fail "image registry is not answering at ${REGISTRY_URL} (mTLS)"
       return 1
     fi
     sleep 3
@@ -288,8 +305,8 @@ build_ocr_base() {
   pod="$(kubectl -n "${NS}" get pod -l app=buildkitd -o jsonpath='{.items[0].metadata.name}')"
   ok "buildkitd pod ${pod}"
 
-  wait_for_url "http://127.0.0.1:30500/v2/" 120 "image registry" || exit 1
-  ok "registry reachable"
+  wait_for_registry 120 || exit 1
+  ok "registry reachable (mTLS)"
 
   # Stage only what Dockerfile.full consumes. `kubectl cp` tars the directory
   # as-is (it does not honour .dockerignore), and ocr-service/ holds a ~900 MB
@@ -311,7 +328,9 @@ build_ocr_base() {
   # `sh -c` wrapper that contains the pattern).
   kubectl -n "${NS}" exec "${pod}" -- sh -c "
     rm -f /tmp/ocr-build.log /tmp/ocr-build.rc
-    nohup sh -c 'buildctl --addr tcp://127.0.0.1:1234 build \
+    nohup sh -c 'buildctl --addr tcp://127.0.0.1:1234 \
+      --tlscacert /tls/ca.crt --tlscert /tls/client.crt --tlskey /tls/client.key \
+      build \
       --progress plain \
       --frontend dockerfile.v0 \
       --local context=/tmp/ocr-ctx \
@@ -341,8 +360,8 @@ build_ocr_base() {
   done
 
   # A zero exit is not proof of a push — confirm the tag is actually served.
-  if [[ "${rc}" != "0" ]] || ! curl -fsSI --max-time 10 \
-        "http://127.0.0.1:30500/v2/finance/ocr-base/manifests/${OCR_BASE_TAG}" >/dev/null 2>&1; then
+  if [[ "${rc}" != "0" ]] || ! curl -fsSI --max-time 10 "${REGISTRY_CURL[@]}" \
+        "${REGISTRY_URL}/v2/finance/ocr-base/manifests/${OCR_BASE_TAG}" >/dev/null 2>&1; then
     fail "build failed (buildctl exit ${rc:-unknown})"
     echo "    last log lines:" >&2
     kubectl -n "${NS}" exec "${pod}" -- tail -n 25 /tmp/ocr-build.log >&2 || true
@@ -532,7 +551,7 @@ else
   printf '    rabbitmq       kubectl -n pfa port-forward svc/rabbitmq 15672:15672     → http://localhost:15672\n'
   printf '    argocd         kubectl -n argocd port-forward svc/argocd-server 8080:80  → http://localhost:8080\n'
 fi
-printf '    registry       curl http://127.0.0.1:30500/v2/_catalog\n'
+printf '    registry       curl --cacert .certs/ca.crt --cert .certs/client.crt --key .certs/client.key https://127.0.0.1:30500/v2/_catalog\n'
 printf '    ci runs        https://github.com/verginjose/Personal-Finance-Assistant/actions\n'
 
 # ── 5. credentials ───────────────────────────────────────────────────────────

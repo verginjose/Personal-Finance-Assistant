@@ -6,6 +6,37 @@
 # and cannot resolve ClusterIP/DNS names. kubelet pulls from the NodePort on
 # loopback (127.0.0.1:30500, see /etc/rancher/k3s/registries.yaml), while
 # BuildKit pushes through the ClusterIP DNS name (registry.pfa.svc:5000).
+#
+# Transport is mutually authenticated TLS: every client must present a
+# certificate signed by the CI CA (key `ci-tls-registry`, produced by
+# ./k8s/ci/gen-tls-certs.sh). `clientcas` is set without `clientauth`, so
+# distribution's default applies - require-and-verify-client-cert. That means
+# the readiness/liveness probes cannot be HTTP: kubelet probes present no
+# client certificate, so they use a TCP connect instead.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: registry-config
+  namespace: pfa
+  labels:
+    app: registry
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  config.yml: |
+    version: 0.1
+    http:
+      addr: :5000
+      tls:
+        certificate: /tls/tls.crt
+        key: /tls/tls.key
+        clientcas:
+          - /tls/ca.crt
+    storage:
+      filesystem:
+        rootdirectory: /var/lib/registry
+      delete:
+        enabled: true      # required by registry-gc.sh
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -47,27 +78,30 @@ spec:
         - name: registry
           image: registry:2.8.3
           imagePullPolicy: IfNotPresent
+          # The image entrypoint turns a *.yml argument into
+          # `registry serve <file>`; the mounted ConfigMap replaces the default
+          # config. garbage-collect (CronJob and registry-gc.sh) reads the same
+          # file. Do not use subPath: a config edit should roll a new pod.
+          args: ["/etc/registry/config.yml"]
           ports:
-            - name: http
+            - name: https
               containerPort: 5000
-          env:
-            - name: REGISTRY_HTTP_ADDR
-              value: ":5000"
-            - name: REGISTRY_STORAGE_DELETE_ENABLED
-              value: "true"      # required by registry-gc.sh
-            - name: REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY
-              value: /var/lib/registry
           volumeMounts:
+            - name: config
+              mountPath: /etc/registry
+              readOnly: true
+            - name: tls
+              mountPath: /tls
+              readOnly: true
             - name: data
               mountPath: /var/lib/registry
+          # TCP only: an HTTP probe would be rejected without a client cert.
           readinessProbe:
-            httpGet:
-              path: /v2/
+            tcpSocket:
               port: 5000
             periodSeconds: 10
           livenessProbe:
-            httpGet:
-              path: /v2/
+            tcpSocket:
               port: 5000
             initialDelaySeconds: 15
             periodSeconds: 20
@@ -79,6 +113,13 @@ spec:
               cpu: 500m
               memory: 256Mi
       volumes:
+        - name: config
+          configMap:
+            name: registry-config
+        - name: tls
+          secret:
+            secretName: ci-tls-registry
+            defaultMode: 0440
         - name: data
           persistentVolumeClaim:
             claimName: registry-data
@@ -96,7 +137,7 @@ spec:
   selector:
     app: registry
   ports:
-    - name: http
+    - name: https
       port: 5000
       targetPort: 5000
       nodePort: 30500

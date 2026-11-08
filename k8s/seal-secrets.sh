@@ -14,6 +14,10 @@
 #
 # Run this after any password/token change in .env, then commit and push.
 # Reloader restarts the affected pods once Argo applies the new Secret.
+#
+# Not handled here: the CI mTLS Secrets (ci-tls-registry, ci-tls-buildkitd,
+# ci-tls-client) are certificates, not .env values. They live in
+# k8s/sealed/ci-tls-secrets.yaml and are produced by k8s/ci/gen-tls-certs.sh.
 set -euo pipefail
 
 K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

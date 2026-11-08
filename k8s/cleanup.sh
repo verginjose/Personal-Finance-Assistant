@@ -37,7 +37,7 @@ if ! ${DO_APP} && ! ${DO_CI} && ! ${DO_IMAGES} && ! ${DO_HOST} && ! ${DO_CLUSTER
 fi
 
 echo "This will:"
-${DO_CI}      && echo "  - delete namespace argocd, the runner secret, and /etc/rancher/k3s/registries.yaml"
+${DO_CI}      && echo "  - delete namespace argocd, the runner secret, and the host registry TLS config"
 ${DO_APP}     && echo "  - delete namespace pfa and all local-path volume data"
 ${DO_IMAGES}  && echo "  - remove the finance images from containerd/Docker and .pipeline artifacts"
 ${DO_HOST}    && echo "  - remove firewalld trusted sources, the inotify sysctl, and the finance.local hosts entry"
@@ -57,8 +57,9 @@ if ${DO_CI}; then
   echo "==> Removing CI credentials"
   kubectl -n pfa delete secret pfa-ci-secrets --ignore-not-found
 
-  echo "==> Removing the insecure registry config"
+  echo "==> Removing the registry mTLS config"
   sudo rm -f /etc/rancher/k3s/registries.yaml
+  sudo rm -rf /etc/rancher/k3s/registry-certs
   echo "    k3s reads this file at startup; restart it to apply"
 
   echo "==> Note: registry/builder volume data lives in namespace pfa (removed by --app)"

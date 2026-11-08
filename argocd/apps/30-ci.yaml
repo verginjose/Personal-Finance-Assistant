@@ -1,7 +1,7 @@
 # In-cluster CI: the registry, rootless BuildKit and the self-hosted GitHub
-# Actions runner. The one-time host setup (containerd's plain-HTTP registry
-# mirror in /etc/rancher/k3s/registries.yaml) is not a Kubernetes object and
-# stays manual.
+# Actions runner. The one-time host setup (containerd's mTLS registry config in
+# /etc/rancher/k3s/registries.yaml plus the certificates it names) is not a
+# Kubernetes object and stays manual: sudo ./k8s/ci/setup-registry.sh.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

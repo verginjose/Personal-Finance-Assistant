@@ -54,6 +54,12 @@ spec:
             app: buildkit-prune
         spec:
           restartPolicy: Never
+          # The rootless BuildKit image runs as uid 1000, and the ci-tls-client
+          # Secret is root:root 0440. fsGroup makes the mounted certificate
+          # and key group-readable; without it buildctl fails with a
+          # permission error before it ever dials the daemon.
+          securityContext:
+            fsGroup: 1000
           containers:
             - name: prune
               image: moby/buildkit:v0.15.2-rootless

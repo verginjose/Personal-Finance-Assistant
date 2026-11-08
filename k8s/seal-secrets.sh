@@ -135,6 +135,17 @@ if wanted redis-secrets; then
 fi
 if wanted clickhouse-secrets; then
   seal_envkeys clickhouse-secrets CLICKHOUSE_PASSWORD
+  # Vector lives in pfa-system; Secrets are namespace-scoped, so it needs its
+  # own copy of the password under its own sealed Secret.
+  ch_tmp="$(mktemp)"
+  printf 'CLICKHOUSE_PASSWORD=%s\n' \
+    "$(sed -n 's/^CLICKHOUSE_PASSWORD=//p' "${ENV_FILE}" | tail -n 1)" > "${ch_tmp}"
+  kubectl create secret generic clickhouse-secrets -n pfa-system \
+      --from-env-file="${ch_tmp}" --dry-run=client -o yaml \
+    | kubeseal --cert "${CERT}" --format yaml \
+    > "${OUT_DIR}/clickhouse-secrets-pfa-system.yaml"
+  rm -f "${ch_tmp}"
+  echo "  sealed clickhouse-secrets -> PFA-SYSTEM (vector) -> k8s/sealed/clickhouse-secrets-pfa-system.yaml"
 fi
 if wanted minio-secrets; then
   seal_envkeys minio-secrets MINIO_ROOT_PASSWORD

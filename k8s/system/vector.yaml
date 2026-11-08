@@ -180,7 +180,7 @@ data:
       clickhouse_logs:
         type: clickhouse
         inputs: ["mask_pii"]
-        endpoint: "http://clickhouse:8123"
+        endpoint: "http://clickhouse.pfa.svc.cluster.local:8123"
         database: "default"
         table: "logs"
         skip_unknown_fields: true

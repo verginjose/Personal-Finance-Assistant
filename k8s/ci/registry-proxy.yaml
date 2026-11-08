@@ -67,6 +67,7 @@ data:
       proxy_ssl_certificate_key     /registry-client/client.key;
       proxy_ssl_trusted_certificate /registry-client/ca.crt;
       proxy_ssl_verify on;
+      proxy_ssl_verify_depth 5;
       proxy_ssl_server_name on;
 
       server {

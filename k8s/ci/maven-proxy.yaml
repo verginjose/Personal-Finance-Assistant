@@ -58,6 +58,10 @@ data:
 
         proxy_ssl_server_name on;
         proxy_ssl_verify on;
+        # nginx defaults to a verify depth of 1. Maven Central's chain is
+        # leaf -> YE1 -> Root YE -> ISRG Root X2 -> ISRG Root X1, so the
+        # default fails with "unable to get local issuer certificate".
+        proxy_ssl_verify_depth 5;
         proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
 
         location / {

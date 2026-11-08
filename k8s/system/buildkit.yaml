@@ -161,7 +161,9 @@ spec:
             - --tlscert=/tls/server.crt
             - --tlskey=/tls/server.key
             - --config=/etc/buildkit/buildkitd.toml
-            - --oci-worker-no-process-sandbox
+            # No --oci-worker-no-process-sandbox: with seccomp Unconfined the
+            # worker can create its own user namespace, so build steps get a
+            # nested sandbox instead of sharing this container's namespaces.
             - --oci-worker-snapshotter=native
           env:
             - name: HOME

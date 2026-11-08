@@ -4,21 +4,32 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebFilter;
+import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
+/**
+ * Injects the authenticated user id as {@code X-User-Id} from the signed JWT,
+ * removing any client-supplied copy first.
+ *
+ * <p>A {@link WebFilter}, not a {@code GlobalFilter}: gateway global filters only
+ * run for requests that match a route, and this service also serves local
+ * controllers ({@code /api/bill/**}, {@code /api/receipt/**},
+ * {@code /api/profile/**}, {@code /api/storage/**}) that read {@code X-User-Id}.
+ * As a global filter the header was never added for those endpoints, so the
+ * controllers answered 400 "Required header 'X-User-Id' is not present".
+ */
 @Component
-public class UserHeaderFilter implements GlobalFilter, Ordered {
+public class UserHeaderFilter implements WebFilter, Ordered {
 
     private final SecretKey secretKey;
     private final com.github.benmanes.caffeine.cache.Cache<String, Claims> claimsCache;
@@ -32,7 +43,7 @@ public class UserHeaderFilter implements GlobalFilter, Ordered {
     }
 
     @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+    public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String token = null;
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authHeader != null && authHeader.startsWith("Bearer ")) {

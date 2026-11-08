@@ -582,6 +582,20 @@ spec:
       ports:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
+    # Cloudflared is the public entry point: it must reach the origin services
+    # it was configured to forward to (verginjose.cloud -> frontend:80,
+    # grafana/argocd hostnames -> Traefik:80). Without these the tunnel
+    # connects but every request fails with "dial tcp ...:80: connection
+    # refused" because the policy drops it.
+    - to:
+        - podSelector: { matchLabels: { app: frontend } }
+      ports:
+        - { protocol: TCP, port: 80 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: TCP, port: 80 }
     # Cloudflare Tunnel edge: QUIC first, HTTP/2 fallback, both on 7844.
     - to:
         - ipBlock:

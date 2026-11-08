@@ -60,17 +60,31 @@ spec:
       # The runner deliberately holds no RBAC: it builds, pushes and commits.
       # There is no kubectl in the workflow, so it never needs a token.
       automountServiceAccountToken: false
+      # fsGroup is the runner account's GID: the ci-tls-client Secret is mode
+      # 0440, so without it the certs are root-readable only and job steps
+      # running as `runner` cannot call buildkitd.
+      securityContext:
+        fsGroup: 121
       containers:
         - name: runner
           image: myoung34/github-runner:2.338.2-ubuntu-jammy
           imagePullPolicy: IfNotPresent
-          # Runs as root because the myoung34 image's entrypoint configures
-          # the runner as root; job steps only use git/buildctl/curl.
+          # The entrypoint still starts as root (it registers the runner and
+          # then drops privileges); RUN_AS_ROOT=false makes it hand the
+          # Runner.Listener and every job step to UID 1001. That matters
+          # because jobs used to be root and could read the PAT from
+          # /proc/1/environ and the client key from /certs.
           securityContext:
             allowPrivilegeEscalation: false
             seccompProfile:
               type: RuntimeDefault
           env:
+            # Jobs run as `runner`, so HOME must point at a directory that
+            # user owns; the image's default is /root.
+            - name: HOME
+              value: /home/runner
+            - name: RUN_AS_ROOT
+              value: "false"
             - name: REPO_URL
               value: https://github.com/verginjose/Personal-Finance-Assistant
             - name: RUNNER_NAME

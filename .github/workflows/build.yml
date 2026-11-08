@@ -43,6 +43,8 @@ env:
   BUILDKIT_HOST: tcp://buildkitd.pfa-system.svc.cluster.local:1234
   BUILDKIT_TLS_DIR: /certs
   BUILDKIT_VERSION: v0.15.2
+  # SHA-256 of buildkit-v0.15.2.linux-amd64.tar.gz. Bump both together.
+  BUILDCTL_SHA256: 59279df5853bef19a03ec15c5c31b772e59d91d079ab0221e1bafa023cf41c35
   ALL_SERVICES: auth-service api-gateway command-service query-service frontend ocr-service
 
 jobs:
@@ -51,7 +53,9 @@ jobs:
     outputs:
       services: ${{ steps.changed.outputs.services }}
     steps:
-      - uses: actions/checkout@v5
+      # Pinned to a commit SHA, not a moving tag: a compromised upstream tag
+      # would otherwise execute with this runner's git and registry credentials.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
         with:
           fetch-depth: 0
 
@@ -106,7 +110,7 @@ jobs:
     env:
       SERVICE: ${{ matrix.service }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
         with:
           # Check out the branch tip, not github.sha. Every matrix job would
           # otherwise branch from the same triggering commit and their
@@ -114,21 +118,27 @@ jobs:
           ref: ${{ github.ref_name }}
           fetch-depth: 0   # the tag-bump commit is pushed from this checkout
 
-      - name: Install buildctl if missing
+      - name: Install buildctl
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/bin" /opt/buildctl
-          # /opt/buildctl is a hostPath-backed cache (k8s/ci/runner.yaml), so
-          # the download happens once per node instead of once per job. The
-          # release asset takes ~2.5 minutes to fetch on this link.
-          if [ ! -x /opt/buildctl/buildctl ]; then
-            tmp="$(mktemp -d)"
+          # /opt/buildctl is a PVC-backed cache (k8s/ci/runner.yaml), so the
+          # 77 MB release asset is fetched once per node instead of once per
+          # job. The *tarball* is cached, not the extracted binary: job steps
+          # can write this volume, so a binary left behind by an earlier build
+          # must never be trusted. Verifying the archive on every run and
+          # extracting from it makes the binary provably the pinned release.
+          archive="/opt/buildctl/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz"
+          if ! echo "${BUILDCTL_SHA256}  ${archive}" | sha256sum -c --status -; then
+            rm -f "${archive}"
             curl -fsSL "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz" \
-              | tar -xz -C "$tmp" --strip-components=1 bin/buildctl
-            install -m 0755 "$tmp/buildctl" /opt/buildctl/buildctl
-            rm -rf "$tmp"
+              -o "${archive}"
           fi
-          ln -sf /opt/buildctl/buildctl "$HOME/.local/bin/buildctl"
+          echo "${BUILDCTL_SHA256}  ${archive}" | sha256sum -c -
+          tmp="$(mktemp -d)"
+          tar -xzf "${archive}" -C "${tmp}" --strip-components=1 bin/buildctl
+          install -m 0755 "${tmp}/buildctl" "$HOME/.local/bin/buildctl"
+          rm -rf "${tmp}"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/buildctl" --version
 

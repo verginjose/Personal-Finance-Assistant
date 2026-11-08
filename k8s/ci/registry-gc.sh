@@ -62,15 +62,12 @@ if [[ -z "${REGISTRY_CA:-}" && -f "${ROOT_DIR}/.certs/ca.crt" ]]; then
   REGISTRY_CERT="${ROOT_DIR}/.certs/client.crt"
   REGISTRY_KEY="${ROOT_DIR}/.certs/client.key"
 fi
-CURL_TLS=()
-[[ -n "${REGISTRY_CA:-}"   ]] && CURL_TLS+=(--cacert "${REGISTRY_CA}")
-[[ -n "${REGISTRY_CERT:-}" ]] && CURL_TLS+=(--cert   "${REGISTRY_CERT}")
-[[ -n "${REGISTRY_KEY:-}"  ]] && CURL_TLS+=(--key    "${REGISTRY_KEY}")
-[[ ${#CURL_TLS[@]} -eq 3 ]] || {
+if [[ -z "${REGISTRY_CA:-}" || -z "${REGISTRY_CERT:-}" || -z "${REGISTRY_KEY:-}" ]]; then
   echo "No client certificate: set REGISTRY_CA, REGISTRY_CERT and REGISTRY_KEY" >&2
   echo "(host default: ${ROOT_DIR}/.certs, see k8s/ci/gen-tls-certs.sh)" >&2
   exit 1
-}
+fi
+CURL_TLS=(--cacert "${REGISTRY_CA}" --cert "${REGISTRY_CERT}" --key "${REGISTRY_KEY}")
 rcurl() { curl "${CURL_TLS[@]}" "$@"; }
 
 # Retry the reachability probe: a freshly started pod's NetworkPolicy state

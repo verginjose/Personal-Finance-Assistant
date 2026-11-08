@@ -86,7 +86,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: ocr-service
-          image: 127.0.0.1:30500/finance/ocr-service:996354883733
+          image: 127.0.0.1:30500/finance/ocr-service:0e1ad6176d68
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

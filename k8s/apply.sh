@@ -177,9 +177,6 @@ kubectl -n "${NS}" rollout status deployment/auth-service --timeout=300s
 kubectl -n "${NS}" rollout status deployment/api-gateway --timeout=300s
 kubectl -n "${NS}" rollout status deployment/frontend --timeout=120s
 
-echo "==> Applying network policies"
-kubectl apply -f "${K8S_DIR}/network-policies.yaml"
-
 echo "==> Applying ingress"
 kubectl apply -f "${K8S_DIR}/edge/ingress.yaml"
 # Grafana's public hostname; Argo CD's is applied by argocd/expose.sh

@@ -851,9 +851,11 @@ def check_repository(repo_root: str, report: Report) -> None:
     report.check("high", "No token is stored in localStorage", not js_hits,
                  f"found in {sorted(set(js_hits))}")
 
-    policy = _read(os.path.join(repo_root, "k8s/network-policies.yaml"))
+    policy = (_read(os.path.join(repo_root, "k8s/apps/network-policies.yaml"))
+              or _read(os.path.join(repo_root, "k8s/network-policies.yaml")))
     report.check("high", "NetworkPolicy manifest present",
-                 "kind: NetworkPolicy" in policy, "k8s/network-policies.yaml missing")
+                 "kind: NetworkPolicy" in policy,
+                 "k8s/apps/network-policies.yaml missing")
 
     sealed_dir = os.path.join(repo_root, "k8s/sealed")
     sealed = [n for n in os.listdir(sealed_dir) if n.endswith(".yaml")] if os.path.isdir(sealed_dir) else []

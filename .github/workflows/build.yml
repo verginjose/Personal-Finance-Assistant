@@ -20,9 +20,11 @@ on:
         type: choice
         options: [all, auth-service, api-gateway, command-service, query-service, frontend, ocr-service]
 
-# The job pushes the tag bump back to the same repo.
+# Pushing the propose-branch and opening the PR. The workflow never pushes to
+# the deployment branch itself; that requires a human merge.
 permissions:
   contents: write
+  pull-requests: write
 
 # Never run two builds at once: a Maven build and an OCR build together will
 # exceed the node's memory, and the tag-bump commits would race.
@@ -210,34 +212,59 @@ jobs:
           set -euo pipefail
           REGISTRY="https://${PUSH_REGISTRY}" ./k8s/ci/registry-gc.sh --retention-only --keep=2
 
-      - name: Bump image tag in the manifest
+  # The runner must never write master: anything that can push to master can
+  # make Argo deploy. It proposes the tag bump on a branch and opens a PR
+  # instead, so a human merge is the only path from "image built" to
+  # "deployed". One PR covers every service this run built.
+  promote:
+    needs: [detect, build]
+    if: needs.detect.outputs.services != '[]'
+    runs-on: [self-hosted, linux, x64, pfa]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Propose the tag bump
+        env:
+          SERVICES: ${{ needs.detect.outputs.services }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          file="k8s/apps/${SERVICE}.yaml"
-          sed -i -E "s#(image: ).*finance/${SERVICE}:.*#\1${PULL_REGISTRY}/finance/${SERVICE}:${TAG}#" "$file"
-          if git diff --quiet -- "$file"; then
-            echo "Manifest already points at ${TAG}; nothing to commit."
+          TAG="${GITHUB_SHA::12}"
+          BRANCH="ci/tag-bump-${GITHUB_RUN_ID}"
+
+          for svc in $(echo "$SERVICES" | jq -r '.[]'); do
+            file="k8s/apps/${svc}.yaml"
+            sed -i -E "s#(image: ).*finance/${svc}:.*#\1${PULL_REGISTRY}/finance/${svc}:${TAG}#" "$file"
+          done
+          git diff --stat
+
+          if git diff --quiet; then
+            echo "Manifests already point at ${TAG}; nothing to propose."
             exit 0
           fi
+
           git config user.name "pfa-ci"
           git config user.email "ci@verginjose.local"
-          git add "$file"
-          git commit -m "ci: ${SERVICE} -> ${TAG} [skip ci]"
+          git checkout -b "$BRANCH"
+          git add k8s/apps
+          git commit -m "ci: bump images to ${TAG}"
+          git push origin "$BRANCH"
 
-          # Serialised by max-parallel, but a second workflow run or a manual
-          # push can still move the branch. Rebase and retry instead of
-          # failing a build whose image was already pushed successfully.
-          for attempt in 1 2 3 4 5; do
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
-              exit 0
-            fi
-            echo "Push rejected (attempt ${attempt}); rebasing onto origin/${GITHUB_REF_NAME}"
-            git pull --rebase origin "${GITHUB_REF_NAME}" || true
-            sleep $((attempt * 2))
-          done
-          echo "Could not push the tag bump after 5 attempts" >&2
-          exit 1
+          body=$(printf 'Images built and pushed by run %s.\n\n```\n%s\n```\n\nMerging this PR makes Argo CD deploy them.' \
+            "$GITHUB_RUN_ID" "$(git show --stat --format= HEAD)")
+          jq -n --arg title "ci: bump images to ${TAG}" \
+                --arg head "$BRANCH" --arg base "$GITHUB_REF_NAME" \
+                --arg body "$body" \
+                '{title: $title, head: $head, base: $base, body: $body}' \
+          | curl -fsS -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls" \
+              --data-binary @- >/dev/null
 
       # Deployment is Argo CD's job: it watches k8s/apps and syncs the new
-      # image tag once the tag-bump commit lands. The runner needs no cluster
+      # image tag once the PR is merged. The runner needs no cluster
       # permissions at all.

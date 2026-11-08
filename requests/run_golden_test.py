@@ -229,6 +229,27 @@ class Metrics:
 # ────────────────────────────────────────────────────────────────────────────
 # HTTP client (retry, shared back-off, multipart)
 # ────────────────────────────────────────────────────────────────────────────
+def _sniff_content_type(path, payload):
+    """Content type from the bytes, not the extension.
+
+    The receipt dataset has at least one PNG saved as .jpg; the gateway's
+    upload validation checks magic bytes, so declaring image/jpeg from the
+    name would (correctly) get a 415. Sniffing keeps the test honest about
+    what it is actually sending.
+    """
+    if payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if payload.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if payload.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if payload[:4] == b"RIFF" and payload[8:12] == b"WEBP":
+        return "image/webp"
+    if payload.startswith(b"%PDF"):
+        return "application/pdf"
+    return mimetypes.guess_type(path)[0] or "application/octet-stream"
+
+
 class Cooldown:
     """Shared client-side back-off: a 429/503 parks *every* simulated user for
     a short, growing interval so the gateway breaker's half-open probes land."""
@@ -270,9 +291,9 @@ class Client:
         chunks = []
         for field, path in files.items():
             filename = os.path.basename(path)
-            ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
             with open(path, "rb") as fh:
                 payload = fh.read()
+            ctype = _sniff_content_type(path, payload)
             chunks.append(f"--{boundary}\r\n".encode())
             chunks.append(
                 f'Content-Disposition: form-data; name="{field}"; filename="{filename}"\r\n'.encode()
@@ -1309,7 +1330,12 @@ def _read_listing(client, member):
             break
         for row in rows:
             amount = float(row.get("amount", 0) or 0)
-            if row.get("type") == "INCOME":
+            # The summary endpoint deliberately excludes settlements from the
+            # income/expense totals (they move money between people, they are
+            # not spending). Mirror that here or the two sides never agree.
+            if row.get("category") == "SETTLEMENT":
+                pass
+            elif row.get("type") == "INCOME":
                 income += amount
             else:
                 expense += amount

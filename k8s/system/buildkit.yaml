@@ -184,6 +184,11 @@ spec:
               type: spc_t
             seccompProfile:
               type: Unconfined
+            # Rootless BuildKit needs none of these. Keeping them explicit
+            # limits what a build can do even while seccomp is Unconfined.
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: tcp
               containerPort: 1234

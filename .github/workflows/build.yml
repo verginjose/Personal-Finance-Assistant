@@ -43,8 +43,10 @@ env:
   BUILDKIT_HOST: tcp://buildkitd.pfa-system.svc.cluster.local:1234
   BUILDKIT_TLS_DIR: /certs
   BUILDKIT_VERSION: v0.15.2
-  # SHA-256 of buildkit-v0.15.2.linux-amd64.tar.gz. Bump both together.
+  # SHA-256 of buildkit-v0.15.2.linux-amd64.tar.gz, and the GitHub release
+  # asset id used as a download fallback. Bump all three together.
   BUILDCTL_SHA256: 59279df5853bef19a03ec15c5c31b772e59d91d079ab0221e1bafa023cf41c35
+  BUILDKIT_ASSET_ID: "186162870"
   ALL_SERVICES: auth-service api-gateway command-service query-service frontend ocr-service
 
 jobs:
@@ -131,8 +133,16 @@ jobs:
           archive="/opt/buildctl/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz"
           if ! echo "${BUILDCTL_SHA256}  ${archive}" | sha256sum -c --status -; then
             rm -f "${archive}"
-            curl -fsSL "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz" \
-              -o "${archive}"
+            # github.com/.../releases/download has returned 504 in bursts on
+            # this network. The asset API serves the same bytes; the pinned
+            # hash makes either source safe to trust.
+            curl -fSL --retry 3 --retry-delay 3 \
+                "https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz" \
+                -o "${archive}" ||
+              curl -fSL --retry 3 --retry-delay 3 \
+                -H "Accept: application/octet-stream" \
+                "https://api.github.com/repos/moby/buildkit/releases/assets/${BUILDKIT_ASSET_ID}" \
+                -o "${archive}"
           fi
           echo "${BUILDCTL_SHA256}  ${archive}" | sha256sum -c -
           tmp="$(mktemp -d)"

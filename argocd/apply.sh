@@ -83,6 +83,10 @@ if ! kubectl get ns argocd >/dev/null 2>&1; then
 fi
 
 echo "==> Registering the repository credential (${CRED_MODE})"
+# Replace, never merge: kubectl apply would keep the old username/password
+# keys next to the githubApp* ones, and Argo then prefers (and fails with)
+# basic auth.
+kubectl -n argocd delete secret pfa-repo --ignore-not-found >/dev/null
 if [[ "${CRED_MODE}" == app ]]; then
   # Built with kubectl so the PEM does not have to be indented into YAML.
   kubectl -n argocd create secret generic pfa-repo \
@@ -107,6 +111,11 @@ else
     | kubectl apply -f - >/dev/null
 fi
 echo "    secret/pfa-repo applied"
+
+# The repo-server caches repo credentials; make it reload them now.
+echo "==> Restarting argocd-repo-server to pick up the credential"
+kubectl -n argocd rollout restart deploy/argocd-repo-server >/dev/null
+kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=120s >/dev/null
 
 echo "==> Creating the Application"
 kubectl apply -f "${ARGOCD_DIR}/root.yaml"

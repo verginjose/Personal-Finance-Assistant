@@ -3,8 +3,11 @@
 #
 #   ./argocd/apply.sh
 #
-# Requires GITHUB_PAT in .env — it is reused as the HTTPS credential for the
-# private repo and stored in the argocd/pfa-repo Secret. If Argo CD is already
+# The repository credential comes from the GitHub App (CI_APP_ID,
+# CI_APP_INSTALLATION_ID, CI_APP_PRIVATE_KEY in .env) when present: the App
+# needs Repository -> Contents: Read-only, so it can read the private repo and
+# still cannot write code. ARGOCD_GITHUB_TOKEN (a fine-grained read-only PAT)
+# is the fallback; GITHUB_PAT is the last resort. If Argo CD is already
 # installed this is idempotent.
 set -euo pipefail
 
@@ -29,8 +32,41 @@ env_value() {
   sed -n "s/^$1=//p" "${ROOT_DIR}/.env" | tail -n 1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
-PAT="$(env_value GITHUB_PAT)"
-[[ -n "${PAT}" ]] || { echo "GITHUB_PAT missing from .env" >&2; exit 1; }
+# Multi-line value from .env: quote-stripped, per-line whitespace trimmed,
+# blank lines dropped. Handles a PEM pasted with indentation.
+env_multiline() {
+  awk -v key="$1" '
+    index($0, key "=") == 1 {
+      v = substr($0, index($0, "=") + 1)
+      if (v ~ /^".*"$/) { print v; exit }
+      if (v ~ /^"/) {
+        while ((getline line) > 0) {
+          v = v "\n" line
+          if (line ~ /"$/) break
+        }
+      }
+      print v
+      exit
+    }' "${ROOT_DIR}/.env" \
+  | sed -e 's/^"//' -e 's/"$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d'
+}
+
+APP_ID="$(env_value CI_APP_ID | tr -d '"')"
+APP_INSTALLATION_ID="$(env_value CI_APP_INSTALLATION_ID | tr -d '"')"
+APP_KEY="$(env_multiline CI_APP_PRIVATE_KEY)"
+TOKEN="$(env_value ARGOCD_GITHUB_TOKEN)"
+[[ -n "${TOKEN}" ]] || TOKEN="$(env_value GITHUB_PAT)"
+
+if [[ -n "${APP_ID}" && -n "${APP_INSTALLATION_ID}" && -n "${APP_KEY}" ]]; then
+  CRED_MODE=app
+elif [[ -n "${TOKEN}" ]]; then
+  CRED_MODE=token
+else
+  echo "No repo credential found in .env." >&2
+  echo "Set CI_APP_ID/CI_APP_INSTALLATION_ID/CI_APP_PRIVATE_KEY (GitHub App)" >&2
+  echo "or ARGOCD_GITHUB_TOKEN (fine-grained PAT with Contents: read-only)." >&2
+  exit 1
+fi
 
 if ! kubectl get ns argocd >/dev/null 2>&1; then
   echo "==> Installing Argo CD ${ARGOCD_VERSION}"
@@ -46,21 +82,30 @@ if ! kubectl get ns argocd >/dev/null 2>&1; then
       '{"spec":{"type":"NodePort","ports":[{"name":"http","port":80,"targetPort":8080,"nodePort":30080}]}}'
 fi
 
-echo "==> Registering the repository credential"
-cat <<EOF | kubectl apply -f - >/dev/null
-apiVersion: v1
-kind: Secret
-metadata:
-  name: pfa-repo
-  namespace: argocd
-  labels:
-    argocd.argoproj.io/secret-type: repository
-stringData:
-  type: git
-  url: ${REPO_URL}
-  username: ${REPO_USER}
-  password: ${PAT}
-EOF
+echo "==> Registering the repository credential (${CRED_MODE})"
+if [[ "${CRED_MODE}" == app ]]; then
+  # Built with kubectl so the PEM does not have to be indented into YAML.
+  kubectl -n argocd create secret generic pfa-repo \
+      --from-literal=type=git \
+      --from-literal=url="${REPO_URL}" \
+      --from-literal=githubAppID="${APP_ID}" \
+      --from-literal=githubAppInstallationID="${APP_INSTALLATION_ID}" \
+      --from-literal=githubAppPrivateKey="${APP_KEY}" \
+      --dry-run=client -o yaml \
+    | kubectl label --local -f - \
+        argocd.argoproj.io/secret-type=repository -o yaml \
+    | kubectl apply -f - >/dev/null
+else
+  kubectl -n argocd create secret generic pfa-repo \
+      --from-literal=type=git \
+      --from-literal=url="${REPO_URL}" \
+      --from-literal=username="${REPO_USER}" \
+      --from-literal=password="${TOKEN}" \
+      --dry-run=client -o yaml \
+    | kubectl label --local -f - \
+        argocd.argoproj.io/secret-type=repository -o yaml \
+    | kubectl apply -f - >/dev/null
+fi
 echo "    secret/pfa-repo applied"
 
 echo "==> Creating the Application"

@@ -172,7 +172,9 @@ data:
           - type: counter
             field: level
             name: log_errors_total
-            namespace: pfa-system
+            # Prometheus metric prefix, not a Kubernetes namespace. Must stay a
+            # valid metric name (no hyphens), so it is `pfa`, not `pfa-system`.
+            namespace: pfa
             tags:
               service: "{{service}}"
 

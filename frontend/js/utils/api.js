@@ -239,8 +239,8 @@ async function refreshTokens() {
  * is the only credential that survives a reload, so one silent refresh is
  * enough to re-establish the session.
  */
-export async function ensureSession() {
-  if (Auth.getToken() || !Auth.hasSession()) return;
+export async function ensureSession({ force = false } = {}) {
+  if (Auth.getToken() || (!force && !Auth.hasSession())) return;
   try { await refreshTokens(); } catch { /* auth-expired handles the UI */ }
 }
 
@@ -268,8 +268,12 @@ window.addEventListener('storage', (e) => {
   if (e.newValue === '1') {
     ensureSession();
   } else if (e.newValue === null) {
+    // Another tab cleared the flag (a failed refresh or a logout), but the
+    // HttpOnly cookie is the real credential and may still be valid. Try it
+    // before dropping this tab's session; refreshTokens() ends the session
+    // itself only if the cookie is gone too.
     accessToken = null;
-    window.dispatchEvent(new Event('auth-expired'));
+    ensureSession({ force: true });
   }
 });
 
@@ -314,8 +318,11 @@ async function request(method, path, { body, params, headers = {}, raw = false }
   const isAuthRequest = path === '/auth/login' || path === '/auth/refresh' || path === '/auth/register';
 
   // Handle 401 Unauthorized for token refresh. The refresh credential is an
-  // HttpOnly cookie, so the only question is whether a session flag exists.
-  if (res.status === 401 && !isAuthRequest && Auth.hasSession()) {
+  // HttpOnly cookie, so attempt one silent refresh even when the localStorage
+  // flag is missing: a tab that never saw the login, or one whose flag another
+  // tab cleared, can still hold a perfectly good cookie. Only an explicit
+  // 401/403 from /auth/refresh ends the session.
+  if (res.status === 401 && !isAuthRequest) {
     try {
       await refreshTokens(); // Wait for the refresh to finish
       try {
@@ -326,7 +333,10 @@ async function request(method, path, { body, params, headers = {}, raw = false }
         res = await fetch(url.toString(), getOpts());
       }
     } catch (e) {
-      throw new Error('Session expired. Please log in again.');
+      // A network error or a 5xx from /auth/refresh is not a logout; the
+      // cookie may still be valid once the service is reachable again.
+      if (e.fatal) throw new Error('Session expired. Please log in again.');
+      throw new Error('Could not reach the server. Please try again.');
     }
   }
 

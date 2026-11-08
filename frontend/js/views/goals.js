@@ -425,8 +425,13 @@ async function viewGoalDetails(goalParam, uid, reloadData = false) {
           </div>`).join('');
       }
       renderTxnsPagination();
-    } catch {
-      txnsContainer.innerHTML = '<p style="color:var(--neg);padding:10px">Could not load contributions.</p>';
+    } catch (e) {
+      // A 401 means the session ended; the shell is already switching to the
+      // login view, so don't misreport it as a data error.
+      const authFailure = /session expired/i.test(e?.message || '');
+      txnsContainer.innerHTML = authFailure
+        ? '<p class="meta" style="padding:10px">Session expired. Please sign in again.</p>'
+        : '<p style="color:var(--neg);padding:10px">Could not load contributions.</p>';
     }
   };
 

@@ -43,6 +43,19 @@ export function periodRange(period) {
 }
 
 /**
+ * The same range, formatted for endpoints that bind LocalDateTime (for
+ * example /analytics/category-pie-chart). periodRange() returns bare dates,
+ * which those endpoints reject with 400.
+ */
+export function periodRangeDateTime(period) {
+  const { startDate, endDate } = periodRange(period);
+  const range = {};
+  if (startDate) range.startDate = `${startDate}T00:00:00`;
+  if (endDate) range.endDate = `${endDate}T23:59:59.999`;
+  return range;
+}
+
+/**
  * The period a comparison is measured against.
  * The current month is compared like-for-like: day 1 to today against day 1
  * to the same day of the previous month, never a full month.

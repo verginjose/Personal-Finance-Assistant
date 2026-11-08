@@ -7,7 +7,7 @@ import {
   displayAmountFor, displayName, humanizeNamesIn,
 } from '../utils/ui.js';
 import {
-  PERIODS, periodRange, previousRange, periodHeading, periodScopeLabel,
+  PERIODS, periodRange, periodRangeDateTime, previousRange, periodHeading, periodScopeLabel,
   comparisonLabel, getTotals,
 } from '../utils/totals.js';
 
@@ -133,7 +133,10 @@ export async function renderDashboard(container) {
   // The top expense category lets the statement say "most of it went to X"
   // without guessing. It is decoration on top of the totals, never a blocker.
   const loadComposition = () => {
-    const range = periodRange(currentPeriod);
+    // AnalyticsRequest binds startDate/endDate as LocalDateTime, so this call
+    // needs full timestamps even though the other period-scoped endpoints
+    // take bare dates.
+    const range = periodRangeDateTime(currentPeriod);
     api.get('/analytics/category-pie-chart', {
       userId,
       ...range,

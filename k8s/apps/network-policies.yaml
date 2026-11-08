@@ -1,15 +1,46 @@
-# Namespace-internal east-west restrictions.
+# Namespace-internal east-west restrictions, plus a default-deny egress floor.
 #
-# Before this file every pod in the cluster could call command-service with an
-# arbitrary X-User-Id and write into another account's ledger. These policies
-# make the only allowed path to each service the one the architecture intends:
+# INGRESS. Before the ingress rules every pod in the cluster could call
+# command-service with an arbitrary X-User-Id and write into another account's
+# ledger. These policies make the only allowed path to each service the one the
+# architecture intends:
 #
 #   Traefik -> frontend -> api-gateway -> {auth,command,query}
 #   query-service -> ocr-service /analyze
 #   ocr-service -> command-service /internal/**
 #
-# Only Ingress is restricted; egress (DNS, external HTTPS for Groq and FX
-# rates) is untouched. k3s enforces NetworkPolicy with its built-in controller.
+# EGRESS. A single default-deny policy covers every pod in `pfa`; each workload
+# then names the exact destinations it needs. A pod cannot reach the node's
+# host network (kubelet 10250, apiserver 6443, ssh 22, or anything else on
+# 10.99.99.1) unless a rule below grants it; the only ones that do are
+# prometheus (kubelet metrics) and the CI jobs (apiserver / buildkitd).
+# External HTTPS is granted per-workload and only on port 443, because these
+# pods must call the internet:
+#
+#   ocr-service   api.groq.com, api.frankfurter.dev, Paddle model CDN
+#   query-service api.groq.com, api.frankfurter.dev
+#   grafana       grafana.com (plugin install on first start)
+#   cloudflared   Cloudflare edge (QUIC 7844 / HTTPS 443)
+#
+# NetworkPolicy has no notion of a hostname, so 443 to 0.0.0.0/0 is the finest
+# granularity available. Everything on the node that matters is on a different
+# port and therefore stays blocked. The CI pods keep their own, narrower
+# policies in k8s/ci/network-policies.yaml; policies are additive, so those
+# union with the default deny rather than replacing it.
+#
+# k3s enforces NetworkPolicy with its built-in controller.
+---
+# Deny everything outbound by default. Additive: any egress rule in any other
+# policy for the same pod is added to this empty set.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: pfa
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress: []
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -19,7 +50,7 @@ metadata:
 spec:
   podSelector:
     matchLabels: { app: frontend }
-  policyTypes: [Ingress]
+  policyTypes: [Ingress, Egress]
   ingress:
     # The ingress controller (Traefik) and any tunnel pod may live in another
     # namespace, so the public entry point stays open.
@@ -27,6 +58,20 @@ spec:
         - namespaceSelector: {}
       ports:
         - { protocol: TCP, port: 80 }
+  egress:
+    # DNS. kube-dns is the only resolver the pods are given.
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # The SPA is served statically; the only runtime call is /api to the gateway
+    # (the wait-for-gateway init container hits the same address).
+    - to:
+        - podSelector: { matchLabels: { app: api-gateway } }
+      ports:
+        - { protocol: TCP, port: 8080 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -36,7 +81,7 @@ metadata:
 spec:
   podSelector:
     matchLabels: { app: api-gateway }
-  policyTypes: [Ingress]
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - podSelector: { matchLabels: { app: frontend } }
@@ -46,6 +91,39 @@ spec:
         - podSelector: { matchLabels: { app: prometheus } }
       ports:
         - { protocol: TCP, port: 9090 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Spring Cloud Gateway routes.
+    - to:
+        - podSelector: { matchLabels: { app: auth-service } }
+      ports:
+        - { protocol: TCP, port: 8082 }
+    - to:
+        - podSelector: { matchLabels: { app: command-service } }
+      ports:
+        - { protocol: TCP, port: 8081 }
+    - to:
+        - podSelector: { matchLabels: { app: query-service } }
+      ports:
+        - { protocol: TCP, port: 8084 }
+    # Redis rate limiter, RabbitMQ publisher, MinIO receipt/attachment store.
+    - to:
+        - podSelector: { matchLabels: { app: redis } }
+      ports:
+        - { protocol: TCP, port: 6379 }
+    - to:
+        - podSelector: { matchLabels: { app: rabbitmq } }
+      ports:
+        - { protocol: TCP, port: 5672 }
+    - to:
+        - podSelector: { matchLabels: { app: minio } }
+      ports:
+        - { protocol: TCP, port: 9000 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -55,13 +133,29 @@ metadata:
 spec:
   podSelector:
     matchLabels: { app: auth-service }
-  policyTypes: [Ingress]
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - podSelector: { matchLabels: { app: api-gateway } }
         - podSelector: { matchLabels: { app: prometheus } }
       ports:
         - { protocol: TCP, port: 8082 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Users table + refresh-token/session cache.
+    - to:
+        - podSelector: { matchLabels: { app: postgres-primary } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - to:
+        - podSelector: { matchLabels: { app: redis } }
+      ports:
+        - { protocol: TCP, port: 6379 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -71,7 +165,7 @@ metadata:
 spec:
   podSelector:
     matchLabels: { app: command-service }
-  policyTypes: [Ingress]
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - podSelector: { matchLabels: { app: api-gateway } }
@@ -83,6 +177,31 @@ spec:
         - podSelector: { matchLabels: { app: ocr-service } }
       ports:
         - { protocol: TCP, port: 8081 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Writes go to the primary (the replica is read-only for analytics).
+    - to:
+        - podSelector: { matchLabels: { app: postgres-primary } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - to:
+        - podSelector: { matchLabels: { app: redis } }
+      ports:
+        - { protocol: TCP, port: 6379 }
+    # OCR jobs are published here; ANALYTICS_SERVICE_URL calls query-service.
+    - to:
+        - podSelector: { matchLabels: { app: rabbitmq } }
+      ports:
+        - { protocol: TCP, port: 5672 }
+    - to:
+        - podSelector: { matchLabels: { app: query-service } }
+      ports:
+        - { protocol: TCP, port: 8084 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -92,13 +211,44 @@ metadata:
 spec:
   podSelector:
     matchLabels: { app: query-service }
-  policyTypes: [Ingress]
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - podSelector: { matchLabels: { app: api-gateway } }
         - podSelector: { matchLabels: { app: prometheus } }
       ports:
         - { protocol: TCP, port: 8084 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Reads go to the replica; rate limiting/cache to Redis.
+    - to:
+        - podSelector: { matchLabels: { app: postgres-replica } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - to:
+        - podSelector: { matchLabels: { app: redis } }
+      ports:
+        - { protocol: TCP, port: 6379 }
+    - to:
+        - podSelector: { matchLabels: { app: rabbitmq } }
+      ports:
+        - { protocol: TCP, port: 5672 }
+    # Receipt uploads are handed to the OCR worker.
+    - to:
+        - podSelector: { matchLabels: { app: ocr-service } }
+      ports:
+        - { protocol: TCP, port: 8100 }
+    # Groq (LLM categorization) and Frankfurter (FX rates), both HTTPS.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { protocol: TCP, port: 443 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -108,12 +258,39 @@ metadata:
 spec:
   podSelector:
     matchLabels: { app: ocr-service }
-  policyTypes: [Ingress]
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - podSelector: { matchLabels: { app: query-service } }
       ports:
         - { protocol: TCP, port: 8100 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Receipt images, OCR job queue, and the /internal upsert callback.
+    - to:
+        - podSelector: { matchLabels: { app: minio } }
+      ports:
+        - { protocol: TCP, port: 9000 }
+    - to:
+        - podSelector: { matchLabels: { app: rabbitmq } }
+      ports:
+        - { protocol: TCP, port: 5672 }
+    - to:
+        - podSelector: { matchLabels: { app: command-service } }
+      ports:
+        - { protocol: TCP, port: 8081 }
+    # Groq, Frankfurter, and the PaddleOCR model CDN (first start only; the
+    # models then live on the paddle-model-cache PVC).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { protocol: TCP, port: 443 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -123,7 +300,7 @@ metadata:
 spec:
   podSelector:
     matchLabels: { app: redis }
-  policyTypes: [Ingress]
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - podSelector: { matchLabels: { app: api-gateway } }
@@ -133,6 +310,14 @@ spec:
         - podSelector: { matchLabels: { app: grafana } }
       ports:
         - { protocol: TCP, port: 6379 }
+  egress:
+    # Single node, no replicas: Redis never calls out.
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -142,14 +327,22 @@ metadata:
 spec:
   podSelector:
     matchLabels: { app: rabbitmq }
-  policyTypes: [Ingress]
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - podSelector: { matchLabels: { app: api-gateway } }
         - podSelector: { matchLabels: { app: command-service } }
         - podSelector: { matchLabels: { app: ocr-service } }
+        - podSelector: { matchLabels: { app: query-service } }
       ports:
         - { protocol: TCP, port: 5672 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -159,13 +352,50 @@ metadata:
 spec:
   podSelector:
     matchLabels: { app: minio }
-  policyTypes: [Ingress]
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - podSelector: { matchLabels: { app: api-gateway } }
         - podSelector: { matchLabels: { app: ocr-service } }
       ports:
         - { protocol: TCP, port: 9000 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clickhouse-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: clickhouse }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Vector is the only writer; Grafana reads the dashboards' queries.
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa-system }
+          podSelector: { matchLabels: { app: vector } }
+      ports:
+        - { protocol: TCP, port: 8123 }
+        - { protocol: TCP, port: 9000 }
+    - from:
+        - podSelector: { matchLabels: { app: grafana } }
+      ports:
+        - { protocol: TCP, port: 8123 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -175,7 +405,7 @@ metadata:
 spec:
   podSelector:
     matchLabels: { app: postgres-primary }
-  policyTypes: [Ingress]
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - podSelector: { matchLabels: { app: auth-service } }
@@ -186,6 +416,14 @@ spec:
     # The replica bootstraps with pg_basebackup and then streams WAL.
     - from:
         - podSelector: { matchLabels: { app: postgres-replica } }
+  egress:
+    # Streaming replication is replica-initiated; the primary only answers.
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -195,7 +433,7 @@ metadata:
 spec:
   podSelector:
     matchLabels: { app: postgres-replica }
-  policyTypes: [Ingress]
+  policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - podSelector: { matchLabels: { app: query-service } }
@@ -205,3 +443,150 @@ spec:
     # pg_basebackup replication stream from the primary.
     - from:
         - podSelector: { matchLabels: { app: postgres-primary } }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # walreceiver connects out to the primary for basebackup and WAL.
+    - to:
+        - podSelector: { matchLabels: { app: postgres-primary } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: prometheus }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Grafana queries the API directly; the rest of the cluster scrapes nothing.
+    - from:
+        - podSelector: { matchLabels: { app: grafana } }
+      ports:
+        - { protocol: TCP, port: 9090 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # static_configs targets.
+    - to:
+        - podSelector: { matchLabels: { app: api-gateway } }
+      ports:
+        - { protocol: TCP, port: 9090 }
+    - to:
+        - podSelector: { matchLabels: { app: auth-service } }
+      ports:
+        - { protocol: TCP, port: 8082 }
+    - to:
+        - podSelector: { matchLabels: { app: command-service } }
+      ports:
+        - { protocol: TCP, port: 8081 }
+    - to:
+        - podSelector: { matchLabels: { app: query-service } }
+      ports:
+        - { protocol: TCP, port: 8084 }
+    # Vector lives in pfa-system (hostPath log mounts).
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa-system }
+          podSelector: { matchLabels: { app: vector } }
+      ports:
+        - { protocol: TCP, port: 9090 }
+    # Kubelet cAdvisor scrape and node-target discovery. 10.99.99.1 is the
+    # node's static InternalIP; the apiserver is reached either through the
+    # Service IP or the node endpoint, depending on where the policy chain
+    # sees the packet (same reasoning as the registry-gc policy).
+    - to:
+        - ipBlock:
+            cidr: 10.99.99.1/32
+      ports:
+        - { protocol: TCP, port: 10250 }
+        - { protocol: TCP, port: 6443 }
+    - to:
+        - ipBlock:
+            cidr: 10.43.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-ingress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: grafana }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # The Grafana UI is reached through the ingress controller (kube-system).
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - { protocol: TCP, port: 3000 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Provisioned datasources.
+    - to:
+        - podSelector: { matchLabels: { app: prometheus } }
+      ports:
+        - { protocol: TCP, port: 9090 }
+    - to:
+        - podSelector: { matchLabels: { app: postgres-primary } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - to:
+        - podSelector: { matchLabels: { app: clickhouse } }
+      ports:
+        - { protocol: TCP, port: 8123 }
+    - to:
+        - podSelector: { matchLabels: { app: redis } }
+      ports:
+        - { protocol: TCP, port: 6379 }
+    # GF_INSTALL_PLUGINS downloads from grafana.com. Plugins persist on the
+    # grafana-data PVC, so this is startup-only after the first boot.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { protocol: TCP, port: 443 }
+---
+# Optional workload (k8s/optional/cloudflared.yaml). Harmless if absent.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudflared-egress
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: cloudflared }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Cloudflare Tunnel edge: QUIC first, HTTP/2 fallback, both on 7844.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { protocol: UDP, port: 7844 }
+        - { protocol: TCP, port: 7844 }
+        - { protocol: TCP, port: 443 }

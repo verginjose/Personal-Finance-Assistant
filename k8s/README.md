@@ -630,6 +630,15 @@ reachable with `port-forward` (they are `ClusterIP` services, matching the
   partitioned `logs` table (per-day) with a 4-day TTL; the compose-era
   PostgreSQL-engine bridge databases were removed because no dashboard used
   them (Grafana queries Postgres natively).
+- **ClickHouse tuning:** the `clickhouse-tuning` ConfigMap (inline in
+  `infrastructure/clickhouse.yaml`) disables the image's self-monitoring tables
+  (`text_log`, `trace_log`, `metric_log`, `asynchronous_metric_log`,
+  `query_thread_log`), caps per-query memory at 256 MiB and shrinks the merge
+  pools. Those tables were ~99% of the database (639 MiB vs 2.9 MiB of real
+  logs) and their background inserts were the source of the
+  `MEMORY_LIMIT_EXCEEDED` events and container restarts. Existing volumes keep
+  the old tables: drop them once to reclaim the space
+  (`DROP TABLE system.text_log`, `system.trace_log`, …).
 - **Observability profile:** compose gates these behind `--profile observability`;
   the overlay always deploys them. Delete `infrastructure/prometheus.yaml`,
   `grafana.yaml`, `clickhouse.yaml` and `vector.yaml` (and the `vector` scrape

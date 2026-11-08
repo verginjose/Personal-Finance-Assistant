@@ -38,7 +38,7 @@ spec:
         app.kubernetes.io/part-of: personal-finance-assistant
       annotations:
         secret.reloader.stakater.com/reload: "clickhouse-secrets"
-        configmap.reloader.stakater.com/reload: "clickhouse-init"
+        configmap.reloader.stakater.com/reload: "clickhouse-init,clickhouse-tuning"
     spec:
       containers:
         - name: clickhouse
@@ -63,13 +63,23 @@ spec:
             - name: init
               mountPath: /docker-entrypoint-initdb.d
               readOnly: true
+            - name: tuning
+              mountPath: /etc/clickhouse-server/config.d/tuning.xml
+              subPath: tuning.xml
+              readOnly: true
+            - name: tuning
+              mountPath: /etc/clickhouse-server/users.d/limits.xml
+              subPath: limits.xml
+              readOnly: true
           resources:
+            # Sized for the real workload (~26k log lines/day): after the
+            # system-log tables below are off, RSS settles around 250-350 MiB.
             requests:
-              cpu: 250m
-              memory: 512Mi
+              cpu: 100m
+              memory: 256Mi
             limits:
               cpu: "1"
-              memory: 2Gi
+              memory: 1536Mi
           readinessProbe:
             httpGet:
               path: /ping
@@ -91,6 +101,9 @@ spec:
         - name: init
           configMap:
             name: clickhouse-init
+        - name: tuning
+          configMap:
+            name: clickhouse-tuning
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -99,3 +112,69 @@ spec:
         resources:
           requests:
             storage: 5Gi
+---
+# Server-side and per-query limits.
+#
+# The image enables every ClickHouse self-monitoring table. On this box that
+# internal bookkeeping was ~99% of the database: 639 MiB of system.text_log
+# (TRACE level), system.trace_log (per-thread stack sampling), system.metric_log
+# and system.asynchronous_metric_log versus 2.9 MiB of real logs. None of them
+# feeds a dashboard, they had no TTL, and their background inserts are what
+# tripped MEMORY_LIMIT_EXCEEDED (809 events) and the container restarts.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-tuning
+  namespace: pfa
+  labels:
+    app: clickhouse
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  # Mounted under config.d/ (server defaults) ...
+  tuning.xml: |
+    <clickhouse>
+        <!-- Keep only query_log and error_log; both are small and useful. -->
+        <text_log remove="1"/>
+        <trace_log remove="1"/>
+        <metric_log remove="1"/>
+        <asynchronous_metric_log remove="1"/>
+        <query_thread_log remove="1"/>
+
+        <!-- One writer (Vector) and a couple of Grafana sessions. -->
+        <max_concurrent_queries>16</max_concurrent_queries>
+
+        <!-- Default is 16 merge threads + a 128-thread schedule pool. -->
+        <!-- Must stay >= number_of_free_entries_in_pool_to_execute_mutation /
+             background_merges_mutations_concurrency_ratio, so lower the two
+             merge_tree thresholds alongside it (values below give 4*2=8 > 2). -->
+        <background_pool_size>4</background_pool_size>
+        <background_schedule_pool_size>8</background_schedule_pool_size>
+        <background_move_pool_size>1</background_move_pool_size>
+        <merge_tree>
+            <number_of_free_entries_in_pool_to_execute_mutation>2</number_of_free_entries_in_pool_to_execute_mutation>
+            <number_of_free_entries_in_pool_to_lower_max_size_of_merge>2</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+            <number_of_free_entries_in_pool_to_execute_optimize_entire_partition>4</number_of_free_entries_in_pool_to_execute_optimize_entire_partition>
+        </merge_tree>
+
+        <!-- Bound the caches; the defaults cap them in the gigabytes. -->
+        <mark_cache_size>134217728</mark_cache_size>
+        <uncompressed_cache_size>0</uncompressed_cache_size>
+    </clickhouse>
+  # ... and under users.d/ (per-query limits for the default user).
+  limits.xml: |
+    <clickhouse>
+        <profiles>
+            <default>
+                <!-- The largest dashboard query needs ~50 MiB. Without this cap a
+                     wide Grafana range tries to allocate 4.5 GiB and aborts. -->
+                <max_memory_usage>268435456</max_memory_usage>
+                <max_memory_usage_for_user>536870912</max_memory_usage_for_user>
+                <max_threads>2</max_threads>
+                <!-- Spill instead of failing if an aggregation ever outgrows it. -->
+                <max_bytes_before_external_group_by>134217728</max_bytes_before_external_group_by>
+                <max_bytes_before_external_sort>134217728</max_bytes_before_external_sort>
+                <!-- A dashboard query that takes longer is a broken query. -->
+                <max_execution_time>30</max_execution_time>
+            </default>
+        </profiles>
+    </clickhouse>

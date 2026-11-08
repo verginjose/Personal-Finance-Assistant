@@ -244,6 +244,9 @@ kubectl -n pfa exec clickhouse-0 -- clickhouse-client --password "$CH_PW" \
   -q 'select service, level, count() from default.logs group by service, level order by count() desc limit 20'
 kubectl -n pfa exec clickhouse-0 -- clickhouse-client --password "$CH_PW" \
   -q 'select timestamp, service, message from default.logs order by timestamp desc limit 20'
+# The image's self-log tables (text_log/trace_log/metric_log) are disabled by
+# the clickhouse-tuning ConfigMap; read server errors from the pod instead:
+kubectl -n pfa logs clickhouse-0 | grep -iE 'error|exception' | tail -20
 
 # MinIO objects
 kubectl -n pfa exec minio-0 -- sh -c 'ls -la /data/receipts | head'

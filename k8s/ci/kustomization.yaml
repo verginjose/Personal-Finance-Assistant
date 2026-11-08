@@ -15,8 +15,10 @@ kind: Kustomization
 
 resources:
   - buildkit-prune-cron.yaml
+  - maven-proxy.yaml
   - network-policies.yaml
   - registry-gc-cron.yaml
+  - registry-proxy.yaml
   - registry.yaml
   - runner.yaml
 

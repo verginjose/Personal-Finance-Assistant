@@ -34,20 +34,26 @@ spec:
       ports:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
-    # Push/pull against the registry, which stays in pfa.
+    # Registry access goes through the push proxy in pfa, which holds the
+    # client certificate and enforces method/path. buildkitd has no registry
+    # credential and no direct route to registry:5000 any more.
     - to:
         - namespaceSelector:
             matchLabels: { kubernetes.io/metadata.name: pfa }
           podSelector:
-            matchLabels: { app: registry }
+            matchLabels: { app: registry-proxy }
       ports:
-        - { protocol: TCP, port: 5000 }
-    # Docker Hub / the mirrored base images' CDN.
+        - { protocol: TCP, port: 5001 }
+    # Maven dependencies. A pull-through cache in pfa; the daemon itself has
+    # no route to the internet, so nothing a build step produces can be sent
+    # anywhere else.
     - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa }
+          podSelector:
+            matchLabels: { app: maven }
       ports:
-        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 8443 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

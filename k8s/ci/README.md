@@ -187,6 +187,9 @@ SealedSecrets in `k8s/sealed/`. The two ConfigMaps that embed a password
 | Tags are **commit SHAs**, not `latest` | Immutable: a rebuild is visible, rollback is `git revert`, and kubelet never reuses a stale cache entry. |
 | Runner is **not** privileged, no docker socket | Builds happen in the rootless BuildKit pod. Under SELinux Enforcing on Fedora this is safer than docker-in-docker. |
 | BuildKit cache lives on a **40 Gi PVC** | Maven dependency downloads dominate build time; the cache makes rebuilds minutes instead of tens of minutes. |
+| Registry credential lives in **registry-proxy**, not buildkitd | The daemon runs with `--oci-worker-no-process-sandbox`, so a build step shares its namespaces and could read any mounted key. The proxy enforces "push only into the six service repos, never DELETE" and is the only holder of `ci-tls-registry-client`. |
+| Maven goes through **maven**, a pull-through cache | With it, buildkitd needs no internet egress at all: the daemon can only reach the registry proxy and the Maven cache. Removes the exfiltration path the missing sandbox otherwise leaves open. |
+| buildkitd uses a **node-local seccomp deny-list** instead of `Unconfined` | Blocks `ptrace`, cross-process memory reads, eBPF, io_uring, userfaultfd and module loading from build steps. Install with `k8s/system/seccomp/README.md`. |
 | `max-parallel: 1` | Node has ~8 GiB free; two Maven builds plus the running stack can OOM. |
 | Path-based service detection | Avoids rebuilding the 10 GB CUDA OCR image on every frontend tweak. |
 
@@ -251,6 +254,8 @@ Deployment — if the runner ever needs `kubectl`, something is wrong with Argo.
 | `registry.yaml` | 50 Gi PVC + `registry:2` Deployment + ConfigMap + NodePort 30500 |
 | `../system/buildkit.yaml` | rootless BuildKit Deployment (mTLS 1234), 40 Gi cache PVC, in `pfa-system` |
 | `runner.yaml` | ServiceAccount + `myoung34/github-runner` Deployment + client cert mount + buildctl PVC |
+| `registry-proxy.yaml` | nginx push/pull proxy: holds the registry client certificate, enforces method and repository rules |
+| `maven-proxy.yaml` | nginx pull-through cache for Maven Central (HTTPS, CI-CA certificate) |
 | `network-policies.yaml` | Ingress/egress allow-lists for every CI pod |
 | `gen-tls-certs.sh` | Generates the CA/certs into `.certs/` and seals them into `k8s/sealed/ci-tls-secrets.yaml` |
 | `apply.sh` | Deploys the TLS Secrets, policies and three workloads |

@@ -4,10 +4,10 @@
 #   * the Maven/apt layer cache survives in a PVC between builds, and
 #   * the runner pod needs no privileged container and no docker socket.
 #
-# Lives in pfa-system for the same reason as Vector: it needs
-# seccompProfile: Unconfined and SELinux spc_t to run rootless on this Fedora
-# node, and both are rejected by Baseline PSA. pfa enforces baseline; this
-# namespace does not.
+# Lives in pfa-system for the same reason as Vector: it needs a node-local
+# seccomp profile and SELinux spc_t to run rootless on this Fedora node, and
+# Baseline PSA rejects that combination in pfa. The profile itself is a
+# deny-list (k8s/system/seccomp/), not Unconfined.
 #
 # The daemon speaks mutually authenticated TLS on 1234: `--tlscacert` makes
 # BuildKit require and verify a client certificate (buildkitd main.go sets
@@ -15,8 +15,9 @@
 # of a CI client certificate can submit builds. NetworkPolicies narrow it
 # further to the runner and the prune CronJob.
 #
-# Its registry client is mTLS too (the `keypair` block below): the registry
-# rejects unauthenticated pushes and pulls.
+# It holds no registry credential of its own: pulls and pushes go through
+# registry-proxy (k8s/ci/registry-proxy.yaml), which enforces the method and
+# repository rules and is the only workload with the registry client keypair.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -24,19 +25,17 @@ metadata:
   namespace: pfa-system
 data:
   buildkitd.toml: |
-    # BuildKit pushes to the registry over its ClusterIP Service, which is
-    # stable regardless of the node's LAN IP. The registry serves HTTPS and
-    # requires a client certificate; `keypair` is how BuildKit presents one.
+    # BuildKit no longer talks to the registry directly, and no longer holds a
+    # registry credential. Pulls and pushes go through registry-proxy
+    # (k8s/ci/registry-proxy.yaml), which is the only workload with the
+    # ci-tls-registry-client keypair and enforces "push only, finance/<service>
+    # only, never DELETE".
     #
-    # This is the *registry-client* identity (its own CA), not the CI client
-    # certificate the runner holds for buildkitd. Keeping them separate stops
-    # a compromised build from pushing or deleting images.
-    [registry."registry.pfa.svc.cluster.local:5000"]
+    # The proxy presents a server certificate signed by the same CI CA that
+    # `ca` points at, so verification is unchanged. `insecure` is deliberately
+    # NOT set: keep TLS end to end even inside the cluster.
+    [registry."registry-proxy.pfa.svc.cluster.local:5001"]
       ca = ["/tls/ca.crt"]
-
-      [[registry."registry.pfa.svc.cluster.local:5000".keypair]]
-        cert = "/registry-client/client.cert"
-        key = "/registry-client/client.key"
 
     # Cache retention. With no gcpolicy BuildKit falls back to
     # config.DetectDefaultGCCap(), which is 10% of the filesystem it can see.
@@ -182,8 +181,14 @@ spec:
             # which is the default on Fedora.
             seLinuxOptions:
               type: spc_t
+            # Not Unconfined. The process sandbox is off (see the
+            # --oci-worker-no-process-sandbox note below), so this deny-list is
+            # what stops a build step from tracing or reading the daemon it
+            # shares namespaces with. The profile file lives on the node:
+            # k8s/system/seccomp/README.md has the install command.
             seccompProfile:
-              type: Unconfined
+              type: Localhost
+              localhostProfile: profiles/buildkitd.json
             # Do NOT add allowPrivilegeEscalation: false or drop ALL caps
             # here. rootlesskit starts through the setuid newuidmap helper;
             # no_new_privs blocks it and an empty bounding set would strip
@@ -200,9 +205,6 @@ spec:
               readOnly: true
             - name: tls
               mountPath: /tls
-              readOnly: true
-            - name: registry-client
-              mountPath: /registry-client
               readOnly: true
             - name: cache
               mountPath: /home/user/.local/share/buildkit
@@ -242,10 +244,6 @@ spec:
         - name: tls
           secret:
             secretName: ci-tls-buildkitd
-            defaultMode: 0440
-        - name: registry-client
-          secret:
-            secretName: ci-tls-registry-client
             defaultMode: 0440
         - name: cache
           persistentVolumeClaim:

@@ -1,0 +1,61 @@
+{
+  "comment": [
+    "Seccomp profile for the rootless BuildKit daemon (pfa-system/buildkitd).",
+    "",
+    "Rootless BuildKit on this Fedora/k3s host cannot run with the default",
+    "profile: the process sandbox cannot mount /proc, so the daemon is started",
+    "with --oci-worker-no-process-sandbox (k8s/system/buildkit.yaml). That flag",
+    "puts a build step in the daemon's own namespaces, where it can signal the",
+    "daemon, read another process's files through /proc/<pid>/root, and inspect",
+    "process memory. The pod used to run with seccompProfile: Unconfined, which",
+    "left all of that reachable.",
+    "",
+    "This is a deny-list, not an allow-list: the rootless runtime needs a wide",
+    "set of syscalls and an allow-list is where builds break. It blocks the",
+    "syscalls that turn 'a build step' into 'control of the build daemon' or",
+    "'a kernel exploit': cross-process memory access, tracing, eBPF, perf,",
+    "io_uring, userfaultfd, keyrings, module loading and kexec.",
+    "",
+    "Install on the node (the kubelet resolves Localhost profiles relative to",
+    "its seccomp root):",
+    "",
+    "  sudo install -D -m 0644 k8s/system/seccomp/buildkitd.json \\",
+    "       /var/lib/kubelet/seccomp/profiles/buildkitd.json",
+    "",
+    "Then roll the daemon. Test a build with a real RUN step: this file must",
+    "not block anything rootlesskit, runc or the build itself needs."
+  ],
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "syscalls": [
+    {
+      "names": [
+        "acct",
+        "add_key",
+        "bpf",
+        "delete_module",
+        "finit_module",
+        "init_module",
+        "io_uring_enter",
+        "io_uring_register",
+        "io_uring_setup",
+        "kexec_file_load",
+        "kexec_load",
+        "keyctl",
+        "lookup_dcookie",
+        "nfsservctl",
+        "open_by_handle_at",
+        "perf_event_open",
+        "process_vm_readv",
+        "process_vm_writev",
+        "ptrace",
+        "reboot",
+        "request_key",
+        "swapon",
+        "swapoff",
+        "userfaultfd"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1
+    }
+  ]
+}

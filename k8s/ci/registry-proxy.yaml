@@ -1,0 +1,200 @@
+# Push proxy in front of the registry.
+#
+# Why: buildkitd runs with --oci-worker-no-process-sandbox (k8s/system/
+# buildkit.yaml), so a build step shares the daemon's namespaces and can read
+# any file the daemon has mounted. Until this change that included
+# ci-tls-registry-client — a keypair that may push AND delete any finance/*
+# image. The fix is to remove the credential from the daemon and put it here,
+# where the checks the registry itself cannot express (method and path) are
+# enforced.
+#
+# What it allows:
+#   * GET/HEAD on /v2/** — pulls, including base/* and finance/ocr-base.
+#   * POST/PUT/PATCH on /v2/finance/<one of the six services>/** — pushes.
+#   * DELETE only on /blobs/uploads/** — cancelling an upload session.
+# Everything else is 403. Deletes of manifests or blobs are never allowed:
+# retention and garbage collection stay in registry-gc.sh, which runs with
+# cluster access, not with the build credential.
+#
+# TLS: buildkitd verifies this proxy with the CI CA it already mounts
+# (/tls/ca.crt). The proxy verifies the registry with the CI CA in
+# ci-tls-registry-client and presents that Secret's client certificate, so the
+# registry still sees a normal mTLS client. Nothing is plaintext.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: registry-proxy-config
+  namespace: pfa
+  labels:
+    app: registry-proxy
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  nginx.conf: |
+    worker_processes 1;
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr warn;
+
+    events {
+      worker_connections 1024;
+    }
+
+    http {
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path     /tmp/proxy;
+      fastcgi_temp_path   /tmp/fastcgi;
+      uwsgi_temp_path     /tmp/uwsgi;
+      scgi_temp_path      /tmp/scgi;
+
+      access_log /dev/stdout;
+
+      # Image pushes are arbitrarily large; never buffer them.
+      client_max_body_size 0;
+      proxy_http_version 1.1;
+      proxy_request_buffering off;
+      proxy_buffering off;
+      proxy_connect_timeout 10s;
+      proxy_read_timeout 300s;
+      proxy_send_timeout 300s;
+
+      # Presented to us by buildkitd's registry client.
+      ssl_certificate     /proxy-tls/server.crt;
+      ssl_certificate_key /proxy-tls/server.key;
+      ssl_protocols TLSv1.2 TLSv1.3;
+
+      # Presented by us to the registry. This is the credential that must not
+      # live in the build daemon.
+      proxy_ssl_certificate         /registry-client/client.cert;
+      proxy_ssl_certificate_key     /registry-client/client.key;
+      proxy_ssl_trusted_certificate /registry-client/ca.crt;
+      proxy_ssl_verify on;
+      proxy_ssl_server_name on;
+
+      server {
+        listen 5001 ssl;
+
+        # Upload sessions: the registry client cancels a failed upload with
+        # DELETE on the session, which removes no content.
+        location ~ ^/v2/finance/(auth-service|api-gateway|command-service|query-service|frontend|ocr-service)/blobs/uploads/ {
+          limit_except GET HEAD POST PUT PATCH DELETE { deny all; }
+          proxy_pass https://registry.pfa.svc.cluster.local:5000;
+        }
+
+        # Pushes into the six service repositories. Everything else in
+        # finance/* (ocr-base, for example) is pulled, never overwritten.
+        location ~ ^/v2/finance/(auth-service|api-gateway|command-service|query-service|frontend|ocr-service)/(blobs|manifests)/ {
+          limit_except GET HEAD POST PUT PATCH { deny all; }
+          proxy_pass https://registry.pfa.svc.cluster.local:5000;
+        }
+
+        # Pulls: the API check, base/*, finance/ocr-base, service manifests.
+        location /v2/ {
+          limit_except GET HEAD { deny all; }
+          proxy_pass https://registry.pfa.svc.cluster.local:5000;
+        }
+
+        location / {
+          return 403;
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry-proxy
+  namespace: pfa
+  labels:
+    app: registry-proxy
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: registry-proxy
+  template:
+    metadata:
+      labels:
+        app: registry-proxy
+        app.kubernetes.io/part-of: personal-finance-assistant
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        # `nginx` in the alpine image. No `user` directive: the master process
+        # is already unprivileged and binds 5001.
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nginx
+          image: 127.0.0.1:30500/base/nginx:alpine
+          imagePullPolicy: IfNotPresent
+          # Skip the image entrypoint: it writes to /etc/nginx, which is
+          # read-only here.
+          command: ["/usr/sbin/nginx", "-g", "daemon off;"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: https
+              containerPort: 5001
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: tls
+              mountPath: /proxy-tls
+              readOnly: true
+            - name: registry-client
+              mountPath: /registry-client
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            tcpSocket:
+              port: 5001
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      volumes:
+        - name: config
+          configMap:
+            name: registry-proxy-config
+        - name: tls
+          secret:
+            secretName: ci-tls-registry-proxy
+            defaultMode: 0440
+        - name: registry-client
+          secret:
+            secretName: ci-tls-registry-client
+            defaultMode: 0440
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry-proxy
+  namespace: pfa
+  labels:
+    app: registry-proxy
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    app: registry-proxy
+  ports:
+    - name: https
+      port: 5001
+      targetPort: 5001

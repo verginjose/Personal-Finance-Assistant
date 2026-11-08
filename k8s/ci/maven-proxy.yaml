@@ -1,0 +1,208 @@
+# Pull-through cache for Maven Central.
+#
+# Why: buildkitd's only required internet dependency was the Maven build
+# stage. With this in place the daemon can have no egress at all (see
+# k8s/system/network-policies.yaml), which removes the exfiltration path that
+# --oci-worker-no-process-sandbox otherwise leaves open.
+#
+# It is deliberately dumb: an nginx proxy_cache, not Nexus. Maven only issues
+# GETs, and this repository has one ecosystem. If npm or PyPI ever need a
+# build-time dependency, promote this to a real repository manager.
+#
+# HTTPS matters: Maven 3.8.1+ refuses plain-HTTP repositories ("Blocked
+# mirror for repositories"), so the service terminates TLS with a certificate
+# from the CI CA. The builder stage trusts that CA — k8s/ci/build.yml copies
+# /certs/ca.crt into the build context and the Maven Dockerfiles import it
+# into the JDK truststore before running mvn.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: maven-proxy-config
+  namespace: pfa
+  labels:
+    app: maven
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  nginx.conf: |
+    worker_processes 1;
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr warn;
+
+    events {
+      worker_connections 1024;
+    }
+
+    http {
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path     /tmp/proxy;
+      fastcgi_temp_path   /tmp/fastcgi;
+      uwsgi_temp_path     /tmp/uwsgi;
+      scgi_temp_path      /tmp/scgi;
+
+      access_log /dev/stdout;
+
+      # 8 GiB of artifacts covers the Spring dependency tree several times
+      # over. max_size is the hard bound; inactive is the GC horizon.
+      proxy_cache_path /cache
+                       levels=1:2
+                       keys_zone=maven:64m
+                       max_size=8g
+                       inactive=90d
+                       use_temp_path=off;
+
+      server {
+        listen 8443 ssl;
+        ssl_certificate     /proxy-tls/server.crt;
+        ssl_certificate_key /proxy-tls/server.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+
+        proxy_ssl_server_name on;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+
+        location / {
+          limit_except GET HEAD { deny all; }
+
+          proxy_pass https://repo.maven.apache.org/maven2/;
+          proxy_set_header Host repo.maven.apache.org;
+          proxy_read_timeout 120s;
+
+          proxy_cache maven;
+          proxy_cache_valid 200 301 302 60d;
+          # Short negative cache: a dependency that does not exist yet must
+          # not be remembered for a week.
+          proxy_cache_valid 404 1m;
+          proxy_cache_use_stale error timeout updating
+                                http_500 http_502 http_503 http_504;
+          proxy_cache_lock on;
+
+          add_header X-Cache-Status $upstream_cache_status always;
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: maven-cache
+  namespace: pfa
+  labels:
+    app: maven
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maven
+  namespace: pfa
+  labels:
+    app: maven
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate          # the cache PVC is RWO
+  selector:
+    matchLabels:
+      app: maven
+  template:
+    metadata:
+      labels:
+        app: maven
+        app.kubernetes.io/part-of: personal-finance-assistant
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # local-path is a hostPath volume, so fsGroup does not chown it.
+        - name: fix-perms
+          image: busybox:1.36
+          command: ["sh", "-c", "chown -R 101:101 /cache"]
+          # One-shot root: chown needs CAP_CHOWN, and the pod-level
+          # runAsNonRoot/runAsUser would otherwise apply here too. The nginx
+          # container itself stays uid 101.
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+      containers:
+        - name: nginx
+          image: 127.0.0.1:30500/base/nginx:alpine
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/sbin/nginx", "-g", "daemon off;"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: https
+              containerPort: 8443
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: tls
+              mountPath: /proxy-tls
+              readOnly: true
+            - name: cache
+              mountPath: /cache
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            tcpSocket:
+              port: 8443
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: maven-proxy-config
+        - name: tls
+          secret:
+            secretName: ci-tls-maven
+            defaultMode: 0440
+        - name: cache
+          persistentVolumeClaim:
+            claimName: maven-cache
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: maven
+  namespace: pfa
+  labels:
+    app: maven
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    app: maven
+  ports:
+    - name: https
+      port: 8443
+      targetPort: 8443

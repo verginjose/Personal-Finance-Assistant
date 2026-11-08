@@ -10,6 +10,10 @@
 #       the existing CA, server certs and runner certificate untouched. Used
 #       to stop the runner's buildkitd client certificate from being accepted
 #       by the registry.
+#   ./k8s/ci/gen-tls-certs.sh --proxy-certs
+#       Add (or rotate) the registry-proxy and maven server certificates only,
+#       leaving the CA and every existing certificate untouched, then re-seal.
+#       Used when a cluster predates the in-cluster proxy pair.
 #   ./k8s/ci/gen-tls-certs.sh --reseal
 #       Re-seal the existing material unchanged.
 #
@@ -45,18 +49,22 @@ CONTROLLER_NAME="${SEALED_SECRETS_CONTROLLER:-sealed-secrets-controller}"
 # be in the SAN list or one of the two clients fails verification.
 REGISTRY_SANS="DNS:registry,DNS:registry.pfa,DNS:registry.pfa.svc,DNS:registry.pfa.svc.cluster.local,IP:127.0.0.1"
 BUILDKIT_SANS="DNS:buildkitd,DNS:buildkitd.pfa,DNS:buildkitd.pfa.svc,DNS:buildkitd.pfa.svc.cluster.local,DNS:buildkitd.pfa-system,DNS:buildkitd.pfa-system.svc,DNS:buildkitd.pfa-system.svc.cluster.local,IP:127.0.0.1"
+REGISTRY_PROXY_SANS="DNS:registry-proxy,DNS:registry-proxy.pfa,DNS:registry-proxy.pfa.svc,DNS:registry-proxy.pfa.svc.cluster.local"
+MAVEN_SANS="DNS:maven,DNS:maven.pfa,DNS:maven.pfa.svc,DNS:maven.pfa.svc.cluster.local"
 
 FORCE=false
 APPLY=false
 RESEAL=false
 REGISTRY_CLIENT=false
+PROXY_CERTS=false
 for arg in "$@"; do
   case "${arg}" in
     --force) FORCE=true ;;
     --apply) APPLY=true ;;
     --reseal) RESEAL=true ;;
     --registry-client) REGISTRY_CLIENT=true ;;
-    -h|--help) sed -n '2,36p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    --proxy-certs) PROXY_CERTS=true ;;
+    -h|--help) sed -n '2,40p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "Unknown argument: ${arg}" >&2; exit 1 ;;
   esac
 done
@@ -75,14 +83,15 @@ if [[ "${RESEAL}" == true ]]; then
   # SANs or a Secret moved namespace) without touching the CA or rotating
   # anything the running workloads already trust.
   for f in ca.crt ca.key client.crt client.key registry.crt registry.key \
-           buildkitd.crt buildkitd.key registry-client-ca.crt \
+           buildkitd.crt buildkitd.key registry-proxy.crt registry-proxy.key \
+           maven.crt maven.key registry-client-ca.crt \
            registry-client-ca.key registry-client.crt registry-client.key; do
     [[ -f "${CERT_DIR}/${f}" ]] || {
       echo "--reseal needs the existing material in ${CERT_DIR}; ${f} is missing." >&2
       exit 1
     }
   done
-elif [[ -f "${CERT_DIR}/ca.crt" && "${FORCE}" == false && "${REGISTRY_CLIENT}" == false ]]; then
+elif [[ -f "${CERT_DIR}/ca.crt" && "${FORCE}" == false && "${REGISTRY_CLIENT}" == false && "${PROXY_CERTS}" == false ]]; then
   echo "Certificates already exist in ${CERT_DIR}." >&2
   echo "Refusing to overwrite them: rotating the CA invalidates every mounted" >&2
   echo "certificate and restarts the registry, buildkitd and the runner." >&2
@@ -131,16 +140,6 @@ issue_registry_client() {
   chmod 0644 "${CERT_DIR}/registry-client-ca.crt" "${CERT_DIR}/registry-client.crt"
 }
 
-if [[ "${RESEAL}" == false && "${REGISTRY_CLIENT}" == false ]]; then
-# ── CA ──────────────────────────────────────────────────────────────────────
-echo "==> Generating CA (${DAYS} days)"
-openssl req -x509 -newkey rsa:4096 -nodes -sha256 -days "${DAYS}" \
-  -keyout "${CERT_DIR}/ca.key" -out "${CERT_DIR}/ca.crt" \
-  -subj "/CN=pfa-ci-ca/O=personal-finance-assistant" \
-  -addext "basicConstraints=critical,CA:TRUE" \
-  -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
-
-# ── Server certificates ─────────────────────────────────────────────────────
 issue_server() {  # basename subjectAltNames
   local name="$1" sans="$2"
   echo "==> Generating ${name} server certificate"
@@ -154,8 +153,22 @@ issue_server() {  # basename subjectAltNames
     -extfile "${TMP}/${name}.ext" -out "${CERT_DIR}/${name}.crt" >/dev/null 2>&1
 }
 
+if [[ "${RESEAL}" == false && "${REGISTRY_CLIENT}" == false && "${PROXY_CERTS}" == false ]]; then
+# ── CA ──────────────────────────────────────────────────────────────────────
+echo "==> Generating CA (${DAYS} days)"
+openssl req -x509 -newkey rsa:4096 -nodes -sha256 -days "${DAYS}" \
+  -keyout "${CERT_DIR}/ca.key" -out "${CERT_DIR}/ca.crt" \
+  -subj "/CN=pfa-ci-ca/O=personal-finance-assistant" \
+  -addext "basicConstraints=critical,CA:TRUE" \
+  -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
+
+# ── Server certificates ─────────────────────────────────────────────────────
 issue_server registry "${REGISTRY_SANS}"
 issue_server buildkitd "${BUILDKIT_SANS}"
+# In-cluster proxies. Signed by the same CI CA buildkitd already trusts, so
+# they need no extra CA mount and no `insecure = true`.
+issue_server registry-proxy "${REGISTRY_PROXY_SANS}"
+issue_server maven "${MAVEN_SANS}"
 
 # ── Client certificate ──────────────────────────────────────────────────────
 # Shared by the runner (buildctl + registry-gc.sh), buildkitd's registry
@@ -176,6 +189,16 @@ issue_registry_client
 chmod 0600 "${CERT_DIR}"/*.key
 chmod 0644 "${CERT_DIR}"/*.crt
 fi   # RESEAL
+
+# ── Proxy server certificates only ──────────────────────────────────────────
+# For an existing cluster that predates registry-proxy / maven: issue just
+# those two certificates, leave the CA and every existing certificate alone,
+# then re-seal.
+if [[ "${PROXY_CERTS}" == true ]]; then
+  issue_server registry-proxy "${REGISTRY_PROXY_SANS}"
+  issue_server maven "${MAVEN_SANS}"
+  chmod 0600 "${CERT_DIR}/registry-proxy.key" "${CERT_DIR}/maven.key"
+fi
 
 # ── Registry client identity ────────────────────────────────────────────────
 # The registry must not accept the certificate the runner holds for buildkitd,
@@ -249,6 +272,17 @@ seal() {  # secret-name namespace file=path...
     "client.crt=${CERT_DIR}/client.crt" \
     "client.key=${CERT_DIR}/client.key" \
     "ca.crt=${CERT_DIR}/ca.crt"
+  echo "---"
+  # The two in-cluster proxies. Server certificates only: buildkitd verifies
+  # them with the CI CA it already mounts, and the Maven builders get that CA
+  # as a BuildKit secret rather than from these Secrets.
+  seal ci-tls-registry-proxy pfa \
+    "server.crt=${CERT_DIR}/registry-proxy.crt" \
+    "server.key=${CERT_DIR}/registry-proxy.key"
+  echo "---"
+  seal ci-tls-maven pfa \
+    "server.crt=${CERT_DIR}/maven.crt" \
+    "server.key=${CERT_DIR}/maven.key"
   echo "---"
   seal ci-tls-client pfa \
     "ca.crt=${CERT_DIR}/ca.crt" \

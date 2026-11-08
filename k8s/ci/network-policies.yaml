@@ -5,16 +5,21 @@
 # connection. Together they replace the old "anything in pfa can submit builds
 # and push images" model.
 #
-#   ci-runner  --1234-->  buildkitd  --5000-->  registry
+#   ci-runner  --1234-->  buildkitd  --5001-->  registry-proxy  --5000-->  registry
+#   buildkitd  --8443-->  maven
 #   buildkit-prune --1234--> buildkitd
 #   registry-gc / mirror-base-images --5000--> registry
+#
+# The proxy is the only workload holding the registry client certificate, and
+# the only route buildkitd has out of the cluster is the Maven cache. Nothing
+# in the build path has general internet egress.
 #
 # Egress is restricted too, because a compromised runner holding a CI
 # certificate should not double as a proxy to the rest of the cluster. Each
 # pod keeps exactly the destinations it needs:
 #   * DNS in kube-system, for everything;
 #   * the CI pods above;
-#   * 443 to the internet where GitHub / Docker Hub / quay.io are contacted;
+#   * 443 to the internet only for the runner (GitHub) and maven (Central);
 #   * the Kubernetes API for the registry-gc job (it patches the registry
 #     Deployment and execs into it).
 #
@@ -36,13 +41,9 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
-        # BuildKit pushes new images and pulls base/ocr-base layers. It now
-        # lives in pfa-system, so both the namespace and pod label are named.
-        - namespaceSelector:
-            matchLabels: { kubernetes.io/metadata.name: pfa-system }
-          podSelector: { matchLabels: { app: buildkitd } }
-        # build.yml runs registry-gc.sh (tag retention) from the runner.
-        - podSelector: { matchLabels: { app: ci-runner } }
+        # Only the push proxy reaches the registry with the client credential.
+        # buildkitd holds no registry keypair; see registry-proxy.yaml.
+        - podSelector: { matchLabels: { app: registry-proxy } }
         # The hourly sweep's own retention pass.
         - podSelector: { matchLabels: { app: registry-gc } }
         # One-shot pods from mirror-base-images.sh.
@@ -99,11 +100,8 @@ spec:
           podSelector: { matchLabels: { app: buildkitd } }
       ports:
         - { protocol: TCP, port: 1234 }
-    # registry-gc.sh --retention-only from the build step.
-    - to:
-        - podSelector: { matchLabels: { app: registry } }
-      ports:
-        - { protocol: TCP, port: 5000 }
+    # No direct registry access: retention moved to the registry-gc CronJob,
+    # and pushes go through registry-proxy.
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -195,3 +193,64 @@ spec:
         - podSelector: { matchLabels: { app: registry } }
       ports:
         - { protocol: TCP, port: 5000 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: registry-proxy
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: registry-proxy }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # The build daemon is the only client, and it is in pfa-system.
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa-system }
+          podSelector: { matchLabels: { app: buildkitd } }
+      ports:
+        - { protocol: TCP, port: 5001 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # The registry, over the ClusterIP Service.
+    - to:
+        - podSelector: { matchLabels: { app: registry } }
+      ports:
+        - { protocol: TCP, port: 5000 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: maven
+  namespace: pfa
+spec:
+  podSelector:
+    matchLabels: { app: maven }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: pfa-system }
+          podSelector: { matchLabels: { app: buildkitd } }
+      ports:
+        - { protocol: TCP, port: 8443 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    # Maven Central and the CDN it resolves to. This pod is the only one in
+    # the build path with internet egress.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - { protocol: TCP, port: 443 }

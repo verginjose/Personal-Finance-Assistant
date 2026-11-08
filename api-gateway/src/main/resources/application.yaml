@@ -63,10 +63,18 @@ spring:
           # pending, created) so pool behaviour is visible during load tests.
           metrics: true
       routes:
+        # Rate-limit policy (per key, so it never binds aggregate throughput —
+        # a 1,000 req/s run across 200 users recorded zero 429s). The buckets
+        # below cap a *single* abusive key, not the fleet:
+        #   login/register  5/s  per IP+path   (brute-force)
+        #   auth refresh/me 100/s per IP+path  (multiple tabs; NAT cohorts)
+        #   writes          20/s per user      (≈16/s is the test's write pace)
+        #   reads           50/s per user      (dashboard + filters)
+        #   analytics       10/s per user      (expensive; burst absorbs a
+        #                                       dashboard's parallel chart calls)
         # Credential endpoints get a human-sized bucket (IP + path), separate
-        # from the general auth route. 200/s let a credential-stuffing run
-        # proceed unhindered. Must come before the /api/auth/** route because
-        # the first matching route wins.
+        # from the general auth route. Must come before the /api/auth/** route
+        # because the first matching route wins.
         - id: auth-credentials
           uri: http://auth-service:8082
           predicates:
@@ -85,7 +93,8 @@ spring:
 
         # Auth lives in its own service now. The path is forwarded unchanged
         # (/api/auth/** -> auth-service /api/auth/**). Refresh and /me are
-        # legitimately bursty (multiple tabs), so they keep the wider bucket.
+        # legitimately bursty (multiple tabs), so they keep a wider bucket
+        # than the user-scoped routes — but still bounded per source IP.
         - id: auth-service
           uri: http://auth-service:8082
           predicates:
@@ -93,8 +102,8 @@ spring:
           filters:
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 200
-                redis-rate-limiter.burstCapacity: 400
+                redis-rate-limiter.replenishRate: 100
+                redis-rate-limiter.burstCapacity: 200
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@ipPathKeyResolver}"
             - name: CircuitBreaker
@@ -121,8 +130,8 @@ spring:
             - StripPrefix=1
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 200
-                redis-rate-limiter.burstCapacity: 400
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@userKeyResolver}"
             - name: CircuitBreaker
@@ -139,8 +148,8 @@ spring:
             - StripPrefix=1
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 200
-                redis-rate-limiter.burstCapacity: 400
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@userKeyResolver}"
             - name: CircuitBreaker
@@ -156,8 +165,8 @@ spring:
             - StripPrefix=1
             - name: RequestRateLimiter
               args:
-                redis-rate-limiter.replenishRate: 200
-                redis-rate-limiter.burstCapacity: 400
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
                 redis-rate-limiter.requestedTokens: 1
                 key-resolver: "#{@userKeyResolver}"
             - name: CircuitBreaker

@@ -209,6 +209,16 @@ public class RedisConfig {
                                 .allowIfSubType("java.util.")
                                 .allowIfSubType("java.time.")
                                 .allowIfSubType("java.math.")
+                                // Boxed scalars are values in Map<String,Object>
+                                // cache payloads (getSummary puts totalCount ->
+                                // Long). The map's value type is Object, so
+                                // NON_FINAL still emits a type id for them; without
+                                // these the validator rejects the whole cached map
+                                // and every GET falls back to the DB.
+                                .allowIfSubType(Number.class)
+                                .allowIfSubType(Boolean.class)
+                                .allowIfSubType(Character.class)
+                                .allowIfSubType(String.class)
                                 .build(),
                         ObjectMapper.DefaultTyping.NON_FINAL,
                         JsonTypeInfo.As.PROPERTY

@@ -120,6 +120,12 @@ kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=120s >/dev/
 echo "==> Creating the Application"
 kubectl apply -f "${ARGOCD_DIR}/root.yaml"
 
+# The application controller caches repo credentials. Without a hard refresh
+# it keeps using the previous ones (e.g. a revoked PAT) even after the Secret
+# and repo-server have been updated.
+kubectl -n argocd annotate application pfa-root \
+  argocd.argoproj.io/refresh=hard --overwrite >/dev/null 2>&1 || true
+
 echo
 echo "Argo CD is configured. It polls the repo every 3 minutes and syncs k8s/apps."
 echo

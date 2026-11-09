@@ -7,6 +7,7 @@ import unittest
 BENCH = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BENCH))
 from parse_receipts import parse_document, extract_date, CATEGORY_RULES
+from receipt_parser import extract_amount
 from category_search import CategorySearch
 
 
@@ -15,9 +16,11 @@ class ParserTests(unittest.TestCase):
         rows = json.loads((BENCH / "tests/fixtures/ocr_regressions.json").read_text())
         for row in rows:
             with self.subTest(image=row["image"]):
-                doc, _, _ = parse_document(row["text"], convert=False, default_currency="USD")
+                doc, evidence, _ = parse_document(row["text"], convert=False, default_currency="USD")
                 for field, value in row["expected"].items():
                     self.assertEqual(doc[field], value, field)
+                for field, value in row.get("expected_evidence", {}).items():
+                    self.assertEqual(evidence[field], value, field)
 
     def test_signed_refund(self):
         for amount in ("-$12.50", "$-12.50", "-12.50"):
@@ -39,6 +42,43 @@ class ParserTests(unittest.TestCase):
     def test_explicit_date_order(self):
         self.assertEqual(extract_date("04/05/2019", "dmy")[0], "2019-05-04")
         self.assertEqual(extract_date("04/05/2019", "mdy")[0], "2019-04-05")
+
+    def test_notices_and_percentages_are_not_fallback_amounts(self):
+        for notice in ("FOR PURCHASES UNDER $20.00", "OR PUFCHASES UNDER $20.00",
+                       "Win $500.00", "Tax rate 99.00%"):
+            with self.subTest(notice=notice):
+                self.assertEqual(extract_amount("Acme\nCoffee 3.00\n" + notice)[0], 3.0)
+
+    def test_final_subtotal_tax_block_can_recover_missing_total(self):
+        amount, _, source = extract_amount(
+            "Acme\nSub-total\n164.00\nDiscount\n-12.00\n"
+            "Sub-total\n152.00\nSales Tax\n0.00\nTOTAL")
+        self.assertEqual(amount, 152.0)
+        self.assertEqual(source, "subtotal_plus_tax")
+
+    def test_missing_total_does_not_reconstruct_across_unreadable_fees(self):
+        _, _, source = extract_amount("Acme\nSubtotal\n100.00\nTax\n5.00\nService Charge\nTOTAL")
+        self.assertNotEqual(source, "subtotal_plus_tax")
+
+    def test_missing_decimal_requires_total_tip_agreement(self):
+        for digits, expected in (("1250", 12.5), ("9999", 10.0)):
+            with self.subTest(digits=digits):
+                amount, _, _ = extract_amount("Acme\nTotal 10.00\nTip\n2.50\n" + digits + "\nTotal")
+                self.assertEqual(amount, expected)
+
+    def test_total_labels_and_notices_are_not_items(self):
+        doc, evidence, _ = parse_document("Acme\nCoffee 3.00\nTOTALE\n3.00\nFOR PURCHASES UNDER $20.00")
+        self.assertEqual(doc["amount"], 3.0)
+        self.assertEqual(evidence["items"], ["Coffee"])
+
+    def test_currency_lookahead_does_not_cross_tax_or_tip_labels(self):
+        for label in ("tax", "tip"):
+            with self.subTest(label=label):
+                self.assertEqual(extract_amount("Acme\nTotal\n20.00\n" + label + "\n$2.00")[0], 20.0)
+
+    def test_signature_menu_items_are_preserved(self):
+        _, evidence, _ = parse_document("Acme\nSignature Burger 8.00\nTotal 8.00")
+        self.assertEqual(evidence["items"], ["Signature Burger"])
 
 
 class VectorTests(unittest.TestCase):

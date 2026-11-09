@@ -40,7 +40,7 @@ def list_images(folder):
     return [os.path.join(folder, n) for n in names if n.lower().endswith(EXT)]
 
 
-def post_image(url, path, boxes=False):
+def post_image(url, path, boxes=False, token=None):
     boundary = "----ocrbatch" + uuid.uuid4().hex
     filename = os.path.basename(path)
     ctype = mimetypes.guess_type(filename)[0] or "image/jpeg"
@@ -54,9 +54,12 @@ def post_image(url, path, boxes=False):
         f"\r\n--{boundary}--\r\n".encode(),
     ])
     target = url + ("?boxes=true" if boxes else "")
+    headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+    if token:
+        headers["X-Internal-Token"] = token
     req = urllib.request.Request(
         target, data=body, method="POST",
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        headers=headers,
     )
     t = time.perf_counter()
     try:
@@ -86,6 +89,8 @@ def main():
     ap.add_argument("count", type=int, help="how many receipts to pick")
     ap.add_argument("--folder", default=DEFAULT_FOLDER, help="receipt image folder")
     ap.add_argument("--url", default="http://localhost:8100", help="OCR service base URL")
+    ap.add_argument("--token", default=os.getenv("INTERNAL_API_TOKEN"),
+                    help="X-Internal-Token (default $INTERNAL_API_TOKEN)")
     ap.add_argument("--first", action="store_true",
                     help="take the first N by filename instead of a random sample")
     ap.add_argument("--seed", type=int, default=None, help="random seed for reproducibility")
@@ -122,7 +127,7 @@ def main():
     started = time.perf_counter()
     results = []
     with cf.ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as ex:
-        futures = [ex.submit(post_image, endpoint, pth, args.boxes) for pth in chosen]
+        futures = [ex.submit(post_image, endpoint, pth, args.boxes, args.token) for pth in chosen]
         for i, fut in enumerate(cf.as_completed(futures), 1):
             r = fut.result()
             results.append(r)

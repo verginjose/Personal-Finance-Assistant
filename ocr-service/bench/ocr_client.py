@@ -25,7 +25,7 @@ import urllib.request
 import uuid
 
 
-def post_image(url, path, boxes):
+def post_image(url, path, boxes, token=None):
     boundary = "----ocrbench" + uuid.uuid4().hex
     filename = os.path.basename(path)
     ctype = mimetypes.guess_type(filename)[0] or "image/jpeg"
@@ -42,10 +42,13 @@ def post_image(url, path, boxes):
     body = b"".join(parts)
 
     target = url + ("?boxes=true" if boxes else "")
+    headers = {"Content-Type": f"multipart/form-data; boundary={boundary}",
+               "Content-Length": str(len(body))}
+    if token:
+        headers["X-Internal-Token"] = token
     req = urllib.request.Request(
         target, data=body, method="POST",
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}",
-                 "Content-Length": str(len(body))},
+        headers=headers,
     )
     t = time.perf_counter()
     try:
@@ -68,15 +71,18 @@ def main():
     ap.add_argument("--url", default="http://localhost:8100",
                     help="service base URL (default http://localhost:8100)")
     ap.add_argument("--boxes", action="store_true", help="include line boxes + confidence")
+    ap.add_argument("--token", default=os.getenv("INTERNAL_API_TOKEN"),
+                    help="X-Internal-Token (default $INTERNAL_API_TOKEN)")
     ap.add_argument("--json", action="store_true", help="print the raw JSON response")
     args = ap.parse_args()
 
     endpoint = args.url.rstrip("/") + "/ocr"
     failures = 0
     for path in args.images:
-        code, dt, body = post_image(endpoint, path, args.boxes)
+        code, dt, body = post_image(endpoint, path, args.boxes, args.token)
         if args.json:
             print(json.dumps(body, indent=2))
+            failures += code != 200
             continue
         if code != 200:
             failures += 1

@@ -1,0 +1,122 @@
+{
+  "date": "2026-11-09",
+  "dataset": "bundled receipt images 1000-1199",
+  "method": "Fresh authenticated POST /ocr for every image. Identical saved text replayed locally before and after parser changes. Currency conversion disabled; default currency USD for this benchmark.",
+  "deployed_ocr_image": "107de7e54146",
+  "baseline_source_commit": "337664c",
+  "text_sha256": "63c2e32bb2b0596d1af319fdc73e924b15013372832fb875fb2a4a0ba603f073",
+  "baseline": {
+    "picked": 200,
+    "ok": 200,
+    "failed": 0,
+    "vendor_found": 193,
+    "amount_found": 200,
+    "date_found": 184,
+    "currency_detected": 141,
+    "clean": 123,
+    "warnings": 89,
+    "categories": {
+      "RESTAURANTS": 195,
+      "OTHERS": 5
+    },
+    "rates_source": "disabled",
+    "rates_date": "",
+    "amount": {
+      "min": 2.17,
+      "median": 37.33,
+      "max": 780.45
+    }
+  },
+  "tuned": {
+    "picked": 200,
+    "ok": 200,
+    "failed": 0,
+    "vendor_found": 193,
+    "amount_found": 200,
+    "date_found": 184,
+    "currency_detected": 142,
+    "clean": 122,
+    "warnings": 89,
+    "categories": {
+      "RESTAURANTS": 195,
+      "OTHERS": 5
+    },
+    "rates_source": "disabled",
+    "rates_date": "",
+    "amount": {
+      "min": 2.17,
+      "median": 38.06,
+      "max": 780.45
+    }
+  },
+  "changed_fields": {
+    "description": 16,
+    "amount": 3,
+    "currency": 1
+  },
+  "reviewed_corrections": [
+    {
+      "image": "1027-receipt.jpg",
+      "fields": {
+        "amount": {
+          "before": 20.0,
+          "after": 44.31
+        }
+      },
+      "amount_source": "total_reconciled_tip",
+      "review": "Image shows printed 41.31, gratuity 3.00, handwritten final 44.31. OCR reads final as 4431; restore cents only with exact total-plus-tip agreement."
+    },
+    {
+      "image": "1038-receipt.jpg",
+      "fields": {
+        "amount": {
+          "before": 20.0,
+          "after": 17.8
+        }
+      },
+      "amount_source": "total_next_line",
+      "review": "Image shows total 17.80; 20.00 belongs to the signature requirement notice."
+    },
+    {
+      "image": "1056-receipt.jpg",
+      "fields": {
+        "amount": {
+          "before": 164.0,
+          "after": 152.0
+        }
+      },
+      "amount_source": "subtotal_plus_tax",
+      "review": "Image shows final subtotal 152.00 after a 12.00 comp, and tax 0.00. Total is clipped; 152.00 is derived from visible components."
+    },
+    {
+      "image": "1156-receipt.jpg",
+      "fields": {
+        "currency": {
+          "before": "USD",
+          "after": "GBP"
+        }
+      },
+      "amount_source": "total_next_line",
+      "review": "Image shows IKEA Milton Keynes and UK VAT registration GB527773320; currency GBP."
+    }
+  ],
+  "verification": {
+    "service_unit_tests": 13,
+    "benchmark_unit_tests": 19,
+    "reviewed_ocr_snapshots": 54,
+    "production_callback_adapter_snapshots": 200,
+    "adapter_method": "Local _parse_bill and _convert_currency replay with captured OCR text, fixed test rates, USD default, and inline thread runner; no transaction writes.",
+    "live_image_client_smokes": {
+      "ocr_client.py": 200,
+      "run_ocr_batch.py": 200
+    }
+  },
+  "limitations": [
+    "Three amount corrections and one currency correction were reviewed; the whole dataset lacks complete image-labelled ground truth.",
+    "The 152.00 Zoca amount is reconstructed from visible subtotal and tax, not a readable printed total.",
+    "16 receipts still lack dates; 7 lack vendors; 58 use the configured default currency.",
+    "54 selected OCR snapshots are targeted regression tests, not an unbiased accuracy estimate.",
+    "New parser source was tested locally with live OCR text; it has not been deployed.",
+    "Legacy OCR Groq SealedSecret is retained until the local-parser image replaces the currently deployed Groq image."
+  ]
+}

@@ -32,9 +32,7 @@ data:
   REDIS_HOST: redis
   RABBITMQ_HOST: rabbitmq
   RABBITMQ_PORT: "5672"
-  RABBITMQ_USER: guest
   SPRING_RABBITMQ_HOST: rabbitmq
-  SPRING_RABBITMQ_USERNAME: guest
   ANALYTICS_SERVICE_URL: http://query-service:8084
   JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
 ---

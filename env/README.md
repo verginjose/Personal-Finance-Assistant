@@ -20,7 +20,7 @@ One entry per line. Blank lines and `#` comments are ignored.
 | Line | Meaning |
 |---|---|
 | `DB_PASSWORD` | Copy the value of `DB_PASSWORD` from the repo-root `.env` |
-| `RABBITMQ_PASSWORD=guest` | Literal override, independent of `.env` |
+| `RABBITMQ_PASSWORD=...` | Literal override, independent of `.env`; use a unique non-default credential |
 
 So `.env` stays the single source of truth for shared secrets, and each file
 lists only the names that service consumes. Overriding a value for one service

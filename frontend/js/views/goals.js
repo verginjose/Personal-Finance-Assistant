@@ -3,7 +3,7 @@ import { icon } from '../utils/icons.js';
 import {
   esc, escAttr, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
   progressBar, goalRuler, budgetStatusColor, openModal, confirmModal, modalActions,
-  EXPENSE_CATS, categoryOptions, currencyOptionHtml,
+  SPENDING_CATS, categoryOptions, currencyOptionHtml,
 } from '../utils/ui.js';
 
 export async function renderGoals(container) {
@@ -532,7 +532,7 @@ function bindEvents(uid) {
         <form id="budget-form">
           <div class="form-group">
             <label for="b-cat">Category</label>
-            <select class="form-select" id="b-cat">${categoryOptions(EXPENSE_CATS)}</select>
+            <select class="form-select" id="b-cat">${categoryOptions(SPENDING_CATS)}</select>
           </div>
           <div class="form-row">
             <div class="form-group"><label for="b-amount">Budget amount</label><input class="form-input" id="b-amount" type="text" inputmode="decimal" required></div>

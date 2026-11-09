@@ -160,6 +160,38 @@ public class TransactionEntry implements Serializable {
     @Getter
     @Setter
     private BigDecimal amountDefault;
+    @Getter @Setter
+    @Enumerated(EnumType.STRING)
+    @Column(name = "transaction_kind", length = 20)
+    private TransactionKind transactionKind = TransactionKind.STANDARD;
+
+    @Getter @Setter
+    @Column(name = "original_transaction_id")
+    private Long originalTransactionId;
+
+    @Getter @Setter
+    @Size(max = 80)
+    @Column(name = "subcategory", length = 80)
+    private String subcategory;
+
+    // Formula fields let JPQL use precisely the same policy as native timelines.
+    @org.hibernate.annotations.Formula(AccountingRules.REPORTABLE_SQL)
+    private boolean reportable;
+
+    @org.hibernate.annotations.Formula(AccountingRules.AMOUNT_SQL)
+    private BigDecimal reportingAmount;
+
+    @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.Formula(AccountingRules.TYPE_SQL)
+    private TransactionType reportingType;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public boolean isReportable() { return AccountingRules.isReportable(this); }
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public BigDecimal getReportingAmount() { return AccountingRules.amount(this); }
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public TransactionType getReportingType() { return AccountingRules.type(this); }
+
     // Constructors
     public TransactionEntry() {}
 

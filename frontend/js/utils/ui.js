@@ -1005,24 +1005,64 @@ export function modalActions(cancelLabel = 'Cancel', submitLabel = 'Save') {
 
 /* ── Category options ───────────────────────────────────────────────────── */
 export const EXPENSE_CATS = [
-  'RENT', 'HOME_LOAN_EMI', 'HOME_MAINTENANCE', 'PROPERTY_TAX', 'ELECTRICITY', 'WATER', 'GAS', 'INTERNET', 'MOBILE_PHONE', 'OTT_SUBSCRIPTIONS',
+  'RENT', 'FURNITURE', 'HOUSEHOLD_SUPPLIES', 'DOMESTIC_HELP', 'SOCIETY_MAINTENANCE', 'HOME_LOAN_EMI', 'HOME_MAINTENANCE', 'PROPERTY_TAX', 'ELECTRICITY', 'WATER', 'GAS', 'INTERNET', 'MOBILE_PHONE', 'OTT_SUBSCRIPTIONS',
   'GROCERIES', 'RESTAURANTS', 'FOOD_DELIVERY', 'COFFEE_AND_SNACKS',
   'FUEL', 'PUBLIC_TRANSPORT', 'CAB_AND_AUTO', 'VEHICLE_EMI', 'VEHICLE_MAINTENANCE', 'PARKING_AND_TOLLS', 'FLIGHT_AND_TRAIN',
   'DOCTOR_AND_CLINIC', 'MEDICINES', 'HEALTH_INSURANCE', 'GYM_AND_FITNESS', 'MENTAL_WELLNESS',
   'TUITION_AND_FEES', 'BOOKS_AND_COURSES', 'COACHING', 'STUDENT_LOAN_EMI',
   'CLOTHING', 'ELECTRONICS', 'HOME_APPLIANCES', 'PERSONAL_CARE', 'GIFTS_GIVEN',
   'MOVIES_AND_EVENTS', 'GAMING', 'SPORTS_AND_HOBBIES', 'BOOKS_AND_MAGAZINES', 'TRAVEL_VACATION', 'HOTEL_AND_STAYS',
-  'LIFE_INSURANCE', 'VEHICLE_INSURANCE', 'CREDIT_CARD_PAYMENT', 'LOAN_REPAYMENT', 'MUTUAL_FUNDS_SIP', 'STOCKS_AND_TRADING', 'CRYPTO', 'EMERGENCY_FUND', 'FIXED_DEPOSIT',
-  'CHARITY_AND_DONATIONS', 'TAXES', 'FINES_AND_PENALTIES', 'PETS', 'CHILDCARE', 'ELDER_CARE', 'GOAL', 'SETTLEMENT', 'OTHERS'
+  'BANK_CHARGES', 'CARD_FEES', 'LOAN_INTEREST', 'SOFTWARE_SUBSCRIPTIONS', 'CLOUD_STORAGE', 'PROFESSIONAL_MEMBERSHIPS', 'LIFE_INSURANCE', 'VEHICLE_INSURANCE', 'CREDIT_CARD_PAYMENT', 'LOAN_REPAYMENT', 'MUTUAL_FUNDS_SIP', 'STOCKS_AND_TRADING', 'CRYPTO', 'EMERGENCY_FUND', 'FIXED_DEPOSIT',
+  'CHARITY_AND_DONATIONS', 'TAXES', 'FINES_AND_PENALTIES', 'PETS', 'CHILDCARE', 'ELDER_CARE', 'GOAL', 'SETTLEMENT', 'OTHERS', 'OWN_ACCOUNT_TRANSFER', 'BORROWING', 'LENDING', 'LOAN_PRINCIPAL', 'INVESTMENT_WITHDRAWAL'
 ];
 
 export const INCOME_CATS = [
-  'SALARY', 'FREELANCE', 'BUSINESS', 'INVESTMENTS', 'RENTAL_INCOME', 'DIVIDENDS', 'INTEREST', 'BONUS', 'PENSION', 'GOVT_BENEFITS', 'CASHBACK_REWARDS', 'GIFTS_RECEIVED', 'TAX_REFUND', 'SIDE_HUSTLE', 'OTHER_INCOME'
+  'SALARY', 'COMMISSION', 'CAPITAL_GAINS', 'FREELANCE', 'BUSINESS', 'INVESTMENTS', 'RENTAL_INCOME', 'DIVIDENDS', 'INTEREST', 'BONUS', 'PENSION', 'GOVT_BENEFITS', 'CASHBACK_REWARDS', 'GIFTS_RECEIVED', 'TAX_REFUND', 'SIDE_HUSTLE', 'OTHER_INCOME'
 ];
+
+export const TRANSFER_CATS = ['OWN_ACCOUNT_TRANSFER', 'CREDIT_CARD_PAYMENT', 'BORROWING', 'LENDING', 'LOAN_PRINCIPAL'];
+export const INVESTMENT_CATS = ['MUTUAL_FUNDS_SIP', 'STOCKS_AND_TRADING', 'CRYPTO', 'EMERGENCY_FUND', 'FIXED_DEPOSIT', 'INVESTMENT_WITHDRAWAL', 'GOAL'];
+export const MOVEMENT_CATS = [...TRANSFER_CATS, ...INVESTMENT_CATS, 'SETTLEMENT'];
+export const SPENDING_CATS = EXPENSE_CATS.filter(c => !MOVEMENT_CATS.includes(c));
+
+export const CATEGORY_HELP = {
+  FREELANCE: 'Project or contract work for clients.',
+  SIDE_HUSTLE: 'Gig work and part-time jobs outside your main work.',
+  BUSINESS: 'Income from operating your business.',
+  CAPITAL_GAINS: 'Realized investment profit only. Record returned capital as an investment withdrawal.',
+  INVESTMENTS: 'Investment earnings. Use dividends, interest, or capital gains when known; exclude returned capital.',
+  DIVIDENDS: 'Distributions paid by shares or funds.',
+  INTEREST: 'Interest earned on savings, deposits, or lending.',
+  TRAVEL_VACATION: 'Tours, packages, and other holiday costs. Use hotel and transport categories for separately itemized costs.',
+  HOTEL_AND_STAYS: 'Accommodation costs, including stays during a vacation.',
+  FLIGHT_AND_TRAIN: 'Intercity tickets. Use public transport for local journeys.',
+  LOAN_PRINCIPAL: 'Principal repayment, excluded from spending. Record interest separately as loan interest.',
+  HOME_LOAN_EMI: 'Whole home-loan installment. For principal and interest reporting, enter separate loan principal and loan interest transactions.',
+  VEHICLE_EMI: 'Whole vehicle-loan installment. Split principal and interest for more precise spending reports.',
+  STUDENT_LOAN_EMI: 'Whole student-loan installment. Split principal and interest for more precise spending reports.',
+  LOAN_REPAYMENT: 'Whole loan installment. Split into loan principal and loan interest when the breakdown is available.',
+  CREDIT_CARD_PAYMENT: 'Repayment only; purchases should be recorded separately under their spending categories.',
+  INVESTMENT_WITHDRAWAL: 'Returned investment capital, excluded from income. Record earnings separately.',
+};
+
+export function transactionCategories(type, kind = 'STANDARD', current) {
+  let cats = kind === 'TRANSFER' ? TRANSFER_CATS
+    : kind === 'INVESTMENT' ? INVESTMENT_CATS
+    : ['REFUND', 'REIMBURSEMENT'].includes(kind) ? SPENDING_CATS
+    : type === 'INCOME' ? INCOME_CATS : SPENDING_CATS;
+  return current && !cats.includes(current) ? [...cats, current] : cats;
+}
+
+export function transactionKindLabel(t) {
+  const kind = t.transactionKind || 'STANDARD';
+  if (kind !== 'STANDARD') return ({ TRANSFER: 'Transfer', INVESTMENT: 'Savings / investment', REFUND: 'Refund', REIMBURSEMENT: 'Reimbursement' })[kind] || '';
+  const cat = t.category || t.expenseCategory || t.incomeCategory;
+  return MOVEMENT_CATS.includes(cat) ? 'Money movement' : '';
+}
 
 export function categoryOptions(cats, selected) {
   return cats.map(c =>
-    `<option value="${c}" ${selected === c ? 'selected' : ''}>${formatCategory(c)}</option>`
+    `<option value="${escAttr(c)}" title="${escAttr(CATEGORY_HELP[c] || '')}" ${selected === c ? 'selected' : ''}>${formatCategory(c)}</option>`
   ).join('');
 }
 

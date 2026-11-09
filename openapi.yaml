@@ -1166,8 +1166,62 @@ components:
           type: string
     CreateEntryRequest:
       type: object
+      required: [userId, name, amount, type, category, currency]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+        amount:
+          type: number
+          minimum: 0.01
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        category:
+          $ref: '#/components/schemas/Category'
+        transactionKind:
+          $ref: '#/components/schemas/TransactionKind'
+        originalTransactionId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Required for refunds/reimbursements; must reference your active expense in the same currency.
+        subcategory:
+          type: string
+          maxLength: 80
+          nullable: true
+          description: Personal label within the category; inherited from the original expense for recoveries.
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        description:
+          type: string
+          maxLength: 500
+        recurring:
+          type: boolean
+          default: false
+        recurringPeriod:
+          type: string
+          nullable: true
+          enum: [DAILY, WEEKLY, MONTHLY, YEARLY]
+        createdAt:
+          type: string
+          format: date-time
+        receiptUrl:
+          type: string
+          nullable: true
     UpdateEntryRequest:
-      type: object
+      allOf:
+        - $ref: '#/components/schemas/CreateEntryRequest'
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: integer
+              format: int64
     PatchAmountRequest:
       type: object
       required: [amount]
@@ -1175,7 +1229,8 @@ components:
         amount:
           type: number
     CreateEntryResponse:
-      type: object
+      allOf:
+        - $ref: '#/components/schemas/TransactionEntry'
     TransactionEntry:
       type: object
       properties:
@@ -1190,6 +1245,18 @@ components:
           type: number
         type:
           $ref: '#/components/schemas/TransactionType'
+        category:
+          $ref: '#/components/schemas/Category'
+        transactionKind:
+          $ref: '#/components/schemas/TransactionKind'
+        originalTransactionId:
+          type: integer
+          format: int64
+          nullable: true
+        subcategory:
+          type: string
+          maxLength: 80
+          nullable: true
         expenseCategory:
           $ref: '#/components/schemas/ExpenseCategory'
         incomeCategory:
@@ -1227,15 +1294,26 @@ components:
           type: integer
         size:
           type: integer
+    TransactionKind:
+      type: string
+      enum: [STANDARD, TRANSFER, INVESTMENT, REFUND, REIMBURSEMENT]
+      default: STANDARD
+      description: >-
+        Direction stays INCOME (incoming) or EXPENSE (outgoing). Transfers and investments
+        are excluded from earned/spent totals. Refunds and reimbursements are incoming,
+        non-recurring payments that reduce the original expense category on their recorded date.
+    Category:
+      type: string
+      enum: [SALARY, COMMISSION, CAPITAL_GAINS, FREELANCE, BUSINESS, INVESTMENTS, RENTAL_INCOME, DIVIDENDS, INTEREST, BONUS, PENSION, GOVT_BENEFITS, CASHBACK_REWARDS, GIFTS_RECEIVED, TAX_REFUND, SIDE_HUSTLE, OTHER_INCOME, RENT, HOME_LOAN_EMI, FURNITURE, HOUSEHOLD_SUPPLIES, DOMESTIC_HELP, SOCIETY_MAINTENANCE, HOME_MAINTENANCE, PROPERTY_TAX, ELECTRICITY, WATER, GAS, INTERNET, MOBILE_PHONE, OTT_SUBSCRIPTIONS, GROCERIES, RESTAURANTS, FOOD_DELIVERY, COFFEE_AND_SNACKS, FUEL, PUBLIC_TRANSPORT, CAB_AND_AUTO, VEHICLE_EMI, VEHICLE_MAINTENANCE, PARKING_AND_TOLLS, FLIGHT_AND_TRAIN, DOCTOR_AND_CLINIC, MEDICINES, HEALTH_INSURANCE, GYM_AND_FITNESS, MENTAL_WELLNESS, TUITION_AND_FEES, BOOKS_AND_COURSES, COACHING, STUDENT_LOAN_EMI, CLOTHING, ELECTRONICS, HOME_APPLIANCES, PERSONAL_CARE, GIFTS_GIVEN, MOVIES_AND_EVENTS, GAMING, SPORTS_AND_HOBBIES, BOOKS_AND_MAGAZINES, TRAVEL_VACATION, HOTEL_AND_STAYS, BANK_CHARGES, CARD_FEES, LOAN_INTEREST, SOFTWARE_SUBSCRIPTIONS, CLOUD_STORAGE, PROFESSIONAL_MEMBERSHIPS, LIFE_INSURANCE, VEHICLE_INSURANCE, CREDIT_CARD_PAYMENT, LOAN_REPAYMENT, MUTUAL_FUNDS_SIP, STOCKS_AND_TRADING, CRYPTO, EMERGENCY_FUND, FIXED_DEPOSIT, CHARITY_AND_DONATIONS, TAXES, FINES_AND_PENALTIES, PETS, CHILDCARE, ELDER_CARE, GOAL, SETTLEMENT, OTHERS, OWN_ACCOUNT_TRANSFER, BORROWING, LENDING, LOAN_PRINCIPAL, INVESTMENT_WITHDRAWAL]
     TransactionType:
       type: string
       enum: [INCOME, EXPENSE]
     ExpenseCategory:
       type: string
-      enum: [FOOD_AND_DINING, TRANSPORT, HOUSING, UTILITIES, HEALTHCARE, EDUCATION, ENTERTAINMENT, SHOPPING, TRAVEL, INSURANCE, OTHER_EXPENSE, OTHERS]
+      enum: [RENT, HOME_LOAN_EMI, FURNITURE, HOUSEHOLD_SUPPLIES, DOMESTIC_HELP, SOCIETY_MAINTENANCE, HOME_MAINTENANCE, PROPERTY_TAX, ELECTRICITY, WATER, GAS, INTERNET, MOBILE_PHONE, OTT_SUBSCRIPTIONS, GROCERIES, RESTAURANTS, FOOD_DELIVERY, COFFEE_AND_SNACKS, FUEL, PUBLIC_TRANSPORT, CAB_AND_AUTO, VEHICLE_EMI, VEHICLE_MAINTENANCE, PARKING_AND_TOLLS, FLIGHT_AND_TRAIN, DOCTOR_AND_CLINIC, MEDICINES, HEALTH_INSURANCE, GYM_AND_FITNESS, MENTAL_WELLNESS, TUITION_AND_FEES, BOOKS_AND_COURSES, COACHING, STUDENT_LOAN_EMI, CLOTHING, ELECTRONICS, HOME_APPLIANCES, PERSONAL_CARE, GIFTS_GIVEN, MOVIES_AND_EVENTS, GAMING, SPORTS_AND_HOBBIES, BOOKS_AND_MAGAZINES, TRAVEL_VACATION, HOTEL_AND_STAYS, BANK_CHARGES, CARD_FEES, LOAN_INTEREST, SOFTWARE_SUBSCRIPTIONS, CLOUD_STORAGE, PROFESSIONAL_MEMBERSHIPS, LIFE_INSURANCE, VEHICLE_INSURANCE, CREDIT_CARD_PAYMENT, LOAN_REPAYMENT, MUTUAL_FUNDS_SIP, STOCKS_AND_TRADING, CRYPTO, EMERGENCY_FUND, FIXED_DEPOSIT, CHARITY_AND_DONATIONS, TAXES, FINES_AND_PENALTIES, PETS, CHILDCARE, ELDER_CARE, GOAL, SETTLEMENT, OTHERS, OWN_ACCOUNT_TRANSFER, BORROWING, LENDING, LOAN_PRINCIPAL, INVESTMENT_WITHDRAWAL]
     IncomeCategory:
       type: string
-      enum: [SALARY, FREELANCE, BUSINESS, INVESTMENT, RENTAL, GIFT, OTHER_INCOME]
+      enum: [SALARY, COMMISSION, CAPITAL_GAINS, FREELANCE, BUSINESS, INVESTMENTS, RENTAL_INCOME, DIVIDENDS, INTEREST, BONUS, PENSION, GOVT_BENEFITS, CASHBACK_REWARDS, GIFTS_RECEIVED, TAX_REFUND, SIDE_HUSTLE, OTHER_INCOME]
     SavingsGoalRequest:
       type: object
     SavingsGoalResponse:

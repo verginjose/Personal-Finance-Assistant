@@ -1,8 +1,8 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon, categoryIcon } from '../utils/icons.js';
 import {
-  esc, pageHeader, EXPENSE_CATS, INCOME_CATS, categoryOptions, currencyOptionHtml,
-  formatMoney, formatCategory, openReceiptLightbox,
+  esc, pageHeader, categoryOptions,
+  formatMoney, formatCategory, openReceiptLightbox, transactionCategories,
 } from '../utils/ui.js';
 
 /** Same breakpoint as the mobile shell in style.css. */
@@ -12,7 +12,7 @@ const isMobileViewport = () => typeof window !== 'undefined'
 
 export async function renderBillScanner(container) {
   const userId = Auth.getUserId();
-  const defaultCurrency = Auth.getDefaultCurrency();
+  let scannedAccounting = {};
 
   container.innerHTML = `
     ${pageHeader('Bill scanner', '')}
@@ -28,7 +28,7 @@ export async function renderBillScanner(container) {
             <span class="receipt-sample-line"></span>
           </span>
           <p>Drop a bill here, or choose a file</p>
-          <p class="drop-help">A photo or a PDF, up to 10 MB. Amounts are shown in ${esc(defaultCurrency)}.</p>
+          <p class="drop-help">A photo or a PDF, up to 10 MB. Amounts keep the bill’s currency.</p>
           <div class="file-name" id="bs-fname"></div>
         </div>
         <input type="file" id="bs-file" accept="image/*,application/pdf" hidden>
@@ -166,26 +166,27 @@ export async function renderBillScanner(container) {
     return `<span class="confidence ${high ? 'is-high' : 'is-low'}" title="${high ? 'High confidence' : 'Check this value'}">${high ? icon('check', 'xs') + ' High confidence' : icon('alert-triangle', 'xs') + ' Check this'}</span>`;
   }
 
-  function normalizeCategory(raw, type) {
+  function normalizeCategory(raw, type, kind) {
     let cat = (raw || 'OTHERS').toUpperCase().replace(/ /g, '_').replace(/-/g, '_');
     if (cat === 'OTHER') cat = 'OTHERS';
-    const allowed = type === 'INCOME' ? INCOME_CATS : EXPENSE_CATS;
-    return allowed.includes(cat) ? cat : 'OTHERS';
+    const allowed = transactionCategories(type, kind);
+    return allowed.includes(cat) ? cat : type === 'INCOME' && !['REFUND', 'REIMBURSEMENT'].includes(kind) ? 'OTHER_INCOME' : 'OTHERS';
   }
 
   function renderPreviewForm(result) {
     const type = (result.type || 'EXPENSE').toUpperCase();
-    const category = normalizeCategory(type === 'INCOME' ? result.incomeCategory : result.expenseCategory, type);
+    scannedAccounting = { transactionKind: result.transactionKind || 'STANDARD', originalTransactionId: result.originalTransactionId || null };
+    const category = normalizeCategory(result.category || (type === 'INCOME' ? result.incomeCategory : result.expenseCategory), type, scannedAccounting.transactionKind);
     const amountOriginal = parseFloat((result.amount || '0').toString().replace(/[^0-9.]/g, '')) || 0;
     let originalCurrency = (result.currency || Auth.getDefaultCurrency()).trim().toUpperCase();
     if (originalCurrency.length !== 3) {
       const map = { '₹': 'INR', RS: 'INR', 'RS.': 'INR', $: 'USD', '€': 'EUR', '£': 'GBP' };
       originalCurrency = map[originalCurrency] || Auth.getDefaultCurrency();
     }
-    const currency = (result.defaultCurrency || defaultCurrency || originalCurrency).toUpperCase();
-    const converted = Number(result.amountDefault);
-    const amount = Number.isFinite(converted) && converted > 0 ? converted : amountOriginal;
-    const wasConverted = currency !== originalCurrency;
+    const currency = originalCurrency;
+    const amount = amountOriginal;
+    scannedAccounting.currency = currency;
+    scannedAccounting.recurringPeriod = result.recurringPeriod || null;
 
     const form = document.getElementById('bs-preview-form');
     const now = new Date();
@@ -200,7 +201,6 @@ export async function renderBillScanner(container) {
           <span class="ocr-summary-label">Detected amount</span>
           <div class="ocr-amount"><span class="ocr-amount-currency">${esc(currency)}</span><span id="bs-amount-preview">${formatMoney(amount, currency).replace(/^[^\d−-]*/, '')}</span></div>
           <div class="ocr-summary-name" id="bs-name-preview">${esc(result.name || 'Receipt')}</div>
-          ${wasConverted ? `<div class="ocr-conversion">${icon('refresh', 'xs')} Converted to ${esc(currency)} · original ${formatMoney(amountOriginal, originalCurrency)}</div>` : ''}
         </div>
         <div class="ocr-summary-meta">
           <span class="ocr-type-badge ${type === 'INCOME' ? 'amount--pos' : ''}">${type === 'INCOME' ? 'Income' : 'Expense'}</span>
@@ -237,6 +237,14 @@ export async function renderBillScanner(container) {
           </select>
         </div>
         <div class="ocr-field ocr-field--full">
+          <label for="bs-kind">Treatment</label>
+          <select class="form-select" id="bs-kind">${[['STANDARD','Income / expense'],['TRANSFER','Transfer / repayment'],['INVESTMENT','Savings / investment'],['REFUND','Purchase refund'],['REIMBURSEMENT','Expense reimbursement']].map(([value,label]) => `<option value="${value}" ${scannedAccounting.transactionKind === value ? 'selected' : ''}>${label}</option>`).join('')}</select>
+          <p class="meta" id="bs-accounting-help" aria-live="polite"></p>
+        </div>
+        <div class="ocr-field ocr-field--full">
+          <label for="bs-subcategory">Subcategory (optional)</label><input class="form-input" id="bs-subcategory" maxlength="80" value="${escapeAttr(result.subcategory || '')}">
+        </div>
+        <div class="ocr-field ocr-field--full">
           <label for="bs-desc">Note (optional)</label>
           <textarea class="form-textarea" id="bs-desc" maxlength="500" placeholder="Add context for this entry">${escapeAttr(result.description || '')}</textarea>
         </div>
@@ -269,12 +277,24 @@ export async function renderBillScanner(container) {
     const namePreview = document.getElementById('bs-name-preview');
 
     const fillCategories = () => {
-      const t = typeSelect.value;
-      const cats = t === 'INCOME' ? INCOME_CATS : EXPENSE_CATS;
-      const current = cats.includes(category) ? category : 'OTHERS';
+      const kind = document.getElementById('bs-kind').value;
+      const recovery = ['REFUND', 'REIMBURSEMENT'].includes(kind);
+      if (recovery) typeSelect.value = 'INCOME';
+      typeSelect.disabled = recovery;
+      const cats = transactionCategories(typeSelect.value, kind);
+      const current = cats.includes(category) ? category : typeSelect.value === 'INCOME' && !recovery ? 'OTHER_INCOME' : 'OTHERS';
+      document.getElementById('bs-accounting-help').textContent = recovery
+        ? 'Choose the original expense in the transaction form on the next screen. The category will follow that expense.'
+        : ['TRANSFER', 'INVESTMENT'].includes(kind) ? 'This money movement will be excluded from earned income and spending.' : '';
+      document.getElementById('bs-recurring').disabled = recovery;
+      if (recovery) document.getElementById('bs-recurring').checked = false;
+      const destination = document.getElementById('bs-dest');
+      if (kind !== 'STANDARD') destination.value = 'PERSONAL';
+      destination.disabled = kind !== 'STANDARD';
       catSelect.innerHTML = categoryOptions(cats, current);
     };
     typeSelect.onchange = fillCategories;
+    document.getElementById('bs-kind').onchange = fillCategories;
     fillCategories();
 
     // On phones use the native controls: a native select opens the OS picker
@@ -381,7 +401,7 @@ export async function renderBillScanner(container) {
     try {
       const type = document.getElementById('bs-type').value;
       const amount = parseFloat(document.getElementById('bs-amount').value) || 0;
-      let currency = Auth.getDefaultCurrency();
+      const currency = scannedAccounting.currency || Auth.getDefaultCurrency();
       const dateVal = document.getElementById('bs-date').value;
       const isRecurring = document.getElementById('bs-recurring').checked;
       const dest = document.getElementById('bs-dest').value;
@@ -391,6 +411,9 @@ export async function renderBillScanner(container) {
       if (dest === 'PERSONAL') {
         localStorage.setItem('pfa_pending_scan', JSON.stringify({
           groupId: 'PERSONAL',
+          transactionKind: document.getElementById('bs-kind').value,
+          originalTransactionId: scannedAccounting.originalTransactionId,
+          subcategory: document.getElementById('bs-subcategory').value.trim() || null,
           amount,
           currency,
           name,
@@ -399,6 +422,7 @@ export async function renderBillScanner(container) {
           description,
           date: dateVal,
           recurring: isRecurring,
+          recurringPeriod: isRecurring ? (scannedAccounting.recurringPeriod || 'MONTHLY') : null,
           receiptUrl: window._bsReceiptUrl || null,
         }));
         window.navigateTo('transactions');

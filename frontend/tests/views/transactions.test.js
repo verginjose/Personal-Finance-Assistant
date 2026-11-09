@@ -97,4 +97,47 @@ describe('renderTransactions', () => {
     expect(document.querySelector('#m-detail-cat select')).toBeTruthy();
     expect(document.querySelector('#txn-form')).toBeFalsy();
   });
+  it('offers investment treatment and custom subcategories', async () => {
+    mockFetchJson({ content: [], totalPages: 0 });
+    await renderTransactions(container);
+    container.querySelector('#t-add').click();
+    const kind = document.querySelector('#m-kind');
+    kind.value = 'INVESTMENT';
+    kind.dispatchEvent(new Event('change'));
+    expect([...document.querySelector('#m-cat').options].map(o => o.value)).toContain('MUTUAL_FUNDS_SIP');
+    expect(document.querySelector('#m-cat').textContent).not.toContain('Groceries');
+    expect(document.querySelector('#m-kind-help').textContent).toContain('Excluded');
+    expect(document.querySelector('#m-subcategory').maxLength).toBe(80);
+  });
+
+  it('links refunds to expenses and saves inherited category and original currency', async () => {
+    mockFetchJson({ content: [], totalPages: 0 });
+    await renderTransactions(container);
+    await vi.waitFor(() => expect(container.querySelector('#t-body').textContent).toContain('No transactions'));
+    container.querySelector('#t-add').click();
+    mockFetchJson({ content: [{ id: 42, name: 'Weekly groceries', type: 'EXPENSE', category: 'GROCERIES', subcategory: 'Weekly shop', amount: 200, currency: 'USD', createdAt: '2026-11-01T09:00:00' }], totalPages: 1 });
+    const kind = document.querySelector('#m-kind');
+    kind.value = 'REFUND';
+    kind.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(document.querySelector('#m-original').options.length).toBe(2));
+    const original = document.querySelector('#m-original');
+    original.value = '42';
+    original.dispatchEvent(new Event('change'));
+    expect(document.querySelector('#m-type').value).toBe('INCOME');
+    expect(document.querySelector('#m-cat').value).toBe('GROCERIES');
+    expect(document.querySelector('#m-cat').disabled).toBe(true);
+    expect(document.querySelector('#m-subcategory').value).toBe('Weekly shop');
+    expect(document.querySelector('#m-currency').value).toBe('USD');
+    document.querySelector('#m-name').value = 'Partial refund';
+    document.querySelector('#m-amount').value = '50';
+    mockFetchJson({ id: 43 });
+    document.querySelector('#txn-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await vi.waitFor(() => {
+      const call = global.fetch.mock.calls.find(([url, options]) => String(url).includes('/upsert/create') && options?.method === 'POST');
+      expect(call).toBeTruthy();
+      expect(JSON.parse(call[1].body)).toMatchObject({ transactionKind: 'REFUND', originalTransactionId: 42, category: 'GROCERIES', currency: 'USD', amount: 50, subcategory: 'Weekly shop', recurring: false });
+    });
+    mockFetchJson({ content: [], totalPages: 0 });
+    await vi.waitFor(() => expect(document.querySelector('#txn-form')).toBeFalsy(), { timeout: 2000 });
+  });
 });

@@ -68,7 +68,7 @@ public class AiInsightsService {
      * period currently selected in the UI.
      */
     @Cacheable(value = "ai-insights",
-            key = "'v6:' + #userId + ':' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX')")
+            key = "'v7:' + #userId + ':' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX')")
     public AiInsightResponse generateInsights(UUID userId, LocalDate startDate, LocalDate endDate) {
         boolean ranged = startDate != null || endDate != null;
         LocalDateTime start = startDate != null ? startDate.atStartOfDay() : LocalDateTime.of(1970, 1, 1, 0, 0);

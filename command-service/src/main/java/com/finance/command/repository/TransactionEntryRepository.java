@@ -91,11 +91,12 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
     // ── Budget utilization ────────────────────────────────────────────────────
 
     @Query("""
-            SELECT COALESCE(SUM(t.amount), 0)
+            SELECT COALESCE(SUM(t.reportingAmount), 0)
             FROM TransactionEntry t
             WHERE t.userId = :userId
               AND t.deletedAt IS NULL
-              AND t.type = com.finance.command.model.TransactionType.EXPENSE
+              AND t.reportable = true
+              AND t.reportingType = com.finance.command.model.TransactionType.EXPENSE
               AND t.category = :category
               AND t.createdAt BETWEEN :start AND :end
             """)
@@ -108,17 +109,18 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
     // ── Summary aggregates (avoids full table scan in getSummary()) ────────────
 
     @Query("""
-            SELECT COALESCE(SUM(t.amount), 0)
+            SELECT COALESCE(SUM(t.reportingAmount), 0)
             FROM TransactionEntry t
             WHERE t.userId = :userId
               AND t.deletedAt IS NULL
-              AND t.type = :type
+              AND t.reportable = true
+              AND t.reportingType = :type
             """)
     BigDecimal sumByType(
             @Param("userId") UUID userId,
             @Param("type") TransactionType type);
 
-    @Query("SELECT COUNT(t) FROM TransactionEntry t WHERE t.userId = :userId AND t.deletedAt IS NULL")
+    @Query("SELECT COUNT(t) FROM TransactionEntry t WHERE t.userId = :userId AND t.deletedAt IS NULL AND t.reportable = true")
     long countActiveByUser(@Param("userId") UUID userId);
 
     // ── Batch budget utilization (eliminates N+1) ─────────────────────────────
@@ -129,11 +131,12 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
      * Result: Object[] where [0] = Category enum, [1] = BigDecimal sum.
      */
     @Query("""
-            SELECT t.category, COALESCE(SUM(t.amount), 0)
+            SELECT t.category, COALESCE(SUM(t.reportingAmount), 0)
             FROM TransactionEntry t
             WHERE t.userId = :userId
               AND t.deletedAt IS NULL
-              AND t.type = com.finance.command.model.TransactionType.EXPENSE
+              AND t.reportable = true
+              AND t.reportingType = com.finance.command.model.TransactionType.EXPENSE
               AND t.category IN :categories
               AND t.createdAt BETWEEN :start AND :end
             GROUP BY t.category
@@ -143,4 +146,16 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             @Param("categories") List<Category> categories,
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM TransactionEntry t WHERE t.id = :id AND t.userId = :userId AND t.deletedAt IS NULL")
+    Optional<TransactionEntry> findAccountingEntryForUpdate(@Param("id") Long id, @Param("userId") UUID userId);
+
+    @Query("""
+            SELECT COALESCE(SUM(t.amount), 0) FROM TransactionEntry t
+            WHERE t.originalTransactionId = :originalId AND t.deletedAt IS NULL
+              AND (cast(:excludedId as long) IS NULL OR t.id <> :excludedId)
+              AND t.transactionKind IN (com.finance.command.model.TransactionKind.REFUND,
+                                        com.finance.command.model.TransactionKind.REIMBURSEMENT)
+            """)
+    BigDecimal sumRecoveries(@Param("originalId") Long originalId, @Param("excludedId") Long excludedId);
 }

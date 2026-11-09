@@ -486,16 +486,17 @@ function mountCategoryList(wrapId, data, foldLabel, kind) {
       raw: label,
       value: Number(values[i]) || 0,
     }))
-    .filter(r => r.value > 0)
+    .filter(r => r.value !== 0)
     .sort((a, b) => b.value - a.value);
 
   const total = rows.reduce((sum, r) => sum + r.value, 0);
-  if (!rows.length || total <= 0) {
+  if (!rows.length) {
     wrap.innerHTML = `<div class="empty-state" style="padding:32px 0"><p>No activity in this period.</p></div>`;
     return;
   }
 
-  const max = rows[0].value;
+  const hasRecoveries = rows.some(r => r.value < 0);
+  const max = Math.max(...rows.map(r => Math.abs(r.value)));
   const top = rows.slice(0, 6);
   const rest = rows.slice(6);
   // Phones show the first five and reveal the rest through "Show all".
@@ -506,7 +507,7 @@ function mountCategoryList(wrapId, data, foldLabel, kind) {
 
   const rowHtml = (r, { folded = false } = {}) => {
     const pct = total > 0 ? (r.value / total) * 100 : 0;
-    const width = max > 0 ? Math.max(1, (r.value / max) * 100) : 0;
+    const width = max > 0 ? Math.max(1, (Math.abs(r.value) / max) * 100) : 0;
     const dot = isIncome
       ? '<span class="cat-dot" data-tone="2" aria-hidden="true"></span>'
       : categoryDot(r.raw);
@@ -515,7 +516,7 @@ function mountCategoryList(wrapId, data, foldLabel, kind) {
         <div class="barlist-label">${folded ? '' : dot}<span>${esc(r.label)}</span></div>
         <div class="barlist-track"><div class="barlist-fill" style="width:${width.toFixed(1)}%${folded ? '' : `;background:${isIncome ? 'var(--pos)' : 'var(--brand)'}`}"></div></div>
         <div class="barlist-value">${formatMoney(r.value, currency, { decimals: 0 })}</div>
-        <div class="barlist-pct">${pctLabel(pct)}</div>
+        <div class="barlist-pct">${r.value < 0 ? 'Recovered' : hasRecoveries ? '—' : pctLabel(pct)}</div>
       </div>`;
   };
 

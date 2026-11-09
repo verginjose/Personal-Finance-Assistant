@@ -8,8 +8,8 @@ from decimal import Decimal, InvalidOperation
 from receipt_parser import classify, extract_date, parse_document
 
 
-INCOME_CATEGORIES = frozenset(['BONUS', 'BUSINESS', 'CASHBACK_REWARDS', 'DIVIDENDS', 'FREELANCE', 'GIFTS_RECEIVED', 'GOVT_BENEFITS', 'INTEREST', 'INVESTMENTS', 'OTHER_INCOME', 'PENSION', 'RENTAL_INCOME', 'SALARY', 'SIDE_HUSTLE', 'TAX_REFUND'])
-EXPENSE_CATEGORIES = frozenset(['BOOKS_AND_COURSES', 'BOOKS_AND_MAGAZINES', 'CAB_AND_AUTO', 'CHARITY_AND_DONATIONS', 'CHILDCARE', 'CLOTHING', 'COACHING', 'COFFEE_AND_SNACKS', 'CREDIT_CARD_PAYMENT', 'CRYPTO', 'DOCTOR_AND_CLINIC', 'ELDER_CARE', 'ELECTRICITY', 'ELECTRONICS', 'EMERGENCY_FUND', 'FINES_AND_PENALTIES', 'FIXED_DEPOSIT', 'FLIGHT_AND_TRAIN', 'FOOD_DELIVERY', 'FUEL', 'GAMING', 'GAS', 'GIFTS_GIVEN', 'GOAL', 'GROCERIES', 'GYM_AND_FITNESS', 'HEALTH_INSURANCE', 'HOME_APPLIANCES', 'HOME_LOAN_EMI', 'HOME_MAINTENANCE', 'HOTEL_AND_STAYS', 'INTERNET', 'LIFE_INSURANCE', 'LOAN_REPAYMENT', 'MEDICINES', 'MENTAL_WELLNESS', 'MOBILE_PHONE', 'MOVIES_AND_EVENTS', 'MUTUAL_FUNDS_SIP', 'OTHERS', 'OTT_SUBSCRIPTIONS', 'PARKING_AND_TOLLS', 'PERSONAL_CARE', 'PETS', 'PROPERTY_TAX', 'PUBLIC_TRANSPORT', 'RENT', 'RESTAURANTS', 'SETTLEMENT', 'SPORTS_AND_HOBBIES', 'STOCKS_AND_TRADING', 'STUDENT_LOAN_EMI', 'TAXES', 'TRAVEL_VACATION', 'TUITION_AND_FEES', 'VEHICLE_EMI', 'VEHICLE_INSURANCE', 'VEHICLE_MAINTENANCE', 'WATER'])
+from accounting import (INCOME_CATEGORIES, EXPENSE_CATEGORIES, MOVEMENT_CATEGORIES,
+                        INVESTMENT_CATEGORIES, TRANSACTION_KINDS)
 
 def _money(value):
     try:
@@ -61,23 +61,55 @@ def parse_file_text(text, *, is_csv=False, is_batch=False, default_currency="INR
                 body = vendor + "\n" + row.get("description", "")
                 doc, _, _ = parse_document(body, convert=False, default_currency=currency,
                                             category_search=category_search)
-                # A known debit/credit column overrides textual income hints.
+                # A known debit/credit column overrides textual direction hints.
                 _, expense, income = classify(body, vendor, -abs(amount) if kind == "Income" else abs(amount))
+                if doc.get("transactionKind") in ("TRANSFER", "INVESTMENT"):
+                    if kind == "Income": income = doc.get("category")
+                    else: expense = doc.get("category")
+                elif doc.get("transactionKind") in ("REFUND", "REIMBURSEMENT"):
+                    expense = doc.get("category") or "OTHERS"
                 if kind == "Expense":
                     expense = doc.get("expenseCategory") or expense or "OTHERS"
-                explicit = row.get("expensecategory") if kind == "Expense" else row.get("incomecategory")
+                treatment = row.get("transactionkind", "").upper() or doc.get("transactionKind", "STANDARD")
+                if treatment not in TRANSACTION_KINDS:
+                    raise ValueError("Unsupported transaction treatment")
+                # An explicit bank debit is authoritative; descriptive words alone
+                # must not turn an outgoing payment into an expense recovery.
+                if treatment in ("REFUND", "REIMBURSEMENT") and kind != "Income":
+                    raise ValueError("Refunds and reimbursements must be incoming payments")
+                explicit = row.get("category") or (row.get("expensecategory") if kind == "Expense" else row.get("incomecategory"))
                 if explicit:
-                    valid = EXPENSE_CATEGORIES if kind == "Expense" else INCOME_CATEGORIES
+                    valid = (EXPENSE_CATEGORIES if kind == "Expense" or treatment in ("REFUND", "REIMBURSEMENT")
+                             else INCOME_CATEGORIES)
+                    valid = valid | MOVEMENT_CATEGORIES
                     if explicit.upper() not in valid:
                         raise ValueError("Unsupported transaction category")
-                    if kind == "Expense": expense = explicit.upper()
+                    if kind == "Expense" or treatment in ("REFUND", "REIMBURSEMENT"): expense = explicit.upper()
                     else: income = explicit.upper()
+                category = expense if kind == "Expense" or treatment in ("REFUND", "REIMBURSEMENT") else income
+                if category in MOVEMENT_CATEGORIES and treatment == "STANDARD":
+                    treatment = "INVESTMENT" if category in INVESTMENT_CATEGORIES else "TRANSFER"
+                original_id = row.get("originaltransactionid")
+                if original_id and (not original_id.isdigit() or int(original_id) <= 0):
+                    raise ValueError("Original transaction ID must be a positive integer")
+                if original_id and treatment not in ("REFUND", "REIMBURSEMENT"):
+                    raise ValueError("Only refunds and reimbursements can link to an expense")
+                subcategory = row.get("subcategory") or None
+                if subcategory and len(subcategory) > 80:
+                    raise ValueError("Subcategory cannot exceed 80 characters")
                 recurring = row.get("recurring", "false").lower()
                 if recurring not in ("true", "false", "1", "0", "yes", "no", ""):
                     raise ValueError("Invalid recurring value")
-                doc.update(vendor=vendor, amount=abs(amount), transactionType=kind,
-                           expenseCategory=expense if kind == "Expense" else None,
-                           incomeCategory=(income or "OTHER_INCOME") if kind == "Income" else None,
+                if treatment in ("REFUND", "REIMBURSEMENT") and recurring in ("true", "1", "yes"):
+                    raise ValueError("Refunds and reimbursements cannot recur")
+                recurring_period = row.get("recurringperiod", "").upper() or None
+                if recurring_period not in (None, "DAILY", "WEEKLY", "MONTHLY", "YEARLY"):
+                    raise ValueError("Unsupported recurrence period")
+                doc.update(recurringPeriod=recurring_period, transactionKind=treatment, originalTransactionId=int(original_id) if original_id else None,
+                           subcategory=subcategory, category=category,
+                           vendor=vendor, amount=abs(amount), transactionType=kind,
+                           expenseCategory=expense if kind == "Expense" or treatment in ("REFUND", "REIMBURSEMENT") else None,
+                           incomeCategory=(income or "OTHER_INCOME") if kind == "Income" and treatment not in ("REFUND", "REIMBURSEMENT") else None,
                            currency=currency, date=date, description=row.get("description") or vendor,
                            recurring=recurring in ("true", "1", "yes"))
                 results.append(doc)
@@ -110,10 +142,16 @@ def analyze_history(transactions):
         # Compact query-service payload has no currency. Do not label its totals
         # with a guessed currency or mix them with explicitly labelled currencies.
         currency = str(row.get("currency") or "unspecified")
+        treatment = str(row.get("transactionKind") or "STANDARD").upper()
+        category = row.get("c") or row.get("category") or row.get("expenseCategory") or row.get("incomeCategory")
+        if treatment in ("TRANSFER", "INVESTMENT") or category in MOVEMENT_CATEGORIES:
+            continue
         amount = abs(_money(row.get("a", row.get("amount", ""))))
         kind = str(row.get("t", row.get("type", ""))).upper()
         if kind not in ("EXPENSE", "INCOME"):
             raise ValueError("Each transaction needs an Expense or Income type")
+        if treatment in ("REFUND", "REIMBURSEMENT"):
+            kind, amount = "EXPENSE", -amount
         groups[currency][kind] += amount
     insights, warnings = [], []
     for currency, totals in sorted(groups.items()):

@@ -57,6 +57,7 @@ public class TransactionEntryService {
             """;
 
     private final TransactionEntryRepository repository;
+    private final TransactionAccountingService accountingService;
     private final IdempotencyRecordRepository idempotencyRecordRepository;
     private final JdbcTemplate jdbcTemplate;
     private final Counter createCounter;
@@ -70,6 +71,7 @@ public class TransactionEntryService {
 
     public TransactionEntryService(
             TransactionEntryRepository repository,
+            TransactionAccountingService accountingService,
             IdempotencyRecordRepository idempotencyRecordRepository,
             JdbcTemplate jdbcTemplate,
             MeterRegistry meterRegistry, OutboxEventRepository outboxEventRepository,
@@ -80,6 +82,7 @@ public class TransactionEntryService {
             SubscriptionDetectorService subscriptionDetectorService
     ) {
         this.repository = repository;
+        this.accountingService = accountingService;
         this.idempotencyRecordRepository = idempotencyRecordRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.createCounter = meterRegistry.counter("transactions.create.success");
@@ -156,7 +159,7 @@ public class TransactionEntryService {
         // waiting for the 02:00 UTC job: GET /api/upsert/subscriptions is
         // routed to query-service, so the read side's on-demand detection is
         // unreachable through the gateway.
-        if (saved.isRecurring() && saved.getType() == TransactionType.EXPENSE) {
+        if (saved.isRecurring() && saved.getType() == TransactionType.EXPENSE && saved.isReportable()) {
             try {
                 subscriptionDetectorService.processRecurringTransactions(List.of(saved));
             } catch (RuntimeException e) {
@@ -217,7 +220,7 @@ public class TransactionEntryService {
         }
 
         List<TransactionEntry> entries = requests.stream()
-                .map(TransactionEntryService::getTransactionEntry)
+                .map(this::getTransactionEntry)
                 .toList();
 
         List<TransactionEntry> saved = repository.saveAll(entries);
@@ -251,7 +254,7 @@ public class TransactionEntryService {
         return saved.stream().map(this::convertToResponse).toList();
     }
 
-    private static TransactionEntry getTransactionEntry(CreateEntryRequest request) {
+    private TransactionEntry getTransactionEntry(CreateEntryRequest request) {
         TransactionEntry entry = new TransactionEntry(
                 request.getUserId(), request.getName(),
                 request.getAmount(), request.getType(), request.getCurrency()
@@ -270,6 +273,10 @@ public class TransactionEntryService {
         }
         com.finance.command.controller.ReceiptOwnership.requireOwned(request.getReceiptUrl(), request.getUserId());
         entry.setReceiptUrl(request.getReceiptUrl());
+        entry.setTransactionKind(request.getTransactionKind());
+        entry.setOriginalTransactionId(request.getOriginalTransactionId());
+        entry.setSubcategory(request.getSubcategory());
+        accountingService.validate(entry);
         return entry;
     }
 
@@ -296,6 +303,7 @@ public class TransactionEntryService {
         if (transactionLinkRepo.existsByTransactionEntryId(request.getId())) {
             throw new IllegalStateException("This transaction is managed by a group expense. Please modify the shared expense instead.");
         }
+        accountingService.requireNoRecoveries(existing);
         BigDecimal oldAmount = existing.getAmount();
         BigDecimal diff = request.getAmount().subtract(oldAmount);
 
@@ -315,6 +323,10 @@ public class TransactionEntryService {
             com.finance.command.controller.ReceiptOwnership.requireOwned(request.getReceiptUrl(), existing.getUserId());
         }
         existing.setReceiptUrl(request.getReceiptUrl());
+        existing.setTransactionKind(request.getTransactionKind());
+        existing.setOriginalTransactionId(request.getOriginalTransactionId());
+        existing.setSubcategory(request.getSubcategory());
+        accountingService.validate(existing);
         
         TransactionEntry updated = repository.save(existing);
         
@@ -350,10 +362,12 @@ public class TransactionEntryService {
         TransactionEntry entry = repository.findByIdAndUserIdAndDeletedAtIsNull(id, userId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Transaction entry with ID " + id + " not found for user " + userId));
+        accountingService.requireNoRecoveries(entry);
         BigDecimal oldAmount = entry.getAmount();
         BigDecimal diff = newAmount.subtract(oldAmount);
 
         entry.setAmount(newAmount);
+        accountingService.validate(entry);
         TransactionEntry saved = repository.save(entry);
         
         if (diff.compareTo(BigDecimal.ZERO) != 0) {
@@ -399,6 +413,8 @@ public class TransactionEntryService {
             throw new SecurityException("User is not authorized to delete this transaction");
         }
         
+        accountingService.requireNoRecoveries(entry);
+
         // Revert goal allocations
         java.util.Optional<com.finance.command.model.TransactionGoalAllocation> allocationOpt = allocationRepository.findByTransactionId(id);
         if (allocationOpt.isPresent()) {
@@ -468,7 +484,7 @@ public class TransactionEntryService {
     // ── Read — summary ────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "transactions", key = "#userId + ':summary'", sync = true)
+    @Cacheable(value = "transactions", key = "#userId + ':summary-v2'", sync = true)
     public Map<String, Object> getSummary(UUID userId) {
         // Two SQL SUM aggregates + one COUNT — no full table scan needed.
         BigDecimal income  = safe(repository.sumByType(userId, TransactionType.INCOME));
@@ -497,7 +513,7 @@ public class TransactionEntryService {
     public String exportCsv(UUID userId) {
         List<TransactionEntry> all = repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
         StringBuilder csv = new StringBuilder();
-        csv.append("id,name,amount,type,expenseCategory,incomeCategory,currency,description,recurring,recurringPeriod,createdAt\n");
+        csv.append("id,name,amount,type,category,currency,description,recurring,recurringPeriod,createdAt,transactionKind,originalTransactionId,subcategory\n");
         for (TransactionEntry e : all) {
             csv.append(e.getId()).append(',')
                .append(escapeCsv(e.getName())).append(',')
@@ -508,7 +524,10 @@ public class TransactionEntryService {
                .append(escapeCsv(e.getDescription())).append(',')
                .append(e.isRecurring()).append(',')
                .append(e.getRecurringPeriod() != null ? e.getRecurringPeriod() : "").append(',')
-               .append(e.getCreatedAt()).append('\n');
+               .append(e.getCreatedAt()).append(',')
+               .append(e.getTransactionKind() != null ? e.getTransactionKind() : "STANDARD").append(',')
+               .append(e.getOriginalTransactionId() != null ? e.getOriginalTransactionId() : "").append(',')
+               .append(escapeCsv(e.getSubcategory())).append('\n');
         }
         return csv.toString();
     }
@@ -528,7 +547,7 @@ public class TransactionEntryService {
     }
 
     private CreateEntryResponse convertToResponse(TransactionEntry entry) {
-        return new CreateEntryResponse(
+        CreateEntryResponse response = new CreateEntryResponse(
                 entry.getId(), entry.getUserId(), entry.getName(), entry.getAmount(),
                 entry.getType(), entry.getCategory(),
                 entry.getCurrency(), entry.getDescription(),
@@ -536,5 +555,9 @@ public class TransactionEntryService {
                 entry.getCreatedAt(), entry.getUpdatedAt(),
                 entry.getReceiptUrl()
         );
+        response.setTransactionKind(entry.getTransactionKind());
+        response.setOriginalTransactionId(entry.getOriginalTransactionId());
+        response.setSubcategory(entry.getSubcategory());
+        return response;
     }
 }

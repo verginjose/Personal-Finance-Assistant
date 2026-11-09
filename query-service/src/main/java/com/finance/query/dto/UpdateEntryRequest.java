@@ -34,6 +34,13 @@ public class UpdateEntryRequest {
 
     private Category category;
 
+    private com.finance.query.model.TransactionKind transactionKind = com.finance.query.model.TransactionKind.STANDARD;
+    private Long originalTransactionId;
+
+    @Size(max = 80, message = "Subcategory cannot exceed 80 characters")
+    private String subcategory;
+
+
     @NotBlank(message = "Currency is required")
     @Size(min = 3, max = 3, message = "Currency must be 3 characters")
     private String currency;

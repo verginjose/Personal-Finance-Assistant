@@ -58,7 +58,7 @@ public class AnalyticsService {
 
     @Cacheable(
             value = "comprehensive-analytics",
-            key = "'v2:' + #request.userId + ':' + #request.timelineType + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
+            key = "'v3:' + #request.userId + ':' + #request.timelineType + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
     )
     public Map<String, Object> getComprehensiveAnalytics(AnalyticsRequest request) {
         Map<String, Object> analytics = new LinkedHashMap<>();
@@ -89,7 +89,13 @@ public class AnalyticsService {
                 request.getUserId(),
                 PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "createdAt")));
         analytics.put("recentTransactions", recentPage.getContent());
-        analytics.put("transactionCount",   recentPage.getTotalElements());
+        LocalDateTime countStart = request.startUtc();
+        LocalDateTime countEnd = request.endUtc();
+        analytics.put("transactionCount", countStart == null && countEnd == null
+                ? repository.countByUserId(request.getUserId())
+                : repository.countByUserIdAndDateRange(request.getUserId(),
+                    countStart != null ? countStart : LocalDateTime.of(1970, 1, 1, 0, 0),
+                    countEnd != null ? countEnd : LocalDateTime.of(9999, 12, 31, 23, 59, 59)));
 
         return analytics;
     }
@@ -98,7 +104,7 @@ public class AnalyticsService {
 
     @Cacheable(
             value = "category-analytics",
-            key = "'v2:' + #request.userId + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
+            key = "'v3:' + #request.userId + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
     )
     public ChartData getCategoryAnalytics(AnalyticsRequest request) {
         List<CategoryRow> rows = fetchCategoryRows(request);
@@ -137,7 +143,7 @@ public class AnalyticsService {
                 ? request.getTransactionFilter() + " Category Distribution"
                 : "Category Distribution";
 
-        return new ChartData("pie", title, labels, List.of(new ChartData.DataSet("Amount", amounts, null)));
+        return new ChartData(amounts.stream().anyMatch(a -> a < 0) ? "bar" : "pie", title, labels, List.of(new ChartData.DataSet("Amount", amounts, null)));
     }
 
     private List<CategoryRow> fetchCategoryRows(AnalyticsRequest request) {
@@ -161,7 +167,7 @@ public class AnalyticsService {
 
     @Cacheable(
             value = "timeline-analytics",
-            key = "'v2:' + #request.userId + ':' + #request.timelineType + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
+            key = "'v3:' + #request.userId + ':' + #request.timelineType + ':' + #request.transactionFilter + ':' + #request.cacheStartDate() + ':' + #request.cacheEndDate() + ':' + #request.cacheTimezone()"
     )
     public ChartData getTimelineAnalytics(AnalyticsRequest request) {
         String timelineType = request.getTimelineType() != null
@@ -313,13 +319,14 @@ public class AnalyticsService {
         LocalDateTime thirtyDaysAgo = LocalDateTime.now().minusDays(30);
         List<TransactionEntry> txns = repository.findByUserIdAndCreatedAtBetween(userId, thirtyDaysAgo, LocalDateTime.now());
 
-        List<Map<String, Object>> mappedTxns = txns.stream().map(t -> {
+        List<Map<String, Object>> mappedTxns = txns.stream().filter(t -> t.getDeletedAt() == null && t.isReportable()).map(t -> {
             Map<String, Object> map = new HashMap<>();
             map.put("d", t.getCreatedAt() != null ? t.getCreatedAt().toLocalDate().toString() : "");
             map.put("n", t.getName());
-            map.put("a", t.getAmount());
+            map.put("a", t.getReportingAmount());
+            map.put("transactionKind", t.getTransactionKind());
             map.put("currency", t.getCurrency());
-            map.put("t", t.getType().toString());
+            map.put("t", t.getReportingType().toString());
             map.put("c", t.getCategory() != null ? t.getCategory().name() : "");
             return map;
         }).collect(Collectors.toList());

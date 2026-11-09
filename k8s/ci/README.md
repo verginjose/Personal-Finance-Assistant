@@ -8,12 +8,13 @@ git push
   └─ GitHub Actions (ci-runner pod)
        ├─ detect which service directories changed
        ├─ buildctl → buildkitd pod → push registry.pfa.svc:5000/finance/<svc>:<sha>
-       └─ commit the new tag into k8s/apps/<svc>.yaml   [skip ci]
-            └─ Argo CD (argocd namespace)
-                 └─ polls master, syncs k8s/apps → Deployment rolls out
+       └─ PennyPilot commits tags on ci/tag-bump-<run>-<attempt>
+            └─ github-actions[bot] opens a promotion pull request
+                 └─ human reviews and merges
+                      └─ Argo CD syncs k8s/apps → Deployment rolls out
 ```
 
-The runner holds **no cluster permissions**: it builds, pushes and commits.
+The runner holds **no cluster permissions**: it builds and proposes image tags through PRs.
 Argo CD is the only thing that mutates the cluster.
 
 Both hops are **mutual TLS**:
@@ -73,22 +74,32 @@ roll-out (`apply.sh` / an Argo sync of `k8s/ci`). If one side has switched to
 HTTPS and the other has not, image *pulls* fail until both agree. Running pods
 are unaffected and cached images keep working.
 
-### 3. Create a GitHub PAT
+### 3. Configure the runner registration App
 
-Settings → Developer settings → Personal access tokens.
+Use the existing GitHub App installed on this repository with
+**Administration: read/write** only. Set `CI_APP_ID`, `CI_APP_LOGIN`, and
+`CI_APP_PRIVATE_KEY` in the gitignored `.env`, then run
+`./k8s/seal-secrets.sh` to update `k8s/sealed/pfa-ci-secrets.yaml`.
+The runner reads the sealed `APP_ID`, `APP_LOGIN`, and `APP_PRIVATE_KEY` keys.
+Registration does not need Contents or Pull requests permissions, or a PAT.
 
-- **Fine-grained**: repository access = this repo; permissions
-  **Administration: Read and write** (needed to register the runner) and
-  **Contents: Read and write** (needed to push the tag-bump commit).
-- **Classic**: `repo` scope is enough.
+### 4. Allow workflow-created pull requests
 
-### 4. Put it in `.env`
+In **Repository Settings → Actions → General → Workflow permissions**, enable
+**Allow GitHub Actions to create and approve pull requests**. Organization policy
+must permit it as well. The workflow only creates PRs; it never approves or
+merges them. Keep branch protection requiring human review.
 
-```bash
-echo 'GITHUB_PAT=ghp_...' >> .env
-```
+`build.yml` grants `contents: read` by default and grants `contents: write` plus
+`pull-requests: write` only to `promote`. Its short-lived `GITHUB_TOKEN` pushes
+the proposal branch and calls the GitHub PR API. The helper reuses an existing
+open PR when retried and fails the job with a setup hint if PR creation is denied.
+No GitHub CLI installation or extra runner credential is needed.
 
-`.env` is gitignored and `apply.sh` copies it into the `pfa-ci-secrets` Secret.
+`runner.yaml` sets `CI_COMMITTER_NAME=PennyPilot` and the existing CI email for
+Git commit attribution. PR authorship remains `github-actions[bot]` because the
+PR is created with that token. The commit and PR title is
+`chore(deploy): promote built images to <sha>`.
 
 ### 5. Deploy
 
@@ -277,8 +288,8 @@ The usual causes are SELinux (the pod sets `seLinuxOptions.type: spc_t` and
 the `fix-perms` initContainer handles the latter — and a missing/unreadable
 `ci-tls-buildkitd` Secret.
 
-**Runner is offline in GitHub's UI.** The PAT probably expired or lacks
-Administration permission; check `kubectl -n pfa logs deploy/ci-runner`.
+**Runner is offline in GitHub's UI.** Check the registration App installation,
+private key, and Administration permission; check `kubectl -n pfa logs deploy/ci-runner`.
 
 **Runner has no cluster permissions.** The interim `Deploy to the cluster` step
 and its `ci-deployer` Role/RoleBinding were removed once Argo CD took over
@@ -313,3 +324,14 @@ Deployment — if the runner ever needs `kubectl`, something is wrong with Argo.
 | `debug.sh` | Read-only health report for the whole chain |
 | `argocd/` | Argo CD install + the `pfa-apps` Application |
 | `.github/workflows/build.yml` | The pipeline |
+
+
+### Check promotion automation locally
+
+```bash
+bash -n k8s/ci/open-promotion-pr.sh
+python3 -I -m unittest discover -s k8s/ci/tests -v
+```
+
+The tests mock GitHub responses and cover PR creation, reuse, and permission
+failure without pushing branches or creating real pull requests.

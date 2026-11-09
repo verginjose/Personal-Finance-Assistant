@@ -1,3 +1,4 @@
+# Full-service rebuild: verify latest code with the PR-based deployment flow.
 # No `# syntax=` directive on purpose: it makes BuildKit fetch the dockerfile
 # frontend image from Docker Hub, and buildkitd has no internet egress. This
 # file only uses FROM/COPY/EXPOSE/CMD, which the built-in frontend handles.

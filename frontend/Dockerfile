@@ -1,3 +1,4 @@
+# Full-service rebuild: verify latest code with the PR-based deployment flow.
 # Base image comes from the in-cluster mirror in CI
 # (k8s/ci/mirror-base-images.sh) and from Docker Hub when built outside it.
 ARG BASE_IMAGE_REGISTRY=docker.io/library

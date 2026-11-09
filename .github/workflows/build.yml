@@ -20,13 +20,10 @@ on:
         type: choice
         options: [all, auth-service, api-gateway, command-service, query-service, frontend, ocr-service]
 
-# Pushing the propose-branch only. The workflow never pushes to the deployment
-# branch itself, and it cannot open the PR either: GitHub's token can only do
-# that if "Allow GitHub Actions to create and approve pull requests" is on,
-# which would also let a compromised run approve its own bump. The run summary
-# carries a one-click compare link instead.
+# Build jobs only read code. Only promotion can push a proposal branch and
+# open its PR; deployment still requires a human merge.
 permissions:
-  contents: write
+  contents: read
 
 # Never run two builds at once: a Maven build and an OCR build together will
 # exceed the node's memory, and the tag-bump commits would race.
@@ -70,6 +67,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Determine services to build
         id: changed
@@ -124,11 +122,9 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
         with:
-          # Check out the branch tip, not github.sha. Every matrix job would
-          # otherwise branch from the same triggering commit and their
-          # tag-bump pushes would conflict with each other.
-          ref: ${{ github.ref_name }}
-          fetch-depth: 0   # the tag-bump commit is pushed from this checkout
+          # The immutable tag must identify the exact source being built.
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
       - name: Install buildctl
         run: |
@@ -227,6 +223,9 @@ jobs:
   # instead, so a human merge is the only path from "image built" to
   # "deployed". One PR covers every service this run built.
   promote:
+    permissions:
+      contents: write
+      pull-requests: write
     needs: [detect, build]
     if: needs.detect.outputs.services != '[]'
     runs-on: [self-hosted, linux, x64, pfa]
@@ -236,8 +235,9 @@ jobs:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
 
-      - name: Propose the tag bump
+      - name: Propose the tag bump and open a pull request
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           SERVICES: ${{ needs.detect.outputs.services }}
         run: |
           set -euo pipefail
@@ -255,18 +255,17 @@ jobs:
             exit 0
           fi
 
-          git config user.name "pfa-ci"
-          git config user.email "ci@verginjose.local"
+          git config user.name "${CI_COMMITTER_NAME:-PennyPilot}"
+          git config user.email "${CI_COMMITTER_EMAIL:-ci@verginjose.local}"
           git checkout -b "$BRANCH"
           git add k8s/apps
-          git commit -m "ci: bump images to ${TAG}"
+          git commit -m "chore(deploy): promote built images to ${TAG}"
           git push origin "$BRANCH"
 
-          # A human must open and merge this. The link is prefilled with the
-          # title and body so it is two clicks: "Create pull request", then
-          # "Merge". See the permissions note at the top of this file for why
-          # the job does not open it itself.
-          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${GITHUB_REF_NAME}...${BRANCH}?expand=1"
+          # The registration App remains Administration-only. PR creation uses
+          # the promote job's separate, short-lived GITHUB_TOKEN.
+          export BRANCH TAG
+          bash k8s/ci/open-promotion-pr.sh
           {
             echo "## Images built: ${TAG}"
             echo ""
@@ -274,7 +273,7 @@ jobs:
             git show --stat --format= HEAD
             echo '```'
             echo ""
-            echo "**Open the pull request:** ${url}"
+            echo "Proposed by ${CI_COMMITTER_NAME:-PennyPilot}."
             echo ""
             echo "Merging it makes Argo CD deploy these images."
           } >> "$GITHUB_STEP_SUMMARY"

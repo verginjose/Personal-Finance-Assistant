@@ -1,3 +1,4 @@
+# Full-service rebuild: verify latest code with the PR-based deployment flow.
 # Step 1: Build stage
 # Base images come from the in-cluster mirror in CI (k8s/ci/mirror-base-images.sh)
 # and from Docker Hub when this Dockerfile is built outside the cluster.

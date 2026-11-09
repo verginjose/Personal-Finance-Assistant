@@ -68,7 +68,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: auth-service
-          image: 127.0.0.1:30500/finance/auth-service:af33188be81e
+          image: 127.0.0.1:30500/finance/auth-service:7b16c71c931a
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true

@@ -90,3 +90,10 @@ management:
   tracing:
     sampling:
       probability: 1.0
+
+# API documentation is opt-in for local development, disabled in production.
+springdoc:
+  api-docs:
+    enabled: ${API_DOCS_ENABLED:false}
+  swagger-ui:
+    enabled: ${API_DOCS_ENABLED:false}

@@ -21,7 +21,7 @@ on:
         options: [all, auth-service, api-gateway, command-service, query-service, frontend, ocr-service]
 
 # Build jobs only read code. Only promotion can push a proposal branch, open
-# its PR, and merge the validated promotion once the required checks pass.
+# its PR, and enable auto-merge for the validated promotion.
 permissions:
   contents: read
 
@@ -221,16 +221,15 @@ jobs:
       # certificate, which this pod no longer has (by design); the hourly
       # registry-gc CronJob owns retention now.
 
-  # Promotion goes through a PR and passing checks. Only the exact generated
-  # manifest commit may be merged automatically. Branch protection on the
-  # target branch requires the CodeQL checks, so GitHub enforces the gate at
-  # merge time as well.
+  # Promotion goes through a PR and passing checks. The job validates the exact
+  # generated manifest commit and enables GitHub's native auto-merge; GitHub
+  # performs the merge once the required checks pass, so the job's token is
+  # short-lived. Branch protection requires the CodeQL checks on the target
+  # branch, so GitHub enforces the gate at merge time as well.
   promote:
     permissions:
       contents: write
       pull-requests: write
-      checks: read
-      statuses: read
     needs: [detect, build]
     if: needs.detect.outputs.services != '[]'
     runs-on: [self-hosted, linux, x64, pfa]
@@ -287,17 +286,18 @@ jobs:
             echo ""
             echo "Proposed by ${CI_COMMITTER_NAME:-PennyPilot}."
             echo ""
-            echo "Merging it makes Argo CD deploy these images."
+            echo "GitHub auto-merges it when the required checks pass."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Merge the validated bot promotion after checks pass
+      - name: Enable auto-merge for the validated promotion
         if: steps.promotion.outputs.pr_number != ''
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.promotion.outputs.pr_number }}
+          PR_NODE_ID: ${{ steps.promotion.outputs.pr_node_id }}
           EXPECTED_HEAD_SHA: ${{ steps.promotion.outputs.head_sha }}
           SOURCE_SHA: ${{ github.sha }}
-        run: bash k8s/ci/merge-promotion-pr.sh
+        run: bash k8s/ci/enable-promotion-automerge.sh
 
       # Deployment is Argo CD's job: it watches k8s/apps and syncs the new
       # image tag once the PR is merged. The runner needs no cluster

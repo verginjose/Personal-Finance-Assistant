@@ -88,6 +88,24 @@ if kubectl -n "${NS}" get deploy ci-runner >/dev/null 2>&1; then
 else
   warn "ci-runner not deployed (./k8s/ci/apply.sh)"
 fi
+# Registration integrity: the runner is repo-scoped, so anyone holding the
+# registration App key can add another runner and receive this repo's jobs.
+# Expect exactly one registration.
+TOKEN="${TOKEN:-$(sed -n 's/^GITHUB_PAT=//p' "${ROOT_DIR}/.env" 2>/dev/null | tail -1 | tr -d '\r')}"
+if [[ -n "${TOKEN}" ]] && command -v jq >/dev/null 2>&1; then
+  runners="$(curl -s --max-time 10 -H "Authorization: Bearer ${TOKEN}" \
+    "https://api.github.com/repos/verginjose/Personal-Finance-Assistant/actions/runners" \
+    | jq -r '.runners[]? | "\(.name):\(.status)"' 2>/dev/null)"
+  if [[ "${runners}" == "pfa-k3s:online" ]]; then
+    ok "registered runner: ${runners}"
+  elif [[ -z "${runners}" ]]; then
+    warn "cannot list registered runners (GITHUB_PAT may lack Administration:read)"
+  else
+    bad "unexpected runner registrations: ${runners//$'\n'/, }"
+  fi
+else
+  warn "GITHUB_PAT or jq missing; cannot verify runner registrations"
+fi
 
 # ── argo cd ─────────────────────────────────────────────────────────────────
 section "argo cd"

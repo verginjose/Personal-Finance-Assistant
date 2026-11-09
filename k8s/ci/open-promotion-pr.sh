@@ -27,7 +27,7 @@ if [[ -z "$url" ]]; then
     printf 'Source commit: `%s`\n\n' "${GITHUB_SHA:-unknown}"
     printf 'Build run: %s/%s/actions/runs/%s\n\n' \
       "${GITHUB_SERVER_URL:-https://github.com}" "$GITHUB_REPOSITORY" "${GITHUB_RUN_ID:-unknown}"
-    printf 'The promotion job merges this bot PR after manifest validation and passing checks. Argo CD then deploys the images.\n'
+    printf 'The promotion job validates this bot PR and enables auto-merge; GitHub merges it once the required checks pass. Argo CD then deploys the images.\n'
   } > "$tmp/body.md"
   jq -n --arg title "chore(deploy): promote built images to ${TAG}" \
     --arg head "$BRANCH" --arg base "$GITHUB_REF_NAME" \
@@ -41,11 +41,14 @@ if [[ -z "$url" ]]; then
     exit 1
   fi
   url="$(jq -er '.html_url | select(type == "string" and length > 0)' "$tmp/created.json")"
+  node_id="$(jq -er '.node_id | select(type == "string" and length > 0)' "$tmp/created.json")"
+else
+  node_id="$(jq -er '.[0].node_id | select(type == "string" and length > 0)' "$tmp/existing.json")"
 fi
 echo "Pull request: $url"
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-  printf 'pr_number=%s\nhead_sha=%s\n' "${url##*/}" "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  printf 'pr_number=%s\nhead_sha=%s\npr_node_id=%s\n' "${url##*/}" "$(git rev-parse HEAD)" "$node_id" >> "$GITHUB_OUTPUT"
 fi
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-  printf '\n**Promotion pull request:** %s\n\nAutomatic merge waits for validation and passing checks; Argo CD then deploys.\n' "$url" >> "$GITHUB_STEP_SUMMARY"
+  printf '\n**Promotion pull request:** %s\n\nAuto-merge is enabled after validation; GitHub merges once checks pass, then Argo CD deploys.\n' "$url" >> "$GITHUB_STEP_SUMMARY"
 fi

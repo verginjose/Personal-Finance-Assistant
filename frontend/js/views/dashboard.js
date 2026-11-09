@@ -1,7 +1,7 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
-  aiPanelHtml, renderAiData, categoryDot,
+  transactionKindLabel, aiPanelHtml, renderAiData, categoryDot,
   formatMoney, formatCategory, formatDayLabel, formatDue, dateTooltip, daysUntilDate, esc,
   segmentedControl, wireSegmented, skeletonRows,
   displayAmountFor, displayName, humanizeNamesIn,
@@ -380,7 +380,7 @@ function renderRecent(result) {
           ${marker}
           <div class="ledger-name">
             ${esc(settlementTitle(t))}
-            <div class="txn-sub">${esc(isSettlement ? (settlementGroup(t) || formatCategory(cat)) : formatCategory(cat))}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}${tags}</div>
+            <div class="txn-sub">${esc(isSettlement ? (settlementGroup(t) || formatCategory(cat)) : formatCategory(cat))}${t.subcategory ? ` · ${esc(t.subcategory)}` : ''}${transactionKindLabel(t) ? ` · ${esc(transactionKindLabel(t))}` : ''}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}${tags}</div>
           </div>
           ${receipt}
           <span class="ledger-amount ${isIncome ? 'is-pos' : ''}">${amount}</span>

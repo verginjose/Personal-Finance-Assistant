@@ -2,7 +2,7 @@ import { api, Auth, toast } from '../utils/api.js';
 import {
   esc, escAttr, safeImageUrl, emptyState, formatMoney, formatDate, formatCategory, dateTooltip,
   openModal, confirmModal, modalActions, avatar, displayName, chip, displayAmountFor,
-  skeletonRows, EXPENSE_CATS, categoryOptions, currencyOptionHtml, categoryDot,
+  skeletonRows, SPENDING_CATS, categoryOptions, currencyOptionHtml, categoryDot,
   pictureLightbox,
 } from '../utils/ui.js';
 import { icon } from '../utils/icons.js';
@@ -1355,7 +1355,7 @@ function addExpenseModal(groupId, members, userId, initialData = null, groupCurr
           </select>
         </div>
         <div class="form-group"><label for="ae-cat">Category</label>
-          <select class="form-select" id="ae-cat">${categoryOptions(EXPENSE_CATS, defaultCategory)}</select>
+          <select class="form-select" id="ae-cat">${categoryOptions(SPENDING_CATS, defaultCategory)}</select>
         </div>
       </div>
       <div id="ae-split-details" hidden></div>

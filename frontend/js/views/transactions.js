@@ -5,7 +5,7 @@ import {
   openModal, confirmModal, modalActions, EXPENSE_CATS, INCOME_CATS, categoryOptions,
   setupCategorySearch, currencyOptionHtml, formatDayLabel, skeletonRows,
   displayAmountFor, displayName, dateTooltip, humanizeNamesIn, humanizeSystemText,
-  categoryDot,
+  categoryDot, SPENDING_CATS, MOVEMENT_CATS, CATEGORY_HELP, transactionCategories, transactionKindLabel,
 } from '../utils/ui.js';
 
 let currentPage = 0, totalPages = 0;
@@ -71,13 +71,14 @@ function titleCase(value) {
 /** Read-only category label for the ledger rows. */
 function categoryDisplayHtml(t, { dot = true } = {}) {
   const cat = txCategory(t) || 'OTHERS';
-  return `<span class="cat-label">${dot ? categoryDot(cat) : ''}<span>${esc(formatCategory(cat))}</span></span>`;
+  return `<span class="cat-label">${dot ? categoryDot(cat) : ''}<span>${esc(formatCategory(cat))}${t.subcategory ? ` · ${esc(t.subcategory)}` : ''}</span></span>`;
 }
 
 /** The category chip in the detail sheet is also the control: change it there. */
 function categoryButtonHtml(t, { dot = true } = {}) {
   const cat = txCategory(t) || 'OTHERS';
   const label = esc(formatCategory(cat));
+  if (['REFUND', 'REIMBURSEMENT'].includes(t.transactionKind)) return `<span>${label}</span>`;
   return `<button type="button" class="cat-edit-btn" data-cat-id="${esc(String(t.id))}" title="Change category" aria-label="Change category: ${label}">
       ${dot ? categoryDot(cat) : ''}<span>${label}</span>${icon('chevron-down', 'xs')}
     </button>`;
@@ -86,7 +87,7 @@ function categoryButtonHtml(t, { dot = true } = {}) {
 /** Inline category correction for auto-generated rows. */
 function startCategoryEdit(btn, t, userId, onDone) {
   const isIncome = t.type === 'INCOME';
-  const cats = isIncome ? INCOME_CATS : EXPENSE_CATS;
+  const cats = transactionCategories(t.type, t.transactionKind, txCategory(t));
   const current = txCategory(t) || 'OTHERS';
 
   const select = document.createElement('select');
@@ -308,6 +309,10 @@ export async function renderTransactions(container) {
             category: pendingScan.category,
             createdAt: isoDate,
             recurring: pendingScan.recurring,
+            recurringPeriod: pendingScan.recurringPeriod || null,
+            transactionKind: pendingScan.transactionKind || 'STANDARD',
+            originalTransactionId: pendingScan.originalTransactionId || null,
+            subcategory: pendingScan.subcategory || null,
             receiptUrl: pendingScan.receiptUrl
           }, load);
         }, 100);
@@ -412,28 +417,30 @@ export async function renderTransactions(container) {
 
 function showBatchModal(userId, transactions, onSuccess) {
   const displayAmount = (t) => {
-    const converted = Number(t.amountDefault);
-    return Number.isFinite(converted) && converted > 0 ? converted : (t.amount || 0);
+    return t.amount || 0;
   };
   const tableRows = transactions.map((t, idx) => `
     <tr>
-      <td><input type="text" class="form-input" id="b-name-${idx}" value="${esc(t.name || '')}"></td>
+      <td><input type="text" class="form-input" id="b-name-${idx}" value="${escAttr(t.name || '')}"></td>
       <td>
         <select class="form-select" id="b-type-${idx}">
           <option value="EXPENSE" ${t.type === 'EXPENSE' ? 'selected' : ''}>Expense</option>
           <option value="INCOME" ${t.type === 'INCOME' ? 'selected' : ''}>Income</option>
         </select>
       </td>
-      <td><input type="number" class="form-input" id="b-amt-${idx}" value="${displayAmount(t)}" step="0.01"></td>
+      <td><select class="form-select" id="b-kind-${idx}">${[['STANDARD','Income / expense'],['TRANSFER','Transfer'],['INVESTMENT','Savings / investment'],['REFUND','Refund'],['REIMBURSEMENT','Reimbursement']].map(([value,label]) => `<option value="${value}" ${t.transactionKind === value ? 'selected' : ''}>${label}</option>`).join('')}</select></td>
+      <td><select class="form-select" id="b-cat-${idx}">${categoryOptions([...new Set([...EXPENSE_CATS, ...INCOME_CATS])], t.category || t.expenseCategory || t.incomeCategory || (t.type === 'INCOME' ? 'OTHER_INCOME' : 'OTHERS'))}</select><input class="form-input" id="b-subcat-${idx}" maxlength="80" aria-label="Subcategory" placeholder="Subcategory (optional)" value="${escAttr(t.subcategory || '')}"></td>
+      <td><input type="number" class="form-input" id="b-original-${idx}" min="1" step="1" aria-label="Original expense ID" placeholder="For refund / reimbursement" value="${escAttr(String(t.originalTransactionId || ''))}"></td>
+      <td><input type="number" class="form-input" id="b-amt-${idx}" value="${displayAmount(t)}" step="0.01"><span>${esc(t.currency || Auth.getDefaultCurrency())}</span></td>
       <td><input type="date" class="form-input" id="b-date-${idx}" value="${t.date || ''}"></td>
     </tr>
   `).join('');
 
   const bodyHtml = `
-    <p class="modal-section-label">Check the ${transactions.length} extracted ${transactions.length === 1 ? 'transaction' : 'transactions'} before importing.</p>
+    <p class="modal-section-label">Check the ${transactions.length} extracted ${transactions.length === 1 ? 'transaction' : 'transactions'} before importing. Refunds and reimbursements need the ID of an existing expense in the same currency; their category follows that expense.</p>
     <div style="max-height:380px;overflow-y:auto;border:1px solid var(--line);border-radius:var(--r-control)">
       <table class="batch-table">
-        <thead><tr><th>Name</th><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
+        <thead><tr><th>Name</th><th>Direction</th><th>Treatment</th><th>Category</th><th>Original expense ID</th><th>Amount / currency</th><th>Date</th></tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
     </div>
@@ -452,13 +459,18 @@ function showBatchModal(userId, transactions, onSuccess) {
           name: document.getElementById(`b-name-${idx}`).value,
           amount: parseFloat(document.getElementById(`b-amt-${idx}`).value) || 0,
           type: document.getElementById(`b-type-${idx}`).value,
-          currency: t.defaultCurrency || t.currency || Auth.getDefaultCurrency(),
-          category: t.type === 'EXPENSE' ? (t.expenseCategory || 'OTHERS') : (t.incomeCategory || 'OTHERS'),
+          currency: t.currency || Auth.getDefaultCurrency(),
+          category: document.getElementById(`b-cat-${idx}`).value,
+          transactionKind: document.getElementById(`b-kind-${idx}`).value,
+          originalTransactionId: Number(document.getElementById(`b-original-${idx}`).value) || null,
+          subcategory: document.getElementById(`b-subcat-${idx}`).value.trim() || null,
+          recurring: !!t.recurring,
+          recurringPeriod: t.recurring ? (t.recurringPeriod || 'MONTHLY') : null,
           description: 'Imported from bank statement',
           createdAt: isoDate
         };
       });
-      await api.post('/create/bulk', payload);
+      await api.post('/upsert/create/bulk', payload);
       toast(`Imported ${payload.length} transactions`, 'success');
       onSuccess();
     }
@@ -521,6 +533,7 @@ async function loadTransactions(userId) {
           const isSplit = !!(t.groupName || t.groupId);
           const total = t.totalAmount != null ? Number(t.totalAmount) : null;
           const subParts = [];
+          if (transactionKindLabel(t)) subParts.push(esc(transactionKindLabel(t)));
           if (settlement) subParts.push(esc(settlementGroup(t) || 'Settlement'));
           else if (isSplit) subParts.push(`Your share${total != null ? ` of ${formatMoney(total, currency)}` : ''}`);
           else if (t.description) subParts.push(esc(humanizeSystemText(t.description)));
@@ -628,7 +641,7 @@ function renderMobileTransactions(items, currency, userId) {
       const title = settlement ? settlementTitle(t, userId) : humanizeNamesIn(t.name || 'Transaction');
       const sub = settlement
         ? esc(settlementGroup(t) || 'Settlement')
-        : `${categoryDisplayHtml(t, { dot: false })}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}`;
+        : `${categoryDisplayHtml(t, { dot: false })}${transactionKindLabel(t) ? ` · ${esc(transactionKindLabel(t))}` : ''}${shown.secondary ? ` · ${esc(shown.secondary)}` : ''}`;
       return `
         <div class="ledger-row ${settlement ? 'is-settlement' : ''}" role="button" tabindex="0" data-txn-id="${esc(String(t.id || ''))}">
           ${settlement
@@ -690,14 +703,20 @@ function renderPagination() {
   });
 }
 
-async function showModal(userId, existing, onDone) {
+async function showModal(userId, existing, onDone, originalExpense = null) {
+  const originals = new Map();
+  if (originalExpense) originals.set(String(originalExpense.id), originalExpense);
+  let originalPage = 0;
+  let originalQuery = '';
+  let originalLoaded = false;
+  let originalRequest = 0;
   const isEdit = !!(existing && existing.id);
   const hasReceipt = !!(existing?.receiptUrl);
 
   openModal(isEdit ? 'Edit transaction' : 'Add transaction', `
     <form id="txn-form">
       <div class="form-row">
-        <div class="form-group" style="flex:2"><label for="m-name">Name</label><input class="form-input" id="m-name" required value="${esc(existing?.name || '')}" placeholder="e.g. Grocery store"></div>
+        <div class="form-group" style="flex:2"><label for="m-name">Name</label><input class="form-input" id="m-name" required value="${escAttr(existing?.name || '')}" placeholder="e.g. Grocery store"></div>
         <div class="form-group" style="flex:1"><label for="m-amount">Amount</label><input class="form-input" id="m-amount" type="text" inputmode="decimal" required value="${existing?.amount || ''}" placeholder="0.00"></div>
       </div>
       <div class="form-row">
@@ -710,10 +729,27 @@ async function showModal(userId, existing, onDone) {
         <div class="form-group"><label for="m-currency">Currency</label><select class="form-select" id="m-currency" required>${currencyOptionHtml(existing?.currency || Auth.getDefaultCurrency())}</select></div>
         <div class="form-group"><label for="m-date">Date</label><input class="form-input" id="m-date" type="date" value="${existing?.createdAt ? existing.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]}"></div>
       </div>
+      <div class="form-group">
+        <label for="m-kind">Treatment</label>
+        <select class="form-select" id="m-kind">
+          ${[['STANDARD', 'Income / expense'], ['TRANSFER', 'Transfer / borrowing / repayment'], ['INVESTMENT', 'Savings / investment'], ['REFUND', 'Purchase refund'], ['REIMBURSEMENT', 'Expense reimbursement']].map(([value, label]) => `<option value="${value}" ${existing?.transactionKind === value ? 'selected' : ''}>${label}</option>`).join('')}
+        </select>
+        <p class="meta" id="m-kind-help" aria-live="polite"></p>
+      </div>
+      <div class="form-group" id="m-original-group" hidden>
+        <label for="m-original-search">Find the original expense</label>
+        <div class="form-row"><input class="form-input" id="m-original-search" placeholder="Search by name or note"><button type="button" class="btn btn-secondary" id="m-original-find">Search</button></div>
+        <label for="m-original">Original expense</label>
+        <select class="form-select" id="m-original"><option value="">Choose an expense…</option></select>
+        <button type="button" class="btn btn-ghost btn-sm" id="m-original-more">Load more expenses</button>
+        <p class="meta" id="m-original-status" aria-live="polite"></p>
+      </div>
       <div class="form-group" id="m-cat-group">
         <label for="m-cat">Category</label>
         <select class="form-select" id="m-cat" required></select>
+        <p class="meta" id="m-cat-help" aria-live="polite"></p>
       </div>
+      <div class="form-group"><label for="m-subcategory">Subcategory <span class="meta">(optional)</span></label><input class="form-input" id="m-subcategory" maxlength="80" value="${escAttr(existing?.subcategory || '')}" placeholder="e.g. Cleaning supplies, consulting, weekend gigs"><p class="meta">Your own label within the selected category.</p></div>
       <div class="form-group"><label for="m-desc">Note <span class="meta">(optional)</span></label><textarea class="form-textarea" id="m-desc" placeholder="Add a note…" style="min-height:64px">${esc(existing?.description || '')}</textarea></div>
       <div class="form-row" style="align-items:center;gap:var(--s4)">
         <div class="form-check">
@@ -792,6 +828,10 @@ async function showModal(userId, existing, onDone) {
         currency: document.getElementById('m-currency').value.toUpperCase(),
         description: document.getElementById('m-desc').value,
         category: document.getElementById('m-cat').value,
+        transactionKind: document.getElementById('m-kind').value,
+        originalTransactionId: ['REFUND', 'REIMBURSEMENT'].includes(document.getElementById('m-kind').value)
+          ? Number(document.getElementById('m-original').value) || null : null,
+        subcategory: document.getElementById('m-subcategory').value.trim() || null,
         recurring,
         recurringPeriod: recurring ? document.getElementById('m-recurring-period').value : null,
         createdAt: isoDate,
@@ -861,21 +901,107 @@ async function showModal(userId, existing, onDone) {
   const recGroup = document.getElementById('m-rec-period-group');
   recCheckbox.onchange = () => { recGroup.style.display = recCheckbox.checked ? 'block' : 'none'; };
 
+  const isRecovery = () => ['REFUND', 'REIMBURSEMENT'].includes(document.getElementById('m-kind').value);
+  const setCategoryHelp = () => {
+    document.getElementById('m-cat-help').textContent = CATEGORY_HELP[document.getElementById('m-cat').value] || '';
+  };
+  const selectOriginal = () => {
+    const original = originals.get(document.getElementById('m-original').value);
+    if (!original) return;
+    const cat = document.getElementById('m-cat');
+    cat.innerHTML = categoryOptions(SPENDING_CATS, txCategory(original));
+    document.getElementById('m-currency').value = original.currency;
+    document.getElementById('m-subcategory').value = original.subcategory || '';
+    setCategoryHelp();
+  };
+  const renderOriginals = (selected) => {
+    const select = document.getElementById('m-original');
+    select.innerHTML = '<option value="">Choose an expense…</option>' + [...originals.values()].map(t =>
+      `<option value="${escAttr(String(t.id))}">${esc(`${t.name} · ${formatMoney(t.amount, t.currency)} · ${formatDate(t.createdAt)}`)}</option>`).join('');
+    if (selected && originals.has(String(selected))) select.value = String(selected);
+    selectOriginal();
+  };
+  const loadOriginals = async (reset = false) => {
+    if (!isRecovery()) return;
+    const token = ++originalRequest;
+    const select = document.getElementById('m-original');
+    const selected = select.value || existing?.originalTransactionId;
+    if (reset) { originalPage = 0; originals.clear(); }
+    const status = document.getElementById('m-original-status');
+    status.textContent = 'Loading expenses…';
+    document.getElementById('m-original-more').disabled = true;
+    try {
+      const params = { userId, page: originalPage, size: 50 };
+      const result = originalQuery
+        ? await api.get('/upsert/search', { ...params, q: originalQuery })
+        : await api.get('/upsert/entries', { ...params, type: 'EXPENSE' });
+      if (token !== originalRequest || !select.isConnected) return;
+      for (const t of result.content || []) {
+        if (t.type === 'EXPENSE' && !t.groupId && !MOVEMENT_CATS.includes(txCategory(t))
+            && !['TRANSFER', 'INVESTMENT', 'REFUND', 'REIMBURSEMENT'].includes(t.transactionKind)) originals.set(String(t.id), t);
+      }
+      if (selected && !originals.has(String(selected))) {
+        const original = await api.get(`/upsert/entries/${selected}`, { userId });
+        if (token !== originalRequest || !select.isConnected) return;
+        originals.set(String(original.id), original);
+      }
+      renderOriginals(selected);
+      originalLoaded = true;
+      originalPage++;
+      document.getElementById('m-original-more').hidden = originalPage >= (result.totalPages || 1);
+      status.textContent = originals.size ? 'The category and currency follow the original expense.' : 'No eligible expenses found. Try another search.';
+    } catch (err) {
+      if (token === originalRequest && status.isConnected) status.textContent = err.message || 'Could not load expenses. Try again.';
+    } finally {
+      if (token === originalRequest && select.isConnected) document.getElementById('m-original-more').disabled = false;
+    }
+  };
   const updateCats = () => {
-    const type = document.getElementById('m-type').value;
-    const cats = type === 'INCOME' ? INCOME_CATS : EXPENSE_CATS;
-    const sel = existing?.type === type
-      ? (existing.expenseCategory || existing.incomeCategory || existing.category)
-      : null;
+    const kind = document.getElementById('m-kind').value;
+    const recovery = isRecovery();
+    const typeSelect = document.getElementById('m-type');
+    if (recovery) typeSelect.value = 'INCOME';
+    typeSelect.disabled = recovery;
+    const type = typeSelect.value;
+    const sel = existing?.type === type ? txCategory(existing) : null;
+    const cats = transactionCategories(type, kind, sel);
     const catSelect = document.getElementById('m-cat');
     if (catSelect.tomselect) catSelect.tomselect.destroy();
+    catSelect.disabled = recovery;
     catSelect.innerHTML = categoryOptions(cats, sel);
-    if (window.TomSelect && !catSelect.tomselect) {
-      new TomSelect(catSelect, { create: false, placeholder: 'Search category…', maxOptions: 100 });
+    if (window.TomSelect && !recovery) {
+      new TomSelect(catSelect, { create: false, placeholder: 'Search category…', maxOptions: 100, onChange: setCategoryHelp });
+    }
+    document.getElementById('m-original-group').hidden = !recovery;
+    document.getElementById('m-original').required = recovery;
+    document.getElementById('m-currency').disabled = recovery;
+    document.getElementById('m-subcategory').disabled = recovery;
+    recCheckbox.disabled = recovery;
+    if (recovery) { recCheckbox.checked = false; recGroup.style.display = 'none'; }
+    document.getElementById('m-kind-help').textContent = recovery
+      ? 'An incoming payment that reduces spending in the original category; it does not count as earnings.'
+      : ['TRANSFER', 'INVESTMENT'].includes(kind)
+        ? 'Excluded from earned income and spending. Choose Income for incoming money or Expense for outgoing money.'
+        : 'Counts toward earned income or spending. Record credit card repayments and money moved to savings using the matching treatment.';
+    setCategoryHelp();
+    if (recovery) {
+      renderOriginals(document.getElementById('m-original').value || existing?.originalTransactionId);
+      if (!originalLoaded) loadOriginals();
     }
   };
   updateCats();
   document.getElementById('m-type').onchange = updateCats;
+  document.getElementById('m-kind').onchange = updateCats;
+  document.getElementById('m-cat').onchange = setCategoryHelp;
+  document.getElementById('m-original').onchange = selectOriginal;
+  document.getElementById('m-original-more').onclick = () => loadOriginals();
+  document.getElementById('m-original-find').onclick = () => {
+    originalQuery = document.getElementById('m-original-search').value.trim();
+    loadOriginals(true);
+  };
+  document.getElementById('m-original-search').onkeydown = e => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('m-original-find').click(); }
+  };
 }
 
 async function editTransaction(userId, id) {
@@ -933,11 +1059,13 @@ async function openTransactionDetailsModal(t, userId) {
     </div>
 
     <div class="modal-detail-panel">
-      <div class="modal-detail-row"><span class="detail-label">Type</span><span class="detail-value">${isIncome ? 'Income' : 'Expense'}</span></div>
+      <div class="modal-detail-row"><span class="detail-label">Type</span><span class="detail-value">${esc(transactionKindLabel(t) || (isIncome ? 'Income' : 'Expense'))}</span></div>
       <div class="modal-detail-row">
         <span class="detail-label">Category</span>
         <span class="detail-value" id="m-detail-cat">${isSettlementRow(t) ? esc(formatCategory(cat)) : categoryButtonHtml(t)}</span>
       </div>
+      ${t.subcategory ? `<div class="modal-detail-row"><span class="detail-label">Subcategory</span><span class="detail-value">${esc(t.subcategory)}</span></div>` : ''}
+      ${t.originalTransactionId ? `<div class="modal-detail-row"><span class="detail-label">Original expense</span><span class="detail-value">#${esc(String(t.originalTransactionId))}</span></div>` : ''}
       <div class="modal-detail-row"><span class="detail-label">Currency</span><span class="detail-value">${esc(currency)}</span></div>
       ${t.recurring ? `<div class="modal-detail-row"><span class="detail-label">Recurring</span><span class="detail-value">${esc(titleCase(t.recurringPeriod || 'Yes'))}</span></div>` : ''}
       ${t.description ? `<div class="modal-detail-row detail-block"><span class="detail-label">Note</span><span class="detail-value">${esc(humanizeSystemText(t.description))}</span></div>` : ''}
@@ -953,12 +1081,23 @@ async function openTransactionDetailsModal(t, userId) {
         </div>` : ''}
     </div>
 
-    <div style="display:flex;gap:10px;margin-top:var(--s4)">
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:var(--s4)">
       <button class="btn btn-secondary" id="m-edit-btn" style="flex:1">${icon('edit', 'sm')} Edit</button>
+      ${!isIncome && !MOVEMENT_CATS.includes(cat) && !['TRANSFER', 'INVESTMENT'].includes(t.transactionKind) && !t.groupId
+        ? '<button class="btn btn-secondary" id="m-refund-btn">Record refund</button><button class="btn btn-secondary" id="m-reimburse-btn">Reimbursement</button>' : ''}
       <button class="btn btn-danger" id="m-del-btn" style="flex:1">${icon('trash', 'sm')} Delete</button>
     </div>
   `);
 
+  const recordRecovery = kind => {
+    document.querySelector('.modal-overlay').click();
+    const draft = { name: `${kind === 'REFUND' ? 'Refund' : 'Reimbursement'}: ${t.name}`.slice(0, 100),
+      type: 'INCOME', transactionKind: kind, originalTransactionId: t.id,
+      category: cat, currency: t.currency, subcategory: t.subcategory };
+    showModal(userId, draft, () => loadTransactions(userId), t);
+  };
+  document.getElementById('m-refund-btn')?.addEventListener('click', () => recordRecovery('REFUND'));
+  document.getElementById('m-reimburse-btn')?.addEventListener('click', () => recordRecovery('REIMBURSEMENT'));
   document.getElementById('m-edit-btn').onclick = () => {
     document.querySelector('.modal-overlay').click();
     setTimeout(() => editTransaction(userId, t.id), 50);

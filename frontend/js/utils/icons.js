@@ -111,6 +111,12 @@ export function icon(name, size = 'md', label = '') {
 
 /** A line icon for a spending/income category. Decoration only. */
 const CATEGORY_ICON_MAP = {
+  COMMISSION: 'wallet', CAPITAL_GAINS: 'trending-up',
+  FURNITURE: 'home', HOUSEHOLD_SUPPLIES: 'home', DOMESTIC_HELP: 'home', SOCIETY_MAINTENANCE: 'home',
+  BANK_CHARGES: 'wallet', CARD_FEES: 'wallet', LOAN_INTEREST: 'wallet',
+  SOFTWARE_SUBSCRIPTIONS: 'monitor', CLOUD_STORAGE: 'monitor', PROFESSIONAL_MEMBERSHIPS: 'book',
+  OWN_ACCOUNT_TRANSFER: 'arrow-right', BORROWING: 'wallet', LENDING: 'wallet',
+  LOAN_PRINCIPAL: 'wallet', INVESTMENT_WITHDRAWAL: 'trending-up',
   RENT: 'home', HOME_LOAN_EMI: 'home', HOME_MAINTENANCE: 'home', PROPERTY_TAX: 'home',
   ELECTRICITY: 'zap', WATER: 'zap', GAS: 'zap', INTERNET: 'wifi', MOBILE_PHONE: 'phone',
   OTT_SUBSCRIPTIONS: 'subscriptions',

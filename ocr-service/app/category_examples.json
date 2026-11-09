@@ -178,5 +178,95 @@
     "id": "rent-1",
     "category": "RENT",
     "text": "rent lease apartment house monthly landlord"
+  },
+  {
+    "id": "furniture-1",
+    "category": "FURNITURE",
+    "text": "sofa wardrobe bed dining table chairs furniture"
+  },
+  {
+    "id": "household_supplies-1",
+    "category": "HOUSEHOLD_SUPPLIES",
+    "text": "household cleaning supplies detergent dishwashing liquid mop broom"
+  },
+  {
+    "id": "domestic_help-1",
+    "category": "DOMESTIC_HELP",
+    "text": "housekeeping domestic help cleaning service maid wages"
+  },
+  {
+    "id": "society_maintenance-1",
+    "category": "SOCIETY_MAINTENANCE",
+    "text": "housing society maintenance apartment association charges HOA dues"
+  },
+  {
+    "id": "bank_charges-1",
+    "category": "BANK_CHARGES",
+    "text": "bank charges account maintenance fee wire transfer fee overdraft"
+  },
+  {
+    "id": "card_fees-1",
+    "category": "CARD_FEES",
+    "text": "credit card annual fee renewal joining fee"
+  },
+  {
+    "id": "loan_interest-1",
+    "category": "LOAN_INTEREST",
+    "text": "loan interest charged finance charge"
+  },
+  {
+    "id": "cloud_storage-1",
+    "category": "CLOUD_STORAGE",
+    "text": "cloud storage backup iCloud Google One Dropbox"
+  },
+  {
+    "id": "software_subscriptions-1",
+    "category": "SOFTWARE_SUBSCRIPTIONS",
+    "text": "software subscription Adobe Microsoft 365 Github Copilot"
+  },
+  {
+    "id": "professional_memberships-1",
+    "category": "PROFESSIONAL_MEMBERSHIPS",
+    "text": "professional association membership annual dues"
+  },
+  {
+    "id": "credit_card_payment-1",
+    "category": "CREDIT_CARD_PAYMENT",
+    "text": "credit card bill payment repayment outstanding balance"
+  },
+  {
+    "id": "own_account_transfer-1",
+    "category": "OWN_ACCOUNT_TRANSFER",
+    "text": "transfer between own accounts self account transfer"
+  },
+  {
+    "id": "borrowing-1",
+    "category": "BORROWING",
+    "text": "loan disbursement proceeds borrowed money"
+  },
+  {
+    "id": "lending-1",
+    "category": "LENDING",
+    "text": "money lent loan to friend family"
+  },
+  {
+    "id": "loan_principal-1",
+    "category": "LOAN_PRINCIPAL",
+    "text": "loan principal repayment"
+  },
+  {
+    "id": "investment_withdrawal-1",
+    "category": "INVESTMENT_WITHDRAWAL",
+    "text": "investment withdrawal returned capital redemption principal"
+  },
+  {
+    "id": "fixed_deposit-1",
+    "category": "FIXED_DEPOSIT",
+    "text": "fixed deposit placement opening contribution"
+  },
+  {
+    "id": "emergency_fund-1",
+    "category": "EMERGENCY_FUND",
+    "text": "emergency fund deposit contribution transfer"
   }
 ]

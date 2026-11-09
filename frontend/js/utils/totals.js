@@ -2,8 +2,8 @@
    totals.js — One source of truth for Earned / Spent / Net.
    Every screen that shows a total asks this module, so the Dashboard,
    Analytics and Insights copy cannot drift apart. The backend summary
-   already excludes settlements (payments between group members are not income
-   or spending), so the rule lives in one place.
+   excludes money movements and subtracts linked expense recoveries, so every
+   screen uses the same reporting policy.
    ═══════════════════════════════════════════════════════════════════════════ */
 import { api, Auth } from './api.js';
 

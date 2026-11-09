@@ -93,4 +93,20 @@ describe('renderAnalytics', () => {
       expect(kpis).toContain('All time');
     });
   });
+  it('shows recoveries as negative category totals', async () => {
+    mockAnalyticsApis();
+    const fallback = global.fetch.getMockImplementation();
+    global.fetch.mockImplementation(url => {
+      const u = new URL(String(url));
+      if (u.pathname.endsWith('/analytics/category-pie-chart') && u.searchParams.get('transactionFilter') === 'EXPENSE') {
+        return Promise.resolve(jsonResponse({ labels: ['GROCERIES'], datasets: [{ data: [-50] }] }));
+      }
+      return fallback(url);
+    });
+    await renderAnalytics(container);
+    await vi.waitFor(() => {
+      expect(container.querySelector('.barlist-row[data-category="GROCERIES"]')?.textContent).toContain('Recovered');
+      expect(container.querySelector('.barlist-row[data-category="GROCERIES"]')?.textContent).toContain('−₹50');
+    });
+  });
 });

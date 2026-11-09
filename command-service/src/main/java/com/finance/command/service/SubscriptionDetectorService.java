@@ -144,7 +144,7 @@ public class SubscriptionDetectorService {
      */
     void processRecurringTransactions(List<TransactionEntry> recurringEntries) {
         for (TransactionEntry entry : recurringEntries) {
-            if (entry.getType() != TransactionType.EXPENSE) continue;
+            if (entry.getType() != TransactionType.EXPENSE || !entry.isReportable()) continue;
             RecurringPeriod period = entry.getRecurringPeriod() != null
                     ? entry.getRecurringPeriod() : RecurringPeriod.MONTHLY;
 
@@ -164,6 +164,7 @@ public class SubscriptionDetectorService {
     void detectPatternBasedSubscriptions(UUID userId, List<TransactionEntry> transactions) {
         // Group by name (case-insensitive)
         Map<String, List<TransactionEntry>> byName = transactions.stream()
+                .filter(TransactionEntry::isReportable)
                 .collect(Collectors.groupingBy(t -> t.getName().toLowerCase()));
 
         for (Map.Entry<String, List<TransactionEntry>> entry : byName.entrySet()) {

@@ -4,6 +4,8 @@ public enum Category {
 
     // ── Income ────────────────────────────────────────────────────────────────
     SALARY,
+    COMMISSION,
+    CAPITAL_GAINS,
     FREELANCE,
     BUSINESS,
     INVESTMENTS,        // renamed from INVESTMENT for consistency
@@ -22,6 +24,10 @@ public enum Category {
     // ── Housing & Utilities ───────────────────────────────────────────────────
     RENT,               // split from HOUSING
     HOME_LOAN_EMI,
+    FURNITURE,
+    HOUSEHOLD_SUPPLIES,
+    DOMESTIC_HELP,
+    SOCIETY_MAINTENANCE,
     HOME_MAINTENANCE,   // repairs, painting, plumbing
     PROPERTY_TAX,
     ELECTRICITY,        // split from UTILITIES
@@ -75,6 +81,12 @@ public enum Category {
     HOTEL_AND_STAYS,
 
     // ── Finance & Insurance ───────────────────────────────────────────────────
+    BANK_CHARGES,
+    CARD_FEES,
+    LOAN_INTEREST,
+    SOFTWARE_SUBSCRIPTIONS,
+    CLOUD_STORAGE,
+    PROFESSIONAL_MEMBERSHIPS,
     LIFE_INSURANCE,     // split from INSURANCE
     VEHICLE_INSURANCE,
     CREDIT_CARD_PAYMENT,
@@ -94,5 +106,12 @@ public enum Category {
     ELDER_CARE,
     GOAL,
     SETTLEMENT,
-    OTHERS
+    OTHERS,
+
+    // Money movements: excluded from earned income and consumption spending.
+    OWN_ACCOUNT_TRANSFER,
+    BORROWING,
+    LENDING,
+    LOAN_PRINCIPAL,
+    INVESTMENT_WITHDRAWAL
 }

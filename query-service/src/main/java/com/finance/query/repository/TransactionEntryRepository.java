@@ -24,6 +24,12 @@ import java.util.UUID;
 
 @Repository
 public interface TransactionEntryRepository extends JpaRepository<TransactionEntry, Long> {
+    String REPORTING_ENTRIES_SQL = "(SELECT id, user_id, created_at, deleted_at, category, "
+            + com.finance.query.model.AccountingRules.TYPE_SQL + " AS type, "
+            + com.finance.query.model.AccountingRules.AMOUNT_SQL + " AS amount "
+            + "FROM finance.transaction_entries WHERE "
+            + com.finance.query.model.AccountingRules.REPORTABLE_SQL + ")";
+
 
     // ── Basic listing ─────────────────────────────────────────────────────────
 
@@ -108,11 +114,12 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
     // ── Budget utilization ────────────────────────────────────────────────────
 
     @Query("""
-            SELECT COALESCE(SUM(t.amount), 0)
+            SELECT COALESCE(SUM(t.reportingAmount), 0)
             FROM TransactionEntry t
             WHERE t.userId = :userId
               AND t.deletedAt IS NULL
-              AND t.type = com.finance.query.model.TransactionType.EXPENSE
+              AND t.reportable = true
+              AND t.reportingType = com.finance.query.model.TransactionType.EXPENSE
               AND t.category = :category
               AND t.createdAt BETWEEN :start AND :end
             """)
@@ -123,24 +130,22 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             @Param("end") LocalDateTime end);
 
     // ── Analytics Queries ──────────────────────────────────────────────────────
-    // SETTLEMENT entries are excluded from every aggregate below: a settlement
-    // moves money between people, so it is neither income nor spending. The
-    // same exclusion is applied by QueryTransactionEntryService.getSummary so
-    // the dashboard and the analytics page report identical numbers.
+    // Movement entries are excluded and recoveries reduce spending in every
+    // aggregate, matching the dashboard summary and category budgets.
 
     @Query("""
-            SELECT COALESCE(SUM(t.amount), 0)
+            SELECT COALESCE(SUM(t.reportingAmount), 0)
             FROM TransactionEntry t
-            WHERE t.userId = :userId AND t.type = :type AND t.deletedAt IS NULL
-              AND t.category <> com.finance.query.model.Category.SETTLEMENT
+            WHERE t.userId = :userId AND t.reportingType = :type AND t.deletedAt IS NULL
+              AND t.reportable = true
             """)
     BigDecimal getTotalAmountByType(@Param("userId") UUID userId, @Param("type") TransactionType type);
 
     @Query("""
-            SELECT COALESCE(SUM(t.amount), 0)
+            SELECT COALESCE(SUM(t.reportingAmount), 0)
             FROM TransactionEntry t
-            WHERE t.userId = :userId AND t.type = :type AND t.deletedAt IS NULL
-              AND t.category <> com.finance.query.model.Category.SETTLEMENT
+            WHERE t.userId = :userId AND t.reportingType = :type AND t.deletedAt IS NULL
+              AND t.reportable = true
               AND t.createdAt BETWEEN :start AND :end
             """)
     BigDecimal getTotalAmountByTypeAndDateRange(
@@ -149,13 +154,13 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
 
     @Query("""
             SELECT t.category AS category,
-                   SUM(t.amount) AS totalAmount,
+                   SUM(t.reportingAmount) AS totalAmount,
                    COUNT(t) AS transactionCount
             FROM TransactionEntry t
             WHERE t.userId = :userId
               AND t.deletedAt IS NULL
-              AND t.type = com.finance.query.model.TransactionType.EXPENSE
-              AND t.category <> com.finance.query.model.Category.SETTLEMENT
+              AND t.reportingType = com.finance.query.model.TransactionType.EXPENSE
+              AND t.reportable = true
             GROUP BY t.category
             ORDER BY totalAmount DESC
             """)
@@ -163,13 +168,13 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
 
     @Query("""
             SELECT t.category AS category,
-                   SUM(t.amount) AS totalAmount,
+                   SUM(t.reportingAmount) AS totalAmount,
                    COUNT(t) AS transactionCount
             FROM TransactionEntry t
             WHERE t.userId = :userId
               AND t.deletedAt IS NULL
-              AND t.type = com.finance.query.model.TransactionType.EXPENSE
-              AND t.category <> com.finance.query.model.Category.SETTLEMENT
+              AND t.reportingType = com.finance.query.model.TransactionType.EXPENSE
+              AND t.reportable = true
               AND t.createdAt BETWEEN :start AND :end
             GROUP BY t.category
             ORDER BY totalAmount DESC
@@ -180,11 +185,11 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
 
     @Query("""
             SELECT t.category AS category,
-                   SUM(t.amount) AS totalAmount,
+                   SUM(t.reportingAmount) AS totalAmount,
                    COUNT(t) AS transactionCount
             FROM TransactionEntry t
-            WHERE t.userId = :userId AND t.type = :type AND t.deletedAt IS NULL
-              AND t.category <> com.finance.query.model.Category.SETTLEMENT
+            WHERE t.userId = :userId AND t.reportingType = :type AND t.deletedAt IS NULL
+              AND t.reportable = true
             GROUP BY t.category
             ORDER BY totalAmount DESC
             """)
@@ -193,11 +198,11 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
 
     @Query("""
             SELECT t.category AS category,
-                   SUM(t.amount) AS totalAmount,
+                   SUM(t.reportingAmount) AS totalAmount,
                    COUNT(t) AS transactionCount
             FROM TransactionEntry t
             WHERE t.userId = :userId AND t.deletedAt IS NULL
-              AND t.category <> com.finance.query.model.Category.SETTLEMENT
+              AND t.reportable = true
               AND t.createdAt BETWEEN :start AND :end
             GROUP BY t.category
             ORDER BY totalAmount DESC
@@ -208,11 +213,11 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
 
     @Query("""
             SELECT t.category AS category,
-                   SUM(t.amount) AS totalAmount,
+                   SUM(t.reportingAmount) AS totalAmount,
                    COUNT(t) AS transactionCount
             FROM TransactionEntry t
-            WHERE t.userId = :userId AND t.type = :type AND t.deletedAt IS NULL
-              AND t.category <> com.finance.query.model.Category.SETTLEMENT
+            WHERE t.userId = :userId AND t.reportingType = :type AND t.deletedAt IS NULL
+              AND t.reportable = true
               AND t.createdAt BETWEEN :start AND :end
             GROUP BY t.category
             ORDER BY totalAmount DESC
@@ -226,7 +231,8 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                    SUM(CASE WHEN t.type = 'INCOME'  THEN t.amount ELSE 0 END) AS incomeAmount,
                    SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount ELSE 0 END) AS expenseAmount,
                    COUNT(*) AS transactionCount
-            FROM transaction_entries t
+            FROM """ + REPORTING_ENTRIES_SQL + """
+             t
             WHERE t.user_id = :userId AND t.deleted_at IS NULL
               AND t.category <> 'SETTLEMENT'
               AND (CAST(:start AS timestamp) IS NULL OR t.created_at >= CAST(:start AS timestamp))
@@ -250,7 +256,8 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                 SELECT t.type,
                        t.amount,
                        t.created_at + (COALESCE(CAST(:tzOffset AS integer), 0) * INTERVAL '1 minute') AS local_time
-                FROM transaction_entries t
+                FROM """ + REPORTING_ENTRIES_SQL + """
+             t
                 WHERE t.user_id = :userId AND t.deleted_at IS NULL
                   AND t.category <> 'SETTLEMENT'
                   AND (CAST(:start AS timestamp) IS NULL OR t.created_at >= CAST(:start AS timestamp))
@@ -274,7 +281,8 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
                 SELECT t.type,
                        t.amount,
                        t.created_at + (COALESCE(CAST(:tzOffset AS integer), 0) * INTERVAL '1 minute') AS local_time
-                FROM transaction_entries t
+                FROM """ + REPORTING_ENTRIES_SQL + """
+             t
                 WHERE t.user_id = :userId AND t.deleted_at IS NULL
                   AND t.category <> 'SETTLEMENT'
                   AND (CAST(:start AS timestamp) IS NULL OR t.created_at >= CAST(:start AS timestamp))
@@ -289,7 +297,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             @Param("end") LocalDateTime end,
             @Param("tzOffset") Integer tzOffsetMinutes);
 
-    @Query(value = "SELECT COUNT(t.id) FROM transaction_entries t WHERE t.user_id = ?1 AND t.deleted_at IS NULL",
+    @Query(value = "SELECT COUNT(t.id) FROM " + REPORTING_ENTRIES_SQL + " t WHERE t.user_id = ?1 AND t.deleted_at IS NULL",
             nativeQuery = true)
     long countByUserId(UUID userId);
 
@@ -298,6 +306,7 @@ public interface TransactionEntryRepository extends JpaRepository<TransactionEnt
             FROM TransactionEntry t
             WHERE t.userId = :userId AND t.deletedAt IS NULL
               AND t.createdAt BETWEEN :start AND :end
+              AND t.reportable = true
             """)
     long countByUserIdAndDateRange(@Param("userId") UUID userId,
                                    @Param("start") LocalDateTime start,

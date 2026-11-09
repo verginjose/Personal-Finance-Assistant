@@ -136,4 +136,41 @@ class TransactionEntryRepositorySettlementTest {
         assertThat(yearly.get(0).getExpenseAmount()).isEqualByComparingTo("200.00");
         assertThat(yearly.get(0).getTransactionCount()).isEqualTo(2L);
     }
+    @Test
+    void movementsAndRecoveriesHaveIdenticalTotalsAcrossEveryAggregate() {
+        repository.save(entry(TransactionType.EXPENSE, Category.CREDIT_CARD_PAYMENT, "200.00"));
+        repository.save(entry(TransactionType.EXPENSE, Category.MUTUAL_FUNDS_SIP, "500.00"));
+        TransactionEntry transfer = entry(TransactionType.INCOME, Category.OTHER_INCOME, "900.00");
+        transfer.setTransactionKind(com.finance.query.model.TransactionKind.TRANSFER);
+        repository.save(transfer);
+        TransactionEntry refund = entry(TransactionType.INCOME, Category.GROCERIES, "50.00");
+        refund.setTransactionKind(com.finance.query.model.TransactionKind.REFUND);
+        repository.save(refund);
+        TransactionEntry reimbursement = entry(TransactionType.INCOME, Category.GROCERIES, "20.00");
+        reimbursement.setTransactionKind(com.finance.query.model.TransactionKind.REIMBURSEMENT);
+        repository.saveAndFlush(reimbursement);
+
+        assertThat(repository.getTotalAmountByType(USER, TransactionType.INCOME)).isEqualByComparingTo("1000");
+        assertThat(repository.getTotalAmountByType(USER, TransactionType.EXPENSE)).isEqualByComparingTo("130");
+        assertThat(repository.getTotalAmountByTypeAndDateRange(USER, TransactionType.EXPENSE, START, END)).isEqualByComparingTo("130");
+        assertThat(repository.sumExpensesByCategory(USER, Category.GROCERIES, START, END)).isEqualByComparingTo("130");
+        assertThat(repository.getAllCategoryAnalytics(USER)).singleElement().satisfies(r -> {
+            assertThat(r.getCategory()).isEqualTo(Category.GROCERIES);
+            assertThat(r.getTotalAmount()).isEqualByComparingTo("130");
+        });
+        assertNoSettlement(repository.getExpenseCategoryAnalyticsByDateRange(USER, START, END), "130");
+        assertNoSettlement(repository.getCategoryAnalyticsByType(USER, TransactionType.EXPENSE), "130");
+        assertNoSettlement(repository.getCategoryAnalyticsByTypeAndDateRange(USER, TransactionType.EXPENSE, START, END), "130");
+        assertThat(repository.getDailyAnalytics(USER, START, END, 330)).singleElement().satisfies(r -> {
+            assertThat(r.getIncomeAmount()).isEqualByComparingTo("1000");
+            assertThat(r.getExpenseAmount()).isEqualByComparingTo("130");
+            assertThat(r.getTransactionCount()).isEqualTo(4);
+        });
+        assertThat(repository.getMonthlyAnalytics(USER, START, END, 330)).singleElement().satisfies(r ->
+                assertThat(r.getExpenseAmount()).isEqualByComparingTo("130"));
+        assertThat(repository.getYearlyAnalytics(USER, START, END, 330)).singleElement().satisfies(r ->
+                assertThat(r.getExpenseAmount()).isEqualByComparingTo("130"));
+        assertThat(repository.countByUserId(USER)).isEqualTo(4);
+        assertThat(repository.countByUserIdAndDateRange(USER, START, END)).isEqualTo(4);
+    }
 }

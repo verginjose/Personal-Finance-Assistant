@@ -139,7 +139,7 @@ public class QueryTransactionEntryService {
 
     @Transactional(readOnly = true)
     @Cacheable(value = "transactions",
-            key = "#userId + ':summary:' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX')",
+            key = "#userId + ':summary-v2:' + (#startDate != null ? #startDate : 'MIN') + ':' + (#endDate != null ? #endDate : 'MAX')",
             sync = true)
     public Map<String, Object> getSummary(UUID userId, LocalDate startDate, LocalDate endDate) {
         LocalDateTime start = startDate != null ? startDate.atStartOfDay() : null;
@@ -149,15 +149,14 @@ public class QueryTransactionEntryService {
                 .stream()
                 .filter(e -> start == null || !e.getCreatedAt().isBefore(start))
                 .filter(e -> end == null || !e.getCreatedAt().isAfter(end))
-                // A settlement moves money between people; it is neither income
-                // nor spending, so it must not inflate either total.
-                .filter(e -> e.getCategory() != Category.SETTLEMENT)
+                // Money movements are excluded; recoveries reduce spending.
+                .filter(TransactionEntry::isReportable)
                 .toList();
 
-        BigDecimal income  = all.stream().filter(e -> e.getType() == TransactionType.INCOME)
-                .map(TransactionEntry::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal expense = all.stream().filter(e -> e.getType() == TransactionType.EXPENSE)
-                .map(TransactionEntry::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal income  = all.stream().filter(e -> e.getReportingType() == TransactionType.INCOME)
+                .map(TransactionEntry::getReportingAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal expense = all.stream().filter(e -> e.getReportingType() == TransactionType.EXPENSE)
+                .map(TransactionEntry::getReportingAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("totalIncome",  income);
         summary.put("totalExpense", expense);
@@ -181,7 +180,7 @@ public class QueryTransactionEntryService {
     public String exportCsv(UUID userId) {
         List<TransactionEntry> all = repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(userId);
         StringBuilder csv = new StringBuilder();
-        csv.append("id,name,amount,type,expenseCategory,incomeCategory,currency,description,recurring,recurringPeriod,createdAt\n");
+        csv.append("id,name,amount,type,category,currency,description,recurring,recurringPeriod,createdAt,transactionKind,originalTransactionId,subcategory\n");
         for (TransactionEntry e : all) {
             csv.append(e.getId()).append(',')
                .append(escapeCsv(e.getName())).append(',')
@@ -192,7 +191,10 @@ public class QueryTransactionEntryService {
                .append(escapeCsv(e.getDescription())).append(',')
                .append(e.isRecurring()).append(',')
                .append(e.getRecurringPeriod() != null ? e.getRecurringPeriod() : "").append(',')
-               .append(e.getCreatedAt()).append('\n');
+               .append(e.getCreatedAt()).append(',')
+               .append(e.getTransactionKind() != null ? e.getTransactionKind() : "STANDARD").append(',')
+               .append(e.getOriginalTransactionId() != null ? e.getOriginalTransactionId() : "").append(',')
+               .append(escapeCsv(e.getSubcategory())).append('\n');
         }
         return csv.toString();
     }
@@ -206,9 +208,13 @@ public class QueryTransactionEntryService {
     }
 
     private CreateEntryResponse convertToResponse(TransactionEntry entry) {
-        return new CreateEntryResponse(
+        CreateEntryResponse response = new CreateEntryResponse(
                 entry.getId(), entry.getUserId(), entry.getName(), entry.getAmount(),
                 entry.getType(), entry.getCategory(), entry.getCurrency(), entry.getDescription(),
                 entry.isRecurring(), entry.getRecurringPeriod(), entry.getCreatedAt(), entry.getUpdatedAt(), entry.getReceiptUrl(), null);
+        response.setTransactionKind(entry.getTransactionKind());
+        response.setOriginalTransactionId(entry.getOriginalTransactionId());
+        response.setSubcategory(entry.getSubcategory());
+        return response;
     }
 }

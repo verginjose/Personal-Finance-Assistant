@@ -1,6 +1,7 @@
 """Shared deterministic receipt extraction; no network or model calls."""
 import datetime as dt
 import re
+from accounting import MOVEMENT_CATEGORIES, INVESTMENT_CATEGORIES
 
 # ── Vendor / category knowledge ──────────────────────────────────────────────
 # Checked against the first lines of the receipt; first match wins.
@@ -37,6 +38,24 @@ BRANDS = [
 
 # First match wins. Patterns are applied to vendor + receipt text, lowercased.
 CATEGORY_RULES = [
+    ("FURNITURE", r"\bfurniture\b|\bsofa\b|\bwardrobe\b|\bdining\s+table\b|\bikea\b"),
+    ("HOUSEHOLD_SUPPLIES", r"household\s+supplies|cleaning\s+supplies|laundry\s+detergent|dishwashing\s+liquid"),
+    ("DOMESTIC_HELP", r"domestic\s+help|housekeep(?:ing|er)|maid\s+(?:salary|service)|cleaning\s+service"),
+    ("SOCIETY_MAINTENANCE", r"society\s+(?:maintenance|charges)|apartment\s+maintenance|housing\s+association|hoa\s+dues"),
+    ("BANK_CHARGES", r"bank\s+(?:charges?|fees?)|account\s+maintenance\s+fee|overdraft\s+fee|wire\s+transfer\s+fee"),
+    ("CARD_FEES", r"card\s+(?:annual|joining|renewal)\s+fee|credit\s+card\s+fee"),
+    ("LOAN_INTEREST", r"loan\s+interest|interest\s+(?:charged|on\s+loan)|finance\s+charge"),
+    ("CLOUD_STORAGE", r"cloud\s+storage|icloud\s*(?:plus|\+|storage)|google\s+one|dropbox|onedrive\s+storage"),
+    ("SOFTWARE_SUBSCRIPTIONS", r"software\s+subscription|adobe|microsoft\s*365|office\s*365|github\s+(?:pro|copilot)|notion\s+(?:plus|subscription)"),
+    ("PROFESSIONAL_MEMBERSHIPS", r"professional\s+(?:membership|association)|membership\s+dues|bar\s+association"),
+    ("CREDIT_CARD_PAYMENT", r"credit\s+card\s+(?:bill\s+)?(?:payment|repayment)|card\s+bill\s+payment"),
+    ("OWN_ACCOUNT_TRANSFER", r"(?:own|self)\s+(?:account\s+)?transfer|transfer\s+between\s+(?:my|own)\s+accounts"),
+    ("BORROWING", r"loan\s+(?:disbursal|disbursement|proceeds)|borrowed\s+(?:money|funds)"),
+    ("LENDING", r"loan\s+to\s+(?:friend|family)|money\s+lent"),
+    ("LOAN_PRINCIPAL", r"loan\s+principal|principal\s+repayment"),
+    ("INVESTMENT_WITHDRAWAL", r"investment\s+withdrawal|returned\s+capital|redemption\s+of\s+principal"),
+    ("FIXED_DEPOSIT", r"fixed\s+deposit\s+(?:opening|contribution|placement)|fd\s+placement"),
+    ("EMERGENCY_FUND", r"emergency\s+fund\s+(?:contribution|transfer|deposit)"),
     ("OTT_SUBSCRIPTIONS", r"netflix|spotify|hotstar|prime\s+video|disney\+|hulu|"
                           r"youtube\s+premium|apple\s+music|sonyliv|zee5"),
     ("FOOD_DELIVERY", r"swiggy|zomato|doordash|door\s+dash|uber\s*eats|grubhub|"
@@ -128,9 +147,11 @@ BUSINESS_RE = re.compile(
     r"kitchen|bar\b|house|hotel|market|store|cuisine|food|teriyaki|buffet|"
     r"steakhouse|bakery|shop|lounge|pub\b|bar\s+&|eatery", re.I)
 
-INCOME_RE = re.compile(r"salary|payroll|payslip|refund|reimbursement|cashback|"
+INCOME_RE = re.compile(r"salary|payroll|payslip|refund|reimbursement|credit\s+note|expense\s+repaid|cashback|"
                        r"interest\s+credit|dividend|payment\s+received|"
-                       r"amount\s+credited|credited\s+to", re.I)
+                       r"amount\s+credited|credited\s+to|commission\s+(?:earned|credit|received)|"
+                       r"capital\s+gains?|bonus\s+(?:paid|received|credit)|pension\s+credit|"
+                       r"loan\s+(?:disbursal|disbursement|proceeds)|investment\s+withdrawal", re.I)
 RECURRING_RE = re.compile(r"netflix|spotify|hotstar|prime\s+video|disney\+|hulu|"
                           r"subscription|membership|internet\s+bill|"
                           r"insurance\s+premium|monthly\s+plan|annual\s+plan|"
@@ -630,14 +651,23 @@ def _head_text(text, lines=15):
 def classify(text, vendor, amount, items=None):
     haystack = " ".join(filter(None, [vendor, _head_text(text),
                                       " ".join(items or [])]))
+    # Policy footers describe a merchant's terms, not money received.
+    haystack = re.sub(r"\b(?:no\s+refunds?|refund(?:s)?\s+(?:policy|within|available)|refund\s*(?:/|and)\s*exchange\s+policy)\b", "", haystack, flags=re.I)
     tx_type = "Income" if INCOME_RE.search(haystack) else "Expense"
+    if re.search(r"\bmaid\s+salary\b", haystack, re.I) and not re.search(r"refund|reimbursement|credited", haystack, re.I):
+        tx_type = "Expense"
     if amount is not None and amount < 0:
         tx_type = "Income"
 
     if tx_type == "Income":
         low = haystack.lower()
         income = "OTHER_INCOME"
-        for name, pattern in (("SALARY", r"salary|payroll|payslip"),
+        for name, pattern in (("COMMISSION", r"commission"),
+                              ("CAPITAL_GAINS", r"capital\s+gains?"),
+                              ("BONUS", r"bonus"),
+                              ("PENSION", r"pension"),
+                              ("SIDE_HUSTLE", r"gig\s+work|side\s+hustle|part[- ]time"),
+                              ("SALARY", r"salary|payroll|payslip"),
                               ("FREELANCE", r"freelance"),
                               ("BUSINESS", r"business"),
                               ("DIVIDENDS", r"dividend"),
@@ -651,6 +681,10 @@ def classify(text, vendor, amount, items=None):
                 break
         return tx_type, None, income
 
+    return tx_type, classify_expense(haystack), None
+
+
+def classify_expense(haystack):
     category = "OTHERS"
     for name, pattern in CATEGORY_RULES:
         if pattern.search(haystack):
@@ -661,7 +695,7 @@ def classify(text, vendor, amount, items=None):
     if category == "OTHERS" and (FOOD_ITEM_RE.search(haystack)
                                  or FOOD_SUBSTRING_RE.search(haystack)):
         category = "RESTAURANTS"
-    return tx_type, category, None
+    return category
 
 
 def is_recurring(text, vendor, items=None):
@@ -708,7 +742,21 @@ def parse_document(text, date_order="auto", rates=None, target_currency="INR",
         category, category_evidence = category_search.search(query, exclude_id=example_id)
         if category:
             expense_category, category_source = category, "vector"
-    recurring = is_recurring(text, vendor, items)
+    haystack = " ".join(filter(None, [vendor, _head_text(text), " ".join(items)]))
+    movement_category = expense_category if expense_category in MOVEMENT_CATEGORIES else classify_expense(haystack)
+    transaction_kind = "STANDARD"
+    if movement_category in MOVEMENT_CATEGORIES:
+        transaction_kind = "INVESTMENT" if movement_category in INVESTMENT_CATEGORIES else "TRANSFER"
+        expense_category = movement_category if tx_type == "Expense" else None
+        income_category = movement_category if tx_type == "Income" else None
+    elif tx_type == "Income" and income_category != "TAX_REFUND":
+        if re.search(r"\breimbursement\b|\bexpense\s+repaid\b", haystack, re.I):
+            transaction_kind = "REIMBURSEMENT"
+        elif re.search(r"\brefund(?:ed)?\b|\bcredit\s+note\b", haystack, re.I) or amount is not None and amount < 0:
+            transaction_kind = "REFUND"
+        if transaction_kind in ("REFUND", "REIMBURSEMENT"):
+            expense_category, income_category = classify_expense(haystack), None
+    recurring = False if transaction_kind in ("REFUND", "REIMBURSEMENT") else is_recurring(text, vendor, items)
 
     if items:
         description = "Items: " + ", ".join(items[:6])
@@ -719,6 +767,10 @@ def parse_document(text, date_order="auto", rates=None, target_currency="INR",
         description = ""
 
     doc = {
+        "transactionKind": transaction_kind,
+        "originalTransactionId": None,
+        "subcategory": None,
+        "category": expense_category or income_category,
         "vendor": vendor,
         "amount": abs(amount) if amount is not None else 0.0,
         "transactionType": tx_type,

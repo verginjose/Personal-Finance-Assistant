@@ -87,6 +87,10 @@ public class SharedExpense {
         // ── Housing & Utilities ───────────────────────────────────────────────────
         RENT,               // split from HOUSING
         HOME_LOAN_EMI,
+        FURNITURE,
+        HOUSEHOLD_SUPPLIES,
+        DOMESTIC_HELP,
+        SOCIETY_MAINTENANCE,
         HOME_MAINTENANCE,   // repairs, painting, plumbing
         PROPERTY_TAX,
         ELECTRICITY,        // split from UTILITIES
@@ -140,6 +144,12 @@ public class SharedExpense {
         HOTEL_AND_STAYS,
 
         // ── Finance & Insurance ───────────────────────────────────────────────────
+        BANK_CHARGES,
+        CARD_FEES,
+        LOAN_INTEREST,
+        SOFTWARE_SUBSCRIPTIONS,
+        CLOUD_STORAGE,
+        PROFESSIONAL_MEMBERSHIPS,
         LIFE_INSURANCE,     // split from INSURANCE
         VEHICLE_INSURANCE,
         CREDIT_CARD_PAYMENT,

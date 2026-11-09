@@ -121,4 +121,21 @@ class QueryTransactionEntryServiceTest {
         assertThat(enriched.getTotalAmount()).isEqualByComparingTo("2106.68");
         assertThat(enriched.getMyShare()).isEqualByComparingTo("421.34");
     }
+    @Test
+    void summaryMatchesSignedRecoveryAndMovementRules() {
+        UUID user = UUID.randomUUID();
+        LocalDateTime now = LocalDateTime.now();
+        TransactionEntry refund = entry(TransactionType.INCOME, "50", Category.GROCERIES, now);
+        refund.setTransactionKind(com.finance.query.model.TransactionKind.REFUND);
+        when(repository.findByUserIdAndDeletedAtIsNullOrderByCreatedAtDesc(user)).thenReturn(List.of(
+                entry(TransactionType.INCOME, "1000", Category.SALARY, now),
+                entry(TransactionType.EXPENSE, "200", Category.GROCERIES, now),
+                entry(TransactionType.EXPENSE, "200", Category.CREDIT_CARD_PAYMENT, now),
+                entry(TransactionType.EXPENSE, "500", Category.MUTUAL_FUNDS_SIP, now), refund));
+        Map<String, Object> totals = service.getSummary(user);
+        assertThat((BigDecimal) totals.get("totalIncome")).isEqualByComparingTo("1000");
+        assertThat((BigDecimal) totals.get("totalExpense")).isEqualByComparingTo("150");
+        assertThat((BigDecimal) totals.get("netBalance")).isEqualByComparingTo("850");
+        assertThat(totals.get("totalCount")).isEqualTo(3);
+    }
 }

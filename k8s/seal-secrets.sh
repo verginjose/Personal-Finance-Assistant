@@ -148,7 +148,10 @@ if wanted clickhouse-secrets; then
   echo "  sealed clickhouse-secrets -> PFA-SYSTEM (vector) -> k8s/sealed/clickhouse-secrets-pfa-system.yaml"
 fi
 if wanted minio-secrets; then
-  seal_envkeys minio-secrets MINIO_ROOT_PASSWORD
+  seal_envkeys minio-secrets MINIO_ACCESS_KEY MINIO_ROOT_PASSWORD
+fi
+if wanted rabbitmq-secrets; then
+  seal_envkeys rabbitmq-secrets RABBITMQ_USER RABBITMQ_PASSWORD
 fi
 if wanted grafana-secrets; then
   seal_envkeys grafana-secrets GRAFANA_ADMIN_PASSWORD

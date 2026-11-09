@@ -1,0 +1,182 @@
+[
+  {
+    "id": "restaurants-1",
+    "category": "RESTAURANTS",
+    "text": "sit down dining lunch dinner breakfast entree dessert waiter menu meal"
+  },
+  {
+    "id": "restaurants-2",
+    "category": "RESTAURANTS",
+    "text": "crepe crepes nutella croissant waffle brunch patisserie"
+  },
+  {
+    "id": "groceries-1",
+    "category": "GROCERIES",
+    "text": "supermarket groceries vegetables fruit milk bread household pantry"
+  },
+  {
+    "id": "food_delivery-1",
+    "category": "FOOD_DELIVERY",
+    "text": "food delivery takeaway courier meal order"
+  },
+  {
+    "id": "fuel-1",
+    "category": "FUEL",
+    "text": "petrol diesel gasoline filling station pump litre"
+  },
+  {
+    "id": "cab_and_auto-1",
+    "category": "CAB_AND_AUTO",
+    "text": "taxi cab ride fare driver pickup destination"
+  },
+  {
+    "id": "public_transport-1",
+    "category": "PUBLIC_TRANSPORT",
+    "text": "bus train metro subway transit ticket"
+  },
+  {
+    "id": "parking_and_tolls-1",
+    "category": "PARKING_AND_TOLLS",
+    "text": "parking garage toll vehicle entry exit"
+  },
+  {
+    "id": "electricity-1",
+    "category": "ELECTRICITY",
+    "text": "electricity power energy kilowatt kwh meter utility"
+  },
+  {
+    "id": "water-1",
+    "category": "WATER",
+    "text": "water supply utility consumption meter"
+  },
+  {
+    "id": "gas-1",
+    "category": "GAS",
+    "text": "gas bill cylinder cooking lpg utility"
+  },
+  {
+    "id": "internet-1",
+    "category": "INTERNET",
+    "text": "broadband internet fibre connection monthly data plan"
+  },
+  {
+    "id": "mobile_phone-1",
+    "category": "MOBILE_PHONE",
+    "text": "cellular mobile phone recharge prepaid postpaid data"
+  },
+  {
+    "id": "health_insurance-1",
+    "category": "HEALTH_INSURANCE",
+    "text": "health medical insurance premium policy coverage"
+  },
+  {
+    "id": "medicines-1",
+    "category": "MEDICINES",
+    "text": "pharmacy prescription tablets capsules medication"
+  },
+  {
+    "id": "doctor_and_clinic-1",
+    "category": "DOCTOR_AND_CLINIC",
+    "text": "doctor clinic consultation diagnostic treatment appointment"
+  },
+  {
+    "id": "gym_and_fitness-1",
+    "category": "GYM_AND_FITNESS",
+    "text": "gym fitness workout training membership exercise"
+  },
+  {
+    "id": "tuition_and_fees-1",
+    "category": "TUITION_AND_FEES",
+    "text": "school college tuition semester education fees"
+  },
+  {
+    "id": "books_and_courses-1",
+    "category": "BOOKS_AND_COURSES",
+    "text": "books textbook bookstore course learning education"
+  },
+  {
+    "id": "clothing-1",
+    "category": "CLOTHING",
+    "text": "clothing apparel shirt jeans trousers dress jacket"
+  },
+  {
+    "id": "electronics-1",
+    "category": "ELECTRONICS",
+    "text": "electronics laptop computer charger headphones keyboard"
+  },
+  {
+    "id": "personal_care-1",
+    "category": "PERSONAL_CARE",
+    "text": "salon haircut beauty spa barber grooming"
+  },
+  {
+    "id": "movies_and_events-1",
+    "category": "MOVIES_AND_EVENTS",
+    "text": "cinema movie concert event theatre ticket"
+  },
+  {
+    "id": "travel_vacation-1",
+    "category": "TRAVEL_VACATION",
+    "text": "travel vacation tour holiday excursion"
+  },
+  {
+    "id": "hotel_and_stays-1",
+    "category": "HOTEL_AND_STAYS",
+    "text": "hotel lodging accommodation room nights resort"
+  },
+  {
+    "id": "flight_and_train-1",
+    "category": "FLIGHT_AND_TRAIN",
+    "text": "airline flight airfare boarding passenger itinerary"
+  },
+  {
+    "id": "life_insurance-1",
+    "category": "LIFE_INSURANCE",
+    "text": "life insurance term policy premium"
+  },
+  {
+    "id": "vehicle_insurance-1",
+    "category": "VEHICLE_INSURANCE",
+    "text": "vehicle car motor insurance premium policy"
+  },
+  {
+    "id": "mutual_funds_sip-1",
+    "category": "MUTUAL_FUNDS_SIP",
+    "text": "mutual fund systematic investment sip units"
+  },
+  {
+    "id": "stocks_and_trading-1",
+    "category": "STOCKS_AND_TRADING",
+    "text": "stock equity brokerage shares securities purchase"
+  },
+  {
+    "id": "crypto-1",
+    "category": "CRYPTO",
+    "text": "crypto bitcoin ethereum digital currency exchange"
+  },
+  {
+    "id": "pets-1",
+    "category": "PETS",
+    "text": "pet veterinary dog cat animal food grooming"
+  },
+  {
+    "id": "charity_and_donations-1",
+    "category": "CHARITY_AND_DONATIONS",
+    "text": "charity donation nonprofit relief contribution"
+  },
+  {
+    "id": "childcare-1",
+    "category": "CHILDCARE",
+    "text": "childcare daycare nursery creche babysitting"
+  },
+  {
+    "id": "taxes-1",
+    "category": "TAXES",
+    "text": "income tax government payment assessment"
+  },
+  {
+    "id": "rent-1",
+    "category": "RENT",
+    "text": "rent lease apartment house monthly landlord"
+  }
+]

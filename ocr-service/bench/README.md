@@ -1,7 +1,7 @@
 # OCR pod benchmark
 
 Measures the OCR service's real pipeline inside the running pod: PaddleOCR
-inference, thread-safety of the shared engine, the Groq call on real OCR text,
+inference, thread-safety of the shared engine, local deterministic extraction on real OCR text,
 and the resulting per-receipt throughput.
 
 ## OCR text endpoint
@@ -44,9 +44,8 @@ the full OCR text) to JSON. Exit code is 1 if any upload failed.
 
 ## Deterministic parse (no LLM)
 
-`parse_receipts.py` replaces the Groq extraction step: it uploads images to
-`/ocr`, then parses the returned text into the same document Groq was asked
-for in `app/main.py` —
+`parse_receipts.py` uploads images to `/ocr` and uses the same shared
+`app/receipt_parser.py` extraction rules as production —
 
 ```json
 {"vendor":"...","amount":0.0,"transactionType":"Expense",
@@ -164,7 +163,7 @@ Options (environment variables):
 |-----|---------|---------|
 | `COUNT` | `6` | number of receipts to test |
 | `REPEATS` | `2` | OCR passes per image |
-| `GROQ_RUNS` | `3` | Groq calls to time |
+| `PARSER_RUNS` | `3` | local parser runs to time |
 | `POD` | auto | target pod (otherwise the `app=ocr-service` pod) |
 | `NS` | `pfa` | namespace |
 | `IMAGES_DIR` | `../../requests/large-receipt-image-dataset-SRD` | receipt images |
@@ -184,9 +183,8 @@ the benchmark there (so it uses the pod's GPU, models and env), and copies
 - `ocr_concurrent` — what happens when two/four OCR calls run on the shared
   engine from threads. PaddleOCR predictors are not thread-safe, so expect
   failures; this documents the ceiling.
-- `groq` / `groq_stats` — Groq latency on OCR'd text, and whether the model
-  returned valid JSON.
-- `pipeline_estimate` — `ocr + groq` per receipt and receipts/minute for one
+- `parser` / `parser_stats` — local extraction latency, documents and evidence.
+- `pipeline_estimate` — `ocr + parser` per receipt and receipts/minute for one
   replica. The RabbitMQ consumer processes jobs one at a time, so this is
   also the per-replica throughput ceiling.
 
@@ -194,7 +192,29 @@ the benchmark there (so it uses the pod's GPU, models and env), and copies
 
 - Run this against an idle pod. It loads a second PaddleOCR instance in the
   pod's GPU; on a 6 GB card this co-exists fine, but don't run it under load.
-- Groq must be called with `httpx` (as the service does). Python `urllib` is
-  refused by Cloudflare with `403 error code: 1010`.
 - Images are copied to `/tmp/bench` and left there; `kubectl exec ... rm -rf
   /tmp/bench` cleans up.
+
+## Production integration
+
+`app/receipt_parser.py` and `app/category_search.py` are shared with the deployed
+worker. The benchmark imports these modules instead of maintaining a second set
+of rules. Production defaults to bundled local TF-IDF fallback examples;
+`OCR_CATEGORY_EXAMPLES`, `OCR_CATEGORY_MODEL`, `OCR_CATEGORY_THRESHOLD`, and
+`OCR_CATEGORY_MARGIN` configure overrides. `OCR_DEFAULT_CURRENCY` defaults to INR;
+`OCR_DATE_ORDER` defaults to auto.
+
+Receipt images and single-receipt PDFs are parsed locally. Structured CSV imports
+accept `date`/`createdAt`, `name`/`vendor`/`description`, `amount` plus `type`, or
+`debit`/`credit` columns, and optional currency/category/recurring fields. Invalid
+rows fail the import with a row number; multiple rows require batch mode.
+Free-form bank statement PDFs are not currently supported by the deterministic
+batch parser and return an explicit error directing users to CSV. Missing receipt
+amounts produce an error instead of creating a zero-value transaction.
+
+OCR `/analyze` returns local descriptive totals with the same
+`insights`/`warnings`/`suggestions` shape. OCR makes no Groq calls and does not
+require its API key. Query-service's separate optional AI insights feature keeps
+its own configuration. The old encrypted OCR API key can be removed from its
+SealedSecret after the new image is promoted; retaining it during the source-PR
+rollout keeps the previous image functional until replacement.

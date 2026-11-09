@@ -43,6 +43,9 @@ if [[ -z "$url" ]]; then
   url="$(jq -er '.html_url | select(type == "string" and length > 0)' "$tmp/created.json")"
 fi
 echo "Pull request: $url"
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+  printf 'pr_number=%s\nhead_sha=%s\n' "${url##*/}" "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+fi
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   printf '\n**Promotion pull request:** %s\n\nMerge it to deploy through Argo CD.\n' "$url" >> "$GITHUB_STEP_SUMMARY"
 fi

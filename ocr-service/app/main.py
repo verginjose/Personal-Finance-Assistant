@@ -18,6 +18,9 @@ from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from minio import Minio
 from paddleocr import PaddleOCR
 from readiness import consumer_ready
+from document_parser import parse_file_text, analyze_history
+from category_search import CategorySearch
+from receipt_parser import CATEGORY_RULES
 
 # OCR service entrypoint: FastAPI app that extracts text from uploaded
 # images/PDFs via PaddleOCR and publishes the results to the message queue.
@@ -26,10 +29,6 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 # ── Config from env ──────────────────────────────────────────────────────────
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL   = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
-GROQ_URL     = os.getenv("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
-
 UPSERT_URL     = os.getenv("UPSERT_SERVICE_URL", "http://command-service:8081")
 CURRENCY_URL   = "https://api.frankfurter.dev/v1/latest?from=USD"
 
@@ -56,32 +55,16 @@ INTERNAL_TOKEN_HEADER = "X-Internal-Token"
 
 # ── In-memory caches ─────────────────────────────────────────────────────────
 ocr_cache: TTLCache   = TTLCache(maxsize=500, ttl=86400)  # 24h
-llm_cache: TTLCache   = TTLCache(maxsize=200, ttl=86400)  # 24h
 rate_cache: dict      = {}   # {"rates": {...}, "date": "..."}
 
-# ── Groq rate limit ─────────────────────────────────────────────────────
-# This account allows 450 requests/minute. The consumer is sequential, so a
-# single spacing gate between calls is enough; 429s are retried with the
-# server's Retry-After (or a fixed spacing delay).
-GROQ_RPM = float(os.getenv("GROQ_RPM", "30"))
-GROQ_MIN_INTERVAL = 60.0 / GROQ_RPM if GROQ_RPM > 0 else 0.0
-GROQ_MAX_ATTEMPTS = int(os.getenv("GROQ_MAX_ATTEMPTS", "5"))
-_groq_next_at = 0.0
-_groq_gate = None  # asyncio.Lock, created lazily on the running loop
-
-
-async def _groq_wait_turn():
-    """Reserve the next Groq slot and sleep until it arrives."""
-    global _groq_next_at, _groq_gate
-    if _groq_gate is None:
-        _groq_gate = asyncio.Lock()
-    async with _groq_gate:
-        now = time.monotonic()
-        slot = max(now, _groq_next_at)
-        _groq_next_at = slot + GROQ_MIN_INTERVAL
-    delay = slot - time.monotonic()
-    if delay > 0:
-        await asyncio.sleep(delay)
+# Loaded once, using the bundled lexical index unless a local model is selected.
+category_search = CategorySearch(
+    os.getenv("OCR_CATEGORY_EXAMPLES", os.path.join(os.path.dirname(__file__), "category_examples.json")),
+    {name for name, _ in CATEGORY_RULES},
+    threshold=float(os.getenv("OCR_CATEGORY_THRESHOLD", "0.45")),
+    margin=float(os.getenv("OCR_CATEGORY_MARGIN", "0.12")),
+    model_path=os.getenv("OCR_CATEGORY_MODEL") or None,
+)
 
 # ── PaddleOCR engine & HTTP Client (global, loaded once) ──────────────────────
 ocr_engine: Optional[PaddleOCR] = None
@@ -243,8 +226,8 @@ def require_internal_token(
 ) -> None:
     """Reject callers that do not present the shared internal credential.
 
-    /analyze forwards the body to Groq using the service API key, so an open
-    endpoint is both a spend risk and a way to probe the model.
+    Receipt extraction and transaction analysis are local; internal callers
+    still need the shared service credential.
     """
     if not INTERNAL_API_TOKEN:
         raise HTTPException(status_code=503, detail="Internal API token is not configured")
@@ -338,110 +321,6 @@ def _convert_currency(amount: float, currency: str, target_currency: str = "INR"
     }
 
 
-GROQ_PROMPT_TEMPLATE = """Extract financial data from this receipt/document. Return ONLY valid JSON.
-
-Rules:
-- transactionType: "Expense" or "Income"
-- expenseCategory: classify from the vendor and the line items actually on the receipt. RENT is only for a rent bill; a food or drink purchase is never RENT. Use "OTHERS" when the receipt is ambiguous rather than guessing.
-- incomeCategory: Guess the closest (e.g., SALARY, FREELANCE, BUSINESS, REFUND) or use "OTHERS"
-- Set the unused category to null
-- currency: 3-letter ISO code (INR for ₹)
-- date: Date of the bill in "YYYY-MM-DD" format, or null if not found
-- recurring: true only for a named subscription or recurring bill (e.g. Netflix, rent, internet). A one-off purchase, even a repeated everyday item, is false.
-
-JSON schema:
-{{"vendor":"string","amount":0.0,"transactionType":"string","expenseCategory":"string|null","incomeCategory":"string|null","currency":"string","description":"string","date":"string|null","recurring":false}}
-
-Receipt:
-{text}
-"""
-
-GROQ_ADVISOR_PROMPT_TEMPLATE = """You are an expert AI Financial Advisor. Analyze the user's transaction history for the past period and provide actionable insights. Return ONLY valid JSON.
-
-Rules:
-- Be concise but helpful.
-- "insights": A list of 2-3 key observations (e.g. "You spent 40% of your budget on Food").
-- "warnings": A list of 0-2 warnings (e.g. "Your recurring subscriptions have increased by $20").
-- "suggestions": A list of 1-2 actionable suggestions.
-
-JSON schema:
-{{"insights":["string"],"warnings":["string"],"suggestions":["string"]}}
-
-Transactions:
-{text}
-"""
-
-GROQ_BATCH_PROMPT_TEMPLATE = """Extract all financial transactions from this bank statement/document. Return ONLY valid JSON containing an array of transactions.
-
-Rules:
-- Output should be a JSON array: `[ {...}, {...} ]`
-- If no transactions are found, return `[]`.
-- transactionType: "Expense" or "Income"
-- expenseCategory/incomeCategory: classify from the vendor and line items; a food purchase is never RENT. Use "OTHERS" when ambiguous. Set the unused one to null.
-- currency: 3-letter ISO code (e.g., INR, USD)
-- date: Date of the bill in "YYYY-MM-DD" format, or null
-- recurring: true only for a named subscription or recurring bill; a one-off purchase is false.
-- amount: Float number (e.g., 20.50)
-
-JSON schema:
-[{{"vendor":"string","amount":0.0,"transactionType":"string","expenseCategory":"string|null","incomeCategory":"string|null","currency":"string","description":"string","date":"string|null","recurring":false}}]
-
-Document:
-{text}
-"""
-
-async def _call_groq_generic(prompt: str) -> dict | list:
-    text_hash = hashlib.sha256(prompt.encode()).hexdigest()
-    if text_hash in llm_cache:
-        return llm_cache[text_hash]
-
-    if not GROQ_API_KEY:
-        raise RuntimeError("GROQ_API_KEY not configured")
-
-    payload = {
-        "model": GROQ_MODEL,
-        "temperature": 0.2,
-        "response_format": {"type": "json_object"},
-        "messages": [{"role": "user", "content": prompt}],
-    }
-
-    client = http_client if http_client else httpx.AsyncClient()
-    attempt = 0
-    while True:
-        await _groq_wait_turn()
-        r = await client.post(
-            GROQ_URL,
-            json=payload,
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-            timeout=40.0
-        )
-        if r.status_code == 200:
-            break
-        attempt += 1
-        if r.status_code != 429 or attempt >= GROQ_MAX_ATTEMPTS:
-            raise RuntimeError(f"Groq HTTP {r.status_code}: {r.text}")
-        retry_after = r.headers.get("Retry-After")
-        try:
-            delay = max(float(retry_after), GROQ_MIN_INTERVAL) if retry_after else GROQ_MIN_INTERVAL
-        except ValueError:
-            delay = GROQ_MIN_INTERVAL
-        delay = min(max(delay, 1.0), 30.0)
-        log.warning("Groq rate limited (attempt %d/%d); retrying in %.1fs",
-                    attempt, GROQ_MAX_ATTEMPTS, delay)
-        await asyncio.sleep(delay)
-
-    content = r.json()["choices"][0]["message"]["content"]
-    result = json.loads(content)
-    llm_cache[text_hash] = result
-    return result
-
-async def _call_groq(text: str, is_batch: bool = False) -> dict | list:
-    if is_batch:
-        return await _call_groq_generic(GROQ_BATCH_PROMPT_TEMPLATE.format(text=text))
-    return await _call_groq_generic(GROQ_PROMPT_TEMPLATE.format(text=text))
-
-
-
 async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: str, is_batch: bool = False,
                       target_currency: str = "INR") -> dict | list:
     is_pdf = filename.lower().endswith(".pdf") or content_type == "application/pdf"
@@ -456,9 +335,13 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
 
     clean_text = " ".join(raw_text.split()).strip()
     if len(clean_text) < 10:
-        return [] if is_batch else {}
+        raise ValueError("Document has insufficient readable text")
 
-    doc = await _call_groq(clean_text, is_batch)
+    # Preserve line breaks: receipt totals, vendors and items depend on layout.
+    doc = await asyncio.to_thread(
+        parse_file_text, raw_text, is_csv=is_csv, is_batch=is_batch,
+        default_currency=os.getenv("OCR_DEFAULT_CURRENCY", "INR"),
+        date_order=os.getenv("OCR_DATE_ORDER", "auto"), category_search=category_search)
     
     if is_batch:
         results = []
@@ -650,13 +533,7 @@ async def analyze_transactions(payload: dict, _auth: None = Depends(require_inte
     if "transactions" not in payload:
         return {"error": "transactions field required"}
     
-    # Format transactions tightly to save tokens
-    txns = payload["transactions"]
-    text_repr = json.dumps(txns, separators=(',', ':'))
-    
     try:
-        res = await _call_groq_generic(GROQ_ADVISOR_PROMPT_TEMPLATE.format(text=text_repr))
-        return res
-    except Exception as e:
-        log.error("Failed to analyze: %s", e)
-        return {"insights": [], "warnings": [], "suggestions": [], "error": str(e)}
+        return analyze_history(payload["transactions"])
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

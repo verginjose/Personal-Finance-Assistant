@@ -318,6 +318,7 @@ public class AnalyticsService {
             map.put("d", t.getCreatedAt() != null ? t.getCreatedAt().toLocalDate().toString() : "");
             map.put("n", t.getName());
             map.put("a", t.getAmount());
+            map.put("currency", t.getCurrency());
             map.put("t", t.getType().toString());
             map.put("c", t.getCategory() != null ? t.getCategory().name() : "");
             return map;

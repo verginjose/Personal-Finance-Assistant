@@ -13,7 +13,7 @@ NS=${NS:-pfa}
 DEPLOY=${DEPLOY:-ocr-service}
 COUNT=${COUNT:-6}
 REPEATS=${REPEATS:-2}
-GROQ_RUNS=${GROQ_RUNS:-3}
+PARSER_RUNS=${PARSER_RUNS:-3}
 HERE=$(cd "$(dirname "$0")" && pwd)
 IMAGES_DIR=${IMAGES_DIR:-$HERE/../../requests/large-receipt-image-dataset-SRD}
 OUT_DIR=${OUT_DIR:-$HERE/results}
@@ -48,7 +48,7 @@ done
 
 kubectl -n "$NS" exec "$POD" -- sh -c \
   "cd /tmp/bench && python3 -I bench.py --out /tmp/bench/result.json \
-   --repeats $REPEATS --groq-runs $GROQ_RUNS ${BASENAMES[*]}"
+   --repeats $REPEATS --parser-runs $PARSER_RUNS ${BASENAMES[*]}"
 
 mkdir -p "$OUT_DIR"
 STAMP=$(date +%Y%m%dT%H%M%S)

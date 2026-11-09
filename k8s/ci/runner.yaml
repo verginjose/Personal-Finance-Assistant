@@ -141,16 +141,21 @@ spec:
             allowPrivilegeEscalation: false
             seccompProfile:
               type: RuntimeDefault
-          # Consume the one-hour registration token, delete it, and hand it to
-          # the image entrypoint. The App private key is not in this container.
+          # Consume the one-hour registration token and hand it to the image
+          # entrypoint (which also needs its default command explicitly). Make
+          # the token root-only rather than deleting it, so a container restart
+          # within the token's lifetime can re-register; job steps run as UID
+          # 1001 and cannot read it. The App private key is not in this
+          # container.
           command: ["/bin/bash", "-c"]
           args:
             - |
               set -euo pipefail
               RUNNER_TOKEN="$(cat /runner-registration/token)"
-              rm -f /runner-registration/token
+              chown root:root /runner-registration/token
+              chmod 600 /runner-registration/token
               export RUNNER_TOKEN
-              exec /entrypoint.sh
+              exec /entrypoint.sh /actions-runner/run.sh
           env:
             # Jobs run as `runner`, so HOME must point at a directory that
             # user owns; the image's default is /root.

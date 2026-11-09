@@ -268,6 +268,7 @@ public class TransactionEntryService {
         if (request.getCreatedAt() != null) {
             entry.setCreatedAt(request.getCreatedAt());
         }
+        com.finance.command.controller.ReceiptOwnership.requireOwned(request.getReceiptUrl(), request.getUserId());
         entry.setReceiptUrl(request.getReceiptUrl());
         return entry;
     }
@@ -309,6 +310,9 @@ public class TransactionEntryService {
         
         if (request.getCreatedAt() != null) {
             existing.setCreatedAt(request.getCreatedAt());
+        }
+        if (!java.util.Objects.equals(existing.getReceiptUrl(), request.getReceiptUrl())) {
+            com.finance.command.controller.ReceiptOwnership.requireOwned(request.getReceiptUrl(), existing.getUserId());
         }
         existing.setReceiptUrl(request.getReceiptUrl());
         

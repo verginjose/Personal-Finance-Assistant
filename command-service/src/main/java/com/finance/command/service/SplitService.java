@@ -586,6 +586,7 @@ public class SplitService {
                 ? SharedExpense.SplitType.valueOf(req.getSplitType().toUpperCase())
                 : SharedExpense.SplitType.EQUAL);
         expense.setExpenseDate(req.getExpenseDate());
+        com.finance.command.controller.ReceiptOwnership.requireOwned(req.getReceiptUrl(), actorUserId);
         expense.setReceiptUrl(req.getReceiptUrl());
         if (req.getExpenseCategory() != null && !req.getExpenseCategory().isBlank()) {
             try {
@@ -702,6 +703,9 @@ public class SplitService {
                 : SharedExpense.SplitType.EQUAL);
         if (req.getExpenseDate() != null) {
             expense.setExpenseDate(req.getExpenseDate());
+        }
+        if (!java.util.Objects.equals(expense.getReceiptUrl(), req.getReceiptUrl())) {
+            com.finance.command.controller.ReceiptOwnership.requireOwned(req.getReceiptUrl(), actorUserId);
         }
         expense.setReceiptUrl(req.getReceiptUrl());
         if (req.getExpenseCategory() != null && !req.getExpenseCategory().isBlank()) {

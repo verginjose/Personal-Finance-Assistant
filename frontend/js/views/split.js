@@ -204,13 +204,13 @@ function groupCard(g, members) {
       ${shown.map(m => `<button type="button" class="group-member-avatar"
           data-picture-src="${escAttr(m.profilePicture || '')}"
           data-name="${escAttr(m.name || m.userName || '')}"
-          aria-label="View ${esc(displayName(m.name || m.userName, 'member'))}'s picture">${avatar(displayName(m.name || m.userName, 'Member'), 26, m.profilePicture)}</button>`).join('')}
+          aria-label="View ${escAttr(displayName(m.name || m.userName, 'member'))}'s picture">${avatar(displayName(m.name || m.userName, 'Member'), 26, m.profilePicture)}</button>`).join('')}
       ${extra ? `<span class="group-members-count">+${extra}</span>` : `<span class="group-members-count">${members.length} member${members.length === 1 ? '' : 's'}</span>`}
     </div>` : '';
 
   return `
     <article class="group-card" data-id="${g.id}" role="button" tabindex="0"
-      ${isPending ? 'aria-label="Invitation to ' + esc(g.name) + '"' : ''}
+      ${isPending ? 'aria-label="Invitation to ' + escAttr(g.name) + '"' : ''}
       ${isArchived ? 'style="opacity:.75"' : ''}>
       <div class="group-name">${esc(g.name)}</div>
       <div class="group-meta">${esc(g.description || '')}</div>
@@ -522,7 +522,7 @@ async function loadGroupDetail(groupId, userId, opts = {}) {
               </div>
               <div class="search-box page-search split-search">
                 ${icon('search', 'sm')}
-                <input class="form-input" id="sp-feed-search" placeholder="Search expenses…" aria-label="Search expenses" value="${esc(feedSearch)}" autocomplete="off">
+                <input class="form-input" id="sp-feed-search" placeholder="Search expenses…" aria-label="Search expenses" value="${escAttr(feedSearch)}" autocomplete="off">
               </div>
             </div>
             <div id="expenses-list" aria-live="polite"></div>
@@ -1065,12 +1065,12 @@ function viewMembersModal(members, groupId, userId, group) {
         <div class="member-row">
           <div class="member-main">
             <button type="button" class="member-avatar-btn" data-picture="${m.userId}"
-                    aria-label="View ${esc(m.displayName || m.name)}'s picture">
+                    aria-label="View ${escAttr(m.displayName || m.name)}'s picture">
               ${avatar(m.displayName || m.name, 44, m.profilePicture)}
             </button>
             <div class="member-identity">
               <button type="button" class="member-name member-profile-btn" data-picture="${m.userId}"
-                      aria-label="View ${esc(m.displayName || m.name)}'s picture">
+                      aria-label="View ${escAttr(m.displayName || m.name)}'s picture">
                 <span>${esc(m.displayName || displayName(m.name))}${isSelf ? ' (you)' : ''}</span>
               </button>
               ${m.email ? `<span class="member-email">${esc(m.email)}</span>` : ''}
@@ -1164,7 +1164,7 @@ function openMemberPicture(member) {
 function editGroupModal(group, userId) {
   openModal('Edit group', `
     <form id="eg-form">
-      <div class="form-group"><label for="eg-name">Group name</label><input class="form-input" id="eg-name" required maxlength="100" value="${esc(group.name)}"></div>
+      <div class="form-group"><label for="eg-name">Group name</label><input class="form-input" id="eg-name" required maxlength="100" value="${escAttr(group.name)}"></div>
       <div class="form-group"><label for="eg-desc">Description</label><textarea class="form-textarea" id="eg-desc" maxlength="300">${esc(group.description || '')}</textarea></div>
       <div class="form-group"><label for="eg-currency">Currency</label><select class="form-select" id="eg-currency">${currencyOptionHtml(group.currency || 'INR')}</select></div>
       ${modalActions('Cancel', 'Save changes')}

@@ -2,6 +2,37 @@
    ui.js — Shared formatting, theme, and component builders
    ═══════════════════════════════════════════════════════════════════════════ */
 import { icon, categoryIcon } from './icons.js';
+import { api } from './api.js';
+
+const receiptBlobs = new WeakMap();
+const activeReceiptImages = new Set();
+async function protectedReceiptBlob(url) {
+  if (!/^\/api\/storage\/receipts\/[A-Za-z0-9._/-]+$/.test(url || '')) throw new Error('Invalid receipt URL');
+  const response = await api.raw('GET', url.slice(4));
+  if (!response.ok) throw new Error('Receipt is unavailable');
+  return URL.createObjectURL(await response.blob());
+}
+
+// Existing view templates use image tags. Replace protected URLs with
+// authenticated blob URLs when the tags enter the document.
+const receiptObserver = new MutationObserver(() => {
+  document.querySelectorAll('img[src^="/api/storage/receipts/"]').forEach(async img => {
+    if (img.dataset.receiptLoading) return;
+    img.dataset.receiptLoading = '1';
+    try {
+      const blob = await protectedReceiptBlob(img.getAttribute('src'));
+      if (img.isConnected) { img.src = blob; receiptBlobs.set(img, blob); activeReceiptImages.add(img); }
+      else URL.revokeObjectURL(blob);
+    } catch { img.removeAttribute('src'); }
+  });
+  for (const img of activeReceiptImages) {
+    if (!img.isConnected) {
+      URL.revokeObjectURL(receiptBlobs.get(img));
+      activeReceiptImages.delete(img);
+    }
+  }
+});
+if (document.documentElement) receiptObserver.observe(document.documentElement, { childList: true, subtree: true });
 
 export function esc(s) {
   const d = document.createElement('div');
@@ -1014,14 +1045,23 @@ export function setupCategorySearch(inputId, selectId) {
   }
 }
 
-export function openReceiptLightbox(url) {
+export async function openReceiptLightbox(url) {
   const safe = safeImageUrl(url);
-  if (!safe) return;
+  if (!safe || !safe.startsWith('/api/storage/receipts/')) return;
   const isPdf = String(safe).toLowerCase().endsWith('.pdf');
+  const pdfWindow = isPdf ? window.open('', '_blank') : null;
+  let displayUrl;
+  try { displayUrl = await protectedReceiptBlob(safe); }
+  catch { pdfWindow?.close(); return; }
   if (isPdf) {
-    window.open(safe, '_blank', 'noopener,noreferrer');
+    if (pdfWindow) {
+      pdfWindow.opener = null;
+      pdfWindow.location.href = displayUrl;
+    }
+    setTimeout(() => URL.revokeObjectURL(displayUrl), 60000);
   } else {
-    openModal('Receipt', `<div class="receipt-lightbox"><img src="${escAttr(safe)}" alt="Receipt"></div>`, { size: 'lg' });
+    openModal('Receipt', `<div class="receipt-lightbox"><img src="${escAttr(displayUrl)}" alt="Receipt"></div>`, { size: 'lg' });
+    setTimeout(() => URL.revokeObjectURL(displayUrl), 60000);
   }
 }
 window.openReceiptLightbox = openReceiptLightbox;

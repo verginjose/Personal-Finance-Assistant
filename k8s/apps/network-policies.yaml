@@ -17,7 +17,7 @@
 # External HTTPS is granted per-workload and only on port 443, because these
 # pods must call the internet:
 #
-#   ocr-service   api.groq.com, api.frankfurter.dev, Paddle model CDN
+#   ocr-service   api.frankfurter.dev, Paddle model CDN
 #   query-service api.groq.com, api.frankfurter.dev
 #   grafana       grafana.com (plugin install on first start)
 #   cloudflared   Cloudflare edge (QUIC 7844 / HTTPS 443)
@@ -284,7 +284,7 @@ spec:
         - podSelector: { matchLabels: { app: command-service } }
       ports:
         - { protocol: TCP, port: 8081 }
-    # Groq, Frankfurter, and the PaddleOCR model CDN (first start only; the
+    # Frankfurter and the PaddleOCR model CDN (first start only; the
     # models then live on the paddle-model-cache PVC).
     - to:
         - ipBlock:

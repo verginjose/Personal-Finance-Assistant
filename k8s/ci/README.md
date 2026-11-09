@@ -87,8 +87,8 @@ Registration does not need Contents or Pull requests permissions, or a PAT.
 
 In **Repository Settings → Actions → General → Workflow permissions**, enable
 **Allow GitHub Actions to create and approve pull requests**. Organization policy
-must permit it as well. The workflow only creates PRs; it never approves or
-merges them. Keep branch protection requiring human review.
+must permit it as well. The workflow creates PRs and can submit a separate-identity approval for validated
+image promotions; it never merges them. Keep branch protection and review rules.
 
 `build.yml` grants `contents: read` by default and grants `contents: write` plus
 `pull-requests: write` only to `promote`. Its short-lived `GITHUB_TOKEN` pushes
@@ -335,3 +335,21 @@ python3 -I -m unittest discover -s k8s/ci/tests -v
 
 The tests mock GitHub responses and cover PR creation, reuse, and permission
 failure without pushing branches or creating real pull requests.
+
+
+### Automated promotion approval
+
+The promote job includes an approval step. Configure the Actions secret
+`PENNYPILOT_REVIEW_TOKEN` with a **different identity** from the PR author
+(`github-actions[bot]`). A repository-restricted token needs Contents read and
+Pull requests write. Do not reuse the Administration-only runner-registration
+App or its private key. The approval is attributed to the token's real account;
+changing the Git author name to PennyPilot does not change the PR/review identity.
+
+The helper checks that the open PR still points to the exact locally generated
+commit, is from this repository's `ci/tag-bump-*` branch, and changes only the six
+service image references and OCR probe paths. It approves that commit via the
+review API. It rejects unexpected file edits, never merges, and leaves a warning
+for manual review when the reviewer token is absent. Currently that secret is
+not configured in this repository. The repository's Actions-create-and-approve
+setting is already enabled; it does not allow authors to approve their own PRs.

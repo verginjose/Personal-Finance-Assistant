@@ -44,12 +44,12 @@ data:
   NVIDIA_DRIVER_CAPABILITIES: compute,utility
   UPSERT_SERVICE_URL: http://command-service:8081
   # Credentials are injected from ocr-service-secrets in the Deployment.
+  OCR_DEFAULT_CURRENCY: INR
+  OCR_DATE_ORDER: auto
   OCR_USE_ANGLE_CLS: "false"
   OCR_DET_LIMIT_SIDE_LEN: "736"
   MINIO_ENDPOINT: minio:9000
   MINIO_SECURE: "false"
-  GROQ_MODEL: openai/gpt-oss-120b
-  GROQ_URL: https://api.groq.com/openai/v1/chat/completions
 ---
 apiVersion: apps/v1
 kind: Deployment

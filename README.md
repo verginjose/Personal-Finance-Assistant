@@ -67,7 +67,7 @@ flowchart LR
     OCR -.-> RMQ
     OCR --> MinIO
     Query --> Groq
-    OCR --> Groq
+    OCR --> LocalParser[Local receipt parser]
     Services -.-> Vector
     Services -.-> Prometheus
     GW -.-> Prometheus
@@ -117,12 +117,12 @@ does *only* proxy work; credentials are handled by a separate service.
   with its own database schema and the same JWT secret as the gateway.
 - **Command Service**: The primary operational engine. It executes all core mutations (CRUD operations) for transactions, budgets, goals, and shared group bills. It persists canonical state directly to its isolated schema in **PostgreSQL**.
 - **Query Service**: Optimized for ultra-fast reads, aggregations, and dashboard analytics. It maintains a highly optimized cache layer in **Redis** and provides AI-powered financial insights using the **Groq LLM**.
-- **OCR Service**: A Python/FastAPI ML worker. It leverages **PaddleOCR** and **Groq** to perform Optical Character Recognition and semantic parsing on receipt images and batch bank statements. 
+- **OCR Service**: A Python/FastAPI ML worker. It uses **PaddleOCR** and the shared in-house deterministic parser for receipts and structured CSV imports, with local vector category fallback.
 
 ### 4. Event-Driven Architecture (Asynchronous Flow)
 To ensure high performance and loose coupling, the system leverages **RabbitMQ** and **Redis** for state propagation.
 - **Cache Invalidation & Outbox**: When the Command Service modifies data, it publishes a `transaction-cache-evict` event to RabbitMQ. The Query Service consumes this and instantly invalidates stale pre-computed aggregations in Redis.
-- **Batch AI Processing**: When a user uploads a multi-page Bank Statement PDF, the API Gateway drops the file in MinIO and sends an `ocr.job` event to RabbitMQ. The OCR Service consumes the job, processes it using Groq, and posts the results back to an internal webhook. The Command Service then broadcasts this via SSE so the user's UI updates in real-time.
+- **Batch AI Processing**: When a user uploads a multi-page Bank Statement PDF, the API Gateway drops the file in MinIO and sends an `ocr.job` event to RabbitMQ. The OCR Service consumes the job, processes receipts and structured CSV locally, and posts the results back to an internal webhook. The Command Service then broadcasts this via SSE so the user's UI updates in real-time.
 
 ### 5. Telemetry & Observability Pipeline
 A robust, enterprise-grade observability stack monitors the entire cluster.

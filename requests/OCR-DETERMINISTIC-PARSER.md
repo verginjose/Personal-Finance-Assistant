@@ -220,3 +220,31 @@ The follow-up fix adds broker startup account reconciliation and OCR `/ready`
 readiness (503 when not consuming), with liveness remaining independent. AMQP
 URLs are removed from connection logs. See `docs/ocr-rabbitmq-recovery.md` for
 validation and rollout details. This does not change the Groq/parser path.
+
+
+## Production parser and approval follow-up
+
+The OCR worker now imports the shared parser from `app/receipt_parser.py`; the
+benchmark imports the same implementation. `app/category_search.py` and bundled
+examples enable local TF-IDF fallback in production. Groq prompts, extraction
+calls, pacing and LLM cache have been removed from OCR, its ConfigMap and its
+env declaration. The OCR benchmark also no longer calls Groq. Its `/analyze`
+endpoint produces local descriptive transaction summaries. Query-service's
+separate optional AI insights API retains its own Groq configuration.
+
+CSV parsing validates headers/rows, supports explicit categories, type, debit/
+credit columns and recurring flags, and preserves the command-service callback
+shape and conversions. Receipt amounts that cannot be read now return an error.
+Free-form statement PDF batches require a structured CSV export; they are not
+silently interpreted as one receipt. Keep the old encrypted OCR Groq key until
+the new image is promoted, then remove it in a follow-up secret cleanup.
+
+CI now has a promotion approval step restricted to the exact generated manifest
+commit. It requires `PENNYPILOT_REVIEW_TOKEN` owned by a different identity from
+the PR author. The Actions setting is enabled, but no repository secret is
+currently configured. Without that token the step explicitly leaves manual
+review. Git commit branding is PennyPilot; GitHub authorship follows the token.
+
+Production-container smoke tests exercised the actual `_parse_bill` adapter with
+synthetic receipt/CSV inputs and no extraction HTTP calls. The production parser
+also replayed all 200 saved OCR texts with 200 amounts and 184 dates.

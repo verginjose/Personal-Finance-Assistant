@@ -236,6 +236,7 @@ jobs:
           fetch-depth: 0
 
       - name: Propose the tag bump and open a pull request
+        id: promotion
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SERVICES: ${{ needs.detect.outputs.services }}
@@ -282,6 +283,15 @@ jobs:
             echo ""
             echo "Merging it makes Argo CD deploy these images."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Approve the validated promotion pull request
+        if: steps.promotion.outputs.pr_number != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REVIEW_TOKEN: ${{ secrets.PENNYPILOT_REVIEW_TOKEN }}
+          PR_NUMBER: ${{ steps.promotion.outputs.pr_number }}
+          EXPECTED_HEAD_SHA: ${{ steps.promotion.outputs.head_sha }}
+        run: bash k8s/ci/approve-promotion-pr.sh
 
       # Deployment is Argo CD's job: it watches k8s/apps and syncs the new
       # image tag once the PR is merged. The runner needs no cluster

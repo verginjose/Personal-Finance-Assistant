@@ -8,11 +8,7 @@ It mirrors the exact settings in ocr-service/app/main.py:
   PaddleOCR(use_angle_cls=OCR_USE_ANGLE_CLS, lang="en", use_gpu=True,
             det_db_thresh=0.3, det_db_box_thresh=0.5, rec_batch_num=6,
             det_limit_side_len=OCR_DET_LIMIT_SIDE_LEN)
-  Groq payload: model=GROQ_MODEL, temperature=0.2,
-               response_format={"type": "json_object"}
-
-Groq is called with httpx, same as the service. Do NOT use urllib here:
-Cloudflare answers urllib requests with "403 error code: 1010".
+  Extraction: shared local deterministic receipt parser.
 """
 import argparse
 import json
@@ -23,35 +19,20 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 import cv2
-import httpx
 import numpy as np
 from paddleocr import PaddleOCR
 
-GROQ_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
-GROQ_URL = os.getenv("GROQ_URL", "https://api.groq.com/openai/v1/chat/completions")
+import importlib.util
+from pathlib import Path
+parser_path = Path("/srv/app/receipt_parser.py")
+if not parser_path.exists():
+    parser_path = Path(__file__).resolve().parents[1] / "app/receipt_parser.py"
+spec = importlib.util.spec_from_file_location("receipt_parser", parser_path)
+parser = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(parser)
+
 ANGLE = os.getenv("OCR_USE_ANGLE_CLS", "false").lower() == "true"
 DET_LEN = int(os.getenv("OCR_DET_LIMIT_SIDE_LEN", "736"))
-
-# GROQ_PROMPT_TEMPLATE from ocr-service/app/main.py
-GROQ_PROMPT_TEMPLATE = """Extract financial data from this receipt/document. Return ONLY valid JSON.
-
-Rules:
-- transactionType: "Expense" or "Income"
-- expenseCategory: classify from the vendor and the line items actually on the receipt. RENT is only for a rent bill; a food or drink purchase is never RENT. Use "OTHERS" when the receipt is ambiguous rather than guessing.
-- incomeCategory: Guess the closest (e.g., SALARY, FREELANCE, BUSINESS, REFUND) or use "OTHERS"
-- Set the unused category to null
-- currency: 3-letter ISO code (INR for ₹)
-- date: Date of the bill in "YYYY-MM-DD" format, or null if not found
-- recurring: true only for a named subscription or recurring bill (e.g. Netflix, rent, internet). A one-off purchase, even a repeated everyday item, is false.
-
-JSON schema:
-{{"vendor":"string","amount":0.0,"transactionType":"string","expenseCategory":"string|null","incomeCategory":"string|null","currency":"string","description":"string","date":"string|null","recurring":false}}
-
-Receipt:
-{text}
-"""
-
 
 def pct(values, p):
     s = sorted(values)
@@ -63,14 +44,14 @@ def main():
     ap.add_argument("images", nargs="+", help="receipt image paths")
     ap.add_argument("--out", default="/tmp/bench/result.json")
     ap.add_argument("--repeats", type=int, default=2, help="OCR passes per image")
-    ap.add_argument("--groq-runs", type=int, default=3)
+    ap.add_argument("--parser-runs", type=int, default=3)
     args = ap.parse_args()
 
     out = {
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "host": os.uname().nodename,
         "settings": {"angle_cls": ANGLE, "det_limit_side_len": DET_LEN,
-                     "groq_model": GROQ_MODEL},
+                     "parser": "deterministic"},
         "images": [os.path.basename(p) for p in args.images],
     }
 
@@ -144,50 +125,21 @@ def main():
         }
     out["ocr_concurrent"] = conc
 
-    # ---- Groq on real OCR text (same client the service uses) ----
+    # Benchmark the same local extraction function production calls.
     _, sample_text = ocr_bytes(blobs[0][1])
-    clean = " ".join(sample_text.split()).strip()
-    prompt = GROQ_PROMPT_TEMPLATE.format(text=clean)
-    groq_runs = []
-    with httpx.Client(timeout=60.0) as client:
-        for _ in range(args.groq_runs):
-            t = time.perf_counter()
-            try:
-                r = client.post(GROQ_URL, json={
-                    "model": GROQ_MODEL,
-                    "temperature": 0.2,
-                    "response_format": {"type": "json_object"},
-                    "messages": [{"role": "user", "content": prompt}],
-                }, headers={"Authorization": f"Bearer {GROQ_KEY}",
-                            "Content-Type": "application/json"})
-                dt = time.perf_counter() - t
-                ok = False
-                preview = r.text[:200]
-                if r.status_code == 200:
-                    content = r.json()["choices"][0]["message"]["content"]
-                    preview = content.replace("\n", "")[:200]
-                    try:
-                        json.loads(content)
-                        ok = True
-                    except Exception:
-                        ok = False
-                groq_runs.append({"http": r.status_code, "latency_s": round(dt, 2),
-                                  "valid_json": ok, "prompt_chars": len(clean),
-                                  "preview": preview})
-            except Exception as e:
-                groq_runs.append({"error": repr(e)[:300]})
-    out["groq"] = groq_runs
-    lat = [g["latency_s"] for g in groq_runs if "latency_s" in g and g.get("http") == 200]
+    runs = []
+    for _ in range(args.parser_runs):
+        started = time.perf_counter()
+        doc, evidence, warnings = parser.parse_document(sample_text, convert=False)
+        runs.append({"latency_s": time.perf_counter() - started,
+                     "document": doc, "evidence": evidence, "warnings": warnings})
+    out["parser"] = runs
+    lat = [run["latency_s"] for run in runs]
     if lat:
-        out["groq_stats"] = {"n": len(lat), "p50_s": round(pct(lat, 50), 2),
-                             "mean_s": round(statistics.mean(lat), 2)}
-        # The MQ consumer awaits each job, so one replica is serial: OCR + Groq.
+        out["parser_stats"] = {"n": len(lat), "mean_s": statistics.mean(lat)}
         e2e = out["ocr_sequential"]["stats"]["mean_ms"] / 1000 + statistics.mean(lat)
-        out["pipeline_estimate"] = {
-            "per_receipt_s": round(e2e, 2),
-            "receipts_per_min_1_replica": round(60 / e2e, 1),
-            "note": "MQ consumer processes jobs one at a time; PaddleOCR is not thread-safe",
-        }
+        out["pipeline_estimate"] = {"per_receipt_s": round(e2e, 4),
+                                     "receipts_per_min_1_replica": round(60 / e2e, 1)}
 
     with open(args.out, "w") as f:
         json.dump(out, f, indent=2)

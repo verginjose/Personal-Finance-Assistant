@@ -58,5 +58,3 @@ EXPOSE 8084
 
 # Run Spring Boot application
 ENTRYPOINT ["java", "-jar", "app.jar"]
-
-# CI automerge trigger 2026-11-09

@@ -9,6 +9,11 @@
 # still cannot write code. ARGOCD_GITHUB_TOKEN (a fine-grained read-only PAT)
 # is the fallback; GITHUB_PAT is the last resort. If Argo CD is already
 # installed this is idempotent.
+#
+# ARGOCD_WEBHOOK_SECRET (optional) is the shared HMAC secret for the GitHub
+# push webhook -> /api/webhook. It is patched into argocd-secret and must
+# match the secret configured in GitHub's webhook settings. Without it the
+# webhook endpoint rejects every delivery and Argo falls back to polling.
 set -euo pipefail
 
 ARGOCD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -82,6 +87,40 @@ if ! kubectl get ns argocd >/dev/null 2>&1; then
       '{"spec":{"type":"NodePort","ports":[{"name":"http","port":80,"targetPort":8080,"nodePort":30080}]}}'
 fi
 
+echo "==> Configuring the GitHub webhook secret"
+# Argo CD validates X-Hub-Signature-256 with webhook.github.secret from
+# argocd-secret. Keep the value in .env (gitignored) so a reinstall does not
+# silently lose instant sync -- the same secret is in GitHub's webhook
+# settings and the two must match exactly.
+WEBHOOK_SECRET="$(env_value ARGOCD_WEBHOOK_SECRET | tr -d '"')"
+if [[ -z "${WEBHOOK_SECRET}" ]]; then
+  echo "    ARGOCD_WEBHOOK_SECRET not set in .env -- skipping (sync stays on the"
+  echo "    3-minute poll; existing webhook deliveries will fail signature checks)"
+else
+  # JSON-escape safety: the value goes into a merge patch, so restrict it to
+  # characters that need no escaping. `openssl rand -hex 20` satisfies this.
+  if [[ ! "${WEBHOOK_SECRET}" =~ ^[A-Za-z0-9._~-]+$ ]]; then
+    echo "error: ARGOCD_WEBHOOK_SECRET contains characters that are not safe in a" >&2
+    echo "       JSON patch. Regenerate with: openssl rand -hex 20" >&2
+    exit 1
+  fi
+  current_secret="$(kubectl -n argocd get secret argocd-secret \
+      -o jsonpath='{.data.webhook\.github\.secret}' 2>/dev/null \
+      | base64 -d 2>/dev/null || true)"
+  if [[ "${current_secret}" == "${WEBHOOK_SECRET}" ]]; then
+    echo "    webhook.github.secret already up to date"
+    else
+      # Merge, never replace: argocd-secret also holds server.secretkey and the
+    # admin password hash.
+    kubectl -n argocd patch secret argocd-secret --type merge \
+      -p "$(printf '{"stringData":{"webhook.github.secret":"%s"}}' "${WEBHOOK_SECRET}")" >/dev/null
+    # argocd-server reads the secret at startup.
+    kubectl -n argocd rollout restart deploy/argocd-server >/dev/null
+    kubectl -n argocd rollout status deploy/argocd-server --timeout=120s >/dev/null
+    echo "    webhook.github.secret applied (argocd-server restarted)"
+  fi
+fi
+
 echo "==> Registering the repository credential (${CRED_MODE})"
 # Replace, never merge: kubectl apply would keep the old username/password
 # keys next to the githubApp* ones, and Argo then prefers (and fails with)
@@ -127,7 +166,11 @@ kubectl -n argocd annotate application pfa-root \
   argocd.argoproj.io/refresh=hard --overwrite >/dev/null 2>&1 || true
 
 echo
-echo "Argo CD is configured. It polls the repo every 3 minutes and syncs k8s/apps."
+if [[ -n "${WEBHOOK_SECRET}" ]]; then
+  echo "Argo CD is configured. The GitHub webhook syncs on push (poll fallback: 3 minutes)."
+else
+  echo "Argo CD is configured. It polls the repo every 3 minutes and syncs k8s/apps."
+fi
 echo
 echo "  Open the UI:   kubectl -n argocd port-forward svc/argocd-server 8080:443"
 echo "                 https://localhost:8080   (user: admin)"

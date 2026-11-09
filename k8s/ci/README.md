@@ -147,11 +147,13 @@ Argo CD watches `k8s/apps` on `master` and syncs automatically (no prune,
 `selfHeal: true`). Set it up with:
 
 ```bash
-./argocd/apply.sh     # installs Argo CD if absent, registers the repo
+./argocd/apply.sh     # installs Argo CD if absent, registers the repo,
+                      # and applies the webhook secret from .env
 ```
 
-It reuses `GITHUB_PAT` as the HTTPS credential for the private repo, stored in
-the `argocd/pfa-repo` Secret.
+It uses the GitHub App credentials from `.env` (`CI_APP_*`) to read the private
+repo, stored in the `argocd/pfa-repo` Secret; `ARGOCD_GITHUB_TOKEN` or
+`GITHUB_PAT` are the fallbacks.
 
 ```bash
 # UI
@@ -162,14 +164,60 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 kubectl -n argocd get applications
 ```
 
-Sync latency is the poll interval (3 min by default). To make it instant, add
-a GitHub webhook pointing at the Argo CD API server — that requires exposing
-it publicly, which this setup does not do.
+### Sync trigger: the GitHub push webhook
 
-**Which branch deploys.** `targetRevision: master`. CI commits the tag bump to
-the branch that triggered the build, so a push to `k8s/local-deployment` builds
-an image but does not deploy it until merged into `master`. Change the field in
-`argocd/apps/*.yaml` if you want feature-branch deploys.
+Deploys are event-driven, not poll-driven. The event is sent by **GitHub
+itself** — not by the CI workflow — from the webhook configured in
+*repo → Settings → Webhooks*. A merge is just a push to the deployment branch,
+so merging the CI tag-bump PR is what fires the deploy:
+
+```
+push to master ─ GitHub webhook ─▶ https://argocd.verginjose.cloud/api/webhook
+               ─ HMAC verified ─▶ Argo re-reads k8s/apps and auto-syncs
+```
+
+| Setting | Value |
+|---|---|
+| Payload URL | `https://argocd.verginjose.cloud/api/webhook` |
+| Content type | `application/json` |
+| Events | push only |
+| Secret | shared with `webhook.github.secret` below |
+
+Argo validates `X-Hub-Signature-256` (HMAC-SHA256 of the raw body) with
+`webhook.github.secret` from `Secret/argocd-secret`; an unsigned or mis-signed
+request gets `400`. Keep the same value in `.env` as
+`ARGOCD_WEBHOOK_SECRET` — `argocd/apply.sh` patches it idempotently and
+restarts `argocd-server` only when it changes. Without it, deliveries fail and
+sync falls back to the poll interval.
+
+Cloudflare Access covers the whole hostname, so the webhook only reaches Argo
+because a separate Access application with a **Bypass / Everyone** policy
+covers exactly the path `/api/webhook`. Keep that bypass path-narrow: Argo's
+HMAC validation is the actual authentication on that endpoint.
+
+Push events for other refs also arrive at Argo (e.g. `ci/tag-bump-*`); Argo
+ignores them because they do not match `targetRevision`. Restrict further with
+`webhook.github.allowedIps` only if needed — GitHub's hook IP ranges change.
+
+**Fallback polling.** `argocd-cm` sets `timeout.reconciliation: 60s` and
+`timeout.reconciliation.jitter: 15s` (default 180s) so a missed delivery still
+syncs within about a minute. These are cluster state, not in any manifest —
+reapply after recreating the ConfigMap:
+
+```bash
+kubectl -n argocd patch cm argocd-cm --type merge -p '{"data":{
+  "timeout.reconciliation":"60s",
+  "timeout.reconciliation.jitter":"15s"}}'
+kubectl -n argocd rollout restart statefulset/argocd-application-controller
+```
+
+**Which branch deploys.** `targetRevision: master`. CI builds on a push to
+`master` or `k8s/local-deployment`, but it never pushes the tag bump to either
+branch: it pushes a `ci/tag-bump-<run-id>` branch and a human merges the PR
+(see the `promote` job in `.github/workflows/build.yml`). A push to
+`k8s/local-deployment` therefore builds an image but does not deploy it until
+merged into `master`. Change the field in `argocd/apps/*.yaml` if you want
+feature-branch deploys.
 
 **Infrastructure is now managed by Argo** through `argocd/apps/10-infra.yaml`
 (`k8s/infrastructure` + `k8s/config/infra`). Secrets come from the committed

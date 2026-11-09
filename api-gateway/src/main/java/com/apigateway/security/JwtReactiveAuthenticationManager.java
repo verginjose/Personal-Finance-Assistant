@@ -56,7 +56,7 @@ public class JwtReactiveAuthenticationManager
                                 .parseSignedClaims(t)
                                 .getPayload());
 
-                        // A cached parse skips JWT validation, so re-check
+                         // A cached parse skips JWT validation, so re-check
                         // expiry on every hit: otherwise a token stays valid
                         // for up to the 5-minute cache lifetime after it expired.
                         if (claims.getExpiration() == null

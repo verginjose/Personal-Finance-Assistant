@@ -20,8 +20,8 @@ on:
         type: choice
         options: [all, auth-service, api-gateway, command-service, query-service, frontend, ocr-service]
 
-# Build jobs only read code. Only promotion can push a proposal branch and
-# open its PR and merge the validated promotion after approval and checks.
+# Build jobs only read code. Only promotion can push a proposal branch, open
+# its PR, and merge the validated promotion once the required checks pass.
 permissions:
   contents: read
 
@@ -221,8 +221,10 @@ jobs:
       # certificate, which this pod no longer has (by design); the hourly
       # registry-gc CronJob owns retention now.
 
-  # Promotion goes through a PR, separate-identity approval and passing checks.
-  # Only the exact generated manifest commit may be merged automatically.
+  # Promotion goes through a PR and passing checks. Only the exact generated
+  # manifest commit may be merged automatically. Branch protection on the
+  # target branch requires the CodeQL checks, so GitHub enforces the gate at
+  # merge time as well.
   promote:
     permissions:
       contents: write
@@ -288,16 +290,7 @@ jobs:
             echo "Merging it makes Argo CD deploy these images."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Approve the validated promotion pull request
-        if: steps.promotion.outputs.pr_number != ''
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          REVIEW_TOKEN: ${{ secrets.PENNYPILOT_REVIEW_TOKEN }}
-          PR_NUMBER: ${{ steps.promotion.outputs.pr_number }}
-          EXPECTED_HEAD_SHA: ${{ steps.promotion.outputs.head_sha }}
-        run: bash k8s/ci/approve-promotion-pr.sh
-
-      - name: Merge the approved bot promotion after checks pass
+      - name: Merge the validated bot promotion after checks pass
         if: steps.promotion.outputs.pr_number != ''
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -10,6 +10,11 @@
 # is the fallback; GITHUB_PAT is the last resort. If Argo CD is already
 # installed this is idempotent.
 #
+# Preferred once available: ARGO_DEPLOY_KEY_FILE (path to a read-only SSH
+# deploy key). Using a deploy key lets the registration App drop Contents:read
+# entirely, so one leaked App key can no longer read code (and vice versa).
+# The App and token paths remain as fallbacks.
+#
 # ARGOCD_WEBHOOK_SECRET (optional) is the shared HMAC secret for the GitHub
 # push webhook -> /api/webhook. It is patched into argocd-secret and must
 # match the secret configured in GitHub's webhook settings. Without it the
@@ -61,15 +66,25 @@ APP_INSTALLATION_ID="$(env_value CI_APP_INSTALLATION_ID | tr -d '"')"
 APP_KEY="$(env_multiline CI_APP_PRIVATE_KEY)"
 TOKEN="$(env_value ARGOCD_GITHUB_TOKEN)"
 [[ -n "${TOKEN}" ]] || TOKEN="$(env_value GITHUB_PAT)"
+DEPLOY_KEY_FILE="$(env_value ARGO_DEPLOY_KEY_FILE | tr -d '"')"
+SSH_REPO_URL="git@github.com:verginjose/Personal-Finance-Assistant.git"
 
-if [[ -n "${APP_ID}" && -n "${APP_INSTALLATION_ID}" && -n "${APP_KEY}" ]]; then
+if [[ -n "${DEPLOY_KEY_FILE}" && -f "${DEPLOY_KEY_FILE}" ]]; then
+  # Deploy key: read-only, scoped to this one repository, and independent of
+  # the runner-registration App.
+  perm="$(stat -c '%a' "${DEPLOY_KEY_FILE}" 2>/dev/null || true)"
+  [[ "${perm}" =~ 00$ ]] || echo "warning: ${DEPLOY_KEY_FILE} should be mode 600" >&2
+  CRED_MODE=deploykey
+  REPO_URL="${SSH_REPO_URL}"
+elif [[ -n "${APP_ID}" && -n "${APP_INSTALLATION_ID}" && -n "${APP_KEY}" ]]; then
   CRED_MODE=app
 elif [[ -n "${TOKEN}" ]]; then
   CRED_MODE=token
 else
   echo "No repo credential found in .env." >&2
-  echo "Set CI_APP_ID/CI_APP_INSTALLATION_ID/CI_APP_PRIVATE_KEY (GitHub App)" >&2
-  echo "or ARGOCD_GITHUB_TOKEN (fine-grained PAT with Contents: read-only)." >&2
+  echo "Set ARGO_DEPLOY_KEY_FILE (read-only SSH deploy key), or" >&2
+  echo "CI_APP_ID/CI_APP_INSTALLATION_ID/CI_APP_PRIVATE_KEY (GitHub App), or" >&2
+  echo "ARGOCD_GITHUB_TOKEN (fine-grained PAT with Contents: read-only)." >&2
   exit 1
 fi
 
@@ -126,7 +141,16 @@ echo "==> Registering the repository credential (${CRED_MODE})"
 # keys next to the githubApp* ones, and Argo then prefers (and fails with)
 # basic auth.
 kubectl -n argocd delete secret pfa-repo --ignore-not-found >/dev/null
-if [[ "${CRED_MODE}" == app ]]; then
+if [[ "${CRED_MODE}" == deploykey ]]; then
+  kubectl -n argocd create secret generic pfa-repo \
+      --from-literal=type=git \
+      --from-literal=url="${REPO_URL}" \
+      --from-file=sshPrivateKey="${DEPLOY_KEY_FILE}" \
+      --dry-run=client -o yaml \
+    | kubectl label --local -f - \
+        argocd.argoproj.io/secret-type=repository -o yaml \
+    | kubectl apply -f - >/dev/null
+elif [[ "${CRED_MODE}" == app ]]; then
   # Built with kubectl so the PEM does not have to be indented into YAML.
   kubectl -n argocd create secret generic pfa-repo \
       --from-literal=type=git \

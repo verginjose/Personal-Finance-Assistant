@@ -11,8 +11,8 @@
 #
 # The runner has no cluster permissions: it builds and pushes a tag-bump
 # branch and opens its PR with the promotion job token. Validated bot promotions
-# merge after the required checks pass; Argo CD deploys. Registration App
-# permissions stay unchanged. No review token is used.
+# enable auto-merge; GitHub merges after the required checks pass and Argo CD
+# deploys. Registration App permissions stay unchanged. No review token is used.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

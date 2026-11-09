@@ -17,9 +17,9 @@ if post:
     if os.environ['CASE'] == 'denied':
         print(json.dumps({'message': 'GitHub Actions is not permitted to create pull requests'}))
         sys.exit(22)
-    print(json.dumps({'html_url': 'https://github.com/owner/repo/pull/42'}))
+    print(json.dumps({'html_url': 'https://github.com/owner/repo/pull/42', 'node_id': 'PR_node_42'}))
 else:
-    print(json.dumps([{'html_url': 'https://github.com/owner/repo/pull/41'}] if os.environ['CASE'] == 'existing' else []))
+    print(json.dumps([{'html_url': 'https://github.com/owner/repo/pull/41', 'node_id': 'PR_node_41'}] if os.environ['CASE'] == 'existing' else []))
 '''
 
 
@@ -39,10 +39,10 @@ class PromotionTests(unittest.TestCase):
                    CASE=case, REQUEST_CAPTURE=str(capture), GITHUB_STEP_SUMMARY=str(summary))
         env['GITHUB_OUTPUT'] = str(root / 'outputs')
         result = subprocess.run(['bash', str(HELPER)], env=env, text=True, capture_output=True)
-        return result, capture, summary
+        return result, capture, summary, Path(env['GITHUB_OUTPUT'])
 
     def test_creates_pr_for_correct_branch(self):
-        result, capture, summary = self.run_helper('new')
+        result, capture, summary, outputs = self.run_helper('new')
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(capture.read_text())
         self.assertEqual(payload['head'], 'ci/tag-bump-123-1')
@@ -50,16 +50,18 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(payload['title'], 'chore(deploy): promote built images to abc123')
         self.assertIn('\n\n', payload['body'])
         self.assertIn('pull/42', summary.read_text())
+        self.assertIn('pr_node_id=PR_node_42', outputs.read_text())
         self.assertNotIn('test-token', result.stdout + result.stderr)
 
     def test_existing_pr_is_reused(self):
-        result, capture, summary = self.run_helper('existing')
+        result, capture, summary, outputs = self.run_helper('existing')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(capture.exists())
         self.assertIn('pull/41', summary.read_text())
+        self.assertIn('pr_node_id=PR_node_41', outputs.read_text())
 
     def test_permission_failure_fails_job_with_setup_hint(self):
-        result, _, summary = self.run_helper('denied')
+        result, _, summary, _ = self.run_helper('denied')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Allow GitHub Actions to create', result.stderr)
         self.assertFalse(summary.exists())

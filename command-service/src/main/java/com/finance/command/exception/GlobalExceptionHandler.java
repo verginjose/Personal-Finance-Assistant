@@ -106,6 +106,13 @@ public class GlobalExceptionHandler {
         log.debug("Async request timed out (SSE stream closed)");
     }
 
+    /** A disconnected async response cannot accept an additional JSON error body. */
+    @ExceptionHandler(org.springframework.web.context.request.async.AsyncRequestNotUsableException.class)
+    public void handleDisconnectedClient(
+            org.springframework.web.context.request.async.AsyncRequestNotUsableException ex) {
+        log.debug("Async client disconnected: {}", ex.getMessage());
+    }
+
     /** A missing query/path parameter is a client error, not a 500. */
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ErrorResponse> handleMissingParameter(MissingServletRequestParameterException ex) {

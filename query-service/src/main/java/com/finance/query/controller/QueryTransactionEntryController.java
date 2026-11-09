@@ -1,6 +1,7 @@
 package com.finance.query.controller;
 
 import com.finance.query.dto.CreateEntryResponse;
+import com.finance.query.dto.PageResponse;
 import com.finance.query.model.Category;
 import com.finance.query.model.TransactionEntry;
 import com.finance.query.model.TransactionType;
@@ -41,7 +42,7 @@ public class QueryTransactionEntryController {
     }
 
     @GetMapping("/goals/{id}/transactions")
-    public ResponseEntity<Page<CreateEntryResponse>> getGoalTransactions(
+    public ResponseEntity<PageResponse<CreateEntryResponse>> getGoalTransactions(
             @RequestHeader(value = "X-User-Id", required = false) String xUserId,
             @PathVariable Long id,
             @RequestParam UUID userId,
@@ -50,11 +51,11 @@ public class QueryTransactionEntryController {
         if (xUserId != null && !userId.toString().equalsIgnoreCase(xUserId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: User ID mismatch");
         }
-        return ResponseEntity.ok(service.getGoalContributions(id, userId, page, size));
+        return ResponseEntity.ok(PageResponse.from(service.getGoalContributions(id, userId, page, size)));
     }
 
     @GetMapping("/entries")
-    public ResponseEntity<Page<TransactionEntry>> getEntries(
+    public ResponseEntity<PageResponse<TransactionEntry>> getEntries(
             @RequestParam UUID userId,
             @RequestParam(required = false) TransactionType type,
             @RequestParam(required = false) Category category,
@@ -65,11 +66,11 @@ public class QueryTransactionEntryController {
             @RequestParam(required = false) String targetCurrency) {
         Page<TransactionEntry> result = service.getEntriesByUserId(userId, type, category, startDate, endDate, page, size);
         currencyConversion.decorate(result.getContent(), userId, targetCurrency);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(PageResponse.from(result));
     }
 
     @GetMapping("/search")
-    public ResponseEntity<Page<TransactionEntry>> searchEntries(
+    public ResponseEntity<PageResponse<TransactionEntry>> searchEntries(
             @RequestParam UUID userId,
             @RequestParam String q,
             @RequestParam(defaultValue = "0")  int page,
@@ -77,7 +78,7 @@ public class QueryTransactionEntryController {
             @RequestParam(required = false) String targetCurrency) {
         Page<TransactionEntry> result = service.searchEntries(userId, q, page, size);
         currencyConversion.decorate(result.getContent(), userId, targetCurrency);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(PageResponse.from(result));
     }
 
     @GetMapping("/summary")

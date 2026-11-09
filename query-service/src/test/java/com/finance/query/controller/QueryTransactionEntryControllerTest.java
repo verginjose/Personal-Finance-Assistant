@@ -36,6 +36,31 @@ public class QueryTransactionEntryControllerTest {
     private CurrencyConversionService currencyConversion;
 
     @Test
+    void paginatedEntries_keepStableTopLevelMetadata() throws Exception {
+        UUID userId = UUID.randomUUID();
+        var entry = new com.finance.query.model.TransactionEntry();
+        entry.setId(42L);
+        when(service.getEntriesByUserId(any(), any(), any(), any(), any(),
+                org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(
+                        java.util.List.of(entry), org.springframework.data.domain.PageRequest.of(1, 2), 5));
+
+        mockMvc.perform(get("/upsert/entries")
+                        .header("X-User-Id", userId.toString())
+                        .param("userId", userId.toString()).param("page", "1").param("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(42))
+                .andExpect(jsonPath("$.number").value(1))
+                .andExpect(jsonPath("$.size").value(2))
+                .andExpect(jsonPath("$.totalElements").value(5))
+                .andExpect(jsonPath("$.totalPages").value(3))
+                .andExpect(jsonPath("$.first").value(false))
+                .andExpect(jsonPath("$.last").value(false))
+                .andExpect(jsonPath("$.numberOfElements").value(1))
+                .andExpect(jsonPath("$.empty").value(false));
+    }
+
+    @Test
     @DisplayName("GET /upsert/entries/{id}: an id that is not the caller's is a 404, not a 400")
     void foreignEntryId_returns404() throws Exception {
         UUID userId = UUID.randomUUID();

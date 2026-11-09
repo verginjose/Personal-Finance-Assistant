@@ -1,16 +1,16 @@
 {
   "uid": "redis-debug",
-  "title": "Redis — Debug & Runbook",
+  "title": "Redis — Diagnostics",
   "tags": [
     "finance-assistant",
     "redis"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
-  "refresh": "15s",
+  "version": 3,
+  "refresh": "30s",
   "editable": true,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "time": {
     "from": "now-1h",
     "to": "now"
@@ -38,36 +38,6 @@
   "templating": {
     "list": [
       {
-        "name": "service",
-        "label": "Service",
-        "type": "custom",
-        "query": "redis,redis-replica",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "options": [
-          {
-            "text": "All",
-            "value": "$__all",
-            "selected": true
-          },
-          {
-            "text": "redis",
-            "value": "redis",
-            "selected": false
-          },
-          {
-            "text": "redis-replica",
-            "value": "redis-replica",
-            "selected": false
-          }
-        ],
-        "includeAll": true,
-        "allValue": "%",
-        "multi": false
-      },
-      {
         "name": "search",
         "label": "Search",
         "type": "textbox",
@@ -82,17 +52,17 @@
   "panels": [
     {
       "id": 1,
-      "title": "Redis logs — $service | $search",
+      "title": "Recent logs",
       "type": "logs",
       "datasource": {
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse-ds"
       },
-      "description": "All Redis master/replica log lines. Narrow with the Service and Search variables at the top.",
+      "description": "Service-scoped logs. Use Search to narrow messages.",
       "targets": [
         {
           "queryType": "sql",
-          "rawSql": "SELECT timestamp, message, level, service, pod, logger FROM default.logs WHERE service LIKE '$service' AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
+          "rawSql": "SELECT timestamp, message, level, service, pod, logger FROM default.logs WHERE service IN ('redis', 'redis-replica') AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
           "refId": "A",
           "format": "logs"
         }
@@ -115,7 +85,7 @@
         "x": 0,
         "y": 0,
         "w": 24,
-        "h": 12
+        "h": 10
       }
     },
     {
@@ -159,12 +129,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -173,7 +140,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 10,
         "w": 12,
         "h": 8
       }
@@ -219,12 +186,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -233,31 +197,87 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 12,
+        "y": 10,
         "w": 12,
         "h": 8
       }
     },
     {
-      "id": 4,
-      "title": "Runbook — redis-cli commands",
-      "type": "text",
-      "options": {
-        "mode": "markdown",
-        "code": {
-          "language": "bash",
-          "showLineNumbers": true
-        },
-        "content": "## Copy/paste runbook\n\nRun these from the repo root. `REDIS_PW` comes from `.env`; never paste the\npassword into a ticket or a Grafana panel.\n\n```bash\nexport REDIS_PW=$(sed -n 's/^REDIS_PASSWORD=//p' .env)\nMASTER=$(kubectl -n pfa get pod -l app=redis -o jsonpath='{.items[0].metadata.name}')\nREPLICA=$(kubectl -n pfa get pod -l app=redis-replica -o jsonpath='{.items[0].metadata.name}')\nCLI=\"redis-cli -a $REDIS_PW --no-auth-warning\"\n```\n\n### 1. Is it alive?\n\n```bash\nkubectl -n pfa exec $MASTER  -- $CLI ping                 # PONG\nkubectl -n pfa exec $REPLICA -- $CLI ping\nkubectl -n pfa exec $MASTER  -- $CLI info server | grep -E 'redis_version|uptime_in_seconds|process_id'\nkubectl -n pfa exec $MASTER  -- $CLI info keyspace        # db0:keys=…,expires=…,avg_ttl=…\nkubectl -n pfa exec $MASTER  -- $CLI dbsize\n```\n\n### 2. Replication (why reads are stale)\n\n```bash\nkubectl -n pfa exec $MASTER  -- $CLI info replication     # role:master, connected_slaves\nkubectl -n pfa exec $REPLICA -- $CLI info replication     # role:slave, master_link_status:up\n```\n\nWatch `master_link_status` (must be `up`), `master_last_io_seconds_ago`\n(should be < 10) and compare `slave_repl_offset` to the master's\n`master_repl_offset`.\n\n### 3. Memory, eviction and hit rate\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI info memory \\\n  | grep -E 'used_memory_human|maxmemory_human|maxmemory_policy|mem_fragmentation_ratio'\nkubectl -n pfa exec $MASTER -- $CLI info stats \\\n  | grep -E 'keyspace_hits|keyspace_misses|evicted_keys|rejected_connections|expired_keys'\nkubectl -n pfa exec $MASTER -- $CLI config get maxmemory-policy\n```\n\n`evicted_keys` climbing = the cache is under pressure: raise the limit or\nreduce TTLs. A falling hit ratio with a growing `dbsize` usually means stale\ncache keys, not a Redis fault.\n\n### 4. Auth caches (auth-service / query-service)\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'refresh_token:*' | head\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'user_tokens:*'    | head\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'token_blacklist:*'| head\nkubectl -n pfa exec $MASTER -- $CLI ttl  'refresh_token:<id>'\nkubectl -n pfa exec $MASTER -- $CLI memory usage 'refresh_token:<id>'\n```\n\nPrefer `--scan` over `keys '*'`; `keys` blocks the single-threaded server.\n\n### 5. Slow operations and clients\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI slowlog len\nkubectl -n pfa exec $MASTER -- $CLI slowlog get 20\nkubectl -n pfa exec $MASTER -- $CLI info clients | grep -E 'connected_clients|blocked_clients'\nkubectl -n pfa exec $MASTER -- $CLI client list\nkubectl -n pfa exec $MASTER -- $CLI latency latest\n```\n\n### 6. Live traffic (short burst only)\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI monitor      # Ctrl-C after a few seconds\n```\n\n`monitor` adds load and can print secrets — use it for seconds, not minutes.\n\n### 7. Persistence checks\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI info persistence | grep -E 'rdb_last_bgsave_status|aof_last_bgrewrite_status|rdb_changes_since_last_save'\nkubectl -n pfa exec $MASTER -- $CLI bgsave      # async; never `save` in prod\n```\n\n### Last resort\n\n`FLUSHDB` / `FLUSHALL` delete the auth token caches and every cached\naggregate. Only run after a verified backup, and expect all users to be\nlogged out.\n"
-      },
+      "id": 100,
+      "type": "row",
+      "title": "Operational runbook",
+      "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 20,
+        "y": 18,
         "w": 24,
-        "h": 22
+        "h": 1
       },
-      "transparent": false
+      "panels": [
+        {
+          "id": 4,
+          "title": "Runbook — redis-cli commands",
+          "type": "text",
+          "options": {
+            "mode": "markdown",
+            "code": {
+              "language": "bash",
+              "showLineNumbers": true
+            },
+            "content": "## Copy/paste runbook\n\nRun these from the repo root. `REDIS_PW` comes from `.env`; never paste the\npassword into a ticket or a Grafana panel.\n\n```bash\nexport REDIS_PW=$(sed -n 's/^REDIS_PASSWORD=//p' .env)\nMASTER=$(kubectl -n pfa get pod -l app=redis -o jsonpath='{.items[0].metadata.name}')\nREPLICA=$(kubectl -n pfa get pod -l app=redis-replica -o jsonpath='{.items[0].metadata.name}')\nCLI=\"redis-cli -a $REDIS_PW --no-auth-warning\"\n```\n\n### 1. Is it alive?\n\n```bash\nkubectl -n pfa exec $MASTER  -- $CLI ping                 # PONG\nkubectl -n pfa exec $REPLICA -- $CLI ping\nkubectl -n pfa exec $MASTER  -- $CLI info server | grep -E 'redis_version|uptime_in_seconds|process_id'\nkubectl -n pfa exec $MASTER  -- $CLI info keyspace        # db0:keys=…,expires=…,avg_ttl=…\nkubectl -n pfa exec $MASTER  -- $CLI dbsize\n```\n\n### 2. Replication (why reads are stale)\n\n```bash\nkubectl -n pfa exec $MASTER  -- $CLI info replication     # role:master, connected_slaves\nkubectl -n pfa exec $REPLICA -- $CLI info replication     # role:slave, master_link_status:up\n```\n\nWatch `master_link_status` (must be `up`), `master_last_io_seconds_ago`\n(should be < 10) and compare `slave_repl_offset` to the master's\n`master_repl_offset`.\n\n### 3. Memory, eviction and hit rate\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI info memory \\\n  | grep -E 'used_memory_human|maxmemory_human|maxmemory_policy|mem_fragmentation_ratio'\nkubectl -n pfa exec $MASTER -- $CLI info stats \\\n  | grep -E 'keyspace_hits|keyspace_misses|evicted_keys|rejected_connections|expired_keys'\nkubectl -n pfa exec $MASTER -- $CLI config get maxmemory-policy\n```\n\n`evicted_keys` climbing = the cache is under pressure: raise the limit or\nreduce TTLs. A falling hit ratio with a growing `dbsize` usually means stale\ncache keys, not a Redis fault.\n\n### 4. Auth caches (auth-service / query-service)\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'refresh_token:*' | head\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'user_tokens:*'    | head\nkubectl -n pfa exec $MASTER -- $CLI --scan --pattern 'token_blacklist:*'| head\nkubectl -n pfa exec $MASTER -- $CLI ttl  'refresh_token:<id>'\nkubectl -n pfa exec $MASTER -- $CLI memory usage 'refresh_token:<id>'\n```\n\nPrefer `--scan` over `keys '*'`; `keys` blocks the single-threaded server.\n\n### 5. Slow operations and clients\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI slowlog len\nkubectl -n pfa exec $MASTER -- $CLI slowlog get 20\nkubectl -n pfa exec $MASTER -- $CLI info clients | grep -E 'connected_clients|blocked_clients'\nkubectl -n pfa exec $MASTER -- $CLI client list\nkubectl -n pfa exec $MASTER -- $CLI latency latest\n```\n\n### 6. Live traffic (short burst only)\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI monitor      # Ctrl-C after a few seconds\n```\n\n`monitor` adds load and can print secrets — use it for seconds, not minutes.\n\n### 7. Persistence checks\n\n```bash\nkubectl -n pfa exec $MASTER -- $CLI info persistence | grep -E 'rdb_last_bgsave_status|aof_last_bgrewrite_status|rdb_changes_since_last_save'\nkubectl -n pfa exec $MASTER -- $CLI bgsave      # async; never `save` in prod\n```\n\n### Last resort\n\n`FLUSHDB` / `FLUSHALL` delete the auth token caches and every cached\naggregate. Only run after a verified backup, and expect all users to be\nlogged out.\n"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 19,
+            "w": 24,
+            "h": 22
+          },
+          "transparent": false
+        }
+      ]
     }
   ],
-  "description": "Redis master/replica logs, pod pressure, replication health and copy-paste redis-cli commands. Start here when caching, login tokens or read freshness look wrong."
+  "description": "Service-scoped logs and CPU / memory pressure. Expand the operational runbook for investigation commands.",
+  "links": [
+    {
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/finance-assistant",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Pods",
+      "type": "link",
+      "url": "/d/pods",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Logs",
+      "type": "link",
+      "url": "/d/logs-explorer",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Data",
+      "type": "link",
+      "url": "/d/data-explorer",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Postgres",
+      "type": "link",
+      "url": "/d/postgres-debug",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    }
+  ]
 }

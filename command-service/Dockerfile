@@ -59,3 +59,5 @@ EXPOSE 8081
 # Run Spring Boot application
 # Virtual threads are enabled via spring.threads.virtual.enabled=true in application.properties
 ENTRYPOINT ["java", "-jar", "app.jar"]
+
+# CI automerge trigger 2026-11-09

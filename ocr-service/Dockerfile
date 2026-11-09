@@ -35,3 +35,5 @@ CMD ["uvicorn", "main:app", \
      "--workers", "1", \
      "--loop", "uvloop", \
      "--http", "httptools"]
+
+# CI automerge trigger 2026-11-09

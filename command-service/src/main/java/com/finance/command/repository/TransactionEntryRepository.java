@@ -20,6 +20,7 @@ import java.util.UUID;
 
 @Repository
 public interface TransactionEntryRepository extends JpaRepository<TransactionEntry, Long> {
+    boolean existsByReceiptUrlAndUserIdAndDeletedAtIsNull(String receiptUrl, UUID userId);
 
     // ── Basic listing ─────────────────────────────────────────────────────────
 

@@ -21,7 +21,9 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
 
     @Override
     public Mono<Void> handle(@NonNull ServerWebExchange exchange, @NonNull Throwable ex) {
-        log.error("Gateway error: {} {}", exchange.getRequest().getMethod(), exchange.getRequest().getURI(), ex);
+        // Query parameters can contain short-lived stream tickets. Never log them.
+        log.error("Gateway error: {} {} ({})", exchange.getRequest().getMethod(),
+                exchange.getRequest().getPath().value(), ex.getClass().getSimpleName());
 
         // Once the response is committed (e.g. an SSE stream that already sent
         // headers/data and then failed or the client disconnected) its headers

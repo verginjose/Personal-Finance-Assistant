@@ -124,7 +124,7 @@ public class AuthController {
                             // browser (stored XSS through avatars).
                             if (!picture.isEmpty()
                                     && (picture.length() > 512
-                                        || !picture.matches("^/api/storage/[A-Za-z0-9._/-]+$"))) {
+                                        || !picture.matches("^/api/storage/profiles/[A-Za-z0-9._/-]+$"))) {
                                 return Mono.just(ResponseEntity.badRequest()
                                         .body(Map.of("message", "Invalid profile picture URL")));
                             }

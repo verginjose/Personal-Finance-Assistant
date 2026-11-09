@@ -1,7 +1,7 @@
 import { api, Auth, toast } from '../utils/api.js';
 import { icon } from '../utils/icons.js';
 import {
-  esc, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
+  esc, escAttr, pageHeader, emptyState, formatMoney, formatCategory, formatDate,
   progressBar, goalRuler, budgetStatusColor, openModal, confirmModal, modalActions,
   EXPENSE_CATS, categoryOptions, currencyOptionHtml,
 } from '../utils/ui.js';
@@ -164,7 +164,7 @@ function goalCard(g, forecast) {
           ${!g.completed ? `<button class="btn btn-secondary btn-sm" id="add-money-${g.id}">Add money</button>` : ''}
           <button class="btn btn-ghost btn-sm" id="view-goal-${g.id}">Details</button>
           <span class="overflow-wrap">
-            <button id="goal-menu-${g.id}" class="btn btn-ghost btn-icon btn-sm" aria-label="More actions for ${esc(g.name)}" aria-haspopup="menu">${icon('more-vertical', 'sm')}</button>
+            <button id="goal-menu-${g.id}" class="btn btn-ghost btn-icon btn-sm" aria-label="More actions for ${escAttr(g.name)}" aria-haspopup="menu">${icon('more-vertical', 'sm')}</button>
             <div class="overflow-menu" id="goal-actions-${g.id}" role="menu" hidden>
               <button id="del-goal-${g.id}" role="menuitem">Delete goal</button>
             </div>

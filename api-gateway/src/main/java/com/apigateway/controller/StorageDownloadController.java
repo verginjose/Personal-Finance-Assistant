@@ -15,6 +15,8 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.ClientResponse;
 
 /**
  * Serves stored receipts and profile pictures.
@@ -39,6 +41,7 @@ import reactor.core.publisher.Mono;
 public class StorageDownloadController {
 
     private final MinioStorageService storage;
+    private final WebClient storageAccessClient = WebClient.create("http://command-service:8081");
 
     @Value("${minio.bucket:receipts}")
     private String receiptBucket;
@@ -73,7 +76,25 @@ public class StorageDownloadController {
         response.getHeaders().set("Content-Disposition",
                 (image ? "inline; " : "attachment; ") + "filename=\"" + safeFileName(name) + "\"");
 
-        return storage.open(bucket, name)
+        Mono<Boolean> authorized;
+        if (profileBucket.equals(bucket)) {
+            authorized = Mono.just(true);
+        } else {
+            String userId = exchange.getRequest().getHeaders().getFirst("X-User-Id");
+            if (userId == null || userId.isBlank()) {
+                return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+            }
+            String url = "/api/storage/" + bucket + "/" + name;
+            authorized = storageAccessClient.get()
+                    .uri(uri -> uri.path("/upsert/storage-access").queryParam("url", url).build())
+                    .header("X-User-Id", userId)
+                    .exchangeToMono(reply -> Mono.just(reply.statusCode().is2xxSuccessful()))
+                    .onErrorReturn(false);
+        }
+
+        return authorized.filter(Boolean::booleanValue)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND)))
+                .flatMap(ignored -> storage.open(bucket, name))
                 .flatMap(obj -> {
                     String length = obj.headers().get("Content-Length");
                     if (length != null) {

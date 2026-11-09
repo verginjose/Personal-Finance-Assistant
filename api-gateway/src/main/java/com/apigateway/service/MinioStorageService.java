@@ -4,6 +4,7 @@ import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
 import io.minio.GetObjectResponse;
 import io.minio.MakeBucketArgs;
+import io.minio.DeleteBucketPolicyArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +46,18 @@ public class MinioStorageService {
 
     private final MinioClient client;
     private final Set<String> knownBuckets = ConcurrentHashMap.newKeySet();
+
+    @Value("${minio.bucket:receipts}")
+    private String receiptBucket;
+
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void makeExistingReceiptsPrivate() {
+        try {
+            ensureBucket(receiptBucket);
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not remove the legacy public receipt policy", e);
+        }
+    }
 
     public MinioStorageService(
             @Value("${minio.endpoint:http://minio:9000}") String endpoint,
@@ -176,17 +189,23 @@ public class MinioStorageService {
         if (!client.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {
             client.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
         }
-        // No bucket policy: objects are private and are only read through the
-        // authenticated-by-origin, header-hardened download controller.
+        // Older deployments applied a public-read policy to this bucket.
+        // Remove it as part of the migration, including on an existing bucket.
+        if (receiptBucket.equals(bucket)) {
+            client.deleteBucketPolicy(DeleteBucketPolicyArgs.builder().bucket(bucket).build());
+        }
         knownBuckets.add(bucket);
     }
 
     /** Open an object for the download controller. Blocking; call off the event loop. */
     public Mono<GetObjectResponse> open(String bucket, String objectName) {
-        return Mono.fromCallable(() -> client.getObject(GetObjectArgs.builder()
-                        .bucket(bucket)
-                        .object(objectName)
-                        .build()))
+        return Mono.fromCallable(() -> {
+                    ensureBucket(bucket);
+                    return client.getObject(GetObjectArgs.builder()
+                            .bucket(bucket)
+                            .object(objectName)
+                            .build());
+                })
                 .subscribeOn(Schedulers.boundedElastic());
     }
 

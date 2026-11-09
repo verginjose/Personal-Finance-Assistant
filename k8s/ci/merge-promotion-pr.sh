@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Merge only the approved, checked manifest commit produced by this build.
+# Merge only the validated, checked manifest commit produced by this build.
+# No review token is used: the promotion is gated by manifest validation and by
+# the required checks that branch protection enforces at merge time.
 set -euo pipefail
 : "${PR_NUMBER:?PR_NUMBER is required}"
 : "${GITHUB_TOKEN:?GITHUB_TOKEN is required}"
@@ -24,17 +26,6 @@ for ((attempt=1; attempt<=${MERGE_POLL_ATTEMPTS:-60}; attempt++)); do
     and (.head.ref | test("^ci/tag-bump-[0-9]+-[0-9]+$"))
     and .user.login == "github-actions[bot]"
   ' "$tmp/pr.json" >/dev/null || { echo '::error::Promotion PR identity or commit changed'; exit 1; }
-
-  curl -fsS "${headers[@]}" "$api/pulls/$PR_NUMBER/reviews?per_page=100" > "$tmp/reviews.json"
-  jq -e 'length < 100' "$tmp/reviews.json" >/dev/null || { echo '::error::Too many reviews to validate'; exit 1; }
-  # Ignore superseded reviews by the same account. Approval must refer to this
-  # exact commit and come from an identity other than the author.
-  jq 'sort_by(.id) | group_by(.user.login) | map(last)' "$tmp/reviews.json" > "$tmp/latest.json"
-  jq -e --arg sha "$EXPECTED_HEAD_SHA" '
-    any(.[]; .state == "APPROVED" and .commit_id == $sha
-      and .user.login != "github-actions[bot]")
-    and all(.[]; .state != "CHANGES_REQUESTED")
-  ' "$tmp/latest.json" >/dev/null || { echo '::error::Promotion needs approval for the exact commit'; exit 1; }
 
   curl -fsS "${headers[@]}" "$api/commits/$EXPECTED_HEAD_SHA/check-runs?per_page=100" > "$tmp/checks.json"
   curl -fsS "${headers[@]}" "$api/commits/$EXPECTED_HEAD_SHA/status?per_page=100" > "$tmp/status.json"

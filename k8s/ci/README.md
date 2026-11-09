@@ -10,7 +10,7 @@ git push
        ├─ buildctl → buildkitd pod → push registry.pfa.svc:5000/finance/<svc>:<sha>
        └─ PennyPilot commits tags on ci/tag-bump-<run>-<attempt>
             └─ github-actions[bot] opens a promotion pull request
-                 └─ validated bot PR merges after approval and checks
+                 └─ validated bot PR merges after checks pass
                       └─ Argo CD syncs k8s/apps → Deployment rolls out
 ```
 
@@ -87,10 +87,10 @@ Registration does not need Contents or Pull requests permissions, or a PAT.
 
 In **Repository Settings → Actions → General → Workflow permissions**, enable
 **Allow GitHub Actions to create and approve pull requests**. Organization policy
-must permit it as well. Enable **Allow auto-merge** in repository settings too.
-The workflow creates PRs, submits a separate-identity approval for validated
-image promotions, waits for checks, and merges the exact generated commit.
-Branch protection and review rules still apply. Ordinary source PRs are unchanged.
+must permit it as well. The workflow creates PRs, waits for checks, and merges
+the exact generated commit. Ordinary source PRs are unchanged. No review token
+or separate approver identity is used; GitHub enforces the required checks (see
+"Branch protection for promotion" below).
 
 `build.yml` grants `contents: read` by default and grants `contents: write` plus
 `pull-requests: write` only to `promote`, which also needs `checks: read` and
@@ -332,43 +332,49 @@ Deployment — if the runner ever needs `kubectl`, something is wrong with Argo.
 ### Check promotion automation locally
 
 ```bash
-bash -n k8s/ci/open-promotion-pr.sh k8s/ci/approve-promotion-pr.sh k8s/ci/merge-promotion-pr.sh
+bash -n k8s/ci/open-promotion-pr.sh k8s/ci/merge-promotion-pr.sh
 python3 -I -m unittest discover -s k8s/ci/tests -v
 ```
 
-The tests mock GitHub responses and cover PR creation, approval, exact-commit
-merging, waiting for checks, stale approvals, changed heads, failed checks,
-branch protection, unsafe files, incorrect image tags, and permission failures.
+The tests mock GitHub responses and cover PR creation, exact-commit merging,
+waiting for checks, branch protection, changed heads, failed checks, unsafe
+files, and incorrect image tags.
 
 
-### Automated promotion approval and merge
+### Automated promotion validation and merge
 
-The promote job includes an approval step. Configure the Actions secret
-`PENNYPILOT_REVIEW_TOKEN` with a **different identity** from the PR author
-(`github-actions[bot]`). A repository-restricted token needs Contents read and
-Pull requests write. Do not reuse the Administration-only runner-registration
-App or its private key. The approval is attributed to the token's real account;
-changing the Git author name to PennyPilot does not change the PR/review identity.
+The promote job opens a `ci/tag-bump-*` PR, validates the locally generated
+commit, waits for checks, and merges that exact commit. No review token or
+separate approver identity is used.
 
-The helper checks that the open PR still points to the exact locally generated
-commit, is from this repository's `ci/tag-bump-*` branch, and changes only the six
-service image references and OCR probe paths. It approves that commit via the
-review API. It rejects unexpected file edits and leaves a warning for manual
-review when the reviewer token is absent. The repository's Actions-create-and-approve
-setting does not allow authors to approve their own PRs.
+`validate-promotion.py` checks that the commit contains only the six service
+image references (tagged with the successful build's source SHA) and the OCR
+probe path changes. `merge-promotion-pr.sh` then validates that the PR is
+authored by `github-actions[bot]`, contains one generated commit, targets this
+workflow's branch in the same repository, and still points to the expected SHA.
+It waits up to ten minutes for at least one check to appear, all check runs to
+complete successfully (or be neutral/skipped), commit statuses to pass, and
+GitHub to report a clean merge state. Failed checks, a moved head, or a timeout
+leave the PR open and fail the job. The merge API receives the expected SHA, so
+a concurrent push cannot change the commit being merged.
 
-`merge-promotion-pr.sh` then validates that the PR is authored by
-`github-actions[bot]`, contains one generated commit, targets this workflow's
-branch in the same repository, and still points to the expected SHA. Added image
-tags must match the successful build's source SHA. A current, separate-identity
-approval is required. It waits up to ten minutes for at least one check to
-appear, all check runs to complete successfully (or be neutral/skipped), commit
-statuses to pass, and GitHub to report a clean merge state. Failed checks,
-requested changes, a moved head, or a timeout leave the PR open and fail the job.
-The merge API receives the expected SHA, so a concurrent push cannot change the
-commit being merged. No branch-protection bypass is used.
+### Branch protection for promotion
 
-Repository auto-merge is enabled separately, but the workflow uses a checked,
-SHA-pinned merge request so it also waits for checks that branch rules do not
-mark as required. No additional merge token is needed. Source PRs continue
-through the normal review process.
+The merge gate must be enforced by GitHub, not only by the helper script. On
+`master`, enable:
+
+- **Require a pull request before merging**, with **0** required approvals. The
+  bot prepares and merges its own PR, so requiring an approval would block it.
+- **Require status checks to pass** and select the four contexts
+  `Analyze (actions)`, `Analyze (java-kotlin)`,
+  `Analyze (javascript-typescript)` and `Analyze (python)`. These come from
+  CodeQL default setup, which runs on the bot-authored PR.
+- **Include administrators**, so the same rules apply to admin pushes.
+
+Leave *Require branches to be up to date* disabled: the helper expects
+`mergeable_state == "clean"`, and a branch that falls `behind` after master
+moves would otherwise time out instead of merging.
+
+If CodeQL default setup is moved to a checked-in workflow, a PR authored by
+`GITHUB_TOKEN` will not trigger it and promotion merges stop (fail closed) until
+the trigger is adjusted. No branch-protection bypass is used.

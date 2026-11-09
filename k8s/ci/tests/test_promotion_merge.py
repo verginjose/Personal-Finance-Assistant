@@ -29,11 +29,6 @@ elif '/check-runs' in url:
     print(json.dumps({'total_count': len(runs), 'check_runs': runs}))
 elif '/status?' in url:
     print(json.dumps({'total_count': 0 if case != 'failed_status' else 1, 'state': 'failure' if case == 'failed_status' else 'pending', 'statuses': [] if case != 'failed_status' else [{}]}))
-elif '/reviews?' in url:
-    reviews = [{'id': 1, 'user': {'login': 'reviewer'}, 'state': 'COMMENTED' if case == 'unapproved' else 'APPROVED', 'commit_id': '0'*40 if case == 'stale_review' else sha}]
-    if case == 'changes_requested':
-        reviews.append({'id': 2, 'user': {'login': 'reviewer'}, 'state': 'CHANGES_REQUESTED', 'commit_id': sha})
-    print(json.dumps(reviews))
 else:
     print(json.dumps({'state': 'open', 'draft': False, 'commits': 2 if case == 'extra_commits' else 1,
       'user': {'login': 'person' if case == 'human_pr' else 'github-actions[bot]'},
@@ -95,8 +90,7 @@ class MergeTests(unittest.TestCase):
 
     def test_rejects_unvalidated_or_unready_promotions(self):
         for case in ('source_edit', 'wrong_image', 'changed_head', 'human_pr',
-                     'wrong_branch', 'fork', 'extra_commits', 'unapproved',
-                     'stale_review', 'changes_requested', 'pending', 'no_checks',
+                     'wrong_branch', 'fork', 'extra_commits', 'pending', 'no_checks',
                      'failed_check', 'failed_status', 'blocked'):
             with self.subTest(case=case):
                 result, request, _ = self.run_case(case)

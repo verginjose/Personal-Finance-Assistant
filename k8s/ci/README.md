@@ -93,9 +93,10 @@ key can then only manage runners — it cannot read code — while the deploy ke
 cannot manage anything. `./k8s/ci/debug.sh` flags unexpected runner
 registrations.
 
-Registration runs in a short-lived init container that mints a one-hour
-registration token; the long-running runner container never receives the App
-private key.
+Registration runs in a native sidecar that mints a one-hour registration token
+and refreshes it every 45 minutes; the long-running runner container never
+receives the App private key, and a container restart always finds a fresh
+token.
 
 ### 4. Allow workflow-created pull requests
 

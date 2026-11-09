@@ -247,6 +247,11 @@ jobs:
           for svc in $(echo "$SERVICES" | jq -r '.[]'); do
             file="k8s/apps/${svc}.yaml"
             sed -i -E "s#(image: ).*finance/${svc}:.*#\1${PULL_REGISTRY}/finance/${svc}:${TAG}#" "$file"
+            if [[ "$svc" == "ocr-service" ]]; then
+              # Activate /ready together with the new image that provides it.
+              # The source PR must not send old OCR images to a missing route.
+              sed -i '/readinessProbe:/,/livenessProbe:/s#path: /health#path: /ready#' "$file"
+            fi
           done
           git diff --stat
 

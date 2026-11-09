@@ -21,6 +21,24 @@ data:
     # logging a multi-line warning on every start. Nothing scrapes the RabbitMQ
     # management API metrics, so opt into the "removed" behaviour explicitly.
     deprecated_features.permit.management_metrics_collection = false
+  ensure-service-user.sh: |
+    #!/bin/sh
+    # Default-user environment variables only initialize an empty database.
+    # Reconcile the configured account when starting with an existing PVC too.
+    set -eu
+    : "${RABBITMQ_DEFAULT_USER:?Missing service username}"
+    : "${RABBITMQ_DEFAULT_PASS:?Missing service password}"
+    rabbitmqctl --timeout 120 await_startup >/dev/null
+    if ! rabbitmqctl authenticate_user "$RABBITMQ_DEFAULT_USER" "$RABBITMQ_DEFAULT_PASS" >/dev/null 2>&1; then
+      if rabbitmqctl -q list_users | awk -v user="$RABBITMQ_DEFAULT_USER" '$1 == user { found=1 } END { exit !found }'; then
+        rabbitmqctl change_password "$RABBITMQ_DEFAULT_USER" "$RABBITMQ_DEFAULT_PASS" >/dev/null
+      else
+        rabbitmqctl add_user "$RABBITMQ_DEFAULT_USER" "$RABBITMQ_DEFAULT_PASS" >/dev/null
+      fi
+    fi
+    rabbitmqctl set_permissions -p / "$RABBITMQ_DEFAULT_USER" '.*' '.*' '.*' >/dev/null
+    rabbitmqctl authenticate_user "$RABBITMQ_DEFAULT_USER" "$RABBITMQ_DEFAULT_PASS" >/dev/null 2>&1
+    echo 'Configured RabbitMQ service account is ready'
 ---
 apiVersion: v1
 kind: Service
@@ -65,6 +83,10 @@ spec:
         - name: rabbitmq
           image: rabbitmq:3-management-alpine
           imagePullPolicy: IfNotPresent
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/sh", "/etc/rabbitmq/ensure-service-user.sh"]
           env:
             - name: RABBITMQ_DEFAULT_USER
               valueFrom:
@@ -83,6 +105,9 @@ spec:
             - name: config
               mountPath: /etc/rabbitmq/rabbitmq.conf
               subPath: rabbitmq.conf
+            - name: config
+              mountPath: /etc/rabbitmq/ensure-service-user.sh
+              subPath: ensure-service-user.sh
           resources:
             requests:
               cpu: 100m

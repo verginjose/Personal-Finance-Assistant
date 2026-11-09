@@ -17,5 +17,3 @@ RUN sed -i '/^user[[:space:]]/d' /etc/nginx/nginx.conf
 RUN find /usr/share/nginx/html -type f \( -name "*.html" -o -name "*.js" \) -exec sed -i "s/?v=[0-9]*/?v=$(date +%s)/g" {} +
 
 EXPOSE 80
-
-# CI automerge trigger 2026-11-09

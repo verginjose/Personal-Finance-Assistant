@@ -71,16 +71,21 @@ spec:
       # running as `runner` cannot call buildkitd.
       securityContext:
         fsGroup: 121
-      # The App private key lives only in this short-lived init container. It
-      # mints an installation token, then a one-hour runner registration token,
-      # and writes the registration token (only) to the shared emptyDir.
+      # Native sidecar: the App private key lives only in this container, which
+      # mints a one-hour runner registration token and refreshes it every 45
+      # minutes for the pod's lifetime. The runner container never sees APP_*,
+      # and a container restart always finds a fresh token.
       initContainers:
         - name: mint-registration-token
           image: myoung34/github-runner:2.338.2-ubuntu-jammy
           imagePullPolicy: IfNotPresent
-          # No root needed: the emptyDir is group-owned by fsGroup 121.
+          # Native sidecar (k8s >= 1.29): starts before the runner and stays up.
+          restartPolicy: Always
+          # Runs as a UID the job steps (1001) do not share; the token file is
+          # 0600, so jobs cannot read it. The emptyDir is world-writable
+          # (fsGroup 121).
           securityContext:
-            runAsUser: 1001
+            runAsUser: 1002
             runAsGroup: 121
             runAsNonRoot: true
             allowPrivilegeEscalation: false
@@ -88,6 +93,13 @@ spec:
               drop: ["ALL"]
             seccompProfile:
               type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
           env:
             - name: REPO
               value: verginjose/Personal-Finance-Assistant
@@ -100,31 +112,41 @@ spec:
           command: ["/bin/bash", "-c"]
           args:
             - |
-              set -euo pipefail
-              now=$(date +%s); exp=$((now + 540))
+              set -uo pipefail
+              token_file=/runner-registration/token
               b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
-              header=$(printf %s '{"alg":"RS256","typ":"JWT"}' | b64url)
-              payload=$(printf %s "{\"iat\":${now},\"exp\":${exp},\"iss\":\"${APP_ID}\"}" | b64url)
-              key="$(mktemp)"
-              printf '%s' "${APP_PRIVATE_KEY//\\n/$'\n'}" > "$key"
-              sig=$(printf %s "${header}.${payload}" | openssl dgst -sha256 -sign "$key" | b64url)
-              rm -f "$key"
-              jwt="${header}.${payload}.${sig}"
-              installation=$(curl -fsS -H "Authorization: Bearer ${jwt}" \
-                  -H 'Accept: application/vnd.github+json' \
-                  "https://api.github.com/app/installations" \
-                | jq -er --arg owner "${REPO%%/*}" \
-                    '[.[] | select(.account.login == $owner) | .id][0]')
-              access=$(curl -fsS -X POST -H "Authorization: Bearer ${jwt}" \
-                  -H 'Accept: application/vnd.github+json' \
-                  "https://api.github.com/app/installations/${installation}/access_tokens" \
-                | jq -er .token)
-              token=$(curl -fsS -X POST -H "Authorization: Bearer ${access}" \
-                  -H 'Accept: application/vnd.github+json' \
-                  "https://api.github.com/repos/${REPO}/actions/runners/registration-token" \
-                | jq -er .token)
-              umask 077
-              printf '%s' "$token" > /runner-registration/token
+              mint() {
+                local now exp header payload key sig jwt installation access token
+                now=$(date +%s); exp=$((now + 540))
+                header=$(printf %s '{"alg":"RS256","typ":"JWT"}' | b64url)
+                payload=$(printf %s "{\"iat\":${now},\"exp\":${exp},\"iss\":\"${APP_ID}\"}" | b64url)
+                key="$(mktemp)"
+                printf '%s' "${APP_PRIVATE_KEY//\\n/$'\n'}" > "$key"
+                sig=$(printf %s "${header}.${payload}" | openssl dgst -sha256 -sign "$key" | b64url) || return 1
+                rm -f "$key"
+                jwt="${header}.${payload}.${sig}"
+                installation=$(curl -fsS -H "Authorization: Bearer ${jwt}" \
+                    -H 'Accept: application/vnd.github+json' \
+                    "https://api.github.com/app/installations" \
+                  | jq -er --arg owner "${REPO%%/*}" \
+                      '[.[] | select(.account.login == $owner) | .id][0]') || return 1
+                access=$(curl -fsS -X POST -H "Authorization: Bearer ${jwt}" \
+                    -H 'Accept: application/vnd.github+json' \
+                    "https://api.github.com/app/installations/${installation}/access_tokens" \
+                  | jq -er .token) || return 1
+                token=$(curl -fsS -X POST -H "Authorization: Bearer ${access}" \
+                    -H 'Accept: application/vnd.github+json' \
+                    "https://api.github.com/repos/${REPO}/actions/runners/registration-token" \
+                  | jq -er .token) || return 1
+                printf '%s' "$token" > "${token_file}.new"
+                chmod 600 "${token_file}.new"
+                mv "${token_file}.new" "$token_file"
+                echo "registration token refreshed"
+              }
+              # Registration tokens are valid for one hour; refresh at 45 min.
+              while true; do
+                if mint; then sleep 2700; else echo "token refresh failed; retrying in 30s" >&2; sleep 30; fi
+              done
           volumeMounts:
             - name: runner-registration
               mountPath: /runner-registration
@@ -141,19 +163,22 @@ spec:
             allowPrivilegeEscalation: false
             seccompProfile:
               type: RuntimeDefault
-          # Consume the one-hour registration token and hand it to the image
-          # entrypoint (which also needs its default command explicitly). Make
-          # the token root-only rather than deleting it, so a container restart
-          # within the token's lifetime can re-register; job steps run as UID
-          # 1001 and cannot read it. The App private key is not in this
-          # container.
+          # Wait for the sidecar's token, make it root-only (job steps run as
+          # UID 1001 and cannot read it), and start the runner. The App private
+          # key is not in this container.
           command: ["/bin/bash", "-c"]
           args:
             - |
               set -euo pipefail
-              RUNNER_TOKEN="$(cat /runner-registration/token)"
-              chown root:root /runner-registration/token
-              chmod 600 /runner-registration/token
+              token_file=/runner-registration/token
+              for _ in $(seq 1 120); do
+                [ -s "$token_file" ] && break
+                sleep 1
+              done
+              [ -s "$token_file" ] || { echo '::error::registration token was not minted'; exit 1; }
+              RUNNER_TOKEN="$(cat "$token_file")"
+              chown root:root "$token_file"
+              chmod 600 "$token_file"
               export RUNNER_TOKEN
               exec /entrypoint.sh /actions-runner/run.sh
           env:

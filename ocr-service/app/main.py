@@ -345,8 +345,6 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
     
     if is_batch:
         results = []
-        if not isinstance(doc, list):
-            doc = doc.get("transactions", []) if isinstance(doc, dict) else []
         for item in doc:
             conversion = _convert_currency(float(item.get("amount", 0)), item.get("currency", "INR"), target_currency)
             results.append({
@@ -487,8 +485,8 @@ async def ocr_text(
 ):
     """Run PaddleOCR on an uploaded image and return the text it produced.
 
-    Debug/ops endpoint: no Groq call, no MinIO, no queue. Useful to see
-    exactly what the OCR model reads from a receipt. Pass ?boxes=true to also
+    Debug/ops endpoint for inspecting the OCR model's receipt text directly.
+    Pass ?boxes=true to also
     get the per-line bounding boxes and confidences.
     """
     if ocr_engine is None:

@@ -30,7 +30,7 @@ upload path:
   api-gateway ──PUT──▶ minio:9000
               └─publish "ocr.job"──▶ rabbitmq ──▶ ocr-service:8100
                                                     ├─ reads the object from MinIO
-                                                    ├─ PaddleOCR + Groq
+                                                    ├─ PaddleOCR + local parser
                                                     └─ POST results ──▶ command-service
                                                                           └─ SSE ──▶ browser
 ```
@@ -155,7 +155,7 @@ Analytics empty while the DB has rows → check replica lag
 ### `ocr-service`
 
 Python/FastAPI worker. Consumes `ocr-jobs` from RabbitMQ, reads the file from
-MinIO, runs PaddleOCR on the GPU (CUDA), parses with Groq, POSTs the result to
+MinIO, runs PaddleOCR on the GPU (CUDA), parses with local deterministic rules, POSTs the result to
 `command-service`. Uses the `paddle-model-cache` PVC at `/root/.paddleocr`,
 which is why its rollout strategy is `Recreate` and why it is slow to start the
 first time and fast afterwards.
@@ -169,7 +169,8 @@ kubectl -n pfa get pod -l app=ocr-service -o jsonpath='{.items[0].spec.container
 
 Failures: pod `Pending` = no `nvidia.com/gpu` allocatable (device plugin);
 jobs never consumed = queue consumer count 0 or RabbitMQ unreachable; parse
-errors = `GROQ_*` credentials; slow first start = model download into the PVC.
+errors = unreadable totals or unsupported statement format (use structured CSV);
+slow first start = model download into the PVC.
 
 ---
 

@@ -4,7 +4,7 @@
 This uses the production deterministic extraction rules in
 ``ocr-service/app/receipt_parser.py``. It
 uploads images to the service's ``POST /ocr`` endpoint, then turns the returned
-text into the same document Groq was asked to produce:
+text into the production receipt document:
 
     {"vendor", "amount", "transactionType", "expenseCategory",
      "incomeCategory", "currency", "description", "date", "recurring"}

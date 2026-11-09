@@ -5,7 +5,7 @@ import io
 import re
 from decimal import Decimal, InvalidOperation
 
-from receipt_parser import CATEGORY_RULES, classify, extract_date, parse_document
+from receipt_parser import classify, extract_date, parse_document
 
 
 INCOME_CATEGORIES = frozenset(['BONUS', 'BUSINESS', 'CASHBACK_REWARDS', 'DIVIDENDS', 'FREELANCE', 'GIFTS_RECEIVED', 'GOVT_BENEFITS', 'INTEREST', 'INVESTMENTS', 'OTHER_INCOME', 'PENSION', 'RENTAL_INCOME', 'SALARY', 'SIDE_HUSTLE', 'TAX_REFUND'])

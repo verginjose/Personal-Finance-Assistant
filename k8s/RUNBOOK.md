@@ -449,7 +449,7 @@ consumers at runtime.
 | `too many open files` in pods | inotify limit | `sysctl fs.inotify.max_user_instances=8192` (persisted in `/etc/sysctl.d/99-k3s-inotify.conf`) |
 | k3s won't start after install | SELinux label `user_tmp_t` | `sudo restorecon -v /usr/local/bin/k3s` |
 | `column users.password does not exist` | Hibernate created `auth.users` first | `db-init/007_create_auth_users.sql` |
-| OCR parse fails with an API-key error | `GROQ_URL` / `GROQ_API_KEY` in `.env` | correct the credentials, restart `ocr-service` |
+| OCR parse fails with no reliable amount | unreadable receipt total | review the receipt or upload a clearer image; use structured CSV for statement batches |
 | image not found / `ErrImagePull` (legacy `finance/<svc>:latest`) | image not imported into containerd | `docker save … -o /tmp/i.tar && sudo k3s ctr images import /tmp/i.tar` |
 | `ImagePullBackOff` on `127.0.0.1:30500/...` | containerd lacks the registry mTLS config | `sudo ./k8s/ci/setup-registry.sh`, confirm with `curl --cacert .certs/ca.crt --cert .certs/client.crt --key .certs/client.key https://127.0.0.1:30500/v2/` |
 | runner shows Offline in GitHub | PAT expired or lacks Administration write | new PAT → `.env` → `./k8s/ci/apply.sh` |

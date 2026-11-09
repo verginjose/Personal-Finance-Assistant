@@ -343,5 +343,67 @@
     "expected": {
       "amount": 33.75
     }
+  },
+  {
+    "image": "1027-receipt.jpg",
+    "text": "AHUHAWAI\nLongboards\n92-161 Waipahe Place\nKapolei,HI 96707\n2\nctices.Tipping\n808)679-4700\nd.unless other\nwy to acknowled\nServer:Elijah J\n15-20%\n01/11/2019\nCheck:24016\n12:46PM\nTable:44/0\nDine In\nItem\nR-\nPrice\nGreen Salad\n8.00\nRanch\nWagyu Cheeseburger\n19.00\nMedium We11\n%\n20%\nGarlic Fries\n2.00\n00\nADD RAW ONIONS& BACON PLZ\n12.00\nDrink of the Day\n13.00\nTea\n9.75\n4.00\n14.00\n15.00\nSubtotal\n$42.75\n16.00\nOhana Discount Breakfast\n17.00\nHI HNLKO 4.712%GET\n-3.30\n18.00\n1.86\n19.00\nTotal\n20.00\npou\n$41.31\n30.00\nmoi\n40.00\nC\ndonner un\nendus et.a\nRegu\nGratuity\n3.00\ns compris.\nlin ge\nlavotre\nenla\n4431\nTotal\nWirwe\nopinues",
+    "expected": {
+      "amount": 44.31
+    },
+    "expected_evidence": {
+      "amount_source": "total_reconciled_tip"
+    }
+  },
+  {
+    "image": "1038-receipt.jpg",
+    "text": "Micros Demo System\nWelcome to Yogurt land\n12502 North Kenda11 Drive\nMiamiFL33186\n05279-3478\nDate:\nSep07'18 09:28PM\nCard Type: VISA\nAcct #\nXXXXXXXXXXXX3862\nCard Entry:SWIPED\nTrans TyDe:PURCHASE\nTransKey: 111008007193348\nAuth Code:071410\nCheck:\n1082\nServer:\n1041 melanie\nTota\n17.80\n**NO SIGNATURE REQUIRED\nOR PUFCHASES UNDER $20.00**",
+    "expected": {
+      "amount": 17.8
+    },
+    "expected_evidence": {
+      "amount_source": "total_next_line"
+    }
+  },
+  {
+    "image": "1056-receipt.jpg",
+    "text": "ZOCA RESTAURANT\n98 GARFIELD PARKWAY\nBETHANY BEACH,DE 19930\n302)616-2120\nWWW.ZOCA.RESTAURANT\n7/30/19\nCheck #:5033\n7:53PM\nServer:Madi B\nGuests:5\nTable:31/2\n8.00\n1 Flying Dog Numero Uno BTL\n12.00\n1 House Recipe\n26.00\n2 Sandia Margarita @13.00/ea\n11.00\n1 Totem Honey Bee\n12.00\n1 Queso Fresco Guacamole\n12.00\n1 Queso Fundido Mexican Street Corn Dip\n8.00\n1 Salsa De Molcajete\n30.00\n2 Taquitos Carne Asada @15.00/ea\n14.00\n1 Taquitos Baja California Shrimp\n19.00\n1 Mole Enchi lada\n1 Quesadi11a Chicken\n12.00\nSub-total\n164.00\nCOMPLIMENTARY\nITEM COMPS:\n1 Queso Fundido Mexican Street Corn Dip\n-12.00\nSub-total\n152.00\nSales Tax\n0.00\nTOTAL",
+    "expected": {
+      "amount": 152.0
+    },
+    "expected_evidence": {
+      "amount_source": "subtotal_plus_tax"
+    }
+  },
+  {
+    "image": "1071-receipt.jpg",
+    "text": "***************************************\nTrinity Restaurant\n190 Jericho Tpke\nFlora1 Park NY 11001\nTel. (516) 358-5584\nOrder 217510\n02/18/17 10:20 PM Check 101244\nTable 15 Cust.2 Server 21 Kelly Bowe\n****************************************\n11.00\n1 Quesadi1la\n1 Pot Roast\n18.00\n16.00\n1 Fish An Chips\n4.00\n1 Side Salad\n5.50\n1 Dft Shock top\n15.00\n2 Dft Guiness\nTaxable:\n69.50\nSub-total:\n69.50\nTax:\n6.00\nTota1Due:75.50\nAMERICAN\nEXPRESS\nWe Welcome\nAmerican Express Cards",
+    "expected": {
+      "amount": 75.5
+    },
+    "expected_evidence": {
+      "amount_source": "total_line"
+    }
+  },
+  {
+    "image": "1156-receipt.jpg",
+    "text": "IKEA\nIKEA FOOD\nIKEA MILTON KEYNES 185\nVATGB527773320\nAddressq\nQty Name\nPrice Total \n-\nMeatballs 10\n3.80\n3.80\n1\nFish & Chips Adult\n4.95\n4.95\n1\nPetit Pain -White\n0.50\n0.50\n1\nWine rose\n2.80\n2.80\n7\nWine red\n2.80\n2.80\nNet SubTotal:\n12.37\nTax:\n20%VAT\n2.48\nTotal to Pay:\n14.85\nReceived:\nVISA\n14.85\nVisa Credit\n***********9529\nStart:\n1890",
+    "expected": {
+      "amount": 14.85,
+      "currency": "GBP"
+    },
+    "expected_evidence": {
+      "amount_source": "total_next_line"
+    }
+  },
+  {
+    "image": "1197-receipt.jpg",
+    "text": "BAR RISTORANTE\nSTABIL IMENTO MARINO E TERHALE\nSAN HONTANO S.R.L.\nVIA S.HONTANO -LACCO AMENO NA\nPARTITA IUA 00200430635\nEURO\n2X0.50\n1.00\nVassoi e Stoviglie\n2X5.00\nMacedonia\n10.00\nInsalata Negombo\n10.00\nBufala\n8.00\nPomodorini\n4.00\nNat 1/2 1t\n1.00\nTOTALE \n34.00\nCONTANTE\nREG.OO1 OPER.1\n28-08-201812:41\nSCONTRINO FISCALE N.\n52\nFTU45400311",
+    "expected": {
+      "amount": 34.0,
+      "currency": "EUR"
+    },
+    "expected_evidence": {
+      "amount_source": "total_next_line"
+    }
   }
 ]

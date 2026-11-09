@@ -7,11 +7,11 @@ and the resulting per-receipt throughput.
 ## OCR text endpoint
 
 `POST /ocr` (in `app/main.py`) takes a multipart image upload and returns the
-text PaddleOCR produced — no Groq, no MinIO, no queue:
+text PaddleOCR produced directly:
 
 ```bash
 kubectl -n pfa port-forward svc/ocr-service 8100:8100     # terminal 1
-python3 ocr_client.py ../../requests/large-receipt-image-dataset-SRD/1001-receipt.jpg   # terminal 2
+INTERNAL_API_TOKEN=... python3 ocr_client.py ../../requests/large-receipt-image-dataset-SRD/1001-receipt.jpg   # terminal 2
 ```
 
 Answer:
@@ -35,6 +35,9 @@ python3 run_ocr_batch.py 50 --seed 7 --concurrency 4
 python3 run_ocr_batch.py 10 --first --boxes --out results/batch.json
 python3 run_ocr_batch.py 100 --folder /path/to/receipts
 ```
+
+Both image clients require `INTERNAL_API_TOKEN` in the environment, or `--token`,
+for the protected endpoint. Set the variable before running the batch examples.
 
 Picks N images from `--folder` (default the repo's 200-receipt dataset), POSTs
 each to `/ocr`, prints one line per receipt, and finishes with p50/p95 OCR and
@@ -81,8 +84,7 @@ response), so parsing can be tuned offline against a saved batch.
 
 This is heuristic by design: it reads a total-priority keyword list, a
 date-format list, and a vendor/category keyword table. It is fast, free and
-reproducible, and its mistakes are visible in `evidence` — unlike a Groq call,
-which returns no trace of where a value came from.
+reproducible, and the source of each extracted value is visible in `evidence`.
 Negative totals are treated as Income with positive document/conversion amounts.
 Final labelled totals supersede earlier totals within the same priority, clock
 values and percentages are excluded, and nearby cash/tax labels limit lookahead.
@@ -137,7 +139,7 @@ Verification:
 python3 -I -m unittest discover -s ocr-service/bench/tests -v
 ```
 
-The tests cover 48 selected real OCR snapshots with manually reviewed expected
+The tests cover 54 selected real OCR snapshots with manually reviewed expected
 fields, signed refunds, payment/clock/percentage confusion, vector acceptance,
 abstention, rule precedence and self-match exclusion. This is a targeted
 regression suite, not an unbiased accuracy estimate.
@@ -149,6 +151,18 @@ OCR evidence. All 200 still have an amount. The sparse fallback abstained on the
 five remaining OTHERS; no category accuracy improvement is claimed from this
 restaurant-only benchmark. Amounts and categories need image-labelled ground
 truth before reporting overall accuracy.
+
+The follow-up fresh replay of all 200 images is recorded in
+`tests/fixtures/tuning_report_followup.json`. Image review corrected three totals:
+Yogurtland's signature threshold, Longboards' interleaved tip table and handwritten
+final total, and Zoca's subtotal before a complimentary-item discount. The final
+Zoca amount is derived from the visible discounted subtotal plus zero sales tax;
+the printed total is clipped. UK VAT registration identifies the IKEA currency
+as GBP. Total labels and legal notices are excluded from item descriptions.
+Missing decimal restoration requires agreement with a previous total plus one
+explicit tip; subtotal/tax recovery requires a contiguous block without unknown
+fees. Dates (184/200) and vendors (193/200) are unchanged. Remaining warnings and
+unlabelled receipts prevent an overall accuracy claim.
 
 ## Run
 

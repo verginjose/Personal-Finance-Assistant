@@ -312,14 +312,62 @@ def _num_value(token):
         return None
 
 
-# Repair only the total label, never digits in the monetary value.
+# Recognize OCR label variants; monetary repairs below require arithmetic agreement.
 TOTAL_LABEL_RE = re.compile(
-    r"(?<![A-Za-z])(?:grand\s+total|total\s+due|amount\s+due|amt\s+due|"
+    r"(?<![A-Za-z])(?:grand\s+total|tota[l1i]\s*due|amount\s+due|amt\s+due|"
     r"balance\s+due|check\s+total|total\s+amount|net\s+total|"
     r"total\s+payable|ant\s+due|take[- ]?out\s+total|total\s+paid|"
-    r"total\s+to\s+pay|tota[l1i]|totl)(?![A-Za-z])", re.I)
+    r"total\s+to\s+pay|tota[l1i]|totale|tota|totl)(?![A-Za-z])", re.I)
 TIME_RE = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|PH)?", re.I)
 MONEY_ONLY_RE = re.compile(r"^\s*(" + NUM_TOKEN + r")\s*[A-Za-z]?\s*$")
+NOTICE_RE = re.compile(
+    r"\bsignature\s+(?:is\s+)?(?:not\s+)?required\b|\bno\s+signature\b|"
+    r"pu[rf]chases?\s+under|\bsurvey\b|\b(?:win|giveaway)\b|"
+    r"auth(?:orization)?\s*(?:code|:)|\b(?:minimum|maximum)\s+purchase", re.I)
+
+
+def _labelled_money(lines, index, pattern):
+    """Read a component only from its label or the immediately following line."""
+    label = pattern.match(lines[index])
+    if not label:
+        return None
+    suffix = lines[index][label.end():].strip(" :")
+    end = index
+    if not suffix and index + 1 < len(lines):
+        end += 1
+        suffix = lines[end]
+    match = MONEY_ONLY_RE.fullmatch(suffix)
+    if match and "." in match.group(1):
+        return _num_value(match.group(1)), end
+    return None
+
+
+SUBTOTAL_LABEL_RE = re.compile(r"sub\s*-?\s*total\b", re.I)
+TAX_LABEL_RE = re.compile(r"(?:sales\s+)?tax\b", re.I)
+TIP_LABEL_RE = re.compile(r"(?:gratuity|tip)(?:\s+amount)?\b", re.I)
+
+
+def _subtotal_with_tax(lines, total_index):
+    # Reconstruct a missing total only from a contiguous final subtotal and tax
+    # block. Unreadable fees/discounts must prevent this arithmetic fallback.
+    for start in range(max(0, total_index - 6), total_index):
+        subtotal = _labelled_money(lines, start, SUBTOTAL_LABEL_RE)
+        if subtotal is None:
+            continue
+        amount, end = subtotal
+        taxes = 0
+        cursor = end + 1
+        while cursor < total_index:
+            tax = _labelled_money(lines, cursor, TAX_LABEL_RE)
+            if tax is None:
+                break
+            value, end = tax
+            amount += value
+            taxes += 1
+            cursor = end + 1
+        if taxes and cursor == total_index:
+            return round(amount, 2), " | ".join(lines[start:total_index + 1])
+    return None
 
 
 def extract_amount(text):
@@ -327,6 +375,7 @@ def extract_amount(text):
     lines = [ln for ln in (clean_line(x) for x in text.splitlines()) if ln]
 
     def candidates(line):
+        line = re.sub(r"\d+(?:\.\d+)?\s*%", " ", line)
         return [(m.group(1), _num_value(m.group(1)))
                 for m in NUMBER_RE.finditer(TIME_RE.sub(" ", line))]
 
@@ -366,6 +415,18 @@ def extract_amount(text):
                            if a > 0 and b > 0):
                         value, evidence = candidate, candidate_line
                         break
+                # A short OCR fragment can separate an interleaved number
+                # column from the actual currency-labelled total.
+                for offset, following in enumerate(following_lines[1:], 1):
+                    if all(MONEY_ONLY_RE.fullmatch(x) or (
+                               re.fullmatch(r"[a-z]{1,3}", x)
+                               and not AMOUNT_EXCLUDE_RE.search(x)
+                               and not TOTAL_LABEL_RE.search(x))
+                           for x in following_lines[:offset]):
+                        match = MONEY_ONLY_RE.fullmatch(following)
+                        if match and re.search(r"[$₹€£¥]", match.group(1)):
+                            value, evidence = _num_value(match.group(1)), following
+                            break
                 pick, source = ("", value), "total_next_line"
             else:
                 # OCR can also put the value immediately before its label.
@@ -380,10 +441,26 @@ def extract_amount(text):
                                     for token, v in candidates(lines[j]) if "." in token]
                         value, evidence = max(previous, key=lambda n: abs(n[0]))
                         pick, source = ("", value), "total_previous_line"
+            if pick is None and i and totals and re.fullmatch(r"\d{3,}", lines[i - 1]):
+                # Handwritten totals sometimes lose their decimal in OCR. Only
+                # restore cents when the prior total + a labelled tip agrees.
+                previous_total = totals[-1]
+                tip_start = previous_total[0][2] + 1
+                tips = [value for j in range(tip_start, i - 1)
+                        if (value := _labelled_money(lines, j, TIP_LABEL_RE)) is not None]
+                if len(tips) == 1:
+                    expected = round(previous_total[1] + tips[0][0], 2)
+                    if expected > 0 and int(lines[i - 1]) == round(expected * 100):
+                        pick, evidence, source = ("", expected), lines[i - 1], "total_reconciled_tip"
+            if pick is None or pick[1] == 0:
+                computed = _subtotal_with_tax(lines, i)
+                if computed is not None:
+                    value, evidence = computed
+                    pick, source = ("", value), "subtotal_plus_tax"
         if pick and pick[1] is not None and 0 < abs(pick[1]) < 10_000_000:
             strong = bool(TOTAL_STRONG_RE.search(line))
             # A paid/final total includes service charges or gratuity added later.
-            paid = bool(re.search(r"total\s+paid", label.group(), re.I))
+            paid = source == "total_reconciled_tip" or bool(re.search(r"total\s+paid", label.group(), re.I))
             totals.append(((paid, strong, i), pick[1], evidence, source))
     if totals:
         _, value, line, source = max(totals, key=lambda n: n[0])
@@ -391,7 +468,7 @@ def extract_amount(text):
 
     best = None
     for i, line in enumerate(lines):
-        if AMOUNT_EXCLUDE_RE.search(line):
+        if AMOUNT_EXCLUDE_RE.search(line) or NOTICE_RE.search(line):
             continue
         # A standalone amount below a payment label is tender, not the bill.
         if i and re.search(r"cash|tender|change", lines[i - 1], re.I) and MONEY_ONLY_RE.fullmatch(line):
@@ -493,7 +570,7 @@ def extract_items(text):
         items.append(name)
 
     for i, line in enumerate(lines):
-        if ITEM_SKIP_RE.search(line):
+        if ITEM_SKIP_RE.search(line) or TOTAL_LABEL_RE.search(line) or NOTICE_RE.search(line):
             continue
         m = re.match(r"^(.*?)\s+[$₹€£¥]?\s*(\d+(?:[.,]\d{2}))\s*[A-Za-z]?$", line)
         if m:
@@ -525,6 +602,8 @@ def detect_currency(text):
     for code in ("USD", "CAD", "EUR", "GBP", "AUD", "SGD", "AED", "INR", "JPY"):
         if re.search(r"\b" + code + r"\b", upper):
             return code, "explicit_code"
+    if re.search(r"\bVAT\s*:?\s*GB\s*\d{9}\b", upper):
+        return "GBP", "country_hint"
     if "€" in text:
         return "EUR", "symbol"
     if "£" in text:

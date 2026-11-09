@@ -10,7 +10,8 @@
 # A PAT is not accepted: it could push to master, and Argo deploys master.
 #
 # The runner has no cluster permissions: it builds and pushes a tag-bump
-# branch. Merging that branch is a human action; Argo CD then deploys it.
+# branch and opens its PR with the promotion job token. A human merges the PR;
+# Argo CD then deploys it. The registration App permissions stay unchanged.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -59,7 +60,7 @@ spec:
         app.kubernetes.io/part-of: personal-finance-assistant
     spec:
       serviceAccountName: ci-runner
-      # The runner deliberately holds no RBAC: it builds, pushes and commits.
+      # The runner holds no RBAC: it builds and proposes image tags through PRs.
       # There is no kubectl in the workflow, so it never needs a token.
       automountServiceAccountToken: false
       # fsGroup is the runner account's GID: the ci-tls-client Secret is mode
@@ -91,6 +92,12 @@ spec:
               value: https://github.com/verginjose/Personal-Finance-Assistant
             - name: RUNNER_NAME
               value: pfa-k3s
+            # Git commit attribution; API-created PRs are authored by
+            # github-actions[bot], the owner of the short-lived job token.
+            - name: CI_COMMITTER_NAME
+              value: PennyPilot
+            - name: CI_COMMITTER_EMAIL
+              value: ci@verginjose.local
             - name: RUNNER_SCOPE
               value: repo
             - name: RUNNER_WORKDIR

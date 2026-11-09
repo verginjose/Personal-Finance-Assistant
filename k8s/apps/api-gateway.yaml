@@ -73,7 +73,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: api-gateway
-          image: 127.0.0.1:30500/finance/api-gateway:411f6718da87
+          image: 127.0.0.1:30500/finance/api-gateway:24ff8fed8c69
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true

@@ -23,29 +23,9 @@ jq -e --arg sha "$EXPECTED_HEAD_SHA" --arg repo "$GITHUB_REPOSITORY" \
   "$tmp/pr.json" >/dev/null
 # The local commit is the one this job just generated. Reject unexpected paths
 # or edits beyond image tags and OCR readiness before submitting approval.
-python3 - "$EXPECTED_HEAD_SHA" <<'PY'
-import re, subprocess, sys
-sha = sys.argv[1]
-names = subprocess.check_output(['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', sha], text=True).splitlines()
-services = {'auth-service', 'api-gateway', 'command-service', 'query-service', 'frontend', 'ocr-service'}
-if not names:
-    raise SystemExit('Refusing to approve an empty promotion')
-for name in names:
-    match = re.fullmatch(r'k8s/apps/([a-z-]+)\.yaml', name)
-    if not match or match[1] not in services:
-        raise SystemExit('Refusing to approve non-promotion files')
-    diff = subprocess.check_output(['git', 'diff', '--unified=0', sha + '^', sha, '--', name], text=True)
-    for line in diff.splitlines():
-        if line.startswith(('---', '+++')) or not line.startswith(('+', '-')):
-            continue
-        value = line[1:].strip()
-        image = re.fullmatch(r'image: 127\.0\.0\.1:30500/finance/' + re.escape(match[1]) + r':[a-f0-9]{12}', value)
-        probe = match[1] == 'ocr-service' and value in ('path: /health', 'path: /ready')
-        if not image and not probe:
-            raise SystemExit('Refusing to approve unexpected manifest edits')
-PY
+python3 "$(dirname "$0")/validate-promotion.py" "$EXPECTED_HEAD_SHA"
 jq -n --arg sha "$EXPECTED_HEAD_SHA" \
-  '{event:"APPROVE", commit_id:$sha, body:"PennyPilot promotion validation passed: successful build and manifest-only image/probe changes. Merge remains a separate action."}' > "$tmp/review.json"
+  '{event:"APPROVE", commit_id:$sha, body:"PennyPilot promotion validation passed: successful build and manifest-only image/probe changes. Automatic merge waits for passing checks."}' > "$tmp/review.json"
 curl --fail-with-body -sS -H "Authorization: Bearer $REVIEW_TOKEN" \
   -H 'Accept: application/vnd.github+json' -H 'Content-Type: application/json' \
   --request POST "$api/pulls/$PR_NUMBER/reviews" --data-binary "@$tmp/review.json" > "$tmp/result.json"

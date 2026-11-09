@@ -27,7 +27,7 @@ if [[ -z "$url" ]]; then
     printf 'Source commit: `%s`\n\n' "${GITHUB_SHA:-unknown}"
     printf 'Build run: %s/%s/actions/runs/%s\n\n' \
       "${GITHUB_SERVER_URL:-https://github.com}" "$GITHUB_REPOSITORY" "${GITHUB_RUN_ID:-unknown}"
-    printf 'Review and merge this PR to let Argo CD deploy the images.\n'
+    printf 'The promotion job merges this bot PR after validation, separate-identity approval, and passing checks. Argo CD then deploys the images.\n'
   } > "$tmp/body.md"
   jq -n --arg title "chore(deploy): promote built images to ${TAG}" \
     --arg head "$BRANCH" --arg base "$GITHUB_REF_NAME" \
@@ -47,5 +47,5 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   printf 'pr_number=%s\nhead_sha=%s\n' "${url##*/}" "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 fi
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-  printf '\n**Promotion pull request:** %s\n\nMerge it to deploy through Argo CD.\n' "$url" >> "$GITHUB_STEP_SUMMARY"
+  printf '\n**Promotion pull request:** %s\n\nAutomatic merge waits for validation, approval, and passing checks; Argo CD then deploys.\n' "$url" >> "$GITHUB_STEP_SUMMARY"
 fi

@@ -21,7 +21,7 @@ on:
         options: [all, auth-service, api-gateway, command-service, query-service, frontend, ocr-service]
 
 # Build jobs only read code. Only promotion can push a proposal branch and
-# open its PR; deployment still requires a human merge.
+# open its PR and merge the validated promotion after approval and checks.
 permissions:
   contents: read
 
@@ -107,6 +107,9 @@ jobs:
           fi
           echo "services=$json" >> "$GITHUB_OUTPUT"
           echo "Selected: $json"
+
+      - name: Test promotion automation
+        run: python3 -I -m unittest discover -s k8s/ci/tests -v
 
   build:
     needs: detect
@@ -218,17 +221,18 @@ jobs:
       # certificate, which this pod no longer has (by design); the hourly
       # registry-gc CronJob owns retention now.
 
-  # The runner must never write master: anything that can push to master can
-  # make Argo deploy. It proposes the tag bump on a branch and opens a PR
-  # instead, so a human merge is the only path from "image built" to
-  # "deployed". One PR covers every service this run built.
+  # Promotion goes through a PR, separate-identity approval and passing checks.
+  # Only the exact generated manifest commit may be merged automatically.
   promote:
     permissions:
       contents: write
       pull-requests: write
+      checks: read
+      statuses: read
     needs: [detect, build]
     if: needs.detect.outputs.services != '[]'
     runs-on: [self-hosted, linux, x64, pfa]
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
         with:
@@ -292,6 +296,15 @@ jobs:
           PR_NUMBER: ${{ steps.promotion.outputs.pr_number }}
           EXPECTED_HEAD_SHA: ${{ steps.promotion.outputs.head_sha }}
         run: bash k8s/ci/approve-promotion-pr.sh
+
+      - name: Merge the approved bot promotion after checks pass
+        if: steps.promotion.outputs.pr_number != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.promotion.outputs.pr_number }}
+          EXPECTED_HEAD_SHA: ${{ steps.promotion.outputs.head_sha }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: bash k8s/ci/merge-promotion-pr.sh
 
       # Deployment is Argo CD's job: it watches k8s/apps and syncs the new
       # image tag once the PR is merged. The runner needs no cluster

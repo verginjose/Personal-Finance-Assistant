@@ -37,6 +37,7 @@ class PromotionTests(unittest.TestCase):
                    GITHUB_REF_NAME='k8s/local-deployment', BRANCH='ci/tag-bump-123-1',
                    TAG='abc123', GITHUB_SHA='abc123456', GITHUB_RUN_ID='123',
                    CASE=case, REQUEST_CAPTURE=str(capture), GITHUB_STEP_SUMMARY=str(summary))
+        env['GITHUB_OUTPUT'] = str(root / 'outputs')
         result = subprocess.run(['bash', str(HELPER)], env=env, text=True, capture_output=True)
         return result, capture, summary
 

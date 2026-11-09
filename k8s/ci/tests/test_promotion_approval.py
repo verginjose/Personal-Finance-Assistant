@@ -44,6 +44,7 @@ class ApprovalTests(unittest.TestCase):
             env=dict(os.environ, PATH=folder+os.pathsep+os.environ['PATH'],
                      GITHUB_TOKEN='creator', REVIEW_TOKEN='reviewer' if token else '',
                      GITHUB_REPOSITORY='owner/repo', PR_NUMBER='42',
+                     GITHUB_STEP_SUMMARY=str(root/'summary.md'),
                      EXPECTED_HEAD_SHA=git('rev-parse','HEAD'), CAPTURE=str(root/'review.json'))
             result=subprocess.run(['bash',str(HELPER)],cwd=root,env=env,capture_output=True,text=True)
             review=json.loads((root/'review.json').read_text()) if (root/'review.json').exists() else None

@@ -206,3 +206,17 @@ acceptance/abstention, competing labels, rule precedence and self-exclusion.
 `bench/tests/fixtures/tuning_report.json` preserves the before/after summaries.
 
 The production Groq path remains untouched; this work is in the benchmark parser.
+
+
+## Deployment follow-up: OCR broker authentication
+
+The full-service rollout exposed a separate production issue: the broker PVC
+contained only `guest`, although all Kubernetes credentials agreed on the new
+service account. The account was created live with application-vhost permissions;
+OCR reconnected and consumed from `ocr-jobs`. A temporary-queue AMQP round trip
+confirmed publishing, consuming and acknowledgement using OCR credentials.
+
+The follow-up fix adds broker startup account reconciliation and OCR `/ready`
+readiness (503 when not consuming), with liveness remaining independent. AMQP
+URLs are removed from connection logs. See `docs/ocr-rabbitmq-recovery.md` for
+validation and rollout details. This does not change the Groq/parser path.

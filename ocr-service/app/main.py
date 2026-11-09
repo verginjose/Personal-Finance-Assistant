@@ -17,6 +17,7 @@ from cachetools import TTLCache
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from minio import Minio
 from paddleocr import PaddleOCR
+from readiness import consumer_ready
 
 # OCR service entrypoint: FastAPI app that extracts text from uploaded
 # images/PDFs via PaddleOCR and publishes the results to the message queue.
@@ -87,6 +88,8 @@ ocr_engine: Optional[PaddleOCR] = None
 http_client: Optional[httpx.AsyncClient] = None
 minio_client: Optional[Minio] = None
 mq_connection: Optional[aio_pika.RobustConnection] = None
+mq_consumer_task: Optional[asyncio.Task] = None
+mq_subscribed = False
 dead_letter_exchange: Optional[aio_pika.abc.AbstractExchange] = None
 
 # PaddleOCR's predictors are not thread-safe: concurrent calls on one engine
@@ -141,10 +144,11 @@ async def process_mq_message(message: aio_pika.abc.AbstractIncomingMessage):
 
 
 async def start_rabbitmq_consumer():
-    global mq_connection, dead_letter_exchange
+    global mq_connection, dead_letter_exchange, mq_subscribed
     while True:
         try:
-            log.info("Connecting to RabbitMQ at %s", RABBITMQ_URL)
+            # The URL contains the password; never put it in application logs.
+            log.info("Connecting to RabbitMQ")
             mq_connection = await aio_pika.connect_robust(RABBITMQ_URL)
             channel = await mq_connection.channel()
 
@@ -157,19 +161,26 @@ async def start_rabbitmq_consumer():
 
             queue = await channel.declare_queue("ocr-jobs", durable=True)
 
-            log.info("Started consuming from RabbitMQ queue 'ocr-jobs'")
             async with queue.iterator() as queue_iter:
+                mq_subscribed = True
+                log.info("Started consuming from RabbitMQ queue 'ocr-jobs'")
                 async for message in queue_iter:
                     await process_mq_message(message)
-            break
         except Exception as e:
-            log.error("RabbitMQ connection failed, retrying in 5s: %s", e)
-            await asyncio.sleep(5)
+            log.error("RabbitMQ consumer failed (%s), retrying in 5s", type(e).__name__)
+        finally:
+            mq_subscribed = False
+            if mq_connection is not None:
+                try:
+                    await mq_connection.close()
+                finally:
+                    mq_connection = None
+        await asyncio.sleep(5)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global ocr_engine, http_client, minio_client, mq_connection
+    global ocr_engine, http_client, minio_client, mq_connection, mq_consumer_task
     log.info("Initializing OCR Service resources...")
 
     missing = [name for name, value in (
@@ -212,12 +223,15 @@ async def lifespan(app: FastAPI):
     await _refresh_rates()
     
     # Start RabbitMQ Consumer in background
-    asyncio.create_task(start_rabbitmq_consumer())
+    mq_consumer_task = asyncio.create_task(start_rabbitmq_consumer())
     
     yield
     
-    if mq_connection:
-        await mq_connection.close()
+    mq_consumer_task.cancel()
+    try:
+        await mq_consumer_task
+    except asyncio.CancelledError:
+        pass
     await http_client.aclose()
 
 
@@ -566,6 +580,13 @@ async def _park_unparsed(message: "aio_pika.abc.AbstractIncomingMessage", reason
 @app.get("/health")
 def health():
     return {"status": "ok", "engine": "PaddleOCR", "async_mq": True}
+
+
+@app.get("/ready")
+def ready():
+    if not consumer_ready(mq_connection, mq_consumer_task, mq_subscribed):
+        raise HTTPException(status_code=503, detail="RabbitMQ consumer is not ready")
+    return {"status": "ok", "rabbitmq": "consuming"}
 
 
 def _full_ocr_result(data: bytes) -> dict:

@@ -7,10 +7,7 @@ metadata:
     app: rabbitmq
     app.kubernetes.io/part-of: personal-finance-assistant
 data:
-  # The services connect with the default guest credentials across the pod
-  # network, so the localhost-only restriction must be lifted.
   rabbitmq.conf: |
-    loopback_users.guest = false
     # The container sees the 1Gi cgroup limit, so the default 0.4 watermark
     # (≈410Mi) is where publishers get flow-controlled. Give the broker more
     # headroom before it raises the memory alarm.
@@ -70,9 +67,11 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: RABBITMQ_DEFAULT_USER
-              value: guest
+              valueFrom:
+                secretKeyRef: { name: rabbitmq-secrets, key: RABBITMQ_USER }
             - name: RABBITMQ_DEFAULT_PASS
-              value: guest
+              valueFrom:
+                secretKeyRef: { name: rabbitmq-secrets, key: RABBITMQ_PASSWORD }
           ports:
             - name: amqp
               containerPort: 5672

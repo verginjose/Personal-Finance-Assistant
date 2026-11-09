@@ -33,9 +33,7 @@ data:
   REDIS_HOST: redis
   RABBITMQ_HOST: rabbitmq
   RABBITMQ_PORT: "5672"
-  RABBITMQ_USER: guest
   MINIO_ENDPOINT: http://minio:9000
-  MINIO_ACCESS_KEY: admin
   JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
 ---
 apiVersion: apps/v1

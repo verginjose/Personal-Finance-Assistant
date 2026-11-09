@@ -1,6 +1,6 @@
 {
   "uid": "pfa-pods",
-  "title": "Pods \u2014 CPU / memory / restarts",
+  "title": "Pods — Resource Health",
   "tags": [
     "pods",
     "cadvisor",
@@ -8,10 +8,10 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "30s",
   "editable": true,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "time": {
     "from": "now-3h",
     "to": "now"
@@ -22,30 +22,6 @@
   "templating": {
     "list": [
       {
-        "name": "namespace",
-        "label": "Namespace",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus-ds"
-        },
-        "query": {
-          "query": "label_values(container_memory_working_set_bytes, namespace)",
-          "refId": "ns"
-        },
-        "definition": "label_values(container_memory_working_set_bytes, namespace)",
-        "includeAll": true,
-        "allValue": ".*",
-        "multi": true,
-        "refresh": 2,
-        "current": {
-          "text": "pfa",
-          "value": [
-            "pfa"
-          ]
-        }
-      },
-      {
         "name": "pod",
         "label": "Pod",
         "type": "query",
@@ -54,10 +30,10 @@
           "uid": "prometheus-ds"
         },
         "query": {
-          "query": "query_result(max by (pod) (container_last_seen{namespace=~\"$namespace\"}) > time() - 120)",
+          "query": "query_result(max by (pod) (container_last_seen{namespace=~\"pfa\"}) > time() - 120)",
           "refId": "pod"
         },
-        "definition": "query_result(max by (pod) (container_last_seen{namespace=~\"$namespace\"}) > time() - 120)",
+        "definition": "query_result(max by (pod) (container_last_seen{namespace=~\"pfa\"}) > time() - 120)",
         "includeAll": true,
         "allValue": ".*",
         "multi": true,
@@ -90,7 +66,8 @@
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "decimals": 2
+          "decimals": 2,
+          "noValue": "No data"
         },
         "overrides": []
       },
@@ -112,7 +89,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sum((rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120))",
+          "expr": "sum((rate(container_cpu_usage_seconds_total{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -123,7 +100,7 @@
     {
       "type": "stat",
       "title": "Memory used",
-      "description": "Working set \u2014 memory the containers actually hold.",
+      "description": "Working set — memory the containers actually hold.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus-ds"
@@ -138,7 +115,8 @@
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
-          "decimals": 1
+          "decimals": 1,
+          "noValue": "No data"
         },
         "overrides": []
       },
@@ -160,7 +138,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sum((container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120))",
+          "expr": "sum((container_memory_working_set_bytes{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -199,7 +177,8 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "noValue": "No data"
         },
         "overrides": []
       },
@@ -221,7 +200,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sum((changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120))",
+          "expr": "sum((changes(container_start_time_seconds{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -262,12 +241,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -280,7 +256,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120)",
+          "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120)",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "instant": false,
@@ -321,12 +297,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -339,7 +312,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120)",
+          "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120)",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "instant": false,
@@ -380,12 +353,9 @@
       },
       "options": {
         "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
@@ -398,13 +368,63 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "(sum by (pod) (changes(container_start_time_seconds{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"$namespace\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"$namespace\"} @ end()))) - 120)",
+          "expr": "(sum by (pod) (changes(container_start_time_seconds{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120)",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "instant": false,
           "range": true
         }
       ]
+    }
+  ],
+  "links": [
+    {
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/finance-assistant",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Pods",
+      "type": "link",
+      "url": "/d/pods",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Logs",
+      "type": "link",
+      "url": "/d/logs-explorer",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Data",
+      "type": "link",
+      "url": "/d/data-explorer",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Postgres",
+      "type": "link",
+      "url": "/d/postgres-debug",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
+    },
+    {
+      "title": "Redis",
+      "type": "link",
+      "url": "/d/redis-debug",
+      "keepTime": true,
+      "includeVars": false,
+      "targetBlank": false
     }
   ]
 }

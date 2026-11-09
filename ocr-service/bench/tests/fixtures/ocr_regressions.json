@@ -1,0 +1,347 @@
+[
+  {
+    "image": "1006-receipt.jpg",
+    "text": "Akira\nGlenmontNY 12077\n385RW\nwww.akirasushigroup.comg\n518-434-8880\n2018-11-1818.5834\n#37 PICKUP\nPhil\nQTY\nHi.Chk Steak(K\nITEM\n$22.95\nAmt\nNoodle\nMed\n1\nSushi Deluxe\n$20.75\n$2.00\n1\nGlenmont Roll\nPhilly R\n$15.95\nSp Tuna R\n$6.50\nSalmon R\n$13.00\nSubtotal\n$5.50\nTax\nTotal:\n$86.65\n$93.58\n$6.93\n Unpaid ",
+    "expected": {
+      "amount": 93.58,
+      "date": "2018-11-18",
+      "vendor": "Akira"
+    }
+  },
+  {
+    "image": "1007-receipt.jpg",
+    "text": "Katana Sushi\n2818 Hewitt Ave\nEverettWA 98201\n425-512-9361\n******\nServer: MichaelC\n05/11/188:47PM\nCheck #93\nTable 02\nHamachi Col1ar\n$12.00\nMega Poke Bowl\n$17.00\nHamachi-Sashimi\n$12.00\nMaguro - Sashimi\n$11.00\nSalmon - Sashimi\n$10.00\n3 Sockeye Salmon\nSashimi\n$36.00\nHamachi Japapeno\n$12.00\nSalmon Collar\n$10.00\nEscolar - Sashimi\n$11.00\nSubtotal\n$131.00\nTax\n$12.71\nTotal\n$143.71\n153.71\n********\nThank You for your visit.",
+    "expected": {
+      "amount": 143.71
+    }
+  },
+  {
+    "image": "1009-receipt.jpg",
+    "text": "PASTA\n223 Neuport\nBella Pasta\nPautucket02661\nHUE\nwuu.bellapastaristorante.con\n(401)722-6297\nCheck us put on\ngoogle/Facebook/yelp/Trip\nAdvisor\nServer:PM BAR P\n08/09/19428PM\nCheck#4\nTable 21\nSteak Tip Skewers\nPiatto Gorgonzola\nRoot Beer\nSubtotal\n$36.78\n$28.48\nTax\nTotal\nCheck us out on Grub hub and uber Ests lon\nDelfvery!!!\nRestaurant Hours",
+    "expected": {
+      "date": "2019-08-09"
+    }
+  },
+  {
+    "image": "1012-receipt.jpg",
+    "text": "#14\nHP Pho Ga\n8930 Mission Dr.#102\nRosemead,CA 91770\nPhone 626)288-9999\nDate:Apr 012019\nTime:05:12PM\nServer:Admin\nBi11:59980\nTable14\nPho Ga Sma11\n8.00\n1\n1\nPho Ga Large\n9.00\n1\nGoi Cuon\n5.25\nSubtotal\n22.25\nTAX\n2.11\nTotal\n24.36\nS.Service Charge 40%\n8.90\nTotal\n$33.26\nSuggested Tip15%3.65\n18%4.38\n20%4.87\nOpen TimeApr 012019 04:39PM\nPrinted By :Admin\nThank you for Coming ",
+    "expected": {
+      "amount": 33.26
+    }
+  },
+  {
+    "image": "1014-receipt.jpg",
+    "text": "Loaded Cafe\n15700 Be11f lower B1vd\nBel1flower,CA 90706\n135 Nathalie\nTb134/1\nChk 2763\nGst 2\nFeb23'19 10:23AM\nDineIn\n2 Enchi Omelete\n25.98\nSHREDDED BEEF\n1 Open Food\n3.19\nSHREDDED BEEG\n1 Open Food\n3.19\n1 Hashbrowns Side\n2.99\nHashbrowns Side\n2.99\nCoffee Hot\n2.99\n1 Diet Coke\n2.99\nSUBTOTAL\n44.32\nTAX\n4.21\n10:51AM TOTAL DUE\n48.53\nTHANK YOU FOR VISITING",
+    "expected": {
+      "amount": 48.53
+    }
+  },
+  {
+    "image": "1020-receipt.jpg",
+    "text": "Deccan Spice\n771 Newark Avenue\nJersey City Loca1, NJ 07306\n201)604-1772\nServer:Com\nStation:6\nOrder#80110\nDine In\nTable:2.\nGuests:6\n1 Da1 Fry\n10.99\n1 Paneer Butter Masala\n12.99\n2 rice\n3.98\n1 Deccan Specia1 Biryani\n14.99\n1 rice\n1.99\nOnline Offer\n(8.99)\nSUB TOTAL:\n35.95\nTax 1\n2.98\nORDER TOTAL\n38.93\n18%TIPS:\n8.09\nTOTAL:\n$47.02\n7/26/2019 10:56:49PM\n****************************************\nNo returns or cancellations accepted once order\nis placed. Exchange only for faulty items ONLy.\n****************************************",
+    "expected": {
+      "amount": 47.02
+    }
+  },
+  {
+    "image": "1022-receipt.jpg",
+    "text": "Moonstar Restaurant\n383 Gellert Blvd.Daly CityCA 94015\n650992-2888\nPAID REPRINT 1\nTab:3321P 19:51\n#2406\nQTY/LB\nNAME\nU/P\nPRICE\nWEEKDAY DINNER $29.88\n29.88\nSUBTOTAL:\n29.88\n15%SERVICE CHARGE\n4.48\nTax8.75%\n3.01\nSALES TOTAL:\n32.89\nTOTAL:\n37.37\nCASH:\n100.00\nCHANGE\n62.63\n10/29/201819:51\nTHANK YOU",
+    "expected": {
+      "amount": 37.37
+    }
+  },
+  {
+    "image": "1024-receipt.jpg",
+    "text": "New Asia Buffet\n14727.5 Rinaldi St.\nSan FernandoCA 91340\nTe1818898-0880\nWeekEnd Dinner\nDate:ov-15-06-N Time:5:17PM#\n84\nServer :2\nTb#D4\nNo.of Guest1\nNN\nWeeken Dinner\n27.96\nCoke\n3.16\nAMOUNT\n31.12\nTAX9%\n2.80\nTOTAL33.92\nAMERICAN\nEXPRESS\nggested Tip 10%\n3.39\n15%\n:\n5.09\n20%\n6.78\nTHANK YOU VERY MUCH.",
+    "expected": {
+      "amount": 33.92
+    }
+  },
+  {
+    "image": "1025-receipt.jpg",
+    "text": "McDona ldst3100\n1617NETAEN\nLOSANGELSC3153\nTEL#2364730\nKS#2\n7/201303:08PM\nSide1\nOrder 97\n5.99\n1Db1 Qtr Ches\nSpecial Requet\nADD Leaf Lett.c\n0.25\nADD Mac Sauce\n0.40\nSubtotal\n6.64\nTax\n0.63\n7.27\nTake-Out Total\nCashless\n7.27\n0.00\nChange\nMER#439206\nNTH\nCARD ISSUER\nBOW DEBIT CARDA\n7.27\nTRANSACTION AMD.\nCHIP READ\nAUTHORIZATIONC-154\nSEQ#099988\nAID:AD000000042\nMcDonald's now ai 3 n JberEATS",
+    "expected": {
+      "vendor": "McDonald's"
+    }
+  },
+  {
+    "image": "1034-receipt.jpg",
+    "text": "ource\n9.\nCaisse?\n02-082015\nNOTE\nPERRIER\n6.80\nECA-COLA\n5.40\n5.40\n1JUS ORAND\nTOTAL EURO\n*17.00\nH.TTVA 10%\n15.45\nDONT TVA 10%\n1.55\nTOTAL TTC 10%\n17.00\nTel01.48.28.44.81\nMERCI DE VOTRE VISITE\nPRIXNET",
+    "expected": {
+      "amount": 17
+    }
+  },
+  {
+    "image": "1035-receipt.jpg",
+    "text": "Argonaut Diner2000 We DeTiver\nPlease Pay at Cashier\n1084 Yonkers Avenue\nYonkersNy 10704\n914)237-5055\nCopy of Receipt\nCoffee\n$1.45\n1\nTea\n$1.45\n1\nWaffle\n$5.50\n1\nOld Fashion French Toast\n$4.50\n1\nSide Home Fries\n$2.95\n1\nBanana\n$2.95\n1\nWhipped Cream\n$2.50\n1\nW/2 EGGS\n$2.95\nSubtotal:\n$24.25\n..\n$2.13\nTotal:\n$26.38\nServer Name:\nMIKE.\nTable Number:\nMichael De MaiSts1\nmper\nPPPRESS\nOrdersStarted:\n11:01 AM\nNECCAN\n4\n12Comments\nTUS FOR FREE\nLike\nOUR HOME OR\nComment",
+    "expected": {
+      "vendor": "Argonaut Diner"
+    }
+  },
+  {
+    "image": "1044-receipt.jpg",
+    "text": "CHURCH'S\nCHCKEN#4717\n7635NINNETKA\nCANOGA PARK CA\n818576-0490\n#253\nROEDRET\n19PC LT\n9.99\nNET\n9.99\nTXTL\n.95\nTOTL\n10.94\nCASH\nDHNG\n11.00\n.06\nTHANK YOU COME AGAIN !!!\nLISBETH/fa\n0203-2057 #02 MAY.2119 REG0002",
+    "expected": {
+      "amount": 10.94
+    }
+  },
+  {
+    "image": "1045-receipt.jpg",
+    "text": "YUM'S RESTAURANT\nWalk in\n6/24/201819PM\nServer Yums\n347\nSteak Crese Egg Rolls 2\n4.49\n4Wingsw French fnes\n7.20\nMumboS.e\n4WingswFreng nes\n7.20\nManboS.e!\nHot Sauceel\nHomemace Ha Hl\n1.89\nFood Subtoial\n20.78\nBev Subtotal\n0.00\nFood Tax\n1.25\nBey Tax\n0.00\nTotal:\n22.03\nReceived.\n22.03\nChange.\n0.00\nPAID Cash\nThank You",
+    "expected": {
+      "date": "2018-06-24"
+    }
+  },
+  {
+    "image": "1047-receipt.jpg",
+    "text": "17\n730tavern.com\nJ62\n730 Mass Ave\nCambridgeMA 02139-3308\n617-868-8800\n09/23/2017\n45757\n9:40PM\ner:Megan\n30062\nle3/1\nests:2\nReprint #:1\n48.00\nManhattan 3 @16.00)\n3Makers Mark\n28.50\n$85\nGrey Goose 3 @9.50)\n3.00\nRocks 3 @1.00)\n79.50\nSubtotal\n5.57\nTax\n85.07\nTotal\n85.07\nBalance Due\nSUGGESTED GRATUITY PRTOR TO DISCOUNT\n22%17.49\n20%16.0",
+    "expected": {
+      "amount": 85.07
+    }
+  },
+  {
+    "image": "1052-receipt.jpg",
+    "text": "255-41 Jericho Turnpike\nFloral Park,NY 11001\nTel718.343-4616\nwww.nancysrestaurant.net\n106 Tom\nCheck:1075\nGuests:2\nTable:34-1\n09/24/2016 08:22PM\nDINEIN\ng1 Imp White\n7.75\nBlue Moon Tap\n6.00\nMozzarella&Tomato\n9.95\nPork Quesadilla\n9.95\nFren Onion Soup\n5.95\nPork Chop\n21.95\nHanger Sizzle\n24.95\nSUBTOTAL\n86.50\nTax\n7.68\nTOTAI\nDUE\n$94.18",
+    "expected": {
+      "amount": 94.18
+    }
+  },
+  {
+    "image": "1055-receipt.jpg",
+    "text": "TER!\nWINGS& THINGS\n519 FULTON AVE.HEMPSTEAD NY\nTHANKS CALL AGAIN 516-483-0936\n50pc\n#195\nIN\n100p\n1 #7 2PC R&B MEAL\n5.99\n200p\nICED TEA\nSUB CORNBREAD\n50p\n1 #3 3WING MEAL\n6.99\n80p\nSIERRA\n1 SUB FIXN\n100\nMAC&CHZ\n1 #3 3WING MEAL\n6.99\nICED TEA\n1 SUB FIXN\nSPRICE\n1 #3 3WING MEAL\n6.99\nICED TEA\n1 SUB FIXN\nMAC&CHZ\n1 COLL GRN-SMALL\n1.19\nTXTL\n2.43\nTOTL\n30.58\nCASH\n40.00\nCHNG",
+    "expected": {
+      "amount": 30.58
+    }
+  },
+  {
+    "image": "1069-receipt.jpg",
+    "text": "Ruerullgy\nAMILY\nRiver Village Family Restaurant\n22825 Huron River Dr\nRockwood,MI 48173\n734236-4033\nServer:Jasmine G\n08/12/198:02 AM\nTable 23\nCheck #7\n$7.99\nApple French Toast\n$2.29\nCoffee\n$10.28\nSubtotal\n$0.62\nTax\n$10.90\nTotal\n2.99 early bird breakfast special\nMonday-Friday 7am-8am\nRiver village kayaking now open\nSunday-Thursday 7:00am-8:00pm\nFriday/Saturday 7:00am-9:00pm\nPay at the cash register\nThank you!!",
+    "expected": {
+      "amount": 10.9
+    }
+  },
+  {
+    "image": "1073-receipt.jpg",
+    "text": "Sucway#44969-0 Phone 626-566-9999\n625 S Fatr Oaks Ave\nServed by:41 5/1/2019 2:25:37ps\nPasadenaCA91105\nTera ID-Trans1/A-297424\nQty Size Iten\nPrice\n#SKS $11.99 Any 2 FtLong 11.99\n12-Steak & Cnse S.b\n1\n12-B.M.T.S\nSales Tax 10.25%\nSub Total\n11.99\n13.22\n1.23\nTotal Eat In)\nCredit Card\nCharge\n13.22\nApprovaNo:05114\n0.00\nReference No:912121113552\nCard Issuer:Visa\nAcct***0002\nAcquired:Contact_ENV\nAcp11catlonCHASE VISA\nAount$13.22\nAID0000000031010\nTVR0080008000\nate/T1ne5/1/20192:25:37PM\nTSI:EB00\nQUSTOMER.COPV",
+    "expected": {
+      "amount": 13.22
+    }
+  },
+  {
+    "image": "1091-receipt.jpg",
+    "text": "CITY TASTE\n930 WAYNE AVE.#100\nSILVER SPRING,MD20910\nTEL:301-585-1111\nDine In\n#90\nDate05-11-2018Time:8:03PM\nServer:BOSS\nTAB#:A06\nNo.ofGuest:2\n1 Philadelphia Roll\n4.85\n1 13.Shrimp Tempura Roll\n4.25\n[Roll]\n1 Rich/Famous Roll\n4.85\n1 16.Spicy Salmon Roll\n4.25\n[Roll]\n1 Veg/Tofu Pad Thai\n8.95\nSpicy\nAmount:27.15\nTAX(6%1.63\nTOTAL28.78\nTHANK YOU VERY MUCH.",
+    "expected": {
+      "amount": 28.78
+    }
+  },
+  {
+    "image": "1094-receipt.jpg",
+    "text": "POKEATERY\nPokeatery CV\n18911 Lake Chabot\nDecember 29,2018\nRoad\nCastro Valley,CA\n2:01PM\n94546\nRamelle\nReceipt3zCW\nAuthorization:060071\nCHASE VISA\nAIDA000000003 10 10\nPoke Box\nRegularAvocado ($1.00\n$13.50\nSubtotal\nCastro Valley Sales Tax\n$13.50\nTip\n$1.25\n$1.48\nTotal\nVisa 0642 (Chip)\n$16.23\n$16.23",
+    "expected": {
+      "amount": 16.23
+    }
+  },
+  {
+    "image": "1097-receipt.jpg",
+    "text": "EL POLLO LOCO\nRESTAURANT 5451\nST0RE5451\n7519 S.ATLANTIC AVE.\nCUDAHY,CA 90201\n323-560-0758\nR OWA\n257 LIDIA H\nhk 1924\nJun28'1705:36P\nGst\n0\nDrive\nThru\n1 Burrito Cmb\n8.28\nChk Ranchero Bur\nADD\nAvo S1cs\nInd Chips\nSM DRINK\nCoke\n2Bur-BRC @1.89\n3.78\nCash\n13.25\nFood\n12.06\nTax\n1.06\nPayment\n13.12\nChange Due\n0.13\n-257 Check C1osed\nJun281705:38PM\nYour 0rder:1924",
+    "expected": {
+      "amount": 13.12,
+      "date": "2017-06-28"
+    }
+  },
+  {
+    "image": "1099-receipt.jpg",
+    "text": "Mexican Restaurant & Bar\n25 West San Fernando St\nSan JoseCA 95113\n408283-9595\nServer:Pablo\n12/29/2017\n1:17PM\nTable40/1\n30001\nGuests:3\nReprint #1\n3.25\nCoffee\n14.95\nEnmoladas with Meat\nS\npollo\n5.95\n0\nChicken Tenders\n9.95\nFlautas Chicken\nT-\n15.95\nColoradito\n50.05\nSubtotal\n5.46\nTax\n55.51\nTotal\n9.01\nGratuity 18.00%\n64.52\nTotal\n64.52\nBalance Due\n!! Become a friend of us on\nFACEBOOK to receive news of\nevents & special offers !!\n!! THANK YOU FOR COMING !!",
+    "expected": {
+      "amount": 64.52
+    }
+  },
+  {
+    "image": "1100-receipt.jpg",
+    "text": "8A3\n*DUPLICATE\n**BILLA\nM\n**\nStony\n16725 Stony Plain Rd\nEdmonton AB T5P 4A9\nStore#:3859Te#780-414-8362\nUR\nWe lcome to all day breakfast\n0 Mc Dona ld's\n192\nKS#1\n03/10/201807:39:12PM\nQTY ITEM\nTOTAL\n1 Delivery\n0.00\n110 McNuggets EVM\n10.29\n1 Barbeque Sauce\nEASE\n1 Barbeque Sauce\n1 L Coke\n0.40\nTURN THISOVER\n1 M French Fries\n1 HM GrChs S-Fry Yog\n3.99\n1 Snoopy\n1 HM App le Juice\n1 6 Cookies\n2.89\n6 Choc Chip Cookie\nA\n1 Baked Apple Pie\n1.19\n1 L French Fries\n3.29\nLEASE\n1 L Iced Tea\n2.99\nSubtotal\n25.04\nGST\n1.11\nTake-Out Total\n26.15\nOVER\nCREDIT SALES-McDelivery\n26.15\nChange\n0.00\nPLEASE TORN THIS OVEI\nGST #120907092\nSALE #04kdfwg532",
+    "expected": {
+      "vendor": "McDonald's"
+    }
+  },
+  {
+    "image": "1107-receipt.jpg",
+    "text": "MIKUNI JAPANESE\n4323 Haze1 Avenue\nFair 0aksCA 95628\n916961-2112\n1070 David 0\nTb142/1\nChk 3905\nGst 2\nJu116'1708:15PM\n1 Mojito Pitcher Original w/\n18.00\n2 Glass\n1Brusse1 Sprouts\n6.50\n1Pepperfin\n14.50\n1 Spicy Drm 1 Red\n14.50\n1 Aerojet\n14.95\n1 Tommy\n17.95\n2 Cnu Toro\n19.00\n1 Daikon Hamachi\n14.50\n1 Garlic Salmon\n14.00\nSubtotal\n133.90\nTax\n10.38\nTotal Due\n144.28",
+    "expected": {
+      "date": "2017-07-16"
+    }
+  },
+  {
+    "image": "1115-receipt.jpg",
+    "text": "Rosebud on Rush\n720 North Rush Street\nChicagoIL\n312-266-6444\nDate:\nJu1151704:07PM\nCard Type:\nVisa\nAcct#\nXXXXXXXXXXXX3426\nCard Entry: SWIPED\nTrans Type: PURCHASE\nTrans Key:\nGIG005625257729\nAuth Code:\n190275\n1738\nCheck:\n81/1\nTable:\nServer:\n226 Chelsea\n79.17\nSubtotal:\nTIP\nTOTAL\nSIGNATURE\nTHIS IS ROSEBUD'S COPY\nAMERICAN\nYou!\nEXPRESS\nThank",
+    "expected": {
+      "date": "2017-07-15"
+    }
+  },
+  {
+    "image": "1116-receipt.jpg",
+    "text": "Villaggio\nGRILLE\nVillaggio Grille\n4780 Wharf Parkway\nOrange Beach,AL 36561\nPHONE:251-224-6510\nOrder 9862 06/08/1911:45 AM\nable 14 Cust 3 Server 156 JAMIE\n1P-VILLAGIO BREEZE\n0.01\n1ADD SALAD\n3.00\n1 LUNCH SEAFOOD PASTA\n14.00\n1 KID PEPERONI PIZZA\n7.00\nKID ALFREDO\n7.00\nSub-total:\n31.01\nTax:\n3.11\nTotalDue:\n34.12",
+    "expected": {
+      "date": "2019-06-08"
+    }
+  },
+  {
+    "image": "1118-receipt.jpg",
+    "text": "Wendy's Restaurant #00003675\n401 Bergan St\nHarrison.NJ 07029\n973)483-8704\n#3264\nHost:JULIANA\n03/18/27\n#3264\n8:48M\nOrder Type:PUW\nVeggle Sandwich\nNO American Cheese\nNO Mayo\nSmal1 Fries\n1.89\nPlain Potato\n1.79\nADD Chives\nTotal Items 3\nTax\nPUW Total\n4.99\n+\nBalance Due\nHow was your visit?\nCall us at 888-624-8140",
+    "expected": {
+      "amount": 4.99
+    }
+  },
+  {
+    "image": "1123-receipt.jpg",
+    "text": "E1 Gato Negro\n300 Harrison Ave\nNew Or leansLA 70124\nPhone:504)488-0107\n1128 Danie1 P\nTb190/1\nChk 4650\nGst 1\nAug231912:07PM\n*** Memo Check ***\nDine\nIn\nSeat:1\n1 Fajita Vegetable\n7.75\n1 Taco Shrimp Fresh Catch 3\n812.00\n*DON'T MAKE*\n1Water\n0.00\nFood\n19.75\nTax\n2.01\nTotal\n21.76",
+    "expected": {
+      "date": "2019-08-23"
+    }
+  },
+  {
+    "image": "1131-receipt.jpg",
+    "text": "CHRISS\nHAMBURGERS\n3950E SLAUSON MAYWOODCA 90270\nPHONE323-588-1607\nREG CASHIER11-24-201712:13 PM 000072\nMC #01\nMJSC\n$0.01\nB CHZ B SPC\nno pickles\n$8.80\nFFRIES-LRG\nCRISPY\n$3.66\nCRISPY\nFFRIES-LRG\n$3.66\nCRISPY\nPREM MED DRINK\n$2.15\nhorchata\nCHZ BURGER SPEC\n$7.57\nno onions\nEAT-IN\nTAXABLE SALES\n$25.85\nTAX\n$2.46\nTL.\n$28.31\nCASH\n$40.00\nCGi\n$11.69\nORDER#\n0000000052\nPLEASE HELP US SERVE YOU BETTER\nSERVICE WAS VERY GOOD\n[]\nGOOD\nPOOR",
+    "expected": {
+      "amount": 28.31
+    }
+  },
+  {
+    "image": "1134-receipt.jpg",
+    "text": "KFC\nRestaurant #C150014\n3880 Hempstead Turnpike\nLevittown\n(516)735-3508\nTicket #2884\n9:16PM\n2016-07-08\nC16001421172884\nCashier:TIANA\nFamily Fill Up\n20.00\nLrg Coleslaw\nLrg Mash/Gvy\nLrg Mash Only\n4 Biscuit\n1.73\nTax\n$21.73\nDRIVE THRU\nETender Credit\n$21.73\nChange\n$0.00\nCHARGE DETAIL:SALE",
+    "expected": {
+      "amount": 21.73
+    }
+  },
+  {
+    "image": "1143-receipt.jpg",
+    "text": "Arthurs\n237 Washington\nHoboken,NJ 07030\n(201)656-5009\n1058 Alexandr\nGst 3\nChk 1844\nTAB/62\nOct01'17 01:44PM\nBar\n1 Arthur's Burger *ChsBleu\n13.95\n1OurBurger **Avocado\n15.95\n1 Loaded Nachos\n12.95\n1 Pint Boston Lager\n6.00\n2Pint YeungTing\n12.00\n1 Kona Longboard\n6.00\n1 Quesadi1la\n13.95\nfood\n56.80\n1iquor\n24.00\nTax\n3.98\n02:2SPM Tota1 Due\n84.78\n20% added to parties 8 or more\nThank You for Dining with Us!\nPrivate Rooms\nAvailable for\nYour Next Party!",
+    "expected": {
+      "vendor": "Arthurs"
+    }
+  },
+  {
+    "image": "1145-receipt.jpg",
+    "text": "MIGUELS MEXICAN\n3035 W.KENNEDY BLVD\nTAMPAFL.\n813)876-2587\n127MISSY\nTb182/1\nChk 55\nGst 3\nDec26'12 04:41PM\n3 WATER\n0.00\n1 CRAB SUIZA\n13.25\n1 SHRIMP VERACRUZ\n14.95\n1 ENCHILADA\n4.95\n1 FAJITA BF\n13.95\n1**TAKE OUT**\n0.25\n4 HH MIGUELS MARGARIT @3.38\n13.52\nSubtotal\n60.87\nTax\n4.27\n05:19PM Total\n65.14\nPLEASE PAY YOUR SERVER",
+    "expected": {
+      "amount": 65.14
+    }
+  },
+  {
+    "image": "1148-receipt.jpg",
+    "text": "Sonic Amer ica's Drive-In\n518 Robertson Boulevard\nWalterboro,SC 29488\n843-782-4565\nStal1 #15\n96JORDEN\nSt115/1\nChk 599\nJun221807:59PM\nTray:8\nStall\n**** Ind 1 ***\n1 Conbo\nChz Burger\n6.79\nAdd Mayo\nAdd Must\nAdd Ket\nMed Fries\nMed Dr Pepper\n1 Prem Dog Combo\n5.09\nNY Dog\nMed Tots\nMed Cof fee\nTax\n1.19 Total Due:\n13.07\n****A1 *****\nSubtotal:\n11.88\nTax\n1.19\n08:00PM Tota1 Due\n13.07\nYou Saved...\n1.86\nHow was your vist?",
+    "expected": {
+      "amount": 13.07,
+      "date": "2018-06-22"
+    }
+  },
+  {
+    "image": "1150-receipt.jpg",
+    "text": "HMS\nSACRANENTO INTL AIRPORT\nESQUIRE GRILL\n1470790d1\n126\n2144\nGST2\nAPR04166:09PH\nDINE IN\n1DB NOODFRD RES Z\nSEAT\nNEAT\n17.99\n1CAB PEJU SAUV S\nPeju Cabernet Sauvignon\n11.00\n1 SAND GRLD CHIX\nSD CHOP SLD\n14.50\nM/ORS BLUE CHS\nDRESS ON SIDE\n1 SLD SHRINP LOUIE\n/ DRESS CN SIDE\n24.00\n1 SD BRUSSEL SPRTS\nTAX\n5.96AMOUNTD 80.45\n7.00\n***\n*****\nSUBTOTAL\nTAX\n74.49\nAMOUNT DUE\n5.96\n$80.45\nWE WANT TO HEAR YOUR FEEDBACK!\nPLEASE CONTACT1-877-672-7467\nOR CUSTOMERSERVICE@HMSHOST.COM\nTO SHARE YOUR EXPERIENCE.\nSTOREID:SMEEGEOS",
+    "expected": {
+      "amount": 80.45,
+      "date": "2016-04-04"
+    }
+  },
+  {
+    "image": "1151-receipt.jpg",
+    "text": "Collector's Choice Restaurant\n215 Cypress Ave\nSnohomish WA 98290\n360-568-1277\nApri1 10,2019 12:00pm\nTicket: 1904100085\nServer: Chery1 V\nSeat:Dining:T8:1\nPrice\nItem\n11.69T\n1 Twisted Rueben\n11.69\nSubtotal\n-0.70T\n1 Service Fee (-6%\n1.14\nSales Tax (9.2%\n$13.53\nTotal\nTip Helper:\n15%=2.03 18%=2.4420%=2.71\nStarting January 25th, 2019\nCCR includes a 6% service charge on each\nguest check.\nThis service charge is fully retained by\nthe company, not the servers. It will be\nused 100% to provide fair wages for our\nkitchen staff with equitable pay and\nbenefits to our entire team.\nWe are required by law to collect tax on\nthe service charge.\nPlease Continue Tipping your Servers\nThank you for your continuing support\nReceive a 3% Discount for paying with\ncash.",
+    "expected": {
+      "amount": 13.53,
+      "date": "2019-04-10"
+    }
+  },
+  {
+    "image": "1157-receipt.jpg",
+    "text": "COLLEGE OF SOUTHERN NEVADA\nRUSSELL'S RESTAURANT\n108 SERV7\nTb155/1\nChk 4488\n0ct081412:10PM\nGst\n1LATTE\nNO FLAVOR\n1.75\n1 SALMON\n7.95\n12:44PH Amount Due\n9.70\nCOLLEGE OF SOUTHERN NEVADA\nWHERE HOSPITALITY EDUCATION\nTAKES LIFE\nPLEASE PAY CASHIER\nThank You",
+    "expected": {
+      "amount": 9.7,
+      "date": "2014-10-08"
+    }
+  },
+  {
+    "image": "1159-receipt.jpg",
+    "text": "Taco Tie -Kenmore\n425488-4472\n6733NE 181TH ST\nKENMOREWA 98028\nDT>248\nHost:\n04/24/2018\nCashier:\nDT>248\n7:08PM\n30126\nOrder Type Drive Thru\nSFT TACOBF\n5.99\nSubtotal\n5.99\nTax\n0.60\nDrive Thru Tota1 6.59\nCASH\n$10.00\nChange\n$3.41\nThank you.\nPlease.come.again",
+    "expected": {
+      "amount": 6.59
+    }
+  },
+  {
+    "image": "1163-receipt.jpg",
+    "text": "BEN'S BAYSIDE\n211-37 26th Avenue\nBaysideNY 11360\nPhone718)229-2367\nEmai1:Bayside@BensDeli.net\nOO32 Table 45 #Party 3\nJESSICA MSvrCk1 12:05 03/05/17\nDINING ROOM\n2DOUBLE DIP1 tky,bow1 barley\n1past,bowl bar ley\n27.98\n1 KNISH\n0.00\n1 ROUND\n3.99\n1KASHE SIDE\n3.99\n1 COFFEE\n1.99\n2WATER\n0.00\nSub Total:\n37.95\nTax\n:\n3.37\n03/05 12:41 TOTAL\n41.32\nSuggested Gratuity\nGRAT 15%\n5.69\nGRAT18K\n6.83",
+    "expected": {
+      "amount": 41.32
+    }
+  },
+  {
+    "image": "1165-receipt.jpg",
+    "text": "EL CHICO MEXICAN RESTAURANT\nTEL04-7059680\nJBR\n1050 Home De1\nTb11014/1\nChk1958\nGst 0\nNov121605:41PM\nHome Delivry\n1 Ts Guac\n1 Grande Chicken\n48.00\n64.00\nBuritto\n1 Delivery Charge\n5.00\nAmount Due\n117.00\n***Thank You For Coming***\nHome De1ivery No:600561112",
+    "expected": {
+      "date": "2016-11-12"
+    }
+  },
+  {
+    "image": "1181-receipt.jpg",
+    "text": "DEL FRISC0S #8620\n1221 Avenue of the Americas\nNew York,New York 10020\n1075 Rebekkah\n:9\nChk 1061\nGst 5\ne\nTb1240/1\nApr07'1607:53PM\n1f\nDine In\n4 Strip 16oz\n212.00\n1 Ribeye Bone In\n69.50\n16.50\n1 Cauliflower\n10.50\n1 Baked Potato\n15.50\n1 Asparagus\n1 0nion Rings\n14.50\n16.00\n1 Sauteed Spinach\n25.50\n3 V0ss Spark1ing\n24.00\n6 Coke Bt1\n404.00\nSUBTOTAL\n35.86\nTAX\n439.86\n09:14PM TOTAL DUE\nTHANK YOU FOR VISITING",
+    "expected": {
+      "amount": 439.86,
+      "date": "2016-04-07"
+    }
+  },
+  {
+    "image": "1182-receipt.jpg",
+    "text": "**********************************\nFinnegan's Way Check 822819\n1344 Ocean Drive\nMiami Beach Florida 33139\nTel.305-672-7747\n08/21/178:38PM\nTable 15 Cust 1\nWaiter 58 IRYNA P\n****************************************\n4 SOBE MOJITO'S\n40.00\nBACARDI LIGHT\nTaxable:\n40.00\nSub-total:\n40.00\nSales Tax 7\n2.80\nResort Tax 2%\nTotal:\n0.80\nVoluntary 18% Tip:\n43.60\nPlease feel free to adjust or remove\n7.20\nthe tip amount at your discretion\nTotal\n50.80",
+    "expected": {
+      "amount": 50.8
+    }
+  },
+  {
+    "image": "1186-receipt.jpg",
+    "text": "Primo\nFamily Restaurant\n5/3/198:14PM\nDARNIN D.Table:10 Check:137\n3Prem Glass 7.50\n$22.50\n1 MED Veggie 27.00\n$27.00\nSub-Total\n$49.50\nSales Tax\n$2.97\nTotal\n$52.47\nPaysents\nMASTERCARD***6170\n$52.47\nAmount Due\n$0.00\nCharge Receipt\nServer:\nDARWIN D.\nTable No:\n10",
+    "expected": {
+      "amount": 52.47
+    }
+  },
+  {
+    "image": "1187-receipt.jpg",
+    "text": "Spiral Diner & Bakery\n608 E Hickory St\nDentonTX76205\nOrder#185736\nEat In Order\nServer:Sarah A\nTable:9\nDate:6/16/1910:04AM\nReal Smooth\nShort Stack\n$7.99\nCoffee\n$8.59\n$2.99\nBreakfast Quesadi1la\n$13.99\nNO Sausage\n+$0.00\nGri1led Spinach\n+$1.99\nSouthern Comfort\n$10.99\nSubtotal:\n$46.54\nTotal Tax:\n$3.84\nTotal:\n$50.38\n$50.38\nOrder Balance due:\nwww.spiraldiner.com\nFo11ow Us On\nfacebook.com/spiraldiner\ninstagram.com/spira1diner\nThanks for your business!",
+    "expected": {
+      "date": "2019-06-16"
+    }
+  },
+  {
+    "image": "1188-receipt.jpg",
+    "text": "New China\n1130 North Higley Rd,Suite#7-102\nMesa,AZ85205\nTel4801218-9888/9892\nWalkin\n#23\nDule:03-12-2016 Time:4:02PM\nServerBOSS\n1 Beef w.Broccoli\n8.25\nw.Chicken Fried Rice\n2.00\n1 Sweet/Sour Chicken\n7.95\n1 Chicken Chow Mein\n6.75\nAmount24.95\nAX8.05%2.01\nTOTAL26.96\nThank you very much",
+    "expected": {
+      "amount": 26.96
+    }
+  },
+  {
+    "image": "1190-receipt.jpg",
+    "text": "EXulut\nS\nSters\nFevo\nSupre\nSerne\nBOmBAY GRILL\nHOUSE\nIndian Cuisino\nBombay Grill House\n7649TH AVE\nNEW YORK,NY 10019\n2129771010\nAny Special Offer will be at End of Receipt\nORDER:Table 2\nDine In\n30-Jun-201810:36:38P\nTransaction 104379\n$5.95\nOnion Bhajia\nLamb Vindaloo\n$14.95\nmedium\nKonkan Fish Curry\n$16.95\nmedium\n$16.95\n1\nShrimp Briyani\nmedium\n$4.00\n1\nGarlic Naan\n$50.00\n1\nHess Cabernet\n$108.80\nSubtotal\n$9.66\nTax\n$118.46\nTotal\n$118.46\nCREDIT CARD AUTH\nMASTERCARD0148\n35.54\nTip\n154.00\nTotal\nEDWIN ALEXANDER",
+    "expected": {
+      "amount": 154
+    }
+  },
+  {
+    "image": "1192-receipt.jpg",
+    "text": "STAMORD'S\n17300SUTHCENTERPARXAY\nTURILAA58188\n206.575.7454\n28120Jane11\nTb1 127/1 Ck3885\nSep301707:36PM\nGst 3\nCHIC TENA\n1 RIBS 1/2 ST\n18.95\n9.95\n1 BRG DELUXE\n14.95\nKTIMING\n9.95\nSUBTOTAL\n33.90\nTAX\n3.39\nTOTAL DUE\n37.29\nMONDAY TO SATURDAY\nHAPPY HOUR\n3 pa to 6 pm and 9 pm to close\nSUNDAY HAPPY HOUR ALL DAY\nJoin Cur EAT DRINK & EARN Club\nto earn reards while dining\nstaurant Ask your serve\nfor detalls or join onl tne a\nw.toecca.rewards",
+    "expected": {
+      "date": "2017-09-30"
+    }
+  },
+  {
+    "image": "1193-receipt.jpg",
+    "text": "Marie Cal lender's Restaurant\nStore #0134\n2131 Pr1ce St.\nPismo Beach.CA 93449\n805773-0606\nwww.mcpfes.com\n111590 Becky\nTb12/1\nChk 1878\nGst2\nNov301406:35PM\nCORNBREAD SVC\n0.00\n2 TRIO-POT PIE9.99\n19.98\n2C-PIE SLICE\n0.00\n1 NO BEVERAGE\n0.00\n1 SOFTDRINK\n2.79\nBDAY CLUB $5\n5.00-\nSubtotal\n17.77\nTax\n1.42\n07:10PM Total\n19.19\nIndulge..Take home a whole pie!",
+    "expected": {
+      "amount": 19.19,
+      "date": "2014-11-30"
+    }
+  },
+  {
+    "image": "1195-receipt.jpg",
+    "text": "Amici Conyers\n1805 Parker RD Suite G110\n1805 Parker RD\n678890-2005\nServer: Nicole\n06/10/2018\nTable 52/1\n1:02PM\nGuests:2\n30004\nSeat 1\nCoke\n2.29\nMargherita Calzcne\n11.99\nSide Caesar\n4.99\nSubtctal\n19.27\nTax\n1.35\nTotal\n20.62\nSeat 2\n******************************************\nCoke\n2.29\nDb1 Stack Cheeseburger\n8.99\nBacon\n0.99\nSubtotal\n12.27\nTax\n0.86\nTctal\n13.13\nSubtotal\n31.54\nTax\n2.21\nTotal\n33.75\n33.75\nBalanceDue\nThank you for dining with us!\nSUGGESTED GRATUITY:",
+    "expected": {
+      "amount": 33.75
+    }
+  }
+]

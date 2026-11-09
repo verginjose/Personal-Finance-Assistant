@@ -1,0 +1,56 @@
+{
+  "dataset": "bundled 1000\u20131199 receipt images",
+  "method": "live POST /ocr once, identical saved text replayed without currency conversion",
+  "baseline": {
+    "picked": 200,
+    "ok": 200,
+    "failed": 0,
+    "vendor_found": 193,
+    "amount_found": 200,
+    "date_found": 172,
+    "currency_detected": 135,
+    "clean": 113,
+    "warnings": 107,
+    "categories": {
+      "RESTAURANTS": 195,
+      "OTHERS": 5
+    },
+    "rates_source": "disabled",
+    "rates_date": "",
+    "amount": {
+      "min": 0.8,
+      "median": 34.06,
+      "max": 780.45
+    }
+  },
+  "hybrid": {
+    "picked": 200,
+    "ok": 200,
+    "failed": 0,
+    "vendor_found": 193,
+    "amount_found": 200,
+    "date_found": 184,
+    "currency_detected": 141,
+    "clean": 123,
+    "warnings": 89,
+    "categories": {
+      "RESTAURANTS": 195,
+      "OTHERS": 5
+    },
+    "rates_source": "disabled",
+    "rates_date": "",
+    "amount": {
+      "min": 2.17,
+      "median": 37.33,
+      "max": 780.45
+    }
+  },
+  "changed_fields": {
+    "amount": 28,
+    "date": 14,
+    "vendor": 6,
+    "currency": 0,
+    "expenseCategory": 0
+  },
+  "category_note": "Sparse vector fallback abstained on all five OTHERS. No category accuracy improvement claimed. Dense backend not runtime-tested in this environment."
+}

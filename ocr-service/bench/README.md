@@ -42,6 +42,115 @@ roundtrip latency plus receipts/minute. `--out` saves every response (including
 the full OCR text) to JSON. Exit code is 1 if any upload failed.
 
 
+## Deterministic parse (no LLM)
+
+`parse_receipts.py` replaces the Groq extraction step: it uploads images to
+`/ocr`, then parses the returned text into the same document Groq was asked
+for in `app/main.py` —
+
+```json
+{"vendor":"...","amount":0.0,"transactionType":"Expense",
+ "expenseCategory":"...","incomeCategory":null,"currency":"USD",
+ "description":"...","date":"YYYY-MM-DD","recurring":false}
+```
+
+It also computes the derived `amountInr` / `amountUsd` / `amountDefault` fields
+the same way `_parse_bill` does (Frankfurter rates, with an offline fallback),
+and reports per-receipt evidence (which line produced the amount/date) plus
+sanity warnings (`no_amount`, `no_date`, `currency_defaulted`, …).
+
+```bash
+INTERNAL_API_TOKEN=... python3 parse_receipts.py --count 20        # random sample
+python3 parse_receipts.py --first 10 --default-currency USD        # first 10
+python3 parse_receipts.py ../../requests/large-receipt-image-dataset-SRD/1001-receipt.jpg
+python3 parse_receipts.py --results results/batch.json             # re-parse saved OCR
+python3 parse_receipts.py --count 50 --labels labels.json --out results/parsed.json
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--token` | `X-Internal-Token` (default `$INTERNAL_API_TOKEN`); `/ocr` requires it |
+| `--default-currency` | currency assumed when none is printed (default `INR`; use `USD` for this dataset) |
+| `--date-order auto\|mdy\|dmy` | ambiguous numeric dates; `auto` prefers month-first unless day > 12 |
+| `--labels` | JSON/CSV ground truth keyed by filename; reports per-field accuracy and mismatches |
+| `--no-convert` | skip the currency-rate fetch and derived amount fields |
+| `--strict` | exit 1 if any receipt has a parse warning |
+| `--include-text` | keep the OCR text in the saved JSON |
+
+`--results` accepts the JSON written by `run_ocr_batch.py` (or a single `/ocr`
+response), so parsing can be tuned offline against a saved batch.
+
+This is heuristic by design: it reads a total-priority keyword list, a
+date-format list, and a vendor/category keyword table. It is fast, free and
+reproducible, and its mistakes are visible in `evidence` — unlike a Groq call,
+which returns no trace of where a value came from.
+Negative totals are treated as Income with positive document/conversion amounts.
+Final labelled totals supersede earlier totals within the same priority, clock
+values and percentages are excluded, and nearby cash/tax labels limit lookahead.
+
+
+## Hybrid category search
+
+Enable the vector fallback with reviewed examples:
+
+```bash
+python3 -I ocr-service/bench/parse_receipts.py \
+  --results /tmp/parser-baseline-200.json --no-convert --default-currency USD \
+  --category-examples ocr-service/bench/category_examples.json \
+  --include-text --out /tmp/parser-hybrid-200.json
+```
+
+Run from the repository root, or adjust the paths. The default backend is
+stdlib TF-IDF vectors with cosine similarity: **lexical similarity, not semantic
+embeddings**. It makes no network calls. The bundled corpus contains starter
+category descriptions; replace or extend it with reviewed vendor/item examples:
+
+```json
+[{"id":"reviewed-example-001","category":"RESTAURANTS","text":"Acme crepe croissant nutella"}]
+```
+
+Categories currently supported by the parser's category-rule table are accepted.
+Use the receipt filename as `id` when indexing benchmark receipts: the current
+receipt's matching ID is excluded from search. Keep evaluation receipts/vendors
+out of the index when measuring generalization; do not auto-label the index with
+parser predictions.
+
+Rules take precedence; only Expense/OTHERS results reach vector search. The top
+example must meet both `--category-threshold` (default 0.45) and the margin over
+the best *different category* (`--category-margin`, default 0.12). Otherwise the
+result stays OTHERS. Scores are not probabilities. Evidence includes the backend,
+index SHA-256, neighbors, scores, margin and acceptance decision. These starter
+thresholds require validation on a separate labelled, mixed-category dataset.
+
+For local semantic embeddings, install `sentence-transformers` separately and
+pass `--category-model /absolute/path/to/model-directory`. This uses CPU,
+normalized embeddings and cosine similarity; the model must already exist
+locally. It disables remote model code and network model downloads. Pin the model
+files as well as the example corpus for repeatable runs. No OCR-service dependency
+or deployed service path is changed. This optional backend has not been executed
+in the current environment (the dependency/model are absent). See the
+[SentenceTransformer API](https://sbert.net/docs/package_reference/sentence_transformer/model.html)
+for model loading and normalization options.
+
+Verification:
+
+```bash
+python3 -I -m unittest discover -s ocr-service/bench/tests -v
+```
+
+The tests cover 48 selected real OCR snapshots with manually reviewed expected
+fields, signed refunds, payment/clock/percentage confusion, vector acceptance,
+abstention, rule precedence and self-match exclusion. This is a targeted
+regression suite, not an unbiased accuracy estimate.
+
+The 2026-11-09 live 200-receipt OCR replay is summarized in
+`tests/fixtures/tuning_report.json`: date coverage 172 → 184, detected currency
+135 → 141, warning-free receipts 113 → 123; 28 amounts changed after reviewing
+OCR evidence. All 200 still have an amount. The sparse fallback abstained on the
+five remaining OTHERS; no category accuracy improvement is claimed from this
+restaurant-only benchmark. Amounts and categories need image-labelled ground
+truth before reporting overall accuracy.
+
 ## Run
 
 ```bash

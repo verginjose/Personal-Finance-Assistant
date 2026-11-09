@@ -10,9 +10,7 @@ import io.lettuce.core.api.StatefulConnection;
 import jakarta.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
-import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.actuate.metrics.cache.CacheMetricsRegistrar;
 import org.springframework.cache.Cache;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.interceptor.CacheErrorHandler;
@@ -173,16 +171,12 @@ public class RedisConfig {
         };
     }
 
-    @Bean
-    public SmartInitializingSingleton cacheMetricsBinder(
-            RedisCacheManager cacheManager,
-            CacheMetricsRegistrar cacheMetricsRegistrar) {
-        return () -> {
-            cacheManager.getCacheNames()
-                    .forEach(name -> cacheMetricsRegistrar
-                            .bindCacheToRegistry(cacheManager.getCache(name)));
-        };
-    }
+    // Cache metrics are registered by Spring Boot's CacheMetricsAutoConfiguration.
+    // Do not bind them here as well: this binder used the one-argument
+    // bindCacheToRegistry(cache), which omits the cache_manager tag, while the
+    // auto-configuration registers the same meter name with that tag. Prometheus
+    // rejects the second shape and drops the meter (warning:
+    // "cache.gets ... registration has failed").
 
     // Add this bean to your existing RedisConfig.java
 

@@ -82,6 +82,12 @@ spec:
               value: "https://grafana.verginjose.cloud/"
             - name: GF_SERVER_SERVE_FROM_SUB_PATH
               value: "false"
+            # The cluster has no route to grafana.com, so the update checks
+            # could only fail — and logged an ERROR on every start.
+            - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+              value: "false"
+            - name: GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES
+              value: "false"
           ports:
             - name: http
               containerPort: 3000

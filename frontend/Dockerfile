@@ -8,6 +8,10 @@ COPY css/       /usr/share/nginx/html/css/
 COPY js/        /usr/share/nginx/html/js/
 COPY assets/    /usr/share/nginx/html/assets/
 
+# The pod runs as a non-root user, so the base image's `user nginx;` directive
+# is ignored and nginx warns about it on every start. Remove the line.
+RUN sed -i '/^user[[:space:]]/d' /etc/nginx/nginx.conf
+
 # Automatically append a build timestamp to all script imports to bust the browser cache
 RUN find /usr/share/nginx/html -type f \( -name "*.html" -o -name "*.js" \) -exec sed -i "s/?v=[0-9]*/?v=$(date +%s)/g" {} +
 

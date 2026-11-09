@@ -146,6 +146,19 @@ data:
           # Registry prints both an access line and a "response completed" line
           # for every request; keep the access line only.
           !contains(string(.message) ?? "", "msg=\"response completed\"") &&
+          # The registry's liveness/readiness probes are TCP connects by design
+          # (HTTP would be rejected without a client certificate), so its TLS
+          # listener logs "TLS handshake error ... EOF" 9x/min while the pod is
+          # idle. A real mTLS failure is reported as "client didn't provide a
+          # certificate" / "unknown certificate", not EOF, so this only drops
+          # probe connects.
+          !contains(string(.message) ?? "", "TLS handshake error from") &&
+          # MinIO warns that Go's GOMAXPROCS (derived from the 500m CPU limit)
+          # is below the host's NumCPU; the limit is intentional.
+          !contains(string(.message) ?? "", "Detected GOMAXPROCS") &&
+          # Grafana 11.1 registers its bundled xychart plugin twice and logs an
+          # ERROR about it on every start. Upstream bug, nothing to act on.
+          !contains(string(.message) ?? "", "plugin xychart is already registered") &&
           # Command-service asks query-service to evict cache after every write
           # during load tests; the outcome is logged separately.
           !contains(string(.message) ?? "", "Received internal cache evict request")

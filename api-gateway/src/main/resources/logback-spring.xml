@@ -13,12 +13,6 @@
       Keeping JSON in the cluster is what lets Vector populate the service,
       level, logger, thread and trace columns instead of guessing with regexes.
     -->
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
     <springProfile name="structured-logs">
         <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
@@ -37,6 +31,17 @@
     </springProfile>
 
     <springProfile name="!structured-logs">
+        <!--
+          Defined inside this profile only. A top-level appender that the active
+          profile never references makes logback warn "Appender named [CONSOLE]
+          not referenced" on every structured-logs startup.
+        -->
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+            </encoder>
+        </appender>
+
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>

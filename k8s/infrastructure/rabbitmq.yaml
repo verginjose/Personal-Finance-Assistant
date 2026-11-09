@@ -20,6 +20,10 @@ data:
     # Absolute (not relative) so a mis-detected host memory figure cannot turn
     # this into a permanent disk alarm.
     disk_free_limit.absolute = 2GB
+    # The management plugin's periodic metrics collector is deprecated and was
+    # logging a multi-line warning on every start. Nothing scrapes the RabbitMQ
+    # management API metrics, so opt into the "removed" behaviour explicitly.
+    deprecated_features.permit.management_metrics_collection = false
 ---
 apiVersion: v1
 kind: Service

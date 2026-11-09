@@ -84,6 +84,13 @@ transforms:
       !contains(string(.message) ?? "", "actuator/health") &&
       !contains(string(.message) ?? "", "GET /v2/") &&
       !contains(string(.message) ?? "", "msg=\"response completed\"") &&
+      # Registry probes are TCP connects by design, so the TLS listener logs
+      # "TLS handshake error ... EOF" 9x/min while idle.
+      !contains(string(.message) ?? "", "TLS handshake error from") &&
+      # MinIO's GOMAXPROCS notice is expected under the 500m CPU limit.
+      !contains(string(.message) ?? "", "Detected GOMAXPROCS") &&
+      # Grafana 11.1's bundled xychart plugin registers twice at startup.
+      !contains(string(.message) ?? "", "plugin xychart is already registered") &&
       !contains(string(.message) ?? "", "Received internal cache evict request")
 
   mask_pii:

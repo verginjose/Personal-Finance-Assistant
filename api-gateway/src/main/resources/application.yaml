@@ -15,8 +15,11 @@ minio:
   profileBucket: ${MINIO_PROFILE_BUCKET:profiles}
 
 spring:
-  codec:
-    max-in-memory-size: 12MB
+  # Renamed in Spring Boot 3.4; the old `spring.codec.*` key logs a
+  # PropertiesMigrationListener warning on every start.
+  http:
+    codecs:
+      max-in-memory-size: 12MB
   webflux:
     multipart:
       max-in-memory-size: 12MB
@@ -43,142 +46,147 @@ spring:
 
   cloud:
     gateway:
-      httpclient:
-        connect-timeout: 5000
-        pool:
-          # Recycle idle connections before Tomcat's keep-alive timeout
-          # (server.tomcat.connection-timeout, default 20 s) closes them. A
-          # pooled connection the backend has already closed fails the next
-          # request in ~0.1 ms with PrematureCloseException; that is the
-          # transient error the circuit breaker was counting as a dependency
-          # failure under bursty load. Recycling at 10 s keeps the pool ahead
-          # of the backend.
-          max-idle-time: 10s
-          max-life-time: 60s
-          # max-idle-time is only enforced by the periodic eviction sweep, so a
-          # stale connection can otherwise survive up to the sweep interval.
-          # 5 s keeps the pool ahead of Tomcat's 20 s keep-alive timeout.
-          eviction-interval: 5s
-          # Expose reactor.netty.connection.provider.* (allocated, idle,
-          # pending, created) so pool behaviour is visible during load tests.
-          metrics: true
-      routes:
-        # Rate-limit policy (per key, so it never binds aggregate throughput —
-        # a 1,000 req/s run across 200 users recorded zero 429s). The buckets
-        # below cap a *single* abusive key, not the fleet:
-        #   login/register  5/s  per IP+path   (brute-force)
-        #   auth refresh/me 100/s per IP+path  (multiple tabs; NAT cohorts)
-        #   writes          20/s per user      (≈16/s is the test's write pace)
-        #   reads           50/s per user      (dashboard + filters)
-        #   analytics       10/s per user      (expensive; burst absorbs a
-        #                                       dashboard's parallel chart calls)
-        # Credential endpoints get a human-sized bucket (IP + path), separate
-        # from the general auth route. Must come before the /api/auth/** route
-        # because the first matching route wins.
-        - id: auth-credentials
-          uri: http://auth-service:8082
-          predicates:
-            - Path=/api/auth/login,/api/auth/register
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 5
-                redis-rate-limiter.burstCapacity: 20
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@ipPathKeyResolver}"
-            - name: CircuitBreaker
-              args:
-                name: auth-cb
-                fallbackUri: forward:/fallback/auth
-
-        # Auth lives in its own service now. The path is forwarded unchanged
-        # (/api/auth/** -> auth-service /api/auth/**). Refresh and /me are
-        # legitimately bursty (multiple tabs), so they keep a wider bucket
-        # than the user-scoped routes — but still bounded per source IP.
-        - id: auth-service
-          uri: http://auth-service:8082
-          predicates:
-            - Path=/api/auth/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 100
-                redis-rate-limiter.burstCapacity: 200
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@ipPathKeyResolver}"
-            - name: CircuitBreaker
-              args:
-                name: auth-cb
-                fallbackUri: forward:/fallback/auth
-
-        - id: command-service-sse
-          uri: http://command-service:8081
-          predicates:
-            - Path=/api/upsert/notifications/**
-          filters:
-            - StripPrefix=2
-          metadata:
-            response-timeout: 1800000
+      # In Spring Cloud Gateway 4.2 the server webflux properties moved under
+      # `server.webflux`; the old prefix still works but the migration listener
+      # logs a warning listing every key on every start.
+      server:
+        webflux:
+          httpclient:
             connect-timeout: 5000
+            pool:
+              # Recycle idle connections before Tomcat's keep-alive timeout
+              # (server.tomcat.connection-timeout, default 20 s) closes them. A
+              # pooled connection the backend has already closed fails the next
+              # request in ~0.1 ms with PrematureCloseException; that is the
+              # transient error the circuit breaker was counting as a dependency
+              # failure under bursty load. Recycling at 10 s keeps the pool ahead
+              # of the backend.
+              max-idle-time: 10s
+              max-life-time: 60s
+              # max-idle-time is only enforced by the periodic eviction sweep, so a
+              # stale connection can otherwise survive up to the sweep interval.
+              # 5 s keeps the pool ahead of Tomcat's 20 s keep-alive timeout.
+              eviction-interval: 5s
+              # Expose reactor.netty.connection.provider.* (allocated, idle,
+              # pending, created) so pool behaviour is visible during load tests.
+              metrics: true
+          routes:
+            # Rate-limit policy (per key, so it never binds aggregate throughput —
+            # a 1,000 req/s run across 200 users recorded zero 429s). The buckets
+            # below cap a *single* abusive key, not the fleet:
+            #   login/register  5/s  per IP+path   (brute-force)
+            #   auth refresh/me 100/s per IP+path  (multiple tabs; NAT cohorts)
+            #   writes          20/s per user      (≈16/s is the test's write pace)
+            #   reads           50/s per user      (dashboard + filters)
+            #   analytics       10/s per user      (expensive; burst absorbs a
+            #                                       dashboard's parallel chart calls)
+            # Credential endpoints get a human-sized bucket (IP + path), separate
+            # from the general auth route. Must come before the /api/auth/** route
+            # because the first matching route wins.
+            - id: auth-credentials
+              uri: http://auth-service:8082
+              predicates:
+                - Path=/api/auth/login,/api/auth/register
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 5
+                    redis-rate-limiter.burstCapacity: 20
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@ipPathKeyResolver}"
+                - name: CircuitBreaker
+                  args:
+                    name: auth-cb
+                    fallbackUri: forward:/fallback/auth
 
-        - id: command-service-command
-          uri: http://command-service:8081
-          predicates:
-            - Path=/api/upsert/**
-            - Method=POST,PUT,PATCH,DELETE
-          filters:
-            - StripPrefix=1
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 20
-                redis-rate-limiter.burstCapacity: 40
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@userKeyResolver}"
-            - name: CircuitBreaker
-              args:
-                name: upsert-cb
-                fallbackUri: forward:/fallback/upsert
+            # Auth lives in its own service now. The path is forwarded unchanged
+            # (/api/auth/** -> auth-service /api/auth/**). Refresh and /me are
+            # legitimately bursty (multiple tabs), so they keep a wider bucket
+            # than the user-scoped routes — but still bounded per source IP.
+            - id: auth-service
+              uri: http://auth-service:8082
+              predicates:
+                - Path=/api/auth/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 100
+                    redis-rate-limiter.burstCapacity: 200
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@ipPathKeyResolver}"
+                - name: CircuitBreaker
+                  args:
+                    name: auth-cb
+                    fallbackUri: forward:/fallback/auth
 
-        - id: command-service-query
-          uri: http://query-service:8084
-          predicates:
-            - Path=/api/upsert/**
-            - Method=GET
-          filters:
-            - StripPrefix=1
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 50
-                redis-rate-limiter.burstCapacity: 100
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@userKeyResolver}"
-            - name: CircuitBreaker
-              args:
-                name: analytics-cb
-                fallbackUri: forward:/fallback/analytics
+            - id: command-service-sse
+              uri: http://command-service:8081
+              predicates:
+                - Path=/api/upsert/notifications/**
+              filters:
+                - StripPrefix=2
+              metadata:
+                response-timeout: 1800000
+                connect-timeout: 5000
 
-        - id: query-service
-          uri: http://query-service:8084
-          predicates:
-            - Path=/api/analytics/**
-          filters:
-            - StripPrefix=1
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
-                redis-rate-limiter.requestedTokens: 1
-                key-resolver: "#{@userKeyResolver}"
-            - name: CircuitBreaker
-              args:
-                name: analytics-cb
-                fallbackUri: forward:/fallback/analytics
+            - id: command-service-command
+              uri: http://command-service:8081
+              predicates:
+                - Path=/api/upsert/**
+                - Method=POST,PUT,PATCH,DELETE
+              filters:
+                - StripPrefix=1
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@userKeyResolver}"
+                - name: CircuitBreaker
+                  args:
+                    name: upsert-cb
+                    fallbackUri: forward:/fallback/upsert
+
+            - id: command-service-query
+              uri: http://query-service:8084
+              predicates:
+                - Path=/api/upsert/**
+                - Method=GET
+              filters:
+                - StripPrefix=1
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 50
+                    redis-rate-limiter.burstCapacity: 100
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@userKeyResolver}"
+                - name: CircuitBreaker
+                  args:
+                    name: analytics-cb
+                    fallbackUri: forward:/fallback/analytics
+
+            - id: query-service
+              uri: http://query-service:8084
+              predicates:
+                - Path=/api/analytics/**
+              filters:
+                - StripPrefix=1
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
+                    redis-rate-limiter.requestedTokens: 1
+                    key-resolver: "#{@userKeyResolver}"
+                - name: CircuitBreaker
+                  args:
+                    name: analytics-cb
+                    fallbackUri: forward:/fallback/analytics
 
 
 
-        # /api/storage/** is NOT proxied to MinIO. It is served by
-        # StorageDownloadController, which is the only reader and hardens the
-        # response headers. Objects are private (no bucket policy).
+            # /api/storage/** is NOT proxied to MinIO. It is served by
+            # StorageDownloadController, which is the only reader and hardens the
+            # response headers. Objects are private (no bucket policy).
 
 resilience4j:
   circuitbreaker:

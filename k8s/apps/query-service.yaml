@@ -27,7 +27,8 @@ metadata:
     app.kubernetes.io/part-of: personal-finance-assistant
 data:
   SPRING_JPA_HIBERNATE_DDL_AUTO: update
-  SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+  # No SPRING_JPA_DATABASE_PLATFORM: Hibernate 6 infers PostgreSQL from the
+  # JDBC connection. Setting it explicitly triggers HHH90000025 on every boot.
   REDIS_HOST: redis
   SPRING_DATA_REDIS_HOST: redis
   SPRING_DATA_REDIS_PORT: "6379"

@@ -1,0 +1,9 @@
+{
+  "source": "User-provided cropped receipt, 2026-11-10",
+  "text": "NA,1,THIRUVENKADANAGAR,\nMGR SALAI\nPERUNGUDICHENNAI,\nChennal-600096,\nGTIN:33AQKPS91902Z9\nPH:8124499888\nName:\nDate:12/03/25\nDine In:D10\n08:37\nCashi  biller\nNo57833\nTokeNo28\nItem\nQty.Price Amount\nIdlyPcs\n133.33\n33.33\nMedhVada\n1\n33.33\n33.33\nCas\n1\n9.52\n9.52\nTotal Qty:3\nSub\nTotal\n76.18\nCGST@2.52.5%\n1.90\nSGST@2.52.5%\n1.90\nGrand Total\nRounc.off\n0.02\n80.00",
+  "expected": {
+    "amount": 80.0,
+    "category": "RESTAURANTS",
+    "vendor": null
+  }
+}

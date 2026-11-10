@@ -30,6 +30,7 @@ CATEGORY_RULES = [
                       r"deliveroo|postmates|instacart"),
     ("RESTAURANTS", r"restaurant|ristorante|caf[eé]\b|\bcafe\b|coffee|pizzer|pizza|"
                     r"grill|tavern|\bbar\b|diner|bistro|kitchen|eatery|sushi|"
+                    r"\bdine\s+in\b|\bidl[yi](?:pcs)?\b|\bmed[hu]\s*vadai?\b|"
                     r"bakery|burger|french\s+fries|nugget|teriyaki|"
                     r"taqueria|burrito|marisqueria|bar\s+tab|bowl\b|"
                     r"buffet|steakhouse|noodle|ramen|deli\b|"
@@ -165,7 +166,7 @@ AMOUNT_EXCLUDE_RE = re.compile(
 
 ITEM_SKIP_RE = re.compile(
     r"(sub\s*-?\s*total|subtotal|\btotal\b|\btax\b|\bgst\b|\bhst\b|\bpst\b|"
-    r"\bvat\b|gratuity|\btip\b|balance|\bchange\b|tendered?|\bcash\b|"
+    r"\bvat\b|\b[csig]gst\b|roun[dc]\s*[.-]?\s*off|gratuity|\btip\b|balance|\bchange\b|tendered?|\bcash\b|"
     r"visa|mastercard|amex|debit|\bcredit\b|discount|savings)", re.I)
 
 
@@ -382,6 +383,17 @@ def extract_amount(text):
         integer_suffix = re.sub(r"\b(?:INR|USD|EUR|GBP|CAD|MYR|AED)\b", "", suffix, flags=re.I).strip(" :")
         pick = decimals[-1] if decimals else (nums[-1] if nums and MONEY_ONLY_RE.fullmatch(integer_suffix) else None)
         evidence, source = line, "total_line"
+        if pick is None and TOTAL_STRONG_RE.search(line) and i + 3 < len(lines):
+            # OCR can read the round-off column before the final total value.
+            # Cross only this specific label and its small adjustment, never
+            # arbitrary text such as tender/change or another component label.
+            if re.fullmatch(r"roun[dc]\s*[.-]?\s*off", lines[i + 1], re.I):
+                adjustment = MONEY_ONLY_RE.fullmatch(lines[i + 2])
+                final = MONEY_ONLY_RE.fullmatch(lines[i + 3])
+                if adjustment and final:
+                    delta, value = _num_value(adjustment[1]), _num_value(final[1])
+                    if delta is not None and value is not None and abs(delta) <= 1 and value > abs(delta):
+                        pick, evidence, source = ("", value), " | ".join(lines[i:i + 4]), "total_after_roundoff"
         if pick is None:
             nearby = []
             following_lines = lines[i + 1:i + 4]
@@ -577,6 +589,10 @@ def extract_vendor(text):
 
     # Preserve the first plausible printed merchant header.
     best = min(enumerate(candidates), key=lambda pair: pair[0])
+    # A cropped header may begin with an Indian street address. Do not
+    # promote a numbered/comma-separated locality into a merchant name.
+    if re.search(r"(?:,|\d).*(?:nagar|salai)[,.\s]*$", best[1], re.I):
+        return None
     return _titleish(best[1])
 
 

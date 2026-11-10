@@ -58,7 +58,7 @@ spec:
           command: ["sh", "-c", "until nslookup api-gateway.pfa.svc.cluster.local >/dev/null 2>&1; do echo waiting for api-gateway; sleep 2; done"]
       containers:
         - name: frontend
-          image: 127.0.0.1:30500/finance/frontend:5ffe8e2a76f1
+          image: 127.0.0.1:30500/finance/frontend:9dfd3ba1dee2
           imagePullPolicy: IfNotPresent
           # nginx:alpine's nginx user. Port 80 needs NET_BIND_SERVICE, which
           # Restricted PSA allows as the only added capability once ALL is

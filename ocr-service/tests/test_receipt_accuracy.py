@@ -48,6 +48,24 @@ class ReceiptAccuracyTests(unittest.TestCase):
             self.assertEqual(doc['currency'], 'EUR')
             self.assertEqual(doc['category'], 'ELECTRONICS')
 
+    def test_cropped_dine_in_receipt_roundoff_does_not_select_tax(self):
+        fixture = json.loads((ROOT / 'ocr-service/bench/tests/fixtures/cropped_dine_in_receipt.json').read_text())
+        doc = parse_file_text(fixture['text'])
+        for field, expected in fixture['expected'].items():
+            self.assertEqual(doc[field], expected, field)
+        self.assertEqual(doc['evidence']['amount_source'], 'total_after_roundoff')
+        self.assertEqual(doc['evidence']['items'], ['IdlyPcs'])
+        self.assertIn('name', doc['reviewFields'])
+        self.assertIn('date', doc['reviewFields'])
+
+    def test_roundoff_total_requires_adjacent_small_adjustment(self):
+        for label in ('Round off', 'Round.off', 'Rounc.off'):
+            doc = parse_file_text('Cafe\nGrand Total\n' + label + '\n-0.02\n80.00')
+            self.assertEqual(doc['amount'], 80.0)
+        for fragment in ('Cash\n0.02\n80.00', 'Round off\n20.00\n80.00'):
+            doc = parse_file_text('Cafe\nGrand Total\n' + fragment)
+            self.assertNotEqual(doc['evidence']['amount_source'], 'total_after_roundoff')
+
     def test_public_malaysian_receipt_currency(self):
         rows = json.loads((ROOT / 'ocr-service/bench/tests/fixtures/public_receipts.json').read_text())
         doc = parse_file_text(rows[1]['ocr']['text'])

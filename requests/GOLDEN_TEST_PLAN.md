@@ -138,3 +138,12 @@ OCR→transaction half of the stage is created synchronously by the test.
   stream rather than a burst.
 - Credentials for the run are written to `golden-users.csv`; the JSON report
   goes to `golden-report.json` (both ignored by git unless a path is given).
+
+## OCR accuracy correction
+
+Receipt uploads no longer create random merchant/amount transactions. Use
+`ocr-service/bench/verify_service.py` for OCR-only field comparisons and callback
+contract validation. It reports exact value matches, explicit review abstentions
+and confident errors separately. Queue/callback success alone is not an accuracy
+measurement. Reviewed regressions cover the 91 previously flagged documents and
+source metadata for all 100 PDF invoices.

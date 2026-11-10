@@ -61,8 +61,9 @@
     "image": "1025-receipt.jpg",
     "text": "McDona ldst3100\n1617NETAEN\nLOSANGELSC3153\nTEL#2364730\nKS#2\n7/201303:08PM\nSide1\nOrder 97\n5.99\n1Db1 Qtr Ches\nSpecial Requet\nADD Leaf Lett.c\n0.25\nADD Mac Sauce\n0.40\nSubtotal\n6.64\nTax\n0.63\n7.27\nTake-Out Total\nCashless\n7.27\n0.00\nChange\nMER#439206\nNTH\nCARD ISSUER\nBOW DEBIT CARDA\n7.27\nTRANSACTION AMD.\nCHIP READ\nAUTHORIZATIONC-154\nSEQ#099988\nAID:AD000000042\nMcDonald's now ai 3 n JberEATS",
     "expected": {
-      "vendor": "McDonald's"
-    }
+      "vendor": "McDona ldst"
+    },
+    "review_note": "Preserve literal OCR merchant text; no merchant dictionary canonicalization."
   },
   {
     "image": "1034-receipt.jpg",
@@ -160,8 +161,9 @@
     "image": "1100-receipt.jpg",
     "text": "8A3\n*DUPLICATE\n**BILLA\nM\n**\nStony\n16725 Stony Plain Rd\nEdmonton AB T5P 4A9\nStore#:3859Te#780-414-8362\nUR\nWe lcome to all day breakfast\n0 Mc Dona ld's\n192\nKS#1\n03/10/201807:39:12PM\nQTY ITEM\nTOTAL\n1 Delivery\n0.00\n110 McNuggets EVM\n10.29\n1 Barbeque Sauce\nEASE\n1 Barbeque Sauce\n1 L Coke\n0.40\nTURN THISOVER\n1 M French Fries\n1 HM GrChs S-Fry Yog\n3.99\n1 Snoopy\n1 HM App le Juice\n1 6 Cookies\n2.89\n6 Choc Chip Cookie\nA\n1 Baked Apple Pie\n1.19\n1 L French Fries\n3.29\nLEASE\n1 L Iced Tea\n2.99\nSubtotal\n25.04\nGST\n1.11\nTake-Out Total\n26.15\nOVER\nCREDIT SALES-McDelivery\n26.15\nChange\n0.00\nPLEASE TORN THIS OVEI\nGST #120907092\nSALE #04kdfwg532",
     "expected": {
-      "vendor": "McDonald's"
-    }
+      "vendor": "Mc Dona ld's"
+    },
+    "review_note": "Preserve literal OCR merchant text; no merchant dictionary canonicalization."
   },
   {
     "image": "1107-receipt.jpg",

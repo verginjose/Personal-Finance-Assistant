@@ -4,41 +4,9 @@ import re
 from accounting import MOVEMENT_CATEGORIES, INVESTMENT_CATEGORIES
 
 # ── Vendor / category knowledge ──────────────────────────────────────────────
-# Checked against the first lines of the receipt; first match wins.
-BRANDS = [
-    (r"mc\s*dona\s*ld", "McDonald's"),
-    (r"grand\s+lux", "Grand Lux Cafe"),
-    (r"grotto\s+pizzer", "Grotto Pizzeria & Tavern"),
-    (r"green\s*field", "Green Field"),
-    (r"starbucks", "Starbucks"),
-    (r"dunkin", "Dunkin'"),
-    (r"denny", "Denny's"),
-    (r"subway", "Subway"),
-    (r"domino", "Domino's"),
-    (r"pizza\s+hut", "Pizza Hut"),
-    (r"burger\s+king", "Burger King"),
-    (r"kfc", "KFC"),
-    (r"chipotle", "Chipotle"),
-    (r"taco\s+bell", "Taco Bell"),
-    (r"wendy", "Wendy's"),
-    (r"whole\s+foods", "Whole Foods"),
-    (r"trader\s+joe", "Trader Joe's"),
-    (r"wal[- ]?mart", "Walmart"),
-    (r"target\b", "Target"),
-    (r"costco", "Costco"),
-    (r"shell\b", "Shell"),
-    (r"chevron", "Chevron"),
-    (r"netflix", "Netflix"),
-    (r"spotify", "Spotify"),
-    (r"yogurt\s*land", "Yogurtland"),
-    (r"bella\s+pasta", "Bella Pasta"),
-    (r"popeye", "Popeye's"),
-    (r"in-?n-?out", "In-N-Out Burger"),
-]
-
 # First match wins. Patterns are applied to vendor + receipt text, lowercased.
 CATEGORY_RULES = [
-    ("FURNITURE", r"\bfurniture\b|\bsofa\b|\bwardrobe\b|\bdining\s+table\b|\bikea\b"),
+    ("FURNITURE", r"\bfurniture\b|\bsofa\b|\bwardrobe\b|\bdining\s+table\b"),
     ("HOUSEHOLD_SUPPLIES", r"household\s+supplies|cleaning\s+supplies|laundry\s+detergent|dishwashing\s+liquid"),
     ("DOMESTIC_HELP", r"domestic\s+help|housekeep(?:ing|er)|maid\s+(?:salary|service)|cleaning\s+service"),
     ("SOCIETY_MAINTENANCE", r"society\s+(?:maintenance|charges)|apartment\s+maintenance|housing\s+association|hoa\s+dues"),
@@ -62,12 +30,9 @@ CATEGORY_RULES = [
                       r"deliveroo|postmates|instacart"),
     ("RESTAURANTS", r"restaurant|ristorante|caf[eé]\b|\bcafe\b|coffee|pizzer|pizza|"
                     r"grill|tavern|\bbar\b|diner|bistro|kitchen|eatery|sushi|"
-                    r"bakery|burger|mc\s*donald|mcnugget|mcdelivery|french\s+fries|"
-                    r"nugget|kfc|subway|domino|starbucks|dunkin|teriyaki|"
+                    r"bakery|burger|french\s+fries|nugget|teriyaki|"
                     r"taqueria|burrito|marisqueria|bar\s+tab|bowl\b|"
-                    r"chipotle|taco\s+bell|wendy|panda\s+express|grand\s+lux|"
-                    r"grotto|green\s*field|\bnorma\b|denny|ihop|applebee|"
-                    r"olive\s+garden|buffet|steakhouse|noodle|ramen|deli\b|"
+                    r"buffet|steakhouse|noodle|ramen|deli\b|"
                     r"bills?\s+bar|brasserie|trattoria|osteria"),
     ("GROCERIES", r"grocer|super\s*market|hyper\s*market|whole\s+foods|"
                   r"trader\s+joe|safeway|kroger|costco|\baldi\b|\blidl\b|\btesco\b|"
@@ -101,7 +66,7 @@ CATEGORY_RULES = [
     ("BOOKS_AND_COURSES", r"udemy|coursera|kindle|book\s*store|course\s+fee|"
                           r"online\s+course"),
     ("CLOTHING", r"clothing|apparel|zara|h&m|uniqlo|\bgap\b|levi|nike|adidas|puma"),
-    ("ELECTRONICS", r"electronics|best\s+buy|apple\s+store|samsung|lenovo|\bdell\b"),
+    ("ELECTRONICS", r"\belectronics?\b|\b(?:laptop|computer|tablet|headphones|smartwatch|bluetooth|mirrorless|ssd|hdd|keyboard|charger|monitor|projector|camera|gps|speaker|watch|wi-?fi|television|tv|oled)\b|\b\d+\s*(?:GB|TB)\b"),
     ("PERSONAL_CARE", r"salon|\bspa\b|barber|haircut|beauty"),
     ("MOVIES_AND_EVENTS", r"cinema|movie|theat(er|re)|\bamc\b|\bregal\b|"
                           r"\bpvr\b|inox|concert|ticketmaster"),
@@ -164,15 +129,15 @@ GENERIC_HEADER = re.compile(
     r"subtotal|sub\s+total|total|tax|gst|hst|pst|vat|visa|mastercard|debit|"
     r"credit|card|amount|item|qty|price|ks#|settled|dine\s*in|take\s*-?out|"
     r"bar\s+tab|survey|approval|cashier|manager|drive\s*thru|check|seat|please|"
-    r"party|employee|servers?|sales?|tickets?|your\s+guest|guest\s+number)\b",
+    r"party|employee|servers?|sales?|tickets?|your\s+guest|guest\s+number|seller|supplier|client|name|closed|purchase|to\s+go)\b",
     re.I)
 # A bare "RESTAURANT" line is a label, not a vendor name.
 GENERIC_WORD_RE = re.compile(
-    r"^(restaurant|ristorante|caf[eé]|bar|grill|kitchen|diner|bistro|"
-    r"shop|store|market|bakery|tavern|dining\s+room|pizzer[i]?a)\s*$", re.I)
+    r"^(restaurant|family\s+restaurant|ristorante|caf[eé]|bar|grill|kitchen|diner|bistro|"
+    r"shop|store|market|bakery|tavern|dining\s+room|pizzer[i]?a|pasta|food)\s*$", re.I)
 BARE_PRICE_RE = re.compile(r"^[$₹€£¥]?\s*\d+[.,]\d{2}\s*[A-Za-z]?$")
 ADDRESS_RE = re.compile(
-    r"\b\d+\s+\w*\s*(st|street|rd|road|ave|avenue|blvd|boulevard|hwy|highway|"
+    r"\b\d+\s+(?:[\w.'-]+\s+){0,4}(st|street|rd|road|ave|avenue|blvd|boulevard|hwy|highway|"
     r"dr|drive|ln|lane|way|pkwy|parkway|pl|place|ct|court|cir|circle|ter|"
     r"terrace|trl|trail)\b", re.I)
 PHONE_RE = re.compile(r"(\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}|\d{3}[-.]\d{4})")
@@ -237,6 +202,8 @@ DATE_YEAR = (r"(?:199\d|20\d{2}|\d{2})(?="
 
 
 def extract_date(text, order="auto"):
+    if order == "auto":
+        order = infer_date_order(text)[0] or "auto"
     # Common character confusions, restricted to a month followed by a day.
     normalized = re.sub(r"\bJu[1I](?=\d)", "Jul", text, flags=re.I)
     normalized = re.sub(r"\bApri1(?=\s*\d)", "April", normalized, flags=re.I)
@@ -315,7 +282,7 @@ def _extract_date(text, order="auto"):
                 month, day = a, b
             elif order == "dmy":
                 day, month = a, b
-            else:  # mdy / auto: this dataset is US, so prefer month first
+            else:  # Standalone callers retain month-first; documents flag ambiguity.
                 month, day = a, b
             d = _mk_date(y, month, day)
             if d:
@@ -338,7 +305,7 @@ TOTAL_LABEL_RE = re.compile(
     r"(?<![A-Za-z])(?:grand\s+total|tota[l1i]\s*due|amount\s+due|amt\s+due|"
     r"balance\s+due|check\s+total|total\s+amount|net\s+total|"
     r"total\s+payable|ant\s+due|take[- ]?out\s+total|total\s+paid|"
-    r"total\s+to\s+pay|tota[l1i]|totale|tota|totl)(?![A-Za-z])", re.I)
+    r"total\s+to\s+pay|total\s+before\s+tip|payment|balance\s+due|tota[l1i]|totale|tota|totl|tl\.?)(?![A-Za-z])", re.I)
 TIME_RE = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|PH)?", re.I)
 MONEY_ONLY_RE = re.compile(r"^\s*(" + NUM_TOKEN + r")\s*[A-Za-z]?\s*$")
 NOTICE_RE = re.compile(
@@ -402,6 +369,8 @@ def extract_amount(text):
 
     totals = []
     for i, line in enumerate(lines):
+        # OCR often glues the clock suffix to TOTAL (09:38PMTOTAL).
+        line = re.sub(r"(?i)(\d(?:[ap]m?|ph))(?=tota[l1i]\b)", r"\1 ", line)
         label = TOTAL_LABEL_RE.search(line)
         if not label or AMOUNT_EXCLUDE_RE.search(line) or re.search(r"total\s+items?", line, re.I):
             continue
@@ -409,7 +378,9 @@ def extract_amount(text):
         suffix = re.sub(r"\d+(?:\.\d+)?\s*%", " ", line[label.end():])
         nums = candidates(suffix)
         decimals = [n for n in nums if "." in n[0]]
-        pick = decimals[-1] if decimals else (nums[-1] if nums else None)
+        # "Total D1-4" is a register annotation, not a four-dollar total.
+        integer_suffix = re.sub(r"\b(?:INR|USD|EUR|GBP|CAD|MYR|AED)\b", "", suffix, flags=re.I).strip(" :")
+        pick = decimals[-1] if decimals else (nums[-1] if nums and MONEY_ONLY_RE.fullmatch(integer_suffix) else None)
         evidence, source = line, "total_line"
         if pick is None:
             nearby = []
@@ -434,6 +405,11 @@ def extract_amount(text):
                     if any(abs(a + b - candidate) < 0.011
                            for j, a in enumerate(pool) for b in pool[j + 1:]
                            if a > 0 and b > 0):
+                        value, evidence = candidate, candidate_line
+                        break
+                    if any(abs(a + b + c - candidate) < .011
+                           for j, a in enumerate(pool) for k, b in enumerate(pool[j + 1:], j + 1)
+                           for c in pool[k + 1:] if a > 0 and b > 0 and c > 0):
                         value, evidence = candidate, candidate_line
                         break
                 # A short OCR fragment can separate an interleaved number
@@ -479,6 +455,17 @@ def extract_amount(text):
                     value, evidence = computed
                     pick, source = ("", value), "subtotal_plus_tax"
         if pick and pick[1] is not None and 0 < abs(pick[1]) < 10_000_000:
+            if TOTAL_STRONG_RE.search(line):
+                nearby = [(value, candidate) for candidate in lines[max(0, i - 2):i + 9]
+                          if MONEY_ONLY_RE.fullmatch(candidate)
+                          for token, value in candidates(candidate) if "." in token]
+                # Interleaved columns can put subtotal/tax below BALANCE DUE.
+                for value, candidate in nearby:
+                    if sum(abs(v - value) < .011 for v, _ in nearby) >= 2 and any(
+                            a > 0 and b > 0 and abs(a + b - value) < .011
+                            for j, (a, _) in enumerate(nearby) for b, _ in nearby[j + 1:]):
+                        pick, evidence, source = ("", value), candidate, "total_reconciled_components"
+                        break
             strong = bool(TOTAL_STRONG_RE.search(line))
             # A paid/final total includes service charges or gratuity added later.
             paid = source == "total_reconciled_tip" or bool(re.search(r"total\s+paid", label.group(), re.I))
@@ -486,6 +473,23 @@ def extract_amount(text):
     if totals:
         _, value, line, source = max(totals, key=lambda n: n[0])
         return value, line, source
+
+    # Some receipts label their tax-inclusive final value "Sub-Total".
+    # Accept it only when a prior amount plus explicit tax reconciles exactly.
+    for i in range(len(lines) - 1, -1, -1):
+        if not SUBTOTAL_LABEL_RE.match(lines[i]):
+            continue
+        final = _labelled_money(lines, i, SUBTOTAL_LABEL_RE)
+        if final is None:
+            continue
+        for j in range(max(0, i - 5), i):
+            tax = _labelled_money(lines, j, re.compile(r"tax\s*(?:rate\s*)?(?:\d+(?:\.\d+)?%\s*)?", re.I))
+            if tax is None:
+                continue
+            prior = [value for previous in lines[max(0, j - 3):j]
+                     for token, value in candidates(previous) if "." in token]
+            if any(abs(value + tax[0] - final[0]) < .011 for value in prior):
+                return final[0], " | ".join(lines[max(0, j - 3):final[1] + 1]), "tax_inclusive_subtotal"
 
     best = None
     for i, line in enumerate(lines):
@@ -519,15 +523,19 @@ def _titleish(value):
 
 def extract_vendor(text):
     lines = [ln for ln in (clean_line(x) for x in text.splitlines()) if ln]
-    head = lines[:15]
-    joined = " ".join(head).lower()
-    for pattern, name in BRANDS:
-        if re.search(pattern, joined, re.I):
-            return name
+    # Named merchant domains/loyalty footers can recover a missing logo.
+    domain = re.search(r"(?:www\.)?([a-z][a-z'-]+restaurant)\.(?:com|net)\b", text, re.I)
+    if domain:
+        return _titleish(re.sub(r"restaurant$", " Restaurant", domain[1], flags=re.I))
+    loyalty = re.search(r"\b([A-Z][a-z]+\s+[A-Z][a-z]+'s)\s+Loyalty\s+Program", text)
+    if loyalty:
+        return loyalty[1]
 
     candidates = []
-    for i, line in enumerate(lines[:10]):
+    for i, line in enumerate(lines[:20]):
         core = re.sub(r"\s*#\s*\d{2,6}\s*$", "", line)  # store number suffix
+        core = re.sub(r"(?<=[A-Za-z])\d{3,}.*$", "", core).strip()
+        core = re.sub(r"^\d{1,2}\s+(?=[A-Za-z])", "", core)
         low = core.lower()
         if i > 2 and re.fullmatch(r"qty|item|amt|description|price", low):
             break
@@ -538,9 +546,17 @@ def extract_vendor(text):
             continue  # "xxxxxxxxxxx", "--------"
         if re.match(r"^#?\d+\s+(pickup|takeout)\b", low):
             continue
-        if GENERIC_HEADER.match(low) or GENERIC_WORD_RE.match(low):
+        if GENERIC_HEADER.match(low) or GENERIC_WORD_RE.match(low) or NOTICE_RE.search(low):
+            continue
+        if re.sub(r"\s+", "", low).startswith('welcome'):
+            continue
+        if len(core.split()) == 1 and i + 1 < len(lines) and ADDRESS_RE.search(lines[i + 1]) and re.search(r"\b" + re.escape(core) + r"\b", lines[i + 1], re.I):
+            continue
+        if re.fullmatch(r"to\s+go|bar\s+[a-z]|[a-z]{2}\s+dining\s+rm", low):
             continue
         if ADDRESS_RE.search(core) or PHONE_RE.search(core):
+            continue
+        if re.search(r"\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b", core, re.I):
             continue
         if "www." in low or re.search(r"\.(com|net|org|con|co|io)\b", low):
             continue  # website, not the vendor name
@@ -559,15 +575,8 @@ def extract_vendor(text):
     if not candidates:
         return None
 
-    def score(line):
-        alpha = [c for c in line if c.isalpha()]
-        upper_ratio = sum(c.isupper() for c in alpha) / len(alpha)
-        return (3 if BUSINESS_RE.search(line) else 0,
-                1 if len(line.split()) >= 2 else 0,
-                1 if upper_ratio >= 0.7 else 0)
-
-    # Ties go to the line nearer the top of the receipt.
-    best = max(enumerate(candidates), key=lambda pair: (score(pair[1]), -pair[0]))
+    # Preserve the first plausible printed merchant header.
+    best = min(enumerate(candidates), key=lambda pair: pair[0])
     return _titleish(best[1])
 
 
@@ -577,11 +586,34 @@ PRICE_LINE_RE = re.compile(
 
 def extract_items(text):
     lines = [ln for ln in (clean_line(x) for x in text.splitlines()) if ln]
+    # Text-layer invoices may serialize each table cell on its own line.
+    # Product descriptions end at the quantity cell; units and totals are not items.
+    if any(re.fullmatch(r"items", line, re.I) for line in lines) and any(
+            re.fullmatch(r"qty|quantity", line, re.I) for line in lines):
+        products = []
+        in_items = False
+        for i, line in enumerate(lines):
+            if re.fullmatch(r"items", line, re.I):
+                in_items = True
+            if in_items and re.fullmatch(r"summary", line, re.I):
+                break
+            if in_items and re.fullmatch(r"\d+\.", line):
+                description = []
+                for following in lines[i + 1:]:
+                    if re.fullmatch(r"[\d,.]+%?|pcs|units?", following, re.I):
+                        break
+                    description.append(following)
+                if description:
+                    products.append(" ".join(description))
+        if products:
+            return products
     items, seen = [], set()
 
     def add(name):
         name = re.sub(r"^(?:\d{1,4}\s*[#):.,-]*\s*)+", "", name)
         name = name.strip(" .,:;#-|")
+        if re.fullmatch(r"pcs|units?|INR|USD|EUR|GBP|CAD|AUD", name, re.I):
+            return
         if len(name) < 2 or not re.search(r"[A-Za-z]", name):
             return
         key = name.lower()
@@ -593,7 +625,7 @@ def extract_items(text):
     for i, line in enumerate(lines):
         if ITEM_SKIP_RE.search(line) or TOTAL_LABEL_RE.search(line) or NOTICE_RE.search(line):
             continue
-        m = re.match(r"^(.*?)\s+[$₹€£¥]?\s*(\d+(?:[.,]\d{2}))\s*[A-Za-z]?$", line)
+        m = re.match(r"^(.*?)\s+[$₹€£¥]?\s*(\d{1,3}(?:,\d{3})+\.\d{2}|\d+[.,]\d{2})\s*[A-Za-z]?$", line)
         if m:
             if _num_value(m.group(2)) not in (None, 0):
                 add(m.group(1))
@@ -613,6 +645,25 @@ def extract_items(text):
     return items
 
 
+FISCAL_INDIA_RE = re.compile(r"\bGSTIN\s*:?\s*\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]\b", re.I)
+
+
+def infer_date_order(text):
+    explicit = re.search(r"\b(?:date\s*format|format)\s*:?\s*(DMY|MDY|DD/MM/YYYY|MM/DD/YYYY)\b", text, re.I)
+    if explicit:
+        return ("dmy" if explicit[1].upper().startswith("D") else "mdy"), "printed_format"
+    if FISCAL_INDIA_RE.search(text):
+        return "dmy", "tax_identifier"
+    if re.search(r"\bVAT\s*:?\s*GB\s*\d{9}\b", text, re.I):
+        return "dmy", "tax_identifier"
+    return None, "unknown"
+
+
+def merchant_text(text):
+    # Customer names/addresses describe the buyer, not the purchase category.
+    return re.sub(r"(?ims)^\s*(?:client|customer|bill\s+to|ship\s+to)\s*:\s*\n.*?(?=^\s*(?:items|seller|supplier|description)\s*:?\s*$|\Z)", "", text)
+
+
 def detect_currency(text):
     """Return (iso_code, source)."""
     upper = text.upper()
@@ -620,7 +671,7 @@ def detect_currency(text):
         return "INR", "symbol"
     if re.search(r"\bEURO?\b", upper):
         return "EUR", "explicit_code"
-    for code in ("USD", "CAD", "EUR", "GBP", "AUD", "SGD", "AED", "INR", "JPY"):
+    for code in ("USD", "CAD", "EUR", "GBP", "AUD", "SGD", "AED", "INR", "JPY", "MYR"):
         if re.search(r"\b" + code + r"\b", upper):
             return code, "explicit_code"
     if re.search(r"\bVAT\s*:?\s*GB\s*\d{9}\b", upper):
@@ -631,15 +682,11 @@ def detect_currency(text):
         return "GBP", "symbol"
     if "¥" in text:
         return "JPY", "symbol"
-    # Canadian postal code (A1A 1A1) or GST/HST with a province code.
-    if re.search(r"\b[ABCEGHJ-NPRSTVXY]\d[A-Z]\s?\d[A-Z]\d\b", upper):
-        return "CAD", "country_hint"
-    if re.search(r"\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|"
-                 r"ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|"
-                 r"PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\s*\d{5}\b", upper):
-        return "USD", "country_hint"
+    # Fiscal identifiers identify currency without merchant/location lookups.
+    if FISCAL_INDIA_RE.search(text):
+        return "INR", "tax_identifier"
     if "$" in text:
-        return "USD", "symbol"
+        return "USD", "ambiguous_symbol"
     return "INR", "default"
 
 
@@ -726,23 +773,32 @@ def parse_document(text, date_order="auto", rates=None, target_currency="INR",
                    convert=True, default_currency="INR", category_search=None, example_id=None):
     """Turn OCR text into the receipt document plus evidence/checks."""
     text = text or ""
-    vendor = extract_vendor(text)
+    purchase_text = merchant_text(text)
+    vendor = extract_vendor(purchase_text)
     amount, amount_line, amount_source = extract_amount(text)
     date, date_match = extract_date(text, date_order)
+    inferred_order, date_source = infer_date_order(text)
+    ambiguous_date = False
+    if date_order == "auto" and not inferred_order and date_match:
+        numeric = re.fullmatch(r"(\d{1,2})[/.-](\d{1,2})[/.-]\d{2,4}", date_match)
+        ambiguous_date = bool(numeric and int(numeric[1]) <= 12 and int(numeric[2]) <= 12
+                              and int(numeric[1]) != int(numeric[2]))
+        if ambiguous_date:
+            date = None
     currency, currency_source = detect_currency(text)
     if currency_source == "default":
         currency = (default_currency or "INR").upper()
-    items = extract_items(text)
+    items = extract_items(purchase_text)
     tx_type, expense_category, income_category = classify(
-        text, vendor, amount, items)
+        purchase_text, vendor, amount, items)
     category_source = "rule" if tx_type == "Income" or expense_category != "OTHERS" else "default"
     category_evidence = None
     if category_search is not None and tx_type == "Expense" and expense_category == "OTHERS":
-        query = " ".join(filter(None, [vendor, " ".join(items), _head_text(text)]))
+        query = " ".join(filter(None, [vendor, " ".join(items), _head_text(purchase_text)]))
         category, category_evidence = category_search.search(query, exclude_id=example_id)
         if category:
             expense_category, category_source = category, "vector"
-    haystack = " ".join(filter(None, [vendor, _head_text(text), " ".join(items)]))
+    haystack = " ".join(filter(None, [vendor, _head_text(purchase_text), " ".join(items)]))
     movement_category = expense_category if expense_category in MOVEMENT_CATEGORIES else classify_expense(haystack)
     transaction_kind = "STANDARD"
     if movement_category in MOVEMENT_CATEGORIES:
@@ -756,7 +812,7 @@ def parse_document(text, date_order="auto", rates=None, target_currency="INR",
             transaction_kind = "REFUND"
         if transaction_kind in ("REFUND", "REIMBURSEMENT"):
             expense_category, income_category = classify_expense(haystack), None
-    recurring = False if transaction_kind in ("REFUND", "REIMBURSEMENT") else is_recurring(text, vendor, items)
+    recurring = False if transaction_kind in ("REFUND", "REIMBURSEMENT") else is_recurring(purchase_text, vendor, items)
 
     if items:
         description = "Items: " + ", ".join(items[:6])
@@ -797,13 +853,23 @@ def parse_document(text, date_order="auto", rates=None, target_currency="INR",
         warnings.append("date_out_of_range")
     if currency_source == "default":
         warnings.append("currency_defaulted")
+    if currency_source == "ambiguous_symbol":
+        warnings.append("currency_ambiguous")
     if not items:
         warnings.append("no_line_items")
+    if ambiguous_date:
+        warnings.append("date_ambiguous")
+    if category_source == "default":
+        warnings.append("category_uncertain")
+    if amount_source == "max_amount":
+        warnings.append("amount_uncertain")
 
     evidence = {
         "amount_source": amount_source,
         "amount_line": amount_line,
         "date_match": date_match,
+        "date_order": inferred_order if date_order == "auto" else date_order,
+        "date_order_source": date_source if date_order == "auto" else "configured",
         "currency_source": currency_source,
         "items": items[:10],
         "category_source": category_source,

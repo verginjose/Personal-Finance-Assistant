@@ -21,6 +21,7 @@ from readiness import consumer_ready
 from document_parser import parse_file_text, analyze_history
 from category_search import CategorySearch
 from receipt_parser import CATEGORY_RULES
+from pdf_layout import extract_pdf_text
 
 # OCR service entrypoint: FastAPI app that extracts text from uploaded
 # images/PDFs via PaddleOCR and publishes the results to the message queue.
@@ -275,18 +276,7 @@ def _extract_text_from_image_bytes(data: bytes, filename: str) -> str:
 
 
 def _extract_text_from_pdf(data: bytes) -> str:
-    import fitz
-    doc = fitz.open(stream=data, filetype="pdf")
-    text = ""
-    for page in doc:
-        text += page.get_text()
-    if len(text.strip()) >= 10:
-        return text
-    page = doc[0]
-    mat = fitz.Matrix(300 / 72, 300 / 72)
-    pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB)
-    img_data = pix.tobytes("png")
-    return _extract_text_from_image_bytes(img_data, "scanned-page.png")
+    return extract_pdf_text(data, _extract_text_from_image_bytes)
 
 
 async def _refresh_rates():
@@ -367,6 +357,10 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
                 "amountUsd": conversion["amountUsd"],
                 "amountDefault": conversion["amountDefault"],
                 "defaultCurrency": conversion["defaultCurrency"],
+                "warnings": item.get("warnings", []),
+                "evidence": item.get("evidence", {}),
+                "reviewFields": item.get("reviewFields", []),
+                "needsReview": item.get("needsReview", False),
             })
         return results
 
@@ -391,6 +385,10 @@ async def _parse_bill(user_id: str, data: bytes, filename: str, content_type: st
         "amountUsd": conversion["amountUsd"],
         "amountDefault": conversion["amountDefault"],
         "defaultCurrency": conversion["defaultCurrency"],
+        "warnings": doc.get("warnings", []),
+        "evidence": doc.get("evidence", {}),
+        "reviewFields": doc.get("reviewFields", []),
+        "needsReview": doc.get("needsReview", False),
     }
 
 

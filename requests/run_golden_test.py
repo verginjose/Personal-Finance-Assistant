@@ -977,9 +977,7 @@ def _dataset_files(samples):
 
 
 def stage_ocr(client, member, checks, args, rng):
-    """Upload ~10 receipts at random. Some of them become personal transactions
-    with a receiptUrl; the rest are kept for attachment to a group expense, so
-    the same receipt flow feeds both transaction capture and split bills."""
+    """Upload receipt attachments without fabricating personal transactions."""
     if args.bills <= 0:
         return
     files = _dataset_files(args.samples)
@@ -999,23 +997,8 @@ def stage_ocr(client, member, checks, args, rng):
         member.uploads += 1
         if not receipt_url:
             continue
-        if rng.random() < 0.6:
-            # Attach the receipt to a personal transaction.
-            name, category, low, high = rng.choice(EXPENSE_MERCHANTS)
-            amount = money(rng.uniform(low, high))
-            status, resp = _create_entry(
-                client, member, checks,
-                {"userId": str(member.user_id), "name": name,
-                 "amount": amount, "type": "EXPENSE",
-                 "category": category, "currency": "INR",
-                 "description": "Receipt captured from OCR upload",
-                 "receiptUrl": receipt_url, "createdAt": iso(datetime.now())})
-            checks.status(201, status, "transaction from OCR receipt")
-            if status == 201:
-                member.created.append((resp.get("id"), "EXPENSE", amount))
-                member.expected_expense += amount
-        else:
-            member.receipt_urls.append(receipt_url)
+        # Uploads are attachments; OCR results must supply any ledger values.
+        member.receipt_urls.append(receipt_url)
         _think(args, rng)
     checks.ok(member.uploads == min(args.bills, len(files)),
               "every receipt upload accepted", f"{member.uploads} uploaded")

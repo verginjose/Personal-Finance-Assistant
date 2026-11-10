@@ -1,0 +1,723 @@
+[
+  {
+    "image": "1001-receipt.jpg",
+    "text": "GRAND LUXCAFE\nRoosevelt Field\nO480 TABLE101 #Party3\nSTEPHEN RSvrCk4 16:4304/25/15\nCoffee\n2.95\nChicken Parmesan\n17.95\nPrime Top Sirloin\n25.95\nTheBacon-Cheese Burger\n13.95\nCoffee\n2.95\nSub Total:\n63.75\nTax:\n5.50\nSub Total:\n69.25\n04/2517:42TOTAL\n69.25\nGratuity Not Included\nSuggested Gratuity:\n20%\n13.85\n18%\n12.47\n15%\n10.39\nIt's been a pleasure to serve you.\nThank you for dining with us",
+    "expected": {
+      "amount": 69.25
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1002-receipt.jpg",
+    "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxx\nFor a Chance to WIN\nSee Back of Receipt\nSurvey Code0279-4033-2211303\n$500CASH\nDiganos en Espanol\nXXXXxXXXxXxxXXXxxxxxxxxxxxxxxxxxxX\nTaco Bell 017314\n7230 Pendleton Pike\n9/1/2016\nOrder 378752\nCashier:DAJA G\n835:38PM\n1 Power Veg Bowl\nNo Sour Cream\n4.99\nNo Cheese\n1 Rg Orange Crsh Fz\n0.00\nSubTotal\n881\nTax\nTotal\nVisa\nAcctxxxxxxx2276\n7.61\nApproval:571883\nDRIVE THRU\nThank you for visiting!\n$500 CASH GIVEAWAY\nLACO\nMOBILE\nORDERING\nON BACK\nISWERE\nDOWNLOAD THEAPP",
+    "expected": {
+      "amount": 7.61
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1008-receipt.jpg",
+    "text": "Dona Mercedes Restaurant\n1030 1/2 San Fernando Rd\nSan Fernando CA 91341\nVero\nCENTERL\n1CHicharon\n$2.25\n3Pupusa Queso\n$6.75\n1 Platanos Orden\n$7.75\n1 Diet coke\n$1.50\n2 Quesadilla salvadorena\n$4.00\nSUBTOTAL:$22.25\nTAX:$2.22\nTOTAL:$24.47\nTIPSUGGESTIONS\n18%:$4.40\n20%:$4.89\n25%$6.12\nThank You!",
+    "expected": {
+      "amount": 24.47
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1009-receipt.jpg",
+    "text": "PASTA\n223 Neuport\nBella Pasta\nPautucket02661\nHUE\nwuu.bellapastaristorante.con\n(401)722-6297\nCheck us put on\ngoogle/Facebook/yelp/Trip\nAdvisor\nServer:PM BAR P\n08/09/19428PM\nCheck#4\nTable 21\nSteak Tip Skewers\nPiatto Gorgonzola\nRoot Beer\nSubtotal\n$36.78\n$28.48\nTax\nTotal\nCheck us out on Grub hub and uber Ests lon\nDelfvery!!!\nRestaurant Hours",
+    "expected": {
+      "amount": 30.76
+    },
+    "review_note": "Image total is 30.76; OCR text does not contain this value. Amount must remain flagged."
+  },
+  {
+    "image": "1010-receipt.jpg",
+    "text": "Friendly Red's\nof Windham\n22 Haverhi11 Rd\nWindham NH\n603-437-7251\nServer: Giancarlo\n07/21/2018\n104/1\n12:56PM\nGuests:2\n10076\nReprint #1\n28.00\nCadi1lac Margarita 2 @14.00)\nPatron Silver\n14.00\nMaryland Crab Cakes\nChicken Caprese\n12.00\n10.00\nChix Parm Sandwich\n7.40\nBud Light 2 @3.70)\n71.40\nSubtotal\nTax\n6.43\nTotal\n77.83\nBalance Due\n77.83\nJoin us on\nFacebook &",
+    "expected": {
+      "amount": 77.83
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1013-receipt.jpg",
+    "text": "ALBETOS\nMEXICAN FOOD\n11732 ARTESIA BLVD\nARTESIA,CA.\nPh:562860-2530\nPHONE ORDERS WELCOME\nORDER#01029\n8.10\n3 ASADA TACO\nATM CHARGE\n0.75\nSUBTOTAL\nS\n8.85\nTAX TOTAL\nS\n0.73\nTOTAL\n9.58\nATM\n9.58\nRECALL\n636",
+    "expected": {
+      "amount": 9.58
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1015-receipt.jpg",
+    "text": "HAMMOCKS TRADING COMPANY\nwww.hammockstradingcompany.com\n7285 Roswe1T Road\nSandy Springs,Georgia\n30328\nNicetomiotgo\n770-395-9592\nTb1:40\nRef:155091\nChk:202524\nShannon\n3/10/2017 6:23 pm\nCoke\n2.50\nShrimp Entree\n21.00\nMac n Cheese\nFrench Fries\nBBQ & B1ue Chz chips\n6.00\nDiscount:BBQ & B1ue Chz\n-6.00\nSprite\n2.50\nLobster Ro11\n21.00\nSubTotal\n47.00\nState Tax\n3.29\nTotal\n50.29\nTotal Due\n50.29\n1/2 Priced Oysters on the Ha1f She1 4-\n6 pm dai1y",
+    "expected": {
+      "amount": 50.29
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1017-receipt.jpg",
+    "text": "UMIX\n4327 N. Expressway 77/83\n956-350-8686\nBrownsville,TX78521\n956-543-5089\nTicket #215406\nUser:KRIST\nStation:1\nSales Rep KRIST\n4/24/20166:30:31PM\nItem\nQty\nPrice\nTotal\nDescription\n100027\n1\n5.25\n5.25\nPARIS\n100026\n1\n4.95\n4.95\nLE CLASSIQUE\nSubtotal\n10.20\nTax\n0.84\nTotal\n11.04\nTender:\nCASH\n20.00\nChange (CASH)\n-8.96\nNumber of items purchased:2",
+    "expected": {
+      "amount": 11.04
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1019-receipt.jpg",
+    "text": "GrottoPizzeria&Tavern\nTrentanI48183\n2441Van Horn\nServer:Trintty\n7346924300\nOrder 22037\nTable:11\nStatlon:2\nDine In\n1 Ultra\nGuests:2\n1 Bells Draft\n1 Cheese Bread\n2.50\n1 APPS OUT FIRST\n5.00\n1 Caprese\n6.00\n1SALAD OUT FIRST\n0.00\n1 Reg Carnivore (s)\n7.00\n0.00\nPepper Rings s\n12.50\n1 Reg Margherita s\n10.00\nSUB TOTAL:\nTax 1:\n43.00\n2.58\nTOTAL:\n$45.58\nTicket128<\n5/12/20177:48:12PM\nTHANK YOU!",
+    "expected": {
+      "amount": 45.58
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1024-receipt.jpg",
+    "text": "New Asia Buffet\n14727.5 Rinaldi St.\nSan FernandoCA 91340\nTe1818898-0880\nWeekEnd Dinner\nDate:ov-15-06-N Time:5:17PM#\n84\nServer :2\nTb#D4\nNo.of Guest1\nNN\nWeeken Dinner\n27.96\nCoke\n3.16\nAMOUNT\n31.12\nTAX9%\n2.80\nTOTAL33.92\nAMERICAN\nEXPRESS\nggested Tip 10%\n3.39\n15%\n:\n5.09\n20%\n6.78\nTHANK YOU VERY MUCH.",
+    "expected": {
+      "amount": 33.92
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1025-receipt.jpg",
+    "text": "McDona ldst3100\n1617NETAEN\nLOSANGELSC3153\nTEL#2364730\nKS#2\n7/201303:08PM\nSide1\nOrder 97\n5.99\n1Db1 Qtr Ches\nSpecial Requet\nADD Leaf Lett.c\n0.25\nADD Mac Sauce\n0.40\nSubtotal\n6.64\nTax\n0.63\n7.27\nTake-Out Total\nCashless\n7.27\n0.00\nChange\nMER#439206\nNTH\nCARD ISSUER\nBOW DEBIT CARDA\n7.27\nTRANSACTION AMD.\nCHIP READ\nAUTHORIZATIONC-154\nSEQ#099988\nAID:AD000000042\nMcDonald's now ai 3 n JberEATS",
+    "expected": {
+      "amount": 7.27
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1028-receipt.jpg",
+    "text": "11325 Wasnington Bivd\nDOUGLAS BURGERS #15\nhitter.Calif 90605\n(562)\n699-7484\nCheck\nSAT\n2/09/19\n20018\n5:30pm\n1BURGERCOMB0\nfries*\n9.99\nadd bacon*\n*anerican ch\n0.70\n*gri1 onions\n.99\n1 SUB ZUCCHINI\n2.49\nRaspberry Ice Te\n1Burger (1/4\nsesame bun\n5.99\n**REGULAR**\n1*add avocado**\n1**add bacon**\n.99\n1 MAKE SPECIAL\n1.99\n3.00\nonions rings\n2.49\nlemonade *\nSERV.CHARGE(2%)\n0.61\nSub/Tt1\n31.24\nTax\n2.97\n*DRV\nTHRU\n34.21\nCash\n34.21",
+    "expected": {
+      "amount": 34.21
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1030-receipt.jpg",
+    "text": "VILLA O'ESTE RESTAURANT\n186 Jericho Tpke\nflorai park.Ny 11001\n516354-1355\nStation:6\nServer:Jerry\nDine In\nGuests:2\nTable:3\n3.50\n1 Coffee\n9.95\n1 Glass House Wine\n12.95\n1Jumbo Cocta11 Shriap\n10.95\n1 Escargot Bourguigonne\n23.95\n1Veal Zingaria\n25.95\n1 Duckling ala Arancio\n87.25\nSUB TOTAL\nTax 1\n7.53\nTOTAL:\n$94.78\n>>Ticket7<<\n12/8/20174:44:05PM\n*************************************\nThank you for dining at Villa DEste\nPlease come again soon.",
+    "expected": {
+      "amount": 94.78
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1033-receipt.jpg",
+    "text": "8030 Renaissance Parkway\nDurhamNC 27713\n984)329-2900\n05/18/2019\nServer: ANASTASHIA\n12:25PM\nTable 57/1\n80001\nGuests:2\n15.49\nTaco Salad\nGround Beef\n8.99\nAdd Chicken Fajita\n18.99\nPechuga de Po11o\n43.47\nSubtotal\nTax\n3.26\nTotal\n46.73\nBalance Due\n46.73\nAsk your Server about the\nUncle Julio's Loyalty Program\nree to join and tons of rewards to earn!",
+    "expected": {
+      "amount": 46.73
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1035-receipt.jpg",
+    "text": "Argonaut Diner2000 We DeTiver\nPlease Pay at Cashier\n1084 Yonkers Avenue\nYonkersNy 10704\n914)237-5055\nCopy of Receipt\nCoffee\n$1.45\n1\nTea\n$1.45\n1\nWaffle\n$5.50\n1\nOld Fashion French Toast\n$4.50\n1\nSide Home Fries\n$2.95\n1\nBanana\n$2.95\n1\nWhipped Cream\n$2.50\n1\nW/2 EGGS\n$2.95\nSubtotal:\n$24.25\n..\n$2.13\nTotal:\n$26.38\nServer Name:\nMIKE.\nTable Number:\nMichael De MaiSts1\nmper\nPPPRESS\nOrdersStarted:\n11:01 AM\nNECCAN\n4\n12Comments\nTUS FOR FREE\nLike\nOUR HOME OR\nComment",
+    "expected": {
+      "amount": 26.38
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1037-receipt.jpg",
+    "text": "Store #1291\nPanda Express\nEverett,WA\n425710-0278\n3/16/2013\nOrder:177437\n3:41:24PM\nServer:Tameka J\n1PARTY PK 18-22\n139.00\nCHOW MEIN\nFRIED RICE\nFRIED/C MEIN\nORANGE CKN\nGRILL TERIYAKI CKN\nPEPPERCORN SHRIMP\n12.00\nSubTotal\n151.00\nTAX\n13.89\nTotal\n164.89\nCash\n200.00\nChange\n35.11\nFREE ENTREE ITEM!\nX\nWE VALUE YOUR OPINION!E\nX\n*\nX\nCa11 1-888-51-PANDA72632 or\nVisit pandaexpress.com/guest\nX",
+    "expected": {
+      "amount": 164.89
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1039-receipt.jpg",
+    "text": "CARL'SJR 1100375\n916962-3415\n8105 MADISON AVE\nFAIR OAKSCA\n12/19/20167:42:42PM\nDriveThru #3100/3625\n$11.38\n2 Santa Fe Ckn\nAmerican Ch\n$0.70\nE Green Chile\nS Santa Fe Sce\n$12.08\nSub Total\n$0.00\nDiscounts\n$0.97\nTax\n$13.05\nTotal\nCredit\n$13.05\nChange\n$0.00",
+    "expected": {
+      "amount": 13.05
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1042-receipt.jpg",
+    "text": "FAIRVIEWNJ 07022\nPhone 201840-8428\nGuests:1\nCheck:832869\nDate:02/11/19\nTime:07:46pm\nTable:23\nServer:DANIELA\n$13.95\n1 Guaca Chicharron\n$3.00\n2 EMPANADA\n$19.95\n1 PARGO FRITO\nEnsalada\nAguacate\nNo Cebolla\nNo Cebolla Roja\n$17.00\n1 MAR Y CHICKEN\nTostones\nTostones\nToGo2\n$16.00\n1 SALMON A LA PLANCHA\nEnsalada\nEnsalada\nSubtotal:\n$69.90\nVoid:\n-$17.95\nTax::\n$3.44\nSbt1 w/Tax:\n$73.34\nAmt Due:\n$55.39",
+    "expected": {
+      "amount": 55.39
+    },
+    "review_note": "Merchant name is cropped out of the original image."
+  },
+  {
+    "image": "1043-receipt.jpg",
+    "text": "BK SOUL FOOD & CATERING\n11318 YONKERS AVE\nYONKERS,NY1704\n914-237-5083\nJune 23, 2019 at 2:33 PM\nORDER#1019\nAdinin\n12.50\nWINGS (5)\nMAC&CHEESE\nYAMS\n12.00\nSIDE SMx3\nYAMS\nMAC &CHEESE\nCOLLARD GREENS\nSubtotal\n24.50\nTax\n2.17\nDiscount\n0.00\nTotal\n26.67\n0011477215613",
+    "expected": {
+      "amount": 26.67
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1044-receipt.jpg",
+    "text": "CHURCH'S\nCHCKEN#4717\n7635NINNETKA\nCANOGA PARK CA\n818576-0490\n#253\nROEDRET\n19PC LT\n9.99\nNET\n9.99\nTXTL\n.95\nTOTL\n10.94\nCASH\nDHNG\n11.00\n.06\nTHANK YOU COME AGAIN !!!\nLISBETH/fa\n0203-2057 #02 MAY.2119 REG0002",
+    "expected": {
+      "amount": 10.94
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1045-receipt.jpg",
+    "text": "YUM'S RESTAURANT\nWalk in\n6/24/201819PM\nServer Yums\n347\nSteak Crese Egg Rolls 2\n4.49\n4Wingsw French fnes\n7.20\nMumboS.e\n4WingswFreng nes\n7.20\nManboS.e!\nHot Sauceel\nHomemace Ha Hl\n1.89\nFood Subtoial\n20.78\nBev Subtotal\n0.00\nFood Tax\n1.25\nBey Tax\n0.00\nTotal:\n22.03\nReceived.\n22.03\nChange.\n0.00\nPAID Cash\nThank You",
+    "expected": {
+      "amount": 22.03
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1050-receipt.jpg",
+    "text": "AM Dining Rm\nheck:332114 Table:42\novers:2 Person#1\n2.49\nSODA\n10.49\nCHEESE STEAK\n1.00\n+AMERICAN CHS\n0.75\n+FRD ONION\n10.49\nChix Cheesesteak\n25.22\nSUB-TOTAL\n1.74\nFood Tax\n0.00\nLiquor Tax\nOther Taxes\n0.00\nTotal Tax\n1.74\nTOTAL\n26.96\nTHANK YOU!",
+    "expected": {
+      "amount": 26.96
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1052-receipt.jpg",
+    "text": "255-41 Jericho Turnpike\nFloral Park,NY 11001\nTel718.343-4616\nwww.nancysrestaurant.net\n106 Tom\nCheck:1075\nGuests:2\nTable:34-1\n09/24/2016 08:22PM\nDINEIN\ng1 Imp White\n7.75\nBlue Moon Tap\n6.00\nMozzarella&Tomato\n9.95\nPork Quesadilla\n9.95\nFren Onion Soup\n5.95\nPork Chop\n21.95\nHanger Sizzle\n24.95\nSUBTOTAL\n86.50\nTax\n7.68\nTOTAI\nDUE\n$94.18",
+    "expected": {
+      "amount": 94.18
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1053-receipt.jpg",
+    "text": "Primo\nFamily Restaurant\n5/3/198:14P\nDARIND.Table:10 Check:137\n3 Pren Glass 07.50\n$22.50\n1MED Vegg1e 27.00\n$27.00\nSub-Total\n$49.50\nSales Tax\n$2.97\nTotal\n$52.47\nPaynents\nMASTERCARD***6170\n$52.47\nAnount Due\n$0.00\nCharge Receipt\nServer:\nDARMIN'D.\nTable No\n10\nCheck No\n137\nSALE",
+    "expected": {
+      "amount": 52.47
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1055-receipt.jpg",
+    "text": "TER!\nWINGS& THINGS\n519 FULTON AVE.HEMPSTEAD NY\nTHANKS CALL AGAIN 516-483-0936\n50pc\n#195\nIN\n100p\n1 #7 2PC R&B MEAL\n5.99\n200p\nICED TEA\nSUB CORNBREAD\n50p\n1 #3 3WING MEAL\n6.99\n80p\nSIERRA\n1 SUB FIXN\n100\nMAC&CHZ\n1 #3 3WING MEAL\n6.99\nICED TEA\n1 SUB FIXN\nSPRICE\n1 #3 3WING MEAL\n6.99\nICED TEA\n1 SUB FIXN\nMAC&CHZ\n1 COLL GRN-SMALL\n1.19\nTXTL\n2.43\nTOTL\n30.58\nCASH\n40.00\nCHNG",
+    "expected": {
+      "amount": 30.58
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1058-receipt.jpg",
+    "text": "aldera\nBREWERY\nRESTAURANT\n590 Clover Lane\nASHLAND,OREGON\nAshland,OR\nServer:Hope\n541482-HOPS\n1/1\nGuests:2\nGlass Imp Stout\n12/28/2017\nAshland Amber\n7:06PM\nButter Noodles\n#20071\nOatmeal Stout\nMahi Mahi TACO\n5.00\nSubtotal\n4.75\nTax\n7.00\n4.75\nTotal\n15.00\nBalance Due\n36.50\n1.10\nCheers from Caldera Brewery & Restaurant\n37.60\nWE SELL CANS, BOTTLES AND GROWLERS TO GO\nPlease Drive Carefully\n37.60",
+    "expected": {
+      "amount": 37.6
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1059-receipt.jpg",
+    "text": "LANDFALLRESTAURANT\nAPRILTO DECEMBER\n0084Table 31 #Party3\nDWYERM\nSvrCk:13 11:47a 06/10/17\nSeparate checks:6-of-6\n1 CUP CHOWDER\n6.00\nSub Total:\n6.00\nTax\n0.40\nGRAT18\n06/10139pTOTAL\n1.15\n7.55\nLUNCH &DINNER\nWE\nTAKE RESERVATIONS\nEST1946\n508-548-1758",
+    "expected": {
+      "amount": 7.55
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1060-receipt.jpg",
+    "text": "1660 India Street\n12/17/2017\nServer:Jake\n6:29PM\nTable 24/1\n20018\nGuests:2\n12.00\nG1 Karma Cab Sauy\n11.00\nG1 Douglass Green SB\n27.95\nPKLI Green Curry Sca1lops\n23.75\nPKLI Piri Piri Chicken\n74.70\nSubtotal\n6.00\nTax\n2.80\nSurcharge 3.75% SC*\nTotal\n83.50\nBalance Due\n83.50\n*3.75% SC-In support\nof the increases to min wage\nTo find out why, visit\nwww.wnlhosp.com/rttd",
+    "expected": {
+      "amount": 83.5
+    },
+    "review_note": "Merchant name is absent from the original image."
+  },
+  {
+    "image": "1062-receipt.jpg",
+    "text": "lariangcci's\nMARIANACCY'S\nRESTAURANT\nTABLE 403 CHECK\n39\nRoger\nQUESTS\n4FE818/17\n819\nPREM\nWHITE\n10.75\n10.75\nPREM\nRED\nDIET\nSDA\n3.75\n7UP\n3.25\nVONG-\nRIPIENE\n9.75\nChicken.\nParm21.75\nSCAMPI MILAN25.\n22.75\n75\nLING VONG\n1/2 PASTA\nSP16.75\nDIET\nSDA\n3.75\n7UP\n3.25\nSUBTOT\n132.25\nTAX\n9.76\nTOTAL\n142.01\nTHOR YOU,\nTHE KARTRNCCE FAKELY",
+    "expected": {
+      "amount": 142.01
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1063-receipt.jpg",
+    "text": "Primo\nFamily Restaurant\nD4D.Table10 heck137\n5/3/198:14P\n3 Pren Glass 7.50\n$22.50\nMED Vegge 27.00\n$27.00\nSub-Total\n$49.50\nSales Tax\n$2.97\nTotal\n$52.47\nASTERCARO6170\nPayments\n$52.47\nAnount Due\n$0.00\nCharge Receipt\nServer:\nCARMIND",
+    "expected": {
+      "amount": 52.47
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1066-receipt.jpg",
+    "text": "RISTORANTE\nBELLAGIO CO)\nTELEF0N0 031/951888\nTAV.\n9\nCOPERTI\n4\nSALA UNICA\n14/07/2019\n16:23\n4COPERTO\n12.00\n2 ACQUA NAT\n8.00\n1 SALMERINO PIASTRA\n18.00\n1 TRENETTE AL PESTO\n13.00\n1 SPAGHETTI POM.BASILICO\n10.00\n15.00\n1 FETTUCCINE RAGU\n6.00\n1 PATATINE FRITTE\nTOTALE\n82.00\nMANCIA/TIP\nPrego ritirare 11\ndocumento fiscale\nalla cassa",
+    "expected": {
+      "amount": 82.0
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1067-receipt.jpg",
+    "text": "Anjappar Chettinad Artesia\n18128 Pioneer Blvd\nArtesia, Ca 90701\n562)991-1801\nwww.anjapparla.com\nAnjappar - Artesia\nTicket #35\nOrder #004-864\nTable #C16\nDine In\nSeat:1\nDevice #1\nServer: Deepthi R\nSeat #1\n7.95\n1 Ghee Dosa\nKid is waiting\n14.95\n1 Anjappar Mutton Meals\n6.95\n1 Kaldosa\n6.95\n1 Plain Dosa\n36.80\nSub Total:\n3.50\nTax 1:\n40.30\nTotal:",
+    "expected": {
+      "amount": 40.3
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1068-receipt.jpg",
+    "text": "eugene\nCafe Eugene\n1175 So lano Avenue\nAlbany CA 94706\n510-647-9999\nww.cafeeuene.c\nTable:Table 10\nDate:4/10/169:08AM\nPork\nPancakes\n$17.00\nSide Bacon\n$12.00\n2 Regular\n$4.00\n$3.00 each\n$6.00\nsubtotal:\ntal Tax:\n$39.00\n$3.90\nal:\n$42.90",
+    "expected": {
+      "amount": 42.9
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1073-receipt.jpg",
+    "text": "Sucway#44969-0 Phone 626-566-9999\n625 S Fatr Oaks Ave\nServed by:41 5/1/2019 2:25:37ps\nPasadenaCA91105\nTera ID-Trans1/A-297424\nQty Size Iten\nPrice\n#SKS $11.99 Any 2 FtLong 11.99\n12-Steak & Cnse S.b\n1\n12-B.M.T.S\nSales Tax 10.25%\nSub Total\n11.99\n13.22\n1.23\nTotal Eat In)\nCredit Card\nCharge\n13.22\nApprovaNo:05114\n0.00\nReference No:912121113552\nCard Issuer:Visa\nAcct***0002\nAcquired:Contact_ENV\nAcp11catlonCHASE VISA\nAount$13.22\nAID0000000031010\nTVR0080008000\nate/T1ne5/1/20192:25:37PM\nTSI:EB00\nQUSTOMER.COPV",
+    "expected": {
+      "amount": 13.22
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1074-receipt.jpg",
+    "text": "##0270\nLin Buffet\n2988 N. Expressway\nBrownsville,TX\nFhone956)544-6600\nDate:Feb242019\nTime:03:22PM\nServer: Kenya Judith\n#Guest1\nB111:0270\nWeekend Buffet\n27.18\n2\n2\nDrink\n3.98\nSubtotal\n31.16\nSales Tax\n2.57\nTotal\n33.73\nVisa.\n33.73\nBeverages\n3.98\nFood\n27.18\nOpen TimEFeb 242019 03:22PM",
+    "expected": {
+      "amount": 33.73
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1082-receipt.jpg",
+    "text": "SURATI FARSAN MART\n11814 186TH STREET\nARTESIA,CA 90701\n562-860-2310\nWWW.SURATIFARSAN.COM\n16 Daksh D\nChk 45\n14\nGst0\nAug08'19 07:33PM\n1 Chole Samosa *** TO GO ***\n5.99\nXXXXXXXXXXXX8402\nVISA\n6.56\nFOOD\n5.99\nTAX\n0.57\nPAYMENT\n6.56\n16 Check C7osed\nAug08'1907:34PM\nThank You for your business\nFree ground shipping on orders\nof 7lbs or more..\nWWW.SURATIFARSAN.COM",
+    "expected": {
+      "amount": 6.56
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1083-receipt.jpg",
+    "text": "RESTAURANTS,INC\nKing Taco # 30\nExquisitamente..\na la Mexicana!\n***************************************\n1 SOPE ASADA\n3.10\nCON TODO\nCOPA S.ROJA\n1 TACO ASADA\n1.59\nCON CEBOLLA\nCOPA S.ROJA\n1 TACO PASTOR\n1.59\nNO CEBOLLA\nCOPA S.ROJA\n1 QUESADILLA ASADA\n4.89\n1 ORDEN CHIPS\n1.50\nSub/Tt1\n12.67\nTax 8.75%\nTO-GO\n1.11\n13.78\nVISA\n13.78\nAcctXXxxxxxxxxXx6381\nAuth:042402\nTrans ID:274999\n3/17/17\n11:24pm\nCashier 12875 CYNTHIA\nTermina1 01\nRECIBO # 10368\nNUMERO DE ORDEN\n****************************************\nMuchas Gracias por su visita\n********************",
+    "expected": {
+      "amount": 13.78
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1093-receipt.jpg",
+    "text": "POPEYE'S\n11538\n201-885-2085\nCARRY-OUTSUN JUN 24 20:49:53 2018\n#150Server#8325\n1#55WING COMBO\n9.99\n>SPICY\nREG CAJ FRIES\nCOKE\n1\n#63 TENDER ML\n8.69\nREG MACHEESE\nCOKE\n#63 TENDER ML\n8.69\n1\nREG CAJ FRIES\nCOKE\n#11/POP SHRMP/COMBO\n8.49\nREG CAJ FRIES\nCOKE\nTAX A\n2.37\n150\nTotal D1-4\n38.23\nCREDIT\n38.23\nCHANGE\n0.00\nTHANK YOU FOR",
+    "expected": {
+      "amount": 38.23
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1095-receipt.jpg",
+    "text": "Golden Coin\n94-450 Ukee St\nWaipahuHI 96797\n808848-0802\nStation:1\nServer:Charito\nTake Out\nOrder #:6879\n>>SETTLED<<\n1 P1t Lunch 2 Choices\n9.79\nBBQ\nPINAPAITAN\nBar Subtotal:\n0.00\nFood Subtotal:\n9.79\nTax 1\n0.46\nTOTAL:\n$10.25\nCash Tenderen\n15.00",
+    "expected": {
+      "amount": 10.25
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1096-receipt.jpg",
+    "text": "OE\n223 N. Citrus Ave\nCovinaCA 91723\n626)339-9496\nCheck:208774\nTable:BAR9\nServer:Ryan\n08:44pm\n09/25/18\n[Seat 1]\n$16.00\n2Bohemia\nTall\n$9.95\n1 Albondigas\n$16.95\n1 Mole\nSubtotal:\n$42.90\nTax::\n$4.08\nSub w/Tax\n$46.98\nTotal:\n$46.98\n\"Thank-You!\nWe look forward to seeing you again.",
+    "expected": {
+      "amount": 46.98
+    },
+    "review_note": "Merchant header is clipped; only an unreadable logo fragment remains."
+  },
+  {
+    "image": "1097-receipt.jpg",
+    "text": "EL POLLO LOCO\nRESTAURANT 5451\nST0RE5451\n7519 S.ATLANTIC AVE.\nCUDAHY,CA 90201\n323-560-0758\nR OWA\n257 LIDIA H\nhk 1924\nJun28'1705:36P\nGst\n0\nDrive\nThru\n1 Burrito Cmb\n8.28\nChk Ranchero Bur\nADD\nAvo S1cs\nInd Chips\nSM DRINK\nCoke\n2Bur-BRC @1.89\n3.78\nCash\n13.25\nFood\n12.06\nTax\n1.06\nPayment\n13.12\nChange Due\n0.13\n-257 Check C1osed\nJun281705:38PM\nYour 0rder:1924",
+    "expected": {
+      "amount": 13.12
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1100-receipt.jpg",
+    "text": "8A3\n*DUPLICATE\n**BILLA\nM\n**\nStony\n16725 Stony Plain Rd\nEdmonton AB T5P 4A9\nStore#:3859Te#780-414-8362\nUR\nWe lcome to all day breakfast\n0 Mc Dona ld's\n192\nKS#1\n03/10/201807:39:12PM\nQTY ITEM\nTOTAL\n1 Delivery\n0.00\n110 McNuggets EVM\n10.29\n1 Barbeque Sauce\nEASE\n1 Barbeque Sauce\n1 L Coke\n0.40\nTURN THISOVER\n1 M French Fries\n1 HM GrChs S-Fry Yog\n3.99\n1 Snoopy\n1 HM App le Juice\n1 6 Cookies\n2.89\n6 Choc Chip Cookie\nA\n1 Baked Apple Pie\n1.19\n1 L French Fries\n3.29\nLEASE\n1 L Iced Tea\n2.99\nSubtotal\n25.04\nGST\n1.11\nTake-Out Total\n26.15\nOVER\nCREDIT SALES-McDelivery\n26.15\nChange\n0.00\nPLEASE TORN THIS OVEI\nGST #120907092\nSALE #04kdfwg532",
+    "expected": {
+      "amount": 26.15
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1109-receipt.jpg",
+    "text": "BreadFish Cafe\n15848 Haliburton Rd\nTable:A2 Guests:2\nServer: linda\nDine In#:137\nDate:06/14/201718:38:46\nSQ#10038\n[1\n$4.39\nmild\nFopcom Chicken\n(Spicymild\n[1\n$6.75\nEraisec Beef flee/Noodle\n[1]\n$6.25\nCold Noodle With Chicken\n[1\n$7.95\nBeefNoodles\nAmount$25.34\nTaxRate9.00%$2.28\nSub-Total:$27.62\n.-TIPGUIDE-.\n15%=$3.80\n18%=$4.56\n20%=$5.07\nThank You Very Muchl",
+    "expected": {
+      "amount": 27.62
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1111-receipt.jpg",
+    "text": "Place Your\nCard Here\nCOMMANDER'S PALACE\n1427 WASHINGTON AVE.NEW ORLEANSLA\nTable 522 #Party 2\n0009\nSvrCk:1 1123a 03/12/19\n0.25\nLAURA D\n0.25\n0.00\n125/CPup\n0.00\n125/C0SMOup\n22.00\n1 SOUPDJ\n18.00\n1TURTLE\n0.25\n1CATFISH\n0.25\n1 TOSTADA\n9.50\n125/GINup\n125/RAYup\n50.50\n1 SOUFFLE/ALA\n5.45\nSub Total:\nTax:\n55.95\n03/12 12:31pTOTAL\nThank You\nNow streaming on NETFLIX!\nE11a Brennan: Commanding the Table\nAsk your server for details.",
+    "expected": {
+      "amount": 55.95
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1115-receipt.jpg",
+    "text": "Rosebud on Rush\n720 North Rush Street\nChicagoIL\n312-266-6444\nDate:\nJu1151704:07PM\nCard Type:\nVisa\nAcct#\nXXXXXXXXXXXX3426\nCard Entry: SWIPED\nTrans Type: PURCHASE\nTrans Key:\nGIG005625257729\nAuth Code:\n190275\n1738\nCheck:\n81/1\nTable:\nServer:\n226 Chelsea\n79.17\nSubtotal:\nTIP\nTOTAL\nSIGNATURE\nTHIS IS ROSEBUD'S COPY\nAMERICAN\nYou!\nEXPRESS\nThank",
+    "expected": {
+      "amount": 79.17
+    },
+    "review_note": "Only subtotal is filled; final tip and total are blank. Do not claim a verified final amount."
+  },
+  {
+    "image": "1117-receipt.jpg",
+    "text": "KOBE JAPANESE STEAK\n69838 HIGHWAY111\nRANCHO MIRAGECA92270-2837\n760-324-1717\nServer ID:1\nSale\nxxxxxxxx4757\nVISA\nEntry Method:Chip\n158.07\nAmount:$\nTip:\n500\nTotal\n02/22/19\n20:31:12\nInv #00000061\nApprCode:B39001\nApprvd:Online\nVISA DEBIT\nAID0000000031010\nTVR8080 008000\nTSI:6800\nCustomer Copy",
+    "expected": {
+      "amount": 173.07
+    },
+    "review_note": "Handwritten tip 15.00 and final total 173.07 are unreadable in OCR text. Require amount review."
+  },
+  {
+    "image": "1119-receipt.jpg",
+    "text": "xxPURCHASE xx\nPanda Express #2614\nBrooklyn, NY\n718246-3898\n12/22/2017 4:58:01PM\nOrder:196812\n-TO GO-\nServer:Cheryfia M\n1Plate\nCHOW MEIN-1/2\n9.10\nCHOW MEIN-1/2\nBROCCOLI BEEF\nBEIJING BEEF\n1Plate\nCHOW MEIN-1/2\n9.10\nCHOW MEIN-1/2\nCKN EGG ROLL\nKUNG PAO CKN\n1XTRA ENTREE\nGPILL TERIYAKI CKN\n1.50\n1XTRAENTREE\nGRILL TERIYAKI CKN\n1.50\n1PEPSI20Z\n1 PEPSI200Z\n2.00\n2.00\nSubTotal\n25.20\nTAX\n2.24\nTotal\n27.44\nVisa\n27.44\nAcctXXXxxxxx0103\nAuthCode:02776A\n**x\nFREE ENTREE ITEM!",
+    "expected": {
+      "amount": 27.44
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1122-receipt.jpg",
+    "text": "E1 Meson Mexican Restaurant\n794 South Perry St Unit EF\nCASTLE ROCK CO 80104\n720)733-9705\nServer:IGOR\nStation:33\nOrder18533\nDine In\nTable:A1\nGuests:2\n1 SOPA DE TORTILA BOWL\n5.50\n1 TACO SALAD\n9.50\nCHKN\n1 HOUSE MARGARITA JUMBO\n12.50\n1Dr Pepper\n2.65\n1 SIDE CHEESE\n1.55\n1 HOUSE MARGARITA JUMBO\n12.50\nSUB TOTAL:\n44.20\nTax 1:\n3.50\nTOTAL:\n$47.70",
+    "expected": {
+      "amount": 47.7
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1126-receipt.jpg",
+    "text": "SAGE\nFRENCH CAFE &WINE BAR\nO121a Table 3 #Party2\nCHANDA R\nSvrCk8156p 06/02/15\n18.00\n2 SAUV BLANC JB\n11.00\n1 VEGGIE SANDWICH\n12.00\n1 QUICHE LORAINE\n41.00\nSub Total:\n11.00\nOPEN $DISCOUNT *Discount*:\n1.80\nTax\n31.80\nSub Total:\n7.38\nGRATUITY18\n39.18\n06/02 2:44pTOTAL\n********************\nTHANK YOU!\nPLEASE COME AGAIN!\nWINE TASTING 1ST TUESDAY\nWE TAKE RESERVATONS\nCALL US AT 954-565-2299\nWWW.SAGECAFE.NET",
+    "expected": {
+      "amount": 39.18
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1130-receipt.jpg",
+    "text": "BOA\n310278-2050\n0051a\nTABLE 308 #Party 1\nBAR L\nSvrCk:13 13:22 12/20/17\nSeparate checks:1-of-3\n15.00\n1 CRAB CAKE\n28.00\n1 SKIRT STK LUNCH\nSub Total:\n43.00\nTax:\n4.09\nSub Total:\n47.09\n12/20 14:29TOTAL\n47.09\nSUGGESTED GRATUITY\n18%\n8.48\n20%\n9.42",
+    "expected": {
+      "amount": 47.09
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1131-receipt.jpg",
+    "text": "CHRISS\nHAMBURGERS\n3950E SLAUSON MAYWOODCA 90270\nPHONE323-588-1607\nREG CASHIER11-24-201712:13 PM 000072\nMC #01\nMJSC\n$0.01\nB CHZ B SPC\nno pickles\n$8.80\nFFRIES-LRG\nCRISPY\n$3.66\nCRISPY\nFFRIES-LRG\n$3.66\nCRISPY\nPREM MED DRINK\n$2.15\nhorchata\nCHZ BURGER SPEC\n$7.57\nno onions\nEAT-IN\nTAXABLE SALES\n$25.85\nTAX\n$2.46\nTL.\n$28.31\nCASH\n$40.00\nCGi\n$11.69\nORDER#\n0000000052\nPLEASE HELP US SERVE YOU BETTER\nSERVICE WAS VERY GOOD\n[]\nGOOD\nPOOR",
+    "expected": {
+      "amount": 28.31
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1133-receipt.jpg",
+    "text": "MOONSTAR RESTAURANT\n383 GELLERT BLVD.DALY CITYCA 94015\n650-992-2888\n424\n#2184\nTab\n1P\n18:08\nU/P\nPRICE\nQTY\nNAME\n149.40\n5\nFRI-SUN DINNER$29.88\n29.88 50%0FFBIRTHDAY\n-0.50\n-14.94\nSUBTOTAL:\n134.46\nTax9%\n12.11\nTOTAL:\n146.57\nTip Guide:\n15%:+\n20.17=\n166.74\n18%+\n24.20=\n170.77\n20%:+\n26.89=\n173.46",
+    "expected": {
+      "amount": 146.57
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1134-receipt.jpg",
+    "text": "KFC\nRestaurant #C150014\n3880 Hempstead Turnpike\nLevittown\n(516)735-3508\nTicket #2884\n9:16PM\n2016-07-08\nC16001421172884\nCashier:TIANA\nFamily Fill Up\n20.00\nLrg Coleslaw\nLrg Mash/Gvy\nLrg Mash Only\n4 Biscuit\n1.73\nTax\n$21.73\nDRIVE THRU\nETender Credit\n$21.73\nChange\n$0.00\nCHARGE DETAIL:SALE",
+    "expected": {
+      "amount": 21.73
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1139-receipt.jpg",
+    "text": "SS PARADISE\nAndhra Style Famlily Restaurant\nVidyaranyapura,BANGALORE-560097\nConta0t:9148436557/5S\nBILL\nGST-29ADDFS0740912G\nBill No.\n00027\n3i11 Date 06.07.2017\nBill Time\n22:06\nPersons\n01\nTable No P\nWtr.No.\nSD\nItem Name\nRate\nQty\nAmount\nTANDOORI CHICKEN\n179\n1.00\n179.00\nMUTTON RAGON JOSH\n209\n1.00\n209.00\nFISH BIRIYANI\n229\n1.00\n229.00\n617.00\n617.00\nTotal\nT\nGrand Total Rs\n617.00\n-W1\n-WO\n1",
+    "expected": {
+      "amount": 617.0
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1140-receipt.jpg",
+    "text": "SHAKE SHACK\n1450 S.Dix1eHfgn\nHostNelson\n12\n30143\nShackBurger\n5.19\nSmoke Shack\n6.69\n3.95\ncheese fries\n5.50\nREG Soda 2 @2.75\n2REG Rootbeer\nREG Iced Tea\n2.25\nSubtotal\n23.58\n1.89\nTax\nTo Stay Total\n25.47\n25.47\nVisa #XXXXXXXXXxXx9197\nAuth:130960\nWe Tweet.\nYou Tweet.\nWe A11 Tweet.\n@ShakeShack\nCheck Closed",
+    "expected": {
+      "amount": 25.47
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1141-receipt.jpg",
+    "text": "YAUATCHA\nYauatcha\n110578007 Kakin\nCHK1867\nTBL84/1\nGST 3\n84\nRestaurant\n1 Tender Branch Hibiscus\n8.00\n1 Seafood Puff\n10.80\n1 Sesame Prawn Toast\n11.80\n1 Beancurd Prawn Cheung Fun 10.80\n1X0 Sca11op Dump1ing\n8.80\n1 Poached Beijing Dumpling\n5.80\n1 Spinach Dump1ing\n6.80\n1 Tea Smoked Pork Ribs\n22.00\nSubtotal\n$84.80\nTax\n$3.82\nTotal Due\n$88.62\nInternationa1 Market Place\n2330 Kalakaua Ave Ste 326\nHonolulu,Hawaii 96815\nReservations@YauatchaWaikiki.com\nPhone:808-739-9318\n**GRATUITY NOT INCLUDED**",
+    "expected": {
+      "amount": 88.62
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1142-receipt.jpg",
+    "text": "Blue Bear Tavern\n216 S 11th Street\n(215)922-3427\nwww.bluebeartavern.com\nCheck #:00225\nCheck #00225\nDate:01/13/2012 10:16 PM\nServer:Andre\nStation:Pos3\nGuests:1\n3.00\n1 Crimini\n1 Salam1\n3.00\n101ives\n3.00\n1 Lrg Clams\\mussels\n14.00\n4 Reg Kete1 One\n52.00\n1 House Cab\n6.00\nSub Total\n81.00\nPhilly Liquor Tax 0.60\nPhilly Pa Sales Tax\n1.84\nTOTAL\n83.44",
+    "expected": {
+      "amount": 83.44
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1145-receipt.jpg",
+    "text": "MIGUELS MEXICAN\n3035 W.KENNEDY BLVD\nTAMPAFL.\n813)876-2587\n127MISSY\nTb182/1\nChk 55\nGst 3\nDec26'12 04:41PM\n3 WATER\n0.00\n1 CRAB SUIZA\n13.25\n1 SHRIMP VERACRUZ\n14.95\n1 ENCHILADA\n4.95\n1 FAJITA BF\n13.95\n1**TAKE OUT**\n0.25\n4 HH MIGUELS MARGARIT @3.38\n13.52\nSubtotal\n60.87\nTax\n4.27\n05:19PM Total\n65.14\nPLEASE PAY YOUR SERVER",
+    "expected": {
+      "amount": 65.14
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1153-receipt.jpg",
+    "text": "Gordon Ramsay Steak\nParis Las Vegas\n10/21/2014\n19:41\nGordon Ramsay Steak\nCheck:2042367\nTable:T-35\nServer:Lomberto\nGuests:2\nTerminal:42\nRegular\n1 Pi's Cup\n14.00\n2 The Drifter\n28.00\n14.00\n1 Kobe Beef Slider\n18.00\n1 New York\n63.00\n1 Amer Kobe F1let\n79.00\n1 Lobster Tail\n38.00\n1 Potato Puree\n12.00\n1 Gr11d Asparagus\n13.00\n1 Peppercorn\n6.00\n1 Peps1\n6.00\n1 Choc Pot De Crem\n13.00\nSubtotal\n290.00\nTax\n23.49\nTotal\n313.49",
+    "expected": {
+      "amount": 313.49
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1155-receipt.jpg",
+    "text": "Steakhouse &Gr111\nMarco Plerre hite\nDawson Street\nTel:016771155\nVAT6573338P\nmarcoplerreshtte.te/Danson\n40006 Char11e\nTb115/1\nChk1501\nStation 1\nGst 2\n16Feb19 21:31\n1 8oz F11 Bearn\n1 8oz Fi1 Au Po\n35.95\n35.95\n1 Onion Ring\n4.95\n1 Haricots Vert\n1 Choc Truf Cake\n4.95\n1Lunta\n8.95\n39.00\n22:57 Ba lance Due\n129.75\nThank you for your custom.\nPlease call again\nVisit us online at\nmarcopierrewhite.ie/dawson",
+    "expected": {
+      "amount": 129.75
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1156-receipt.jpg",
+    "text": "IKEA\nIKEA FOOD\nIKEA MILTON KEYNES 185\nVATGB527773320\nAddressq\nQty Name\nPrice Total \n-\nMeatballs 10\n3.80\n3.80\n1\nFish & Chips Adult\n4.95\n4.95\n1\nPetit Pain -White\n0.50\n0.50\n1\nWine rose\n2.80\n2.80\n7\nWine red\n2.80\n2.80\nNet SubTotal:\n12.37\nTax:\n20%VAT\n2.48\nTotal to Pay:\n14.85\nReceived:\nVISA\n14.85\nVisa Credit\n***********9529\nStart:\n1890",
+    "expected": {
+      "amount": 14.85
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1157-receipt.jpg",
+    "text": "COLLEGE OF SOUTHERN NEVADA\nRUSSELL'S RESTAURANT\n108 SERV7\nTb155/1\nChk 4488\n0ct081412:10PM\nGst\n1LATTE\nNO FLAVOR\n1.75\n1 SALMON\n7.95\n12:44PH Amount Due\n9.70\nCOLLEGE OF SOUTHERN NEVADA\nWHERE HOSPITALITY EDUCATION\nTAKES LIFE\nPLEASE PAY CASHIER\nThank You",
+    "expected": {
+      "amount": 9.7
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1158-receipt.jpg",
+    "text": "MITASU JAPANESE RESTAURANT SDN BHD\nB-01CENTRAL PLAZA,\n34,JALAN SULTAN ISMAIL,\n50250 KUALA LUMPUR\nTEL 03-21102833\nGSTReg.No001774428160\nTax Invoice\nTab1e D2\nB111#V001-201060\nOdr No199535\nDate29-06-2018 19:59:15\nCashier:AARON\nPaxs11\nQty\nDescription\nTotal TAX\n1128.01Adult\nD709.50SR\nSubtotal:\n709.50\nServ.Charge 10%\n70.95\nGST Payable 0%\n0.00\nTotal:\n780.45\nTOTAL:\n780.45\n29-06-2018\n21:52:03\nClosed:001\nServer:AARON\n780.45\nVISA\n-************3042\n-LIM CHAI JA",
+    "expected": {
+      "amount": 780.45
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1161-receipt.jpg",
+    "text": "Dominican Restaurant\n1019 Front St\n516-292-5700\nGuest Check\nParty of 2\nTable\nTicket12005\nEmployee:EUFEMIA\nSERVERS\n06:38PM\nDate 11/10/18\nSeat1>\n1Bistec Palom11la Enc\nW/Moro Gandules\nHab Rojas Red Bean\nDine in\n15.95\nSpaghetti Con Po1lo\nW/Moro Gandules\nHab Rojas .Red Bean\nDine in\n14.95\nCopa Vino\nWhite Glass Pinot Gr\n5.50\nLemonada\nDine in\n3.50\nJugo de Chinola\nDine in 16oz\n4.00\nGratuity.\n6.59\nSub Total\n50.49\nSales Tax\n:\n2.74\nCheck Total $ 53.23\nAdditional Tip\nTotai Charge:\n15% tip is 7.57\n18% tip is 9.09\n20% tip is 10.10\n22% tip is 11.11\nThank you for Coming\nGracias por su Visita",
+    "expected": {
+      "amount": 53.23
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1164-receipt.jpg",
+    "text": "he\nSolden\npear\nCafe\nEast Hampton,NY\n631)329-1600\nFax 631)329-1648\nwww.goldenpearcafe.com\nDate:\nAug06'15 11:01AM\nCard Type:\nVisa\nAcct #\nXXXXXXXXXXXX1779\nExp Date\nXX/Xx\nAuth Code:\n08316C\nCheck:\n9391\nCheck ID\nCHINO\nServer:\n5 Karina\nSubtotal:\n22.70\nTip\nTotal\nSignature\nI agree to pay above total\naccording to my card issuer\nagreement.\nCustomer\nCopy",
+    "expected": {
+      "amount": 22.7
+    },
+    "review_note": "Only subtotal is filled; final tip and total are blank. Do not claim a verified final amount."
+  },
+  {
+    "image": "1165-receipt.jpg",
+    "text": "EL CHICO MEXICAN RESTAURANT\nTEL04-7059680\nJBR\n1050 Home De1\nTb11014/1\nChk1958\nGst 0\nNov121605:41PM\nHome Delivry\n1 Ts Guac\n1 Grande Chicken\n48.00\n64.00\nBuritto\n1 Delivery Charge\n5.00\nAmount Due\n117.00\n***Thank You For Coming***\nHome De1ivery No:600561112",
+    "expected": {
+      "amount": 117.0
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1166-receipt.jpg",
+    "text": "SEAFOOD KITCHEN\nPappadeaux Seafood Kitchen 612\n7800 Airport B1vd HOU\nHoustonTx 77061\n713)847-7622\n0089\nTable7#Party2\nDANIEL O\nSvrCk:712:46 01/07/17\nDINEIN\n1 Side Craw Etouffee 4oz\n10.98\n1 Pan Seared Tilapia\n21.99\n2 Tea\n5.98\nSub Total:\n38.95\nTax:\n3.21\nSub Total:\n42.16\n01/0713:29TOTAL\n42.16\nThank you for dining at Pappadeaux!\nTip Not Included\n15%\n6.32\n18%\n7.59\n20%\n8.43",
+    "expected": {
+      "amount": 42.16
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1167-receipt.jpg",
+    "text": "ha\nCasa RubloCafe\ny21.2019\n25-17Astona d\n658PM\nAstoria.NY 11102\n929328-0030\nTicket:T1\nFORHERE\n$28.00\nGrilled Skirt Steak\nWel done\nFountain Sodas\n$3.00\nSubtotal\n$31.00\nSale Tax\n$2.75\nTotal\n$33.75",
+    "expected": {
+      "amount": 33.75
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1171-receipt.jpg",
+    "text": "POP TATES KORUH HALL\nANDHERI WEST\nKORUM MALL4TH FLOOR\nMANGAL PANDEY RDOFF EASTERN EXPRESS\nTHANE400606\nORDER NOK00024585\nTEL02266737988\nBILL NO\nB0000626609/12/2012 6:14PH\nDATE AND TIME\nPAX TABLE\nCASHIER CASHIER\n652\nWAITER :WAITER\naty Henu Itea\nAmount\n2 FRENCH FRIES\n190.00\n1 OPEN FOOD\n60.00\n1.00 MANESHSAUS\n60.00\n1 PANEER TIKKA\n248.00\nTotal\n498.00\nSERVICE TAX 4.94%\n24.60\nGrand Total\n523.00\nVAT NO27840289613V\nSTHANK YOU & UISIT AGAIN ",
+    "expected": {
+      "amount": 523.0
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1176-receipt.jpg",
+    "text": "HEDLEYS\n640 N ROBERTSON BLVD\nWEST HOLLYWOOD CA 90069\n310-659-2009\n3430\nTerminal ID:01528251\n2:52PM\n6/5/17\nCREDIT SALE\nREF#9395\nUID:715615506682\nAUTH#065231\nBATCH#554\n$41.45\nAMOUNT\nTIP\nTOTAL\nAPPROVED\nTC -C0347EEBBF2C362B\nCUSTOMER COPY",
+    "expected": {
+      "amount": 41.45
+    },
+    "review_note": "Card slip has amount 41.45; tip and final total are blank."
+  },
+  {
+    "image": "1177-receipt.jpg",
+    "text": "E1 Charro Cafe Ventana\n6910 E SUNRISE DR\nServer:Ana\n06/24/2018\n8:00PM\nTable 24/1\nGuests:2\n#30076\nCoors Light\n5.00\nIce Tea\n3.25\nShrimp Fajita\n18.95\nStuffed Chicken\n17.95\nSubtotal\n45.15\nTax\n2.75\nTotal\n47.90\nBalance Due\n47.90\nEAT FOR FREE!!!",
+    "expected": {
+      "amount": 47.9
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1178-receipt.jpg",
+    "text": "Gourdough's Public House\n2700 South Lamar B1vd\nAustinTX 78704\nPhone:512)912-9070\n3008 BAR PM B\nChk 7862\nJan21'17 08:56P Gst 1\n1FREEBIRD\n5.50\n1 ICE CREAM\n2.00\n1 LONESTAR\n3.50\nORIGINAL TTL\n11.00\nTAX\n0.91\n09:38PMTOTAL\n11.91\nFo1low us @gourdoughspub on\nFacebook or Twitter for the\nlatest and greatest specials!",
+    "expected": {
+      "amount": 11.91
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1180-receipt.jpg",
+    "text": "inach. Served wth a\n10.95\nmatoes, and Onions. Served with a Mexican salad\n13.95\n10.95\ntie BBQ Sauce.to\ntlla and grilled.S\nEYEE\nd your choice of B\nhos\n(912)341-8897\nato.and tarta\n555BARZ\nich stuffed in our\nChk4427\n3.COR\nGst0\nAug3014 01:20PM\nCilantroLime\n1 Chips y Saisa\n4.95\n1 Red Bu11\n3.50\n1 Soft Drink\n2.79\ncajun seasoning\nh fries or rice &b\nCash\n12.03\nSubtotal\n11.24\nTax\n0.79\nime Pie, Car\nTotal Paid\n12.03\nState Tax\n0.79\n-555 Check Closed\n-Aug3014 0147PM-",
+    "expected": {
+      "amount": 12.03
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1181-receipt.jpg",
+    "text": "DEL FRISC0S #8620\n1221 Avenue of the Americas\nNew York,New York 10020\n1075 Rebekkah\n:9\nChk 1061\nGst 5\ne\nTb1240/1\nApr07'1607:53PM\n1f\nDine In\n4 Strip 16oz\n212.00\n1 Ribeye Bone In\n69.50\n16.50\n1 Cauliflower\n10.50\n1 Baked Potato\n15.50\n1 Asparagus\n1 0nion Rings\n14.50\n16.00\n1 Sauteed Spinach\n25.50\n3 V0ss Spark1ing\n24.00\n6 Coke Bt1\n404.00\nSUBTOTAL\n35.86\nTAX\n439.86\n09:14PM TOTAL DUE\nTHANK YOU FOR VISITING",
+    "expected": {
+      "amount": 439.86
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1182-receipt.jpg",
+    "text": "**********************************\nFinnegan's Way Check 822819\n1344 Ocean Drive\nMiami Beach Florida 33139\nTel.305-672-7747\n08/21/178:38PM\nTable 15 Cust 1\nWaiter 58 IRYNA P\n****************************************\n4 SOBE MOJITO'S\n40.00\nBACARDI LIGHT\nTaxable:\n40.00\nSub-total:\n40.00\nSales Tax 7\n2.80\nResort Tax 2%\nTotal:\n0.80\nVoluntary 18% Tip:\n43.60\nPlease feel free to adjust or remove\n7.20\nthe tip amount at your discretion\nTotal\n50.80",
+    "expected": {
+      "amount": 50.8
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1183-receipt.jpg",
+    "text": "JALISCO\n244.Highway290.W.\nE1ginTX'78621\n512-285-3940 or 512-285-3950\nCheck 94\nTable 6\nNOEMI\n5/19/2019\nGuests 1\n11:38AM\nWater\n0.00\nCaldo de Camaron\n8.99\nSubtotal\n8.99\nSales Tax\n0.74\nProcessing Fee\n0.27\nTOTAL\n10.00\nBALANCE DUE\n10.00\nProcessing fee wil1 be removed\nif the check is paid in cash",
+    "expected": {
+      "amount": 10.0
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1184-receipt.jpg",
+    "text": "****************************************\n0193Table 54 #Party2\nWILLIAMLSvrCk:10 8:07p 03/22/13\nDINING ROOM\nT5 MAIN DINING\n1 BEEFEATER-MARTINI\n11.50\n13.00\n1 ROSEMARY CAIPIRINHA\n17.00\n1CRABCAKES\n12.00\nBLACK PEPPER BACON\n52.00\n1 Mi1lenium 2#\n46.00\n1 NY SIRLOIN\n13.00\nBRUSSEL SPROUTS\n4.50\n1ESPRESSO\n9.00\n1 LAUREN'S HAZELNUT TORTE\nSub Total:\n178.00\nTax\n15.35\n193.35\nSub Total:\n-\n193.35\n03/22 9:53pTOTAL\nSS",
+    "expected": {
+      "amount": 193.35
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1185-receipt.jpg",
+    "text": "JT's Diner\n37011 Cook Street\n760797-2100\n02/12/2016\nServer:Braulio\n10:28AM\n102/1\n50022\nGuests:2\n5.90\nCoffee 2 @2.95\n6.95\nTwo Eggs Any Style\n8.95\nWhole-Wheat Pancakes\nHawaiian Sausage\n4.50\nSubtotal\n26.30\nTax\n2.10\nTotal\n28.40\nBalance Due\n28.40\nThank You",
+    "expected": {
+      "amount": 28.4
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1186-receipt.jpg",
+    "text": "Primo\nFamily Restaurant\n5/3/198:14PM\nDARNIN D.Table:10 Check:137\n3Prem Glass 7.50\n$22.50\n1 MED Veggie 27.00\n$27.00\nSub-Total\n$49.50\nSales Tax\n$2.97\nTotal\n$52.47\nPaysents\nMASTERCARD***6170\n$52.47\nAmount Due\n$0.00\nCharge Receipt\nServer:\nDARWIN D.\nTable No:\n10",
+    "expected": {
+      "amount": 52.47
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1189-receipt.jpg",
+    "text": "MIGUELS MEXICAN\n3035 .KENNEDY BLVD\nTAMPAFL.\n813876-2587\n187MEGAN F\nTb142/1\nChk3923\nGst 2\nJu1051705:53PM\nDINE IN\n2 WATER\n0.00\n1 ENCH VERDE\n12.50\n1 ENCH MANUEL\n12.80\nSubtotal\n25.30\nTax\n1.78\n06:11PM Tota1\n27.08\nPLEASE PAY YOUR SERVER\nTHANK YOU\nFOR CHOOSING MIGUELS CAFE\n--Tear Here\nEmpMEGAN F Table:42 Check#3\nDate:7-5-17",
+    "expected": {
+      "amount": 27.08
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1192-receipt.jpg",
+    "text": "STAMORD'S\n17300SUTHCENTERPARXAY\nTURILAA58188\n206.575.7454\n28120Jane11\nTb1 127/1 Ck3885\nSep301707:36PM\nGst 3\nCHIC TENA\n1 RIBS 1/2 ST\n18.95\n9.95\n1 BRG DELUXE\n14.95\nKTIMING\n9.95\nSUBTOTAL\n33.90\nTAX\n3.39\nTOTAL DUE\n37.29\nMONDAY TO SATURDAY\nHAPPY HOUR\n3 pa to 6 pm and 9 pm to close\nSUNDAY HAPPY HOUR ALL DAY\nJoin Cur EAT DRINK & EARN Club\nto earn reards while dining\nstaurant Ask your serve\nfor detalls or join onl tne a\nw.toecca.rewards",
+    "expected": {
+      "amount": 37.29
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1194-receipt.jpg",
+    "text": "32 Clarendon Street\nBar Rua\nTrans241805ServSion\nTable #520\n17/08/201807:40:22PH\nsOust:4\nQuan Description\nCost\n2 GLS CARRIG LAGER\n6.60\n1WINGS SMALL\n9.00\n1FRESH CO0\n18.00\n1SHELLFISH POT\n22.50\n1FISH CAKES\n7.50\n1PORTION BREAD LARGE\n1.50\nTOTAL:\n65.10\nFacebook : BAR RUA\nTwitter : @BARRUADUB\nREVIEW / TRIPADVISOR\n<-REPRINTED->",
+    "expected": {
+      "amount": 65.1
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1195-receipt.jpg",
+    "text": "Amici Conyers\n1805 Parker RD Suite G110\n1805 Parker RD\n678890-2005\nServer: Nicole\n06/10/2018\nTable 52/1\n1:02PM\nGuests:2\n30004\nSeat 1\nCoke\n2.29\nMargherita Calzcne\n11.99\nSide Caesar\n4.99\nSubtctal\n19.27\nTax\n1.35\nTotal\n20.62\nSeat 2\n******************************************\nCoke\n2.29\nDb1 Stack Cheeseburger\n8.99\nBacon\n0.99\nSubtotal\n12.27\nTax\n0.86\nTctal\n13.13\nSubtotal\n31.54\nTax\n2.21\nTotal\n33.75\n33.75\nBalanceDue\nThank you for dining with us!\nSUGGESTED GRATUITY:",
+    "expected": {
+      "amount": 33.75
+    },
+    "review_note": "Reviewed original image. Unprinted/ambiguous currency, date or merchant requires review; no merchant or location lookup is permitted."
+  },
+  {
+    "image": "1196-receipt.jpg",
+    "text": "***TO GO***\nNAME:CHARES\nCHECK#71128.1\nClosed to Credit Card\nDATE/TIME:12/31/20186:06:02PM\nSERVERTaj\nSTATION:01\nSo happy about your visit\nItem Count:8\n1 TIKKA MASALA\nCHICKEN MURGH\n$20.00\n1PALAK SPINACH\n$18.00\nPANEERCHEESE\n1 VEGAN BENGAN BHARTA*\n$17.00\nSubtotal\n$55.00\nTax\nTotal before tip:\nTip amount:",
+    "expected": {
+      "amount": 58.3
+    },
+    "review_note": "Printed tax 3.30 and total before tip 58.30 are absent from OCR text. Require amount review."
+  },
+  {
+    "image": "invoice_51109311.pdf",
+    "expected": {
+      "category": "ELECTRONICS"
+    },
+    "review_note": "Product descriptions identify electronic hardware; use product-type terms and specifications, not seller/client identity."
+  },
+  {
+    "image": "invoice_51109322.pdf",
+    "expected": {
+      "category": "ELECTRONICS"
+    },
+    "review_note": "Product descriptions identify electronic hardware; use product-type terms and specifications, not seller/client identity."
+  },
+  {
+    "image": "invoice_51109339.pdf",
+    "expected": {
+      "category": "ELECTRONICS"
+    },
+    "review_note": "Product descriptions identify electronic hardware; use product-type terms and specifications, not seller/client identity."
+  },
+  {
+    "image": "invoice_51109347.pdf",
+    "expected": {
+      "category": "ELECTRONICS"
+    },
+    "review_note": "Product descriptions identify electronic hardware; use product-type terms and specifications, not seller/client identity."
+  },
+  {
+    "image": "invoice_51109373.pdf",
+    "expected": {
+      "category": "ELECTRONICS"
+    },
+    "review_note": "Product descriptions identify electronic hardware; use product-type terms and specifications, not seller/client identity."
+  },
+  {
+    "image": "invoice_51109392.pdf",
+    "expected": {
+      "category": "ELECTRONICS"
+    },
+    "review_note": "Product descriptions identify electronic hardware; use product-type terms and specifications, not seller/client identity."
+  },
+  {
+    "image": "invoice_51109393.pdf",
+    "expected": {
+      "category": "ELECTRONICS"
+    },
+    "review_note": "Product descriptions identify electronic hardware; use product-type terms and specifications, not seller/client identity."
+  }
+]

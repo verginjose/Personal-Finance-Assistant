@@ -124,7 +124,13 @@ def parse_file_text(text, *, is_csv=False, is_batch=False, default_currency="INR
                                            date_order=date_order, category_search=category_search)
     if "no_amount" in warnings or "amount_out_of_range" in warnings:
         raise ValueError("Receipt has no reliable amount; review or upload a clearer image")
-    # Keep evidence available to callers without changing the callback document schema.
+    warning_fields = {"no_vendor": "name", "no_date": "date", "date_ambiguous": "date",
+                      "currency_defaulted": "currency", "category_uncertain": "category",
+                      "currency_ambiguous": "currency",
+                      "amount_uncertain": "amount"}
+    review_fields = sorted({warning_fields[w] for w in warnings if w in warning_fields})
+    doc.update(warnings=warnings, evidence=evidence, reviewFields=review_fields,
+               needsReview=bool(review_fields))
     return doc
 
 

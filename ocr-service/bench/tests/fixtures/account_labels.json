@@ -1,0 +1,79 @@
+{
+  "invoice_51109317.pdf": {
+    "vendor": "TechVision Distributors Pvt Ltd",
+    "amount": 1263347.8,
+    "currency": "INR",
+    "date": "2023-08-18",
+    "category": "ELECTRONICS"
+  },
+  "invoice_51109382.pdf": {
+    "vendor": "TechVision Distributors Pvt Ltd",
+    "amount": 782634.6,
+    "currency": "INR",
+    "date": "2023-05-11",
+    "category": "ELECTRONICS"
+  },
+  "1076-receipt.jpg": {
+    "vendor": "Paradise Restaurant",
+    "amount": 25.78,
+    "currency": "USD",
+    "date": "2018-07-21",
+    "category": "RESTAURANTS"
+  },
+  "1004-receipt.jpg": {
+    "vendor": "Golden Bowl Teriyaki",
+    "amount": 15.03,
+    "currency": "USD",
+    "date": "2019-05-18",
+    "category": "RESTAURANTS"
+  },
+  "invoice_51109325.pdf": {
+    "vendor": "TechVision Distributors Pvt Ltd",
+    "amount": 2397277.3,
+    "currency": "INR",
+    "date": "2023-11-19",
+    "category": "ELECTRONICS"
+  },
+  "1168-receipt.jpg": {
+    "vendor": "Carl's Jr",
+    "amount": 7.61,
+    "currency": "USD",
+    "date": "2017-09-27",
+    "category": "RESTAURANTS"
+  },
+  "1097-receipt.jpg": {
+    "vendor": "El Pollo Loco",
+    "amount": 13.12,
+    "currency": "USD",
+    "date": "2017-06-28",
+    "category": "RESTAURANTS"
+  },
+  "invoice_51109312.pdf": {
+    "vendor": "TechVision Distributors Pvt Ltd",
+    "amount": 2060083.3,
+    "currency": "INR",
+    "date": "2024-03-07",
+    "category": "ELECTRONICS"
+  },
+  "1175-receipt.jpg": {
+    "vendor": "Bar Louie Huntsville",
+    "amount": 7.56,
+    "currency": "USD",
+    "date": "2015-07-03",
+    "category": "RESTAURANTS"
+  },
+  "invoice_51109314.pdf": {
+    "vendor": "TechVision Distributors Pvt Ltd",
+    "amount": 736059.5,
+    "currency": "INR",
+    "date": "2023-06-03",
+    "category": "ELECTRONICS"
+  },
+  "1016-receipt.jpg": {
+    "vendor": "Chef Wang",
+    "amount": 35.52,
+    "currency": "USD",
+    "date": "2019-02-02",
+    "category": "RESTAURANTS"
+  }
+}

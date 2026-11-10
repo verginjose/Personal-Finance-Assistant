@@ -160,6 +160,9 @@ export async function renderBillScanner(container) {
   }
 
   function confidenceHtml(field, result) {
+    if (result?.reviewFields?.includes(field)) {
+      return `<span class="confidence is-low">${icon('alert-triangle', 'xs')} Check this value</span>`;
+    }
     const value = confidenceFor(field, result);
     if (value == null || Number.isNaN(value)) return '';
     const high = value >= 0.8;
@@ -189,16 +192,15 @@ export async function renderBillScanner(container) {
     scannedAccounting.recurringPeriod = result.recurringPeriod || null;
 
     const form = document.getElementById('bs-preview-form');
-    const now = new Date();
-    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const dateDisplay = result.date
       ? new Date(`${result.date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
       : 'No date detected';
 
     form.innerHTML = `
+      ${result.needsReview ? '<p role="status">Some details could not be confirmed. Check the marked fields before saving.</p>' : ''}
       <div class="ocr-summary">
         <div class="ocr-summary-main">
-          <span class="ocr-summary-label">Detected amount</span>
+          <span class="ocr-summary-label">${result.reviewFields?.includes('amount') ? 'Amount to review' : 'Detected amount'}</span>
           <div class="ocr-amount"><span class="ocr-amount-currency">${esc(currency)}</span><span id="bs-amount-preview">${formatMoney(amount, currency).replace(/^[^\d−-]*/, '')}</span></div>
           <div class="ocr-summary-name" id="bs-name-preview">${esc(result.name || 'Receipt')}</div>
         </div>
@@ -216,13 +218,18 @@ export async function renderBillScanner(container) {
         </div>
         <div class="ocr-field has-fill" style="animation-delay:40ms">
           <label for="bs-amount">Amount</label>
-          <div class="ocr-input-affix"><span>${escapeAttr(currency)}</span><input class="form-input" id="bs-amount" type="text" inputmode="decimal" pattern="^\\d+(\\.\\d{1,2})?$" title="Enter a valid amount" value="${amount}" required></div>
+          <div class="ocr-input-affix"><span id="bs-currency-affix">${escapeAttr(currency)}</span><input class="form-input" id="bs-amount" type="text" inputmode="decimal" pattern="^\\d+(\\.\\d{1,2})?$" title="Enter a valid amount" value="${result.reviewFields?.includes('amount') ? '' : amount}" required></div>
           ${confidenceHtml('amount', result)}
         </div>
         <div class="ocr-field has-fill" style="animation-delay:80ms">
           <label for="bs-date">Date</label>
-          <input class="form-input" id="bs-date" type="date" value="${escapeAttr(result.date || todayIso)}">
+          <input class="form-input" id="bs-date" type="date" value="${escapeAttr(result.date || '')}" required>
           ${confidenceHtml('date', result)}
+        </div>
+        <div class="ocr-field has-fill">
+          <label for="bs-currency">Currency</label>
+          <input class="form-input" id="bs-currency" value="${result.reviewFields?.includes('currency') ? '' : escapeAttr(currency)}" placeholder="e.g. USD" pattern="[A-Za-z]{3}" maxlength="3" required>
+          ${confidenceHtml('currency', result)}
         </div>
         <div class="ocr-field has-fill" style="animation-delay:120ms">
           <label for="bs-category">Category</label>
@@ -312,17 +319,24 @@ export async function renderBillScanner(container) {
 
     const syncSummary = () => {
       const value = parseFloat((amountInput.value || '0').toString().replace(/[^0-9.]/g, '')) || 0;
-      if (amountPreview) amountPreview.textContent = formatMoney(value, currency).replace(/^[^\d−-]*/, '');
+      const enteredCurrency = document.getElementById('bs-currency').value.trim().toUpperCase();
+      const displayCurrency = /^[A-Z]{3}$/.test(enteredCurrency) ? enteredCurrency : currency;
+      document.querySelector('.ocr-amount-currency').textContent = displayCurrency;
+      document.getElementById('bs-currency-affix').textContent = displayCurrency;
+      if (amountPreview) amountPreview.textContent = formatMoney(value, displayCurrency).replace(/^[^\d−-]*/, '');
       if (namePreview) namePreview.textContent = nameInput.value.trim() || 'Receipt';
     };
-    [amountInput, nameInput].forEach(el => el.addEventListener('input', syncSummary));
+    [amountInput, nameInput, document.getElementById('bs-currency')].forEach(el => el.addEventListener('input', syncSummary));
 
     document.getElementById('bs-scan-another').onclick = () => {
       resetScanner();
       fileInput.click();
     };
 
-    form.onsubmit = (e) => { e.preventDefault(); saveTransaction(userId); };
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      if (form.reportValidity()) saveTransaction(userId);
+    };
   }
 
   function showError(message) {
@@ -401,7 +415,7 @@ export async function renderBillScanner(container) {
     try {
       const type = document.getElementById('bs-type').value;
       const amount = parseFloat(document.getElementById('bs-amount').value) || 0;
-      const currency = scannedAccounting.currency || Auth.getDefaultCurrency();
+      const currency = document.getElementById('bs-currency').value.trim().toUpperCase();
       const dateVal = document.getElementById('bs-date').value;
       const isRecurring = document.getElementById('bs-recurring').checked;
       const dest = document.getElementById('bs-dest').value;

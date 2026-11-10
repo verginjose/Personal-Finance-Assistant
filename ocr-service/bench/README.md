@@ -1,8 +1,44 @@
 # OCR pod benchmark
 
-Measures the OCR service's real pipeline inside the running pod: PaddleOCR
-inference, thread-safety of the shared engine, local deterministic extraction on real OCR text,
-and the resulting per-receipt throughput.
+Measures PaddleOCR inference, thread safety, deterministic extraction on real
+OCR text and per-receipt throughput.
+
+## OCR-only accuracy regression
+
+`verify_service.py` exercises the candidate production `_parse_bill` adapter
+with the running service's image recognizer and the candidate PDF extractor.
+Run it in the OCR runtime with this checkout available (PyMuPDF, PaddleOCR and
+the existing internal token are needed):
+
+```bash
+python3 ocr-service/bench/verify_service.py \
+  --samples /path/to/receipts-and-invoices --out /tmp/ocr-report.json
+python3 -m unittest discover -s ocr-service/tests -v
+python3 -m unittest discover -s ocr-service/bench/tests -v
+```
+
+The verifier scores reviewed receipt fields, the 91 previously flagged documents,
+and source metadata for all 100 PDF invoices, including product descriptions.
+Matches, explicit review abstentions and confident errors are reported separately;
+an abstention is never counted as an accuracy match. Other inputs count only as
+processing checks. Callbacks are captured in memory; no jobs, ledger writes or FX requests
+are made. Conversion uses fixed test rates. Use `--labelled-only` for the labelled
+subset. Candidate code can be staged in a temporary directory in the existing
+OCR container; this does not change the deployed process.
+
+Receipts now return `warnings`, `evidence`, `reviewFields` and `needsReview`.
+Unknown currency retains the configured fallback with a currency review flag.
+Ambiguous numeric dates without country evidence return null for review;
+`OCR_DATE_ORDER=dmy|mdy` remains an explicit override. Automatic date-order
+evidence uses printed format declarations and structured fiscal identifiers.
+There are no merchant-name or state/address lookup tables. Currency comes from
+printed ISO codes, symbols or fiscal identifiers. A bare dollar sign is flagged
+as ambiguous. Merchant names preserve readable header text without dictionary
+canonicalization. PDF item extraction
+uses column coordinates for supported invoice tables, with text fallback for
+unrecognized layouts. Mixed PDFs read each scanned page.
+
+Latest candidate validation: [2026-11-10 summary](results/2026-11-10/summary.json).
 
 ## OCR text endpoint
 

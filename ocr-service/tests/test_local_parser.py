@@ -73,6 +73,13 @@ class LocalParserTests(unittest.TestCase):
         self.assertEqual(result['amountInr'], 800)
         batch = asyncio.run(scope['_parse_bill']('user', b'name,amount,type,currency\nCafe,10,Expense,USD\n', 'test.csv', 'text/csv', True))
         self.assertEqual(batch[0], result)
+        scope['_extract_text_from_image_bytes'] = lambda data, filename: 'Acme\n07/03/2024\nTOTAL 10.00'
+        receipt = asyncio.run(scope['_parse_bill']('user', b'image', 'test.jpg', 'image/jpeg'))
+        self.assertTrue(receipt['needsReview'])
+        self.assertIn('currency', receipt['reviewFields'])
+        self.assertIn('date_ambiguous', receipt['warnings'])
+        self.assertEqual(receipt['evidence']['currency_source'], 'default')
+        self.assertIsNone(receipt['date'])
 
 
 if __name__ == '__main__':

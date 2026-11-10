@@ -1,0 +1,102 @@
+{
+  "documents": 300,
+  "processed": 300,
+  "labelled_documents": 189,
+  "field_checks": 625,
+  "captured_callbacks": 189,
+  "failures": [],
+  "matched_fields": 617,
+  "review_abstentions": [
+    {
+      "file": "1009-receipt.jpg",
+      "field": "amount",
+      "expected": 30.76,
+      "actual": 36.78
+    },
+    {
+      "file": "1097-receipt.jpg",
+      "field": "currency",
+      "expected": "USD",
+      "actual": "INR"
+    },
+    {
+      "file": "1117-receipt.jpg",
+      "field": "amount",
+      "expected": 173.07,
+      "actual": 158.07
+    },
+    {
+      "file": "1168-receipt.jpg",
+      "field": "currency",
+      "expected": "USD",
+      "actual": "INR"
+    },
+    {
+      "file": "1175-receipt.jpg",
+      "field": "currency",
+      "expected": "USD",
+      "actual": "INR"
+    },
+    {
+      "file": "1175-receipt.jpg",
+      "field": "date",
+      "expected": "2015-07-03",
+      "actual": null
+    },
+    {
+      "file": "1196-receipt.jpg",
+      "field": "amount",
+      "expected": 58.3,
+      "actual": 55.0
+    },
+    {
+      "file": "invoice_51109393.pdf",
+      "field": "category",
+      "expected": "ELECTRONICS",
+      "actual": "OTHERS"
+    }
+  ],
+  "reviewed_flagged_documents": 91,
+  "duration_s": 27.18,
+  "scope": "Candidate production adapter + live OCR; callbacks captured; fixed FX rates; no ledger writes",
+  "date": "2026-11-10",
+  "service_tests": {
+    "passed": 35,
+    "skipped": 0
+  },
+  "parser_tests": {
+    "passed": 19
+  },
+  "scanner_tests": {
+    "passed": 4
+  },
+  "ocr_harness_tests": {
+    "passed": 1
+  },
+  "needs_review": 199,
+  "warnings": {
+    "currency_ambiguous": 112,
+    "currency_defaulted": 82,
+    "no_date": 62,
+    "date_ambiguous": 46,
+    "amount_uncertain": 12,
+    "no_line_items": 8,
+    "category_uncertain": 8,
+    "no_vendor": 5
+  },
+  "limitations": [
+    "Merchant and state lookup tables were removed. Unprinted or ambiguous currency/date/merchant values require manual review.",
+    "Review abstentions are not counted as correct extraction matches. The three image totals absent from OCR text remain explicitly flagged.",
+    "111 image fixtures have no reviewed field labels; processing success does not establish their accuracy.",
+    "Candidate code was tested in an isolated directory in the OCR container; the deployed process was not replaced."
+  ],
+  "source_sha256": {
+    "category_search.py": "2334fa17cfb195a9413c96ce547bce717630a6f17be6dee21c7b49d26152ec37",
+    "readiness.py": "c744d3d1e06170d0808d97247c416082f77b9381dfea8d11454765a4e9ec7d34",
+    "accounting.py": "0c4a8e5feef9eb398454e35f300909296bbced5eaf85ceb7ac800c7e5bb9d583",
+    "document_parser.py": "075ffc2ab0b8c2c31809d799f515738c4f1c937e6c802ee116bcfa64f67b7153",
+    "main.py": "0dc3f6d3b6e64e1a95a44aa370b43d68019063bb685703bf9b40cf5db33d2210",
+    "receipt_parser.py": "545d0c943ba03a7af4749fefc6fe90f99d1ca0766598de3d1f5fa547f68e0a68",
+    "pdf_layout.py": "ba0019fad9ecb09aa61b37afea1429b3aeaa494e9c92e98d9c49a99acf1d48f8"
+  }
+}

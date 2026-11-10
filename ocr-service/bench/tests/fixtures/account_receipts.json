@@ -1,0 +1,123 @@
+[
+  {
+    "image": "invoice_51109317.pdf",
+    "text": "Invoice no: 51109317\nDate of issue:\n18/08/2023\nSeller:\nTechVision Distributors Pvt Ltd\nPlot 14, MIDC Industrial Area, Andheri East\nMumbai, Maharashtra - 400093\nTax Id: 27AABCT1234F1Z5\nGSTIN: 27AABCT1234F1Z5\nClient:\nCoimbatore IT Solutions\n90 Avinashi Road\nCoimbatore, Tamil Nadu - 641018\nTax Id: 990-90-3260\nITEMS\nNo.\nDescription\nQty\nUM\nNet Price\nNet Worth\nVAT %\nGross\nWorth\n1.\nSony Alpha ZV-E10 Mirrorless Kit 16-50\n8.00\npcs\n64,059.00\n512,472.00\n10%\n563,719.20\n2.\nLG 43 inch 4K UHD Smart WebOS TV\n4.00\npcs\n53,264.00\n213,056.00\n10%\n234,361.60\n3.\nDell XPS 13 Intel i7 16GB 512GB\n1.00\npcs\n117,529.00\n117,529.00\n10%\n129,281.90\n4.\nSamsung Galaxy Watch6 Classic 47mm\n1.00\npcs\n25,709.00\n25,709.00\n10%\n28,279.90\n5.\nGarmin Fenix 7 Solar Multisport GPS\n4.00\npcs\n69,933.00\n279,732.00\n10%\n307,705.20\nSUMMARY\nVAT %\nNet Worth\nVAT\nGross Worth\n10%\n1,148,498.00\n114,849.80\n1,263,347.80\nTotal\nINR 1,148,498.00\nINR\n114,849.80\nINR 1,263,347.80\n",
+    "expected": {
+      "vendor": "TechVision Distributors Pvt Ltd",
+      "amount": 1263347.8,
+      "currency": "INR",
+      "date": "2023-08-18",
+      "category": "ELECTRONICS"
+    }
+  },
+  {
+    "image": "invoice_51109382.pdf",
+    "text": "Invoice no: 51109382\nDate of issue:\n11/05/2023\nSeller:\nTechVision Distributors Pvt Ltd\nPlot 14, MIDC Industrial Area, Andheri East\nMumbai, Maharashtra - 400093\nTax Id: 27AABCT1234F1Z5\nGSTIN: 27AABCT1234F1Z5\nClient:\nBhubaneswar Tech Hub\n23 Janpath Nayapalli\nBhubaneswar, Odisha - 751022\nTax Id: 747-53-7053\nITEMS\nNo.\nDescription\nQty\nUM\nNet Price\nNet Worth\nVAT %\nGross\nWorth\n1.\nApple Watch Series 9 GPS 45mm\nMidnight\n6.00\npcs\n53,381.00\n320,286.00\n10%\n352,314.60\n2.\nApple iPad Air M1 64GB WiFi Space\nGrey\n6.00\npcs\n65,200.00\n391,200.00\n10%\n430,320.00\nSUMMARY\nVAT %\nNet Worth\nVAT\nGross Worth\n10%\n711,486.00\n71,148.60\n782,634.60\nTotal\nINR 711,486.00\nINR 71,148.60\nINR 782,634.60\n",
+    "expected": {
+      "vendor": "TechVision Distributors Pvt Ltd",
+      "amount": 782634.6,
+      "currency": "INR",
+      "date": "2023-05-11",
+      "category": "ELECTRONICS"
+    }
+  },
+  {
+    "image": "1076-receipt.jpg",
+    "text": "Paradise Restaurant\n889 W. 190th Street\nLos AngelesCA 90248\nph 310-324-4800\nOur Family Thanks you\nTravel Safely\nwww.paradisedine.com\nTABLE:Kae#31-1 Guiest\nYour Server was Kae]\n7/21/2018 10:03:14 PM-ID #0375509\nSubtotal\n$20.00\nTotal Taxes\n$2.18\nAutomatic Gratuity\n$3.60\nGrand Total\n$25.78\nredit Purchase",
+    "expected": {
+      "vendor": "Paradise Restaurant",
+      "amount": 25.78,
+      "currency": "USD",
+      "date": "2018-07-21",
+      "category": "RESTAURANTS"
+    }
+  },
+  {
+    "image": "1004-receipt.jpg",
+    "text": "GOLDEN BOWL TERIYAKI\n8610 GARFIELD AVE.\nSOUTH GATE,CA.90280\nTEL562928-8999\nREG\n05-18-2019 11:19AM\nManager1\nMC#01\n000141\nORDER#\nC00141\n1#1 CHKNPLATE\n$9.39\n1+AVOCADO\n$1.95\n1MD.DRINK\n$2.29\nKHERE\nTAX\n$1.40\nTOTAL\n$15.03\nCASH\n$20.00\n$4.97\nCG",
+    "expected": {
+      "vendor": "Golden Bowl Teriyaki",
+      "amount": 15.03,
+      "currency": "USD",
+      "date": "2019-05-18",
+      "category": "RESTAURANTS"
+    }
+  },
+  {
+    "image": "invoice_51109325.pdf",
+    "text": "Invoice no: 51109325\nDate of issue:\n19/11/2023\nSeller:\nTechVision Distributors Pvt Ltd\nPlot 14, MIDC Industrial Area, Andheri East\nMumbai, Maharashtra - 400093\nTax Id: 27AABCT1234F1Z5\nGSTIN: 27AABCT1234F1Z5\nClient:\nRajkot Mobile World\n23 Kalawad Road\nRajkot, Gujarat - 360005\nTax Id: 641-62-9990\nITEMS\nNo.\nDescription\nQty\nUM\nNet Price\nNet Worth\nVAT %\nGross\nWorth\n1.\nHP Pavilion 15 Ryzen 5 8GB 512GB\n10.00\npcs\n63,101.00\n631,010.00\n10%\n694,111.00\n2.\nGoPro Hero 12 Black Action Camera\n9.00\npcs\n38,686.00\n348,174.00\n10%\n382,991.40\n3.\nSony WH-1000XM5 Wireless\nHeadphones\n6.00\npcs\n32,890.00\n197,340.00\n10%\n217,074.00\n4.\nLenovo IdeaPad Slim 5 i5 16GB 512GB\n2.00\npcs\n66,370.00\n132,740.00\n10%\n146,014.00\n5.\nWestern Digital 2TB My Passport HDD\n4.00\npcs\n6,326.00\n25,304.00\n10%\n27,834.40\n6.\nDell 27 inch 4K USB-C IPS Monitor\n10.00\npcs\n44,323.00\n443,230.00\n10%\n487,553.00\n7.\nSamsung T7 Shield 1TB Portable SSD\n3.00\npcs\n11,794.00\n35,382.00\n10%\n38,920.20\n8.\nLG 43 inch 4K UHD Smart WebOS TV\n7.00\npcs\n52,309.00\n366,163.00\n10%\n402,779.30\nSUMMARY\nVAT %\nNet Worth\nVAT\nGross Worth\n10%\n2,179,343.00\n217,934.30\n2,397,277.30\nTotal\nINR 2,179,343.00\nINR\n217,934.30\nINR 2,397,277.30\n",
+    "expected": {
+      "vendor": "TechVision Distributors Pvt Ltd",
+      "amount": 2397277.3,
+      "currency": "INR",
+      "date": "2023-11-19",
+      "category": "ELECTRONICS"
+    }
+  },
+  {
+    "image": "1168-receipt.jpg",
+    "text": "CARL'SJR\nRestaurant 1100580\n11961 Beach B1vd.\nStantonCA 90680\n714895-5114\n9/27/2017\n12:13:06PM\nOrder 375719\nCashier: Alvaro I\n1Box#1\n0.00\n1 All Star Meal #1\n1.00\nDb1 Chbgr\n0.00\nHot Dog\n0.00\nBaked Cookie\n0.00\nLg Fries\n3.00\nLg Bev Bar\n3.00\nSubTotal\n7.00\nTax\n0.61\nTotal\n7.61\nCash\n8.00\nChange\n0.39\nTo Go\nThank you for visiting!\nTicket #45\nItems in bag(s):4",
+    "expected": {
+      "vendor": "Carl's Jr",
+      "amount": 7.61,
+      "currency": "USD",
+      "date": "2017-09-27",
+      "category": "RESTAURANTS"
+    }
+  },
+  {
+    "image": "1097-receipt.jpg",
+    "text": "EL POLLO LOCO\nRESTAURANT 5451\nST0RE5451\n7519 S.ATLANTIC AVE.\nCUDAHY,CA 90201\n323-560-0758\nR OWA\n257 LIDIA H\nhk 1924\nJun28'1705:36P\nGst\n0\nDrive\nThru\n1 Burrito Cmb\n8.28\nChk Ranchero Bur\nADD\nAvo S1cs\nInd Chips\nSM DRINK\nCoke\n2Bur-BRC @1.89\n3.78\nCash\n13.25\nFood\n12.06\nTax\n1.06\nPayment\n13.12\nChange Due\n0.13\n-257 Check C1osed\nJun281705:38PM\nYour 0rder:1924",
+    "expected": {
+      "vendor": "El Pollo Loco",
+      "amount": 13.12,
+      "currency": "USD",
+      "date": "2017-06-28",
+      "category": "RESTAURANTS"
+    }
+  },
+  {
+    "image": "invoice_51109312.pdf",
+    "text": "Invoice no: 51109312\nDate of issue:\n07/03/2024\nSeller:\nTechVision Distributors Pvt Ltd\nPlot 14, MIDC Industrial Area, Andheri East\nMumbai, Maharashtra - 400093\nTax Id: 27AABCT1234F1Z5\nGSTIN: 27AABCT1234F1Z5\nClient:\nKochi Mobile Hub\n11 MG Road\nKochi, Kerala - 682016\nTax Id: 135-91-7627\nITEMS\nNo.\nDescription\nQty\nUM\nNet Price\nNet Worth\nVAT %\nGross\nWorth\n1.\nApple AirPods Pro 2nd Gen USB-C\n10.00\npcs\n21,336.00\n213,360.00\n10%\n234,696.00\n2.\nSamsung Galaxy Watch6 Classic 47mm\n7.00\npcs\n28,516.00\n199,612.00\n10%\n219,573.20\n3.\nApple MacBook Air M2 8GB 256GB\nSilver\n7.00\npcs\n95,855.00\n670,985.00\n10%\n738,083.50\n4.\nApple iPhone 15 128GB Black\n10.00\npcs\n66,869.00\n668,690.00\n10%\n735,559.00\n5.\nSamsung T7 Shield 1TB Portable SSD\n8.00\npcs\n9,403.00\n75,224.00\n10%\n82,746.40\n6.\nWestern Digital 2TB My Passport HDD\n2.00\npcs\n5,084.00\n10,168.00\n10%\n11,184.80\n7.\nJBL Flip 6 Portable Bluetooth Speaker\n4.00\npcs\n8,691.00\n34,764.00\n10%\n38,240.40\nSUMMARY\nVAT %\nNet Worth\nVAT\nGross Worth\n10%\n1,872,803.00\n187,280.30\n2,060,083.30\nTotal\nINR 1,872,803.00\nINR\n187,280.30\nINR 2,060,083.30\n",
+    "expected": {
+      "vendor": "TechVision Distributors Pvt Ltd",
+      "amount": 2060083.3,
+      "currency": "INR",
+      "date": "2024-03-07",
+      "category": "ELECTRONICS"
+    }
+  },
+  {
+    "image": "1175-receipt.jpg",
+    "text": "Bar Louie Huntsville\n365 The Bridge St.,Suite1\nHuntsvi11eAL35806\nServer:\n07/03/2015\nCashier:\n143/2\n4:42PM\nGuests:1\n20111\nReprint #1\nWhiskey\n6.25\n6.25\nSubtotal\nTax\n1.31\nTotal\n7.56\nCASH\n10.00\nChange\n2.44\nThank you for visiting us!\nAsk us about hosting\nyour party or private event\nat Bar Louie Huntsville!\nEat,DrinkBe Happy!\nhuntsvi1le@barlouieamerica.com\nCheck Closed-",
+    "expected": {
+      "vendor": "Bar Louie Huntsville",
+      "amount": 7.56,
+      "currency": "USD",
+      "date": "2015-07-03",
+      "category": "RESTAURANTS"
+    }
+  },
+  {
+    "image": "invoice_51109314.pdf",
+    "text": "Invoice no: 51109314\nDate of issue:\n03/06/2023\nSeller:\nTechVision Distributors Pvt Ltd\nPlot 14, MIDC Industrial Area, Andheri East\nMumbai, Maharashtra - 400093\nTax Id: 27AABCT1234F1Z5\nGSTIN: 27AABCT1234F1Z5\nClient:\nIndore Gadget Market\n34 Vijay Nagar\nIndore, Madhya Pradesh - 452010\nTax Id: 351-29-2557\nITEMS\nNo.\nDescription\nQty\nUM\nNet Price\nNet Worth\nVAT %\nGross\nWorth\n1.\nGarmin Fenix 7 Solar Multisport GPS\n9.00\npcs\n71,185.00\n640,665.00\n10%\n704,731.50\n2.\nBoat Rockerz 550 Bluetooth Headphones\n10.00\npcs\n2,848.00\n28,480.00\n10%\n31,328.00\nSUMMARY\nVAT %\nNet Worth\nVAT\nGross Worth\n10%\n669,145.00\n66,914.50\n736,059.50\nTotal\nINR 669,145.00\nINR 66,914.50\nINR 736,059.50\n",
+    "expected": {
+      "vendor": "TechVision Distributors Pvt Ltd",
+      "amount": 736059.5,
+      "currency": "INR",
+      "date": "2023-06-03",
+      "category": "ELECTRONICS"
+    }
+  },
+  {
+    "image": "1016-receipt.jpg",
+    "text": "Chef Wang\n1902 Jericho Turnpike\nNew Hyde Park NY 11040\nTel:516.354.2858 Fax:516.776.0587\n[A5]\nDine In\n#1022\nServer: lily\n2Person\n02/02/19\n02:14 PM-03:03PM\nScallion Pancake\n$5.25\nLittle Juicy Pork Buns\n$9.95\n1\nBeef w Eak Choy (L)\n$8.75\nHunan Beef (L)\n$8.75\nSubTotal\n$32.70\nSales Tax\n$2.82\nTotal\n$35.52\nThank You\nHave A Nice Day",
+    "expected": {
+      "vendor": "Chef Wang",
+      "amount": 35.52,
+      "currency": "USD",
+      "date": "2019-02-02",
+      "category": "RESTAURANTS"
+    }
+  }
+]

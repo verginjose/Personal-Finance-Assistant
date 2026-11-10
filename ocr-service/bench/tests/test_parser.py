@@ -16,7 +16,8 @@ class ParserTests(unittest.TestCase):
         rows = json.loads((BENCH / "tests/fixtures/ocr_regressions.json").read_text())
         for row in rows:
             with self.subTest(image=row["image"]):
-                doc, evidence, _ = parse_document(row["text"], convert=False, default_currency="USD")
+                # These reviewed fixtures use a known US date convention.
+                doc, evidence, _ = parse_document(row["text"], convert=False, default_currency="USD", date_order="mdy")
                 for field, value in row["expected"].items():
                     self.assertEqual(doc[field], value, field)
                 for field, value in row.get("expected_evidence", {}).items():

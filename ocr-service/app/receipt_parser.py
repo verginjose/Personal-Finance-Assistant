@@ -674,6 +674,9 @@ def detect_currency(text):
     for code in ("USD", "CAD", "EUR", "GBP", "AUD", "SGD", "AED", "INR", "JPY", "MYR"):
         if re.search(r"\b" + code + r"\b", upper):
             return code, "explicit_code"
+    # Ringgit is commonly printed as RM in amount column headings.
+    if re.search(r"\bRM(?=\b|\d)", upper):
+        return "MYR", "symbol"
     if re.search(r"\bVAT\s*:?\s*GB\s*\d{9}\b", upper):
         return "GBP", "country_hint"
     if "€" in text:

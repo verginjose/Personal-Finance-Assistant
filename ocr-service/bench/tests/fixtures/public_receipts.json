@@ -1,0 +1,30 @@
+[
+  {
+    "file": "sroie-receipt.png",
+    "ocr": {
+      "filename": "sroie-receipt.png",
+      "content_type": "image/png",
+      "width": 392,
+      "height": 504,
+      "text": "www.drips.com.sg\nTong Bairu esate\n82 Tlong Poh Road o-05\nSingapore 160082\nTe62220400\n150\n4452\nIERMINAT\nONLINE\n2O/08/1Z(MON)\n12:46\nFHAFEAlired\n230\nLatte\n0\n59.60\nE SKINNYBZ\nBlackberry Almond lart\n$7.50\nM\nCrumbly Aople Crumble larl\n$750\nDessert Oflhe Day\n$7.80\nSCHOPORT\nCinnamon Pear Tanl\n$7.50\n100\nSUB TOTAL\n$39.90\nOTAL5QtY\n$39.90\n250\nTALIENDERED\n$39.90\nCHANGE\n$0.00\nLE\nHave a nice day\nTnanxyou\n150\n3C",
+      "line_count": 42,
+      "chars": 399,
+      "inference_ms": 198.6
+    },
+    "source": "https://github.com/recycletechno/ICDAR-2019-SROIE/blob/main/img/random_receipt_2.png"
+  },
+  {
+    "file": "sroie-malaysia.png",
+    "ocr": {
+      "filename": "sroie-malaysia.png",
+      "content_type": "image/png",
+      "width": 438,
+      "height": 345,
+      "text": "169.78\nToto] Sales (Inclusive Gst) k\n1000\n1.02\nRounding Ad.justaent R\nRoundang R\n139.80\nCASHRMI\n1200.00\nCHANGE RM\n130.20\n1200\nAmount(RM)\nTaxRH\nSST Summary\n160.17\n9.61\nE=\nIhank /ou. Please coze aoain\n1400\nKeep the invoice tor apglicabie returns\n0\n100\n200\n300\n400\n500\n600\n700",
+      "line_count": 29,
+      "chars": 273,
+      "inference_ms": 138.51
+    },
+    "source": "https://github.com/recycletechno/ICDAR-2019-SROIE/blob/main/img/X51005268408_part.png"
+  }
+]

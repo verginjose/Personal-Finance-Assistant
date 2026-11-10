@@ -48,6 +48,19 @@ class ReceiptAccuracyTests(unittest.TestCase):
             self.assertEqual(doc['currency'], 'EUR')
             self.assertEqual(doc['category'], 'ELECTRONICS')
 
+    def test_public_malaysian_receipt_currency(self):
+        rows = json.loads((ROOT / 'ocr-service/bench/tests/fixtures/public_receipts.json').read_text())
+        doc = parse_file_text(rows[1]['ocr']['text'])
+        self.assertEqual(doc['currency'], 'MYR')
+        self.assertNotIn('currency', doc['reviewFields'])
+
+    def test_ringgit_markers_and_explicit_currency_precedence(self):
+        for text in ('TOTAL RM12.50', 'Amount(RM)\n12.50', 'CHANGE RM\n0.00'):
+            self.assertEqual(detect_currency(text), ('MYR', 'symbol'))
+        for text in ('FARM SHOP', 'RMART', 'WARM'):
+            self.assertEqual(detect_currency(text)[1], 'default')
+        self.assertEqual(detect_currency('RM STORE\nTOTAL USD 12.50'), ('USD', 'explicit_code'))
+
     def test_blank_final_total_keeps_amount_flagged(self):
         doc = parse_file_text('Zyphora\nAmount\n158.07\nTip\n500\nTotal')
         self.assertIn('amount', doc['reviewFields'])

@@ -1,0 +1,11 @@
+# Render with: kubectl kustomize --load-restrictor LoadRestrictionsNone k8s/optional/ocr-local
+# Apply only together with a built CPU image. The default GPU manifests remain usable.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../apps/ocr-service.yaml
+images:
+  - name: 127.0.0.1:30500/finance/ocr-service
+    newTag: local-cpu-legacy-v1
+patches:
+  - path: deployment.patch.yaml

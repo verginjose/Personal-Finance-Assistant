@@ -1,0 +1,114 @@
+{
+  "date": "2026-11-25",
+  "scope": "Six locally available labelled receipt images, 30 labelled fields; not a general accuracy claim.",
+  "images": [
+    "1004-receipt.jpg",
+    "1016-receipt.jpg",
+    "1076-receipt.jpg",
+    "1097-receipt.jpg",
+    "1168-receipt.jpg",
+    "1175-receipt.jpg"
+  ],
+  "profiles": {
+    "gpu-current": {
+      "field_counts": {
+        "matched": 26,
+        "review": 4,
+        "wrong": 0
+      },
+      "warm_median_ms": 134.615
+    },
+    "cpu-legacy": {
+      "profile": {
+        "backend": "paddle",
+        "device": "cpu",
+        "profile": "legacy",
+        "threads": 2,
+        "batch": 6,
+        "side_len": 736,
+        "angle": false,
+        "mkldnn": false,
+        "idle_seconds": 2,
+        "timeout_seconds": 180.0,
+        "det_model_dir": "",
+        "rec_model_dir": ""
+      },
+      "field_counts": {
+        "matched": 26,
+        "review": 4,
+        "wrong": 0
+      },
+      "processing_errors": 0,
+      "warm_median_ms": 945.76,
+      "worker_peak_mib": 2320.07,
+      "parent_idle_before_mib": 64.61,
+      "parent_idle_after_mib": 75.66,
+      "worker_unloaded_after_idle": true
+    },
+    "cpu-mobile-v5": {
+      "profile": {
+        "backend": "paddle",
+        "device": "cpu",
+        "profile": "mobile-v5",
+        "threads": 2,
+        "batch": 6,
+        "side_len": 736,
+        "angle": false,
+        "mkldnn": true,
+        "idle_seconds": 2,
+        "timeout_seconds": 180.0,
+        "det_model_dir": "",
+        "rec_model_dir": ""
+      },
+      "field_counts": {
+        "matched": 24,
+        "review": 4,
+        "wrong": 2
+      },
+      "processing_errors": 0,
+      "warm_median_ms": 471.4,
+      "worker_peak_mib": 746.04,
+      "parent_idle_before_mib": 64.0,
+      "parent_idle_after_mib": 74.54,
+      "worker_unloaded_after_idle": true
+    },
+    "tesseract": {
+      "profile": {
+        "backend": "tesseract",
+        "device": "cpu",
+        "profile": "legacy",
+        "threads": 2,
+        "batch": 6,
+        "side_len": 736,
+        "angle": false,
+        "idle_seconds": 2,
+        "timeout_seconds": 180.0,
+        "det_model_dir": "",
+        "rec_model_dir": ""
+      },
+      "field_counts": {
+        "matched": 19,
+        "review": 7,
+        "wrong": 4
+      },
+      "processing_errors": 0,
+      "warm_median_ms": 406.86,
+      "worker_peak_mib": 71.61,
+      "parent_idle_before_mib": 52.93,
+      "parent_idle_after_mib": 62.8,
+      "worker_unloaded_after_idle": true
+    }
+  },
+  "memory_notes": "Worker process RSS/high-water mark, excludes API and GPU VRAM; Tesseract helper peak is excluded. CPU memory cap 3GiB for final legacy run, 2GiB for mobile, 1GiB for Tesseract; two CPU cores each. GPU baseline uses existing live service.",
+  "decision": "Retain GPU compatibility path; CPU legacy is opt-in; mobile and Tesseract fail the silent-error gate. Enable lazy worker/idle release for all profiles.",
+  "package_versions": {
+    "cpu-legacy": {
+      "paddleocr": "2.8.1",
+      "paddlepaddle": "3.2.1"
+    },
+    "cpu-mobile-v5": {
+      "paddleocr": "3.3.2",
+      "paddlepaddle": "3.2.1"
+    }
+  }
+}

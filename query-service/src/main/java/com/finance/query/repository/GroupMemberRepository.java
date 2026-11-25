@@ -11,6 +11,7 @@ import java.util.UUID;
 @Repository
 public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> {
     List<GroupMember> findByGroupId(Long groupId);
+    List<GroupMember> findByGroupIdIn(List<Long> groupIds);
     Optional<GroupMember> findByGroupIdAndUserId(Long groupId, UUID userId);
     boolean existsByGroupIdAndUserId(Long groupId, UUID userId);
     List<GroupMember> findByGroupIdInAndUserId(List<Long> groupIds, UUID userId);

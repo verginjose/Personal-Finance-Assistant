@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -51,6 +52,14 @@ public class QuerySplitController {
         return splitService.getGroup(groupId, requireUserId(xUserId))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/members")
+    @Operation(summary = "Get member lists for up to 50 groups in one request")
+    public ResponseEntity<Map<Long, List<GroupMember>>> getGroupMembersBatch(
+            @RequestHeader("X-User-Id") String xUserId,
+            @RequestParam List<Long> groupIds) {
+        return ResponseEntity.ok(splitService.getGroupMembersBatch(requireUserId(xUserId), groupIds));
     }
 
     @GetMapping("/{groupId}/members")

@@ -247,3 +247,73 @@ describe('renderSplit', () => {
     });
   });
 });
+
+describe('group list latency', () => {
+  const userId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  const json = data => ({ status: 200, ok: true, text: async () => JSON.stringify(data) });
+  let container;
+  beforeEach(() => {
+    Auth.save({ token: 't', userId, email: 'a@b.com' });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+  });
+
+  it('renders usable cards before bulk members and enriches without replacing them', async () => {
+    let finishMembers;
+    global.fetch.mockImplementation(url => {
+      const path = new URL(url).pathname;
+      if (path.endsWith('/groups/members')) return new Promise(resolve => { finishMembers = resolve; });
+      if (path.endsWith('/auth/users/bulk')) return Promise.resolve(json([
+        { userId, profilePicture: '/api/storage/profiles/photo.png' },
+      ]));
+      return Promise.resolve(json([
+        { id: 5, name: 'Trip', currentUserStatus: 'ACCEPTED', currentUserNetBalance: 50 },
+        { id: 6, name: 'Home', currentUserStatus: 'ACCEPTED' },
+      ]));
+    });
+    await renderSplit(container);
+    await vi.waitFor(() => expect(container.querySelectorAll('.group-card')).toHaveLength(2));
+    const card = container.querySelector('.group-card');
+    expect(card.textContent).toContain('Trip');
+    expect(card.querySelector('.group-member-avatar')).toBeNull();
+    await vi.waitFor(() => expect(finishMembers).toBeTypeOf('function'));
+    finishMembers(json({ 5: [{ userId, name: 'Alice', status: 'ACCEPTED' }], 6: [] }));
+    await vi.waitFor(() => expect(card.querySelector('.group-member-avatar img')).toBeTruthy());
+    expect(container.querySelector('.group-card')).toBe(card);
+    expect(global.fetch.mock.calls.filter(([url]) => /\/groups\/\d+\/members/.test(url))).toHaveLength(0);
+    expect(global.fetch.mock.calls.filter(([url]) => new URL(url).pathname.endsWith('/groups/members'))).toHaveLength(1);
+  });
+
+  it('keeps later navigation intact when enrichment completes', async () => {
+    let finishMembers;
+    global.fetch.mockImplementation(url => new URL(url).pathname.endsWith('/groups/members')
+      ? new Promise(resolve => { finishMembers = resolve; })
+      : Promise.resolve(json([{ id: 5, name: 'Trip', currentUserStatus: 'ACCEPTED' }])));
+    await renderSplit(container);
+    await vi.waitFor(() => expect(finishMembers).toBeTypeOf('function'));
+    container.innerHTML = '<h1>Another view</h1>';
+    finishMembers(json({ 5: [{ userId, name: 'Alice', status: 'ACCEPTED' }] }));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(container.innerHTML).toBe('<h1>Another view</h1>');
+  });
+
+  it('limits enrichment to two concurrent batches and twenty IDs per batch', async () => {
+    const pending = [];
+    global.fetch.mockImplementation(url => {
+      const u = new URL(url);
+      if (u.pathname.endsWith('/groups/members')) {
+        expect(u.searchParams.get('groupIds').split(',').length).toBeLessThanOrEqual(20);
+        return new Promise(resolve => pending.push(resolve));
+      }
+      return Promise.resolve(json(Array.from({ length: 65 }, (_, i) => ({
+        id: i + 1, name: `Group ${i + 1}`, currentUserStatus: 'ACCEPTED',
+      }))));
+    });
+    await renderSplit(container);
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    expect(container.querySelectorAll('.group-card')).toHaveLength(65);
+    pending[0](json({})); pending[1](json({}));
+    await vi.waitFor(() => expect(pending).toHaveLength(4));
+    pending[2](json({})); pending[3](json({}));
+  });
+});

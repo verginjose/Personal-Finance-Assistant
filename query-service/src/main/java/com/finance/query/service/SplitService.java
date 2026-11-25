@@ -143,6 +143,38 @@ public class SplitService {
         return memberRepo.findByGroupId(groupId);
     }
 
+    @Transactional(readOnly = true)
+    public Map<Long, List<GroupMember>> getGroupMembersBatch(UUID userId, List<Long> groupIds) {
+        if (groupIds == null || groupIds.isEmpty() || groupIds.size() > 50
+                || groupIds.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "Supply 1 to 50 positive group IDs");
+        }
+        List<Long> ids = groupIds.stream().distinct().toList();
+        // Preserve read-after-write handling with one wait budget for the batch,
+        // rather than a full replica timeout for every requested group.
+        long deadline = System.nanoTime()
+                + com.finance.query.cache.CacheConsistencyGuard.REPLICA_WAIT_MS * 1_000_000L;
+        for (Long id : ids) {
+            var before = consistencyGuard.snapshot("group:" + id);
+            long remaining = (deadline - System.nanoTime()) / 1_000_000L;
+            if (before != null && !before.replicaCaughtUp() && remaining > 0) {
+                consistencyGuard.awaitReplica(before.wal(), remaining);
+            }
+        }
+        Set<Long> allowed = memberRepo.findByGroupIdInAndUserId(ids, userId).stream()
+                .filter(m -> m.getStatus() == GroupMember.InvitationStatus.ACCEPTED)
+                .map(GroupMember::getGroupId).collect(Collectors.toSet());
+        if (!allowed.containsAll(ids)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "Group membership required");
+        }
+        Map<Long, List<GroupMember>> result = new LinkedHashMap<>();
+        ids.forEach(id -> result.put(id, new ArrayList<>()));
+        memberRepo.findByGroupIdIn(ids).forEach(member -> result.get(member.getGroupId()).add(member));
+        return result;
+    }
+
     /**
      * Everyone the user shares an accepted group with, deduplicated, with the
      * group names that connect them. Used by the profile page so people can

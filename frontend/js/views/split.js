@@ -8,6 +8,7 @@ import {
 import { icon } from '../utils/icons.js';
 
 let currentGroupId = null;
+let groupListRequest = 0;
 let expensesPage = 0, expensesTotal = 1;
 let activityPage = 0, activityTotal = 1;
 let activePanel = 'expenses';
@@ -72,12 +73,14 @@ export async function renderSplit(container) {
 async function loadGroups(userId) {
   const el = document.getElementById('sp-content');
   if (!el) return;
+  const requestId = ++groupListRequest;
   const listHeader = document.getElementById('sp-list-header');
   if (listHeader) listHeader.hidden = false;
   el.innerHTML = '<div class="spinner-center"><span class="spinner"></span></div>';
 
   try {
     const groups = await api.get('/upsert/groups', { userId });
+    if (!el.isConnected || requestId !== groupListRequest || currentGroupId) return;
     if (!groups.length) {
       el.innerHTML = emptyState('users', 'No groups yet',
         'Create a group to split bills with the people you share costs with.',
@@ -88,35 +91,6 @@ async function loadGroups(userId) {
 
     const activeGroups = groups.filter(g => !g.isArchived);
     const archivedGroups = groups.filter(g => g.isArchived);
-
-    // Member avatars live on a separate endpoint; load them for the visible cards.
-    const memberMap = new Map();
-    await Promise.all(activeGroups.map(async (g) => {
-      try {
-        const members = await api.get(`/upsert/groups/${g.id}/members`);
-        memberMap.set(g.id, members
-          .filter(m => m.status !== 'PENDING')
-          .map(m => ({ ...m, role: m.role || (String(m.userId) === String(g.createdBy) ? 'ADMIN' : 'MEMBER') })));
-      } catch { memberMap.set(g.id, []); }
-    }));
-
-    // One bulk profile lookup gives every card a real photo and username.
-    try {
-      const ids = [...new Set([...memberMap.values()].flat().map(m => m.userId))];
-      if (ids.length) {
-        const profiles = await api.post('/auth/users/bulk', ids);
-        const byId = new Map((profiles || []).map(p => [p.userId, p]));
-        for (const list of memberMap.values()) {
-          list.forEach(m => {
-            const p = byId.get(m.userId);
-            if (!p) return;
-            m.profilePicture = p.profilePicture || null;
-            m.username = p.username || null;
-            m.email = p.email || null;
-          });
-        }
-      }
-    } catch { /* initials are fine */ }
 
     const owed = groups.reduce((sum, g) => sum + Math.max(0, Number(g.currentUserNetBalance) || 0), 0);
     const owes = groups.reduce((sum, g) => sum + Math.max(0, -(Number(g.currentUserNetBalance) || 0)), 0);
@@ -138,7 +112,7 @@ async function loadGroups(userId) {
     let html = summary;
 
     if (activeGroups.length) {
-      html += `<div class="card-grid card-grid-3">${activeGroups.map(g => groupCard(g, memberMap.get(g.id) || [])).join('')}</div>`;
+      html += `<div class="card-grid card-grid-3">${activeGroups.map(g => groupCard(g, [])).join('')}</div>`;
     } else {
       html += `<p class="meta" style="padding:20px 0">No active groups.</p>`;
     }
@@ -151,7 +125,7 @@ async function loadGroups(userId) {
           </button>
           <div id="archived-groups-container" hidden style="margin-top:var(--s4)">
             <div class="card-grid card-grid-3">
-              ${archivedGroups.map(g => groupCard(g, memberMap.get(g.id) || [])).join('')}
+              ${archivedGroups.map(g => groupCard(g, [])).join('')}
             </div>
           </div>
         </div>`;
@@ -167,9 +141,58 @@ async function loadGroups(userId) {
     });
 
     wireGroupCardActions(el, userId);
+    // Names, balances and actions are useful immediately; avatars are optional.
+    const visibleCards = new Map([...el.querySelectorAll('.group-card')]
+      .map(card => [card.dataset.id, card]));
+    enrichGroupCards(activeGroups.filter(g => g.currentUserStatus !== 'PENDING'),
+      el, visibleCards, userId, requestId);
   } catch (err) {
-    el.innerHTML = `<p style="color:var(--neg)">${esc(err.message)}</p>`;
+    if (el.isConnected && requestId === groupListRequest && !currentGroupId) {
+      el.innerHTML = `<p style="color:var(--neg)">${esc(err.message)}</p>`;
+    }
   }
+}
+
+async function enrichGroupCards(groups, el, cards, userId, requestId) {
+  const current = () => el.isConnected && requestId === groupListRequest
+    && !currentGroupId && Auth.getUserId() === userId;
+  // A bounded number of bulk calls avoids a request burst on large group lists.
+  const chunks = [];
+  for (let i = 0; i < groups.length; i += 20) chunks.push(groups.slice(i, i + 20));
+  async function work() {
+    while (chunks.length && current()) {
+      const chunk = chunks.shift();
+      try {
+        const membersByGroup = await api.get('/upsert/groups/members', {
+          groupIds: chunk.map(g => g.id).join(','),
+        });
+        if (!current()) return;
+        const members = chunk.flatMap(g => (membersByGroup[g.id] || [])
+          .filter(m => m.status !== 'PENDING'));
+        let profiles = new Map();
+        try {
+          const ids = [...new Set(members.map(m => m.userId))];
+          if (ids.length) profiles = new Map((await api.post('/auth/users/bulk', ids))
+            .map(p => [p.userId, p]));
+        } catch { /* member initials still work without profiles */ }
+        if (!current()) return;
+        for (const group of chunk) {
+          const card = cards.get(String(group.id));
+          if (!card?.isConnected) continue;
+          const list = (membersByGroup[group.id] || []).filter(m => m.status !== 'PENDING')
+            .map(m => {
+              const profile = profiles.get(m.userId);
+              return profile ? { ...m, profilePicture: profile.profilePicture || null,
+                username: profile.username || null, email: profile.email || null } : m;
+            });
+          const slot = card.querySelector('[data-members]');
+          if (slot) slot.innerHTML = groupMembersHtml(list);
+        }
+        wireGroupCardActions(el, userId);
+      } catch { /* optional enrichment must not hide usable group cards */ }
+    }
+  }
+  await Promise.all([work(), work()]);
 }
 
 function splitListHeader(userId) {
@@ -187,6 +210,20 @@ function wireListHeader(userId) {
   if (create) create.onclick = () => createGroupModal(userId);
 }
 
+function groupMembersHtml(members) {
+  const shown = members.slice(0, 4);
+  const extra = Math.max(0, members.length - shown.length);
+  return shown.length ? `
+    <div class="group-members">
+      ${shown.map(m => `<button type="button" class="group-member-avatar"
+          data-picture-src="${escAttr(m.profilePicture || '')}"
+          data-name="${escAttr(m.name || m.userName || '')}"
+          aria-label="View ${escAttr(displayName(m.name || m.userName, 'member'))}'s picture">${avatar(displayName(m.name || m.userName, 'Member'), 26, m.profilePicture)}</button>`).join('')}
+      ${extra ? `<span class="group-members-count">+${extra}</span>` : `<span class="group-members-count">${members.length} member${members.length === 1 ? '' : 's'}</span>`}
+    </div>` : '';
+
+}
+
 function groupCard(g, members) {
   const isPending = g.currentUserStatus === 'PENDING';
   const isArchived = g.isArchived;
@@ -197,16 +234,6 @@ function groupCard(g, members) {
   if (balance > 0) balanceHtml = `<div class="group-balance is-pos">You get back ${formatMoney(balance, currency)}</div>`;
   else if (balance < 0) balanceHtml = `<div class="group-balance is-owe">You owe ${formatMoney(Math.abs(balance), currency)}</div>`;
 
-  const shown = members.slice(0, 4);
-  const extra = Math.max(0, members.length - shown.length);
-  const memberHtml = shown.length ? `
-    <div class="group-members">
-      ${shown.map(m => `<button type="button" class="group-member-avatar"
-          data-picture-src="${escAttr(m.profilePicture || '')}"
-          data-name="${escAttr(m.name || m.userName || '')}"
-          aria-label="View ${escAttr(displayName(m.name || m.userName, 'member'))}'s picture">${avatar(displayName(m.name || m.userName, 'Member'), 26, m.profilePicture)}</button>`).join('')}
-      ${extra ? `<span class="group-members-count">+${extra}</span>` : `<span class="group-members-count">${members.length} member${members.length === 1 ? '' : 's'}</span>`}
-    </div>` : '';
 
   return `
     <article class="group-card" data-id="${g.id}" role="button" tabindex="0"
@@ -214,7 +241,7 @@ function groupCard(g, members) {
       ${isArchived ? 'style="opacity:.75"' : ''}>
       <div class="group-name">${esc(g.name)}</div>
       <div class="group-meta">${esc(g.description || '')}</div>
-      ${memberHtml}
+      <div data-members>${groupMembersHtml(members)}</div>
       ${balanceHtml}
       ${isPending ? `
         <div class="sp-pending-actions">

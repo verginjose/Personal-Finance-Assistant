@@ -16,6 +16,7 @@ beforeAll(() => {
 function mockApis() {
   global.fetch.mockImplementation((url) => {
     const u = String(url);
+    if (u.includes('/upsert/notifications')) return Promise.resolve(jsonResponse({ items: [], unread: 3 }));
     if (u.includes('/analytics/ai-insights')) return Promise.resolve(jsonResponse({ insights: [] }));
     if (u.includes('/upsert/entries')) return Promise.resolve(jsonResponse({ content: [], totalPages: 1 }));
     return Promise.resolve(jsonResponse(u.includes('/auth/me') ? { defaultCurrency: 'INR' } : []));
@@ -28,6 +29,11 @@ describe('app shell navigation', () => {
     document.body.innerHTML = '<div id="app"></div>';
     mockApis();
     window.dispatchEvent(new Event('auth-change')); // resets to dashboard + renders
+  });
+
+  it('uses the inbox unread count without another request', async () => {
+    await vi.waitFor(() => expect(document.querySelector('[data-notif-badge]').textContent).toBe('3'));
+    expect(global.fetch.mock.calls.some(([url]) => String(url).includes('/notifications/unread-count'))).toBe(false);
   });
 
   it('exposes every destination on desktop and mobile', () => {

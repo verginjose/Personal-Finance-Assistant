@@ -44,12 +44,9 @@ const NOTIF = { items: [], unread: 0, announced: false };
 async function refreshNotifications() {
   if (!Auth.isLoggedIn()) return;
   try {
-    const [page, count] = await Promise.all([
-      api.get('/upsert/notifications', { page: 0, size: 25 }),
-      api.get('/upsert/notifications/unread-count'),
-    ]);
+    const page = await api.get('/upsert/notifications', { page: 0, size: 25 });
     NOTIF.items = page.items || [];
-    NOTIF.unread = count.unread ?? page.unread ?? 0;
+    NOTIF.unread = page.unread ?? 0;
     updateNotifBadges();
     if (!NOTIF.announced && NOTIF.unread > 0) {
       NOTIF.announced = true;

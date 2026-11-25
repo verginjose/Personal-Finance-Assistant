@@ -172,7 +172,7 @@ public class AuthController {
                 : requestMono.defaultIfEmpty(new RefreshTokenRequest(null));
         return body
                 .map(request -> cookieToken != null && !cookieToken.isBlank()
-                        ? cookieToken : request.refreshToken())
+                        ? cookieToken : (request.refreshToken() == null ? "" : request.refreshToken()))
                 .flatMap(token -> {
                     if (token == null || token.isBlank()) {
                         return Mono.error(new AuthService.InvalidRefreshTokenException("Missing refresh token"));
@@ -195,7 +195,7 @@ public class AuthController {
                 : requestMono.defaultIfEmpty(new LogoutRequest(null));
         return body
                 .map(request -> cookieToken != null && !cookieToken.isBlank()
-                        ? cookieToken : request.refreshToken())
+                        ? cookieToken : (request.refreshToken() == null ? "" : request.refreshToken()))
                 .flatMap(refreshToken -> authService.logout(refreshToken, authHeader))
                 .thenReturn(ResponseEntity.ok()
                         .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())

@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ocr-service
+  namespace: pfa
+spec:
+  template:
+    spec:
+      tolerations: []
+      containers:
+        - name: ocr-service
+          env:
+            - name: OCR_DEVICE
+              value: cpu
+            - name: OCR_MODEL_PROFILE
+              value: legacy
+            - name: OCR_CPU_THREADS
+              value: "2"
+            - name: OCR_IDLE_SECONDS
+              value: "300"
+            - name: OCR_PRELOAD
+              value: "false"
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: void
+            - name: FLAGS_fraction_of_gpu_memory_to_use
+              value: "0"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              memory: 3Gi
+              nvidia.com/gpu: null
+          volumeMounts:
+            - name: paddle-cache
+              mountPath: /root/.paddlex
+              subPath: paddlex

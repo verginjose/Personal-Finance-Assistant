@@ -1,0 +1,31 @@
+# CPU-only alternatives. No CUDA image or paddlepaddle-gpu wheel.
+# docker build -f Dockerfile.cpu --target legacy -t finance/ocr-service:cpu-legacy .
+# docker build -f Dockerfile.cpu --target mobile -t finance/ocr-service:cpu-mobile .
+# docker build -f Dockerfile.cpu --target tesseract -t finance/ocr-service:tesseract .
+FROM python:3.11-slim-bookworm AS common
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
+    OCR_DEVICE=cpu OCR_CPU_THREADS=2 OCR_IDLE_SECONDS=300 OCR_PRELOAD=false \
+    OMP_NUM_THREADS=2 MKL_NUM_THREADS=2
+RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 libgomp1 libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /srv/app
+COPY requirements-common.txt requirements-cpu-legacy.txt requirements-cpu-mobile.txt /tmp/requirements/
+EXPOSE 8100
+CMD ["uvicorn", "main:app", "--app-dir", "/srv/app", "--host", "0.0.0.0", "--port", "8100", "--workers", "1", "--loop", "uvloop", "--http", "httptools"]
+
+FROM common AS mobile
+RUN pip install --no-cache-dir -r /tmp/requirements/requirements-cpu-mobile.txt
+ENV OCR_MODEL_PROFILE=mobile-v5 OCR_ENABLE_MKLDNN=true
+COPY app/ /srv/app/
+
+FROM common AS tesseract
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir -r /tmp/requirements/requirements-common.txt opencv-python-headless==4.10.0.84
+ENV OCR_BACKEND=tesseract
+COPY app/ /srv/app/
+
+FROM common AS legacy
+RUN pip install --no-cache-dir -r /tmp/requirements/requirements-cpu-legacy.txt
+ENV OCR_MODEL_PROFILE=legacy
+COPY app/ /srv/app/

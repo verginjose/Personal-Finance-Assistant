@@ -4,7 +4,6 @@ import hmac
 import json
 import logging
 import os
-import threading
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -16,7 +15,7 @@ import numpy as np
 from cachetools import TTLCache
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
 from minio import Minio
-from paddleocr import PaddleOCR
+from ocr_runtime import OCRRuntime
 from readiness import consumer_ready
 from document_parser import parse_file_text, analyze_history
 from category_search import CategorySearch
@@ -67,19 +66,14 @@ category_search = CategorySearch(
     model_path=os.getenv("OCR_CATEGORY_MODEL") or None,
 )
 
-# ── PaddleOCR engine & HTTP Client (global, loaded once) ──────────────────────
-ocr_engine: Optional[PaddleOCR] = None
+# ── Lazy OCR runtime & shared HTTP client ──────────────────────
+ocr_engine: Optional[OCRRuntime] = None
 http_client: Optional[httpx.AsyncClient] = None
 minio_client: Optional[Minio] = None
 mq_connection: Optional[aio_pika.RobustConnection] = None
 mq_consumer_task: Optional[asyncio.Task] = None
 mq_subscribed = False
 dead_letter_exchange: Optional[aio_pika.abc.AbstractExchange] = None
-
-# PaddleOCR's predictors are not thread-safe: concurrent calls on one engine
-# fail with Paddle predictor RuntimeErrors. Every inference (RabbitMQ jobs and
-# the /ocr endpoint alike) goes through this lock.
-_ocr_lock = threading.Lock()
 
 
 async def process_mq_message(message: aio_pika.abc.AbstractIncomingMessage):
@@ -135,6 +129,7 @@ async def start_rabbitmq_consumer():
             log.info("Connecting to RabbitMQ")
             mq_connection = await aio_pika.connect_robust(RABBITMQ_URL)
             channel = await mq_connection.channel()
+            await channel.set_qos(prefetch_count=1)
 
             # Parked jobs: the gateway declares the same exchange/queue, and
             # declare_exchange/declare_queue are idempotent.
@@ -180,20 +175,10 @@ async def lifespan(app: FastAPI):
         log.error("INTERNAL_API_TOKEN is not set: internal endpoints and OCR "
                   "completion callbacks will be rejected")
 
-    use_angle_cls = os.getenv("OCR_USE_ANGLE_CLS", "false").lower() == "true"
-    det_limit_side_len = int(os.getenv("OCR_DET_LIMIT_SIDE_LEN", "736"))
-    
-    ocr_engine = PaddleOCR(
-        use_angle_cls=use_angle_cls,
-        lang="en",
-        use_gpu=True,
-        det_db_thresh=0.3,
-        det_db_box_thresh=0.5,
-        rec_batch_num=6,
-        det_limit_side_len=det_limit_side_len,
-        show_log=False,
-    )
-    
+    ocr_engine = OCRRuntime()
+    if os.getenv("OCR_PRELOAD", "false").lower() == "true":
+        await asyncio.to_thread(ocr_engine.warmup)
+
     limits = httpx.Limits(max_keepalive_connections=20, max_connections=50)
     http_client = httpx.AsyncClient(limits=limits, timeout=30.0)
     
@@ -217,6 +202,8 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await http_client.aclose()
+    await asyncio.to_thread(ocr_engine.close)
+    ocr_engine = None
 
 
 app = FastAPI(title="Asynchronous OCR Service", version="3.0.0", lifespan=lifespan)
@@ -251,17 +238,7 @@ def _decode_image(data: bytes) -> np.ndarray:
 def _run_ocr_on_image(img: np.ndarray) -> dict:
     if ocr_engine is None:
         raise RuntimeError("PaddleOCR engine is not initialized yet")
-    t0 = time.perf_counter()
-    use_angle_cls = os.getenv("OCR_USE_ANGLE_CLS", "false").lower() == "true"
-    with _ocr_lock:
-        result = ocr_engine.ocr(img, cls=use_angle_cls)
-    ms = round((time.perf_counter() - t0) * 1000, 2)
-    lines, texts = [], []
-    if result and result[0]:
-        for box, (text, conf) in result[0]:
-            lines.append({"text": text, "confidence": round(conf, 4), "bbox": box})
-            texts.append(text)
-    return {"full_text": "\n".join(texts), "lines": lines, "line_count": len(lines), "inference_ms": ms}
+    return ocr_engine.predict(img)
 
 
 def _extract_text_from_image_bytes(data: bytes, filename: str) -> str:
@@ -468,7 +445,8 @@ async def _park_unparsed(message: "aio_pika.abc.AbstractIncomingMessage", reason
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "engine": "PaddleOCR", "async_mq": True}
+    return {"status": "ok", "engine": "Tesseract" if os.getenv("OCR_BACKEND") == "tesseract" else "PaddleOCR",
+            "async_mq": True}
 
 
 @app.get("/ready")

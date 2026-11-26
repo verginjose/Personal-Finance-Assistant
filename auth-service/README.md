@@ -47,6 +47,6 @@ from the repository root for live auth, storage, routing, SSE and cross-account
 security checks. It creates disposable test accounts. The broader
 `requests/run_golden_test.py` also exercises OCR, groups and cache consistency.
 
-Command and Query remain Spring services. The retired Spring auth/gateway code
+Command and Query were also replaced by Rust services; the retired Spring code
 and deployment can be recovered from Git history; database schema and existing
 user/session formats require no rollback migration.

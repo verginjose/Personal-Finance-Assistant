@@ -259,7 +259,7 @@ kubectl -n pfa exec -it deploy/api-gateway -- sh
 | `ImagePullBackOff` on `127.0.0.1:30500/...` | `curl --cacert .certs/ca.crt --cert .certs/client.crt --key .certs/client.key https://127.0.0.1:30500/v2/` | registry pod down or the mTLS host config lost (`sudo k8s/ci/setup-registry.sh`) |
 | `CrashLoopBackOff` | `logs --previous` | bad config/secret, DB unreachable, port already in use |
 | `Pending` | `describe pod` → events | not enough memory/CPU, or GPU not allocatable (OCR) |
-| `OOMKilled` (exit 137) | `kubectl describe pod` | JVM heap + pod limit too tight; compare `kubectl top pod` |
+| `OOMKilled` (exit 137) | `kubectl describe pod` | process memory + pod limit too tight; compare `kubectl top pod` |
 | `502` from the ingress / tunnel | `kubectl -n pfa get endpoints` | Service has no Ready pods |
 | `401` everywhere | compare `JWT_SECRET` in `api-gateway-secrets` with the auth-service pod | both are rendered from the same `.env` entry; a drift means one Secret was not re-rendered |
 | `413` on upload | `frontend/nginx.conf` `client_max_body_size` | file bigger than 12 MB |

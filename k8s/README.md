@@ -316,7 +316,7 @@ it dies.
 ### Why builds run one at a time
 
 `concurrency: group: build-and-deploy` allows one workflow run at a time, and
-the matrix uses `max-parallel: 1`. Two Maven builds plus the running stack would
+the matrix uses `max-parallel: 1`. Two Rust builds plus the running stack would
 exceed the node's memory, and parallel jobs would race on the tag-bump commit
 (each job pushes a commit to the same branch). Jobs check out the branch tip,
 not the triggering SHA, so each build includes the previous tag bump; a
@@ -493,7 +493,7 @@ and imports the tarballs into containerd.
 SKIP_OCR=1 ./k8s/build-images.sh   # skip the multi-GB CUDA image
 ```
 
-The Spring Dockerfiles compile with Maven inside the image, so the first run is
+The Rust Dockerfiles compile with Cargo inside the image, so the first run is
 slow (5–10 min per service). Rerun this script after any code change, then
 restart the relevant Deployment with `kubectl -n pfa rollout restart deploy/<name>`.
 
@@ -570,7 +570,7 @@ reachable with `port-forward` (they are `ClusterIP` services, matching the
 | Compose | Kubernetes |
 |---|---|
 | named volumes | `volumeClaimTemplates` / PVCs on the default StorageClass |
-| `docker-compose` healthchecks | `readinessProbe` / `livenessProbe`; Spring services also get a `startupProbe` on `/actuator/health/liveness` |
+| `docker-compose` healthchecks | `readinessProbe` / `livenessProbe`; services also get a `startupProbe` on `/actuator/health/liveness` |
 | `restart: on-failure` | automatic pod restarts + probes |
 | Postgres replica runs `pg_basebackup` inline | an `initContainer` seeds the empty PVC once, then streams WAL |
 | Redis had a password-less replica in compose | k8s runs a single `redis` with `--requirepass`; the unused read replica was dropped |
@@ -617,7 +617,7 @@ reachable with `port-forward` (they are `ClusterIP` services, matching the
   `kubectl -n pfa exec deploy/grafana -- grafana cli admin reset-admin-password '<new>'`.
   Otherwise the old hash in `grafana.db` keeps winning and login returns 401.
   Deleting the Grafana PVC also re-initialises, but wipes the SQLite DB.
-- **Per-service config:** non-secret settings (hostnames, ports, JVM flags,
+- **Per-service config:** non-secret settings (hostnames, ports, runtime flags,
   feature toggles) live in a `<service>-config` ConfigMap inside each
   `k8s/apps/<service>.yaml`, so changing them goes through git + Argo like any
   other manifest.

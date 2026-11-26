@@ -325,6 +325,23 @@ fn valid_magic(head: &[u8], kind: &str) -> bool {
         _ => false,
     }
 }
+fn upload_busy_response() -> Response {
+    let mut response = Error(
+        StatusCode::TOO_MANY_REQUESTS,
+        "Too many uploads in progress".into(),
+    )
+    .into_response();
+    // The multipart body has not been consumed. Hyper closes this HTTP/1
+    // connection after the early response; tell the proxy not to pool it.
+    // Otherwise a later POST can race that close and become a 500/502.
+    response
+        .headers_mut()
+        .insert("connection", HeaderValue::from_static("close"));
+    response
+        .headers_mut()
+        .insert("retry-after", HeaderValue::from_static("1"));
+    response
+}
 async fn upload(
     State(app): State<App>,
     headers: HeaderMap,
@@ -334,12 +351,10 @@ async fn upload(
 ) -> Result<Response> {
     let claims = auth::identity(&app, &headers).await?;
     let s = storage(&app);
-    let _permit = s.uploads.try_acquire().map_err(|_| {
-        Error(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Too many uploads in progress".into(),
-        )
-    })?;
+    let _permit = match s.uploads.try_acquire() {
+        Ok(permit) => permit,
+        Err(_) => return Ok(upload_busy_response()),
+    };
     let profile = uri.path() == "/api/profile/upload";
     let batch = uri.path().starts_with("/api/bill/batch-process/");
     let bill = uri.path().starts_with("/api/bill/");
@@ -577,6 +592,60 @@ pub fn routes() -> Router<App> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+
+    #[tokio::test]
+    async fn busy_upload_closes_unread_request_connection() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route("/upload", post(|| async { upload_busy_response() })),
+            )
+            .await
+            .unwrap();
+        });
+        let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
+        // Send only part of a large body: the rejection must complete without
+        // waiting for the client and must forbid reuse of the unread stream.
+        socket.write_all(b"POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100000\r\n\r\npartial body").await.unwrap();
+        let mut reader = BufReader::new(socket);
+        let response = tokio::time::timeout(Duration::from_secs(2), async {
+            let mut headers = String::new();
+            loop {
+                let mut line = String::new();
+                assert!(reader.read_line(&mut line).await.unwrap() > 0);
+                headers.push_str(&line);
+                if line == "\r\n" {
+                    break;
+                }
+            }
+            assert!(headers.starts_with("HTTP/1.1 429"));
+            assert!(
+                headers
+                    .to_ascii_lowercase()
+                    .contains("connection: close\r\n")
+            );
+            assert!(headers.to_ascii_lowercase().contains("retry-after: 1\r\n"));
+            let length: usize = headers
+                .lines()
+                .find_map(|line| {
+                    line.to_ascii_lowercase()
+                        .strip_prefix("content-length: ")
+                        .map(|value| value.parse().unwrap())
+                })
+                .unwrap();
+            let mut body = vec![0; length];
+            reader.read_exact(&mut body).await.unwrap();
+            assert!(String::from_utf8_lossy(&body).contains("Too many uploads"));
+            assert_eq!(reader.read(&mut [0; 1]).await.unwrap(), 0);
+        })
+        .await;
+        server.abort();
+        response.expect("busy upload response must close promptly");
+    }
+
     #[test]
     fn file_validation() {
         assert!(valid_magic(b"\x89PNG\r\n\x1a\n", "image/png"));

@@ -8,12 +8,13 @@ mod subscriptions;
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, Request, State},
+    extract::{FromRequest, Path, Query, Request, State},
     http::{HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing as rt,
 };
+use chrono::{NaiveDate, NaiveDateTime};
 use serde_json::{Value, json};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::{collections::HashMap, time::Duration};
@@ -89,6 +90,38 @@ pub fn ts(v: &chrono::NaiveDateTime) -> String {
     v.to_string().replace(' ', "T")
 }
 
+/// Accept both naive timestamps and the browser's `toISOString()` form
+/// (RFC 3339 with `Z`/offset), normalising offsets to UTC.
+pub fn datetime(value: &str) -> Result<NaiveDateTime> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(bad("Invalid date"));
+    }
+    if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(value) {
+        return Ok(parsed.naive_utc());
+    }
+    for format in [
+        "%Y-%m-%dT%H:%M:%S%.f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S%.f",
+        "%Y-%m-%dT%H:%M",
+    ] {
+        if let Ok(parsed) = NaiveDateTime::parse_from_str(value, format) {
+            return Ok(parsed);
+        }
+    }
+    if let Ok(parsed) = NaiveDate::parse_from_str(value, "%Y-%m-%d")
+        && let Some(datetime) = parsed.and_hms_opt(0, 0, 0)
+    {
+        return Ok(datetime);
+    }
+    Err(bad("Invalid date"))
+}
+
+pub fn date(value: &str) -> Result<NaiveDate> {
+    Ok(datetime(value)?.date())
+}
+
 fn header_user(h: &HeaderMap) -> Result<Uuid> {
     let raw = h
         .get("x-user-id")
@@ -121,10 +154,33 @@ fn query_user(h: &HeaderMap, q: &Params) -> Result<Uuid> {
     Uuid::parse_str(raw).map_err(|_| Error(StatusCode::UNAUTHORIZED, "Invalid user context".into()))
 }
 
-async fn create(
-    State(a): State<App>,
+/// `axum::Json` rejects a body that fails deserialization with 422. Spring maps
+/// the same client error to 400 ("Malformed request body"), so wrap it.
+pub struct JsonBody<T>(pub T);
+
+impl<T, S> FromRequest<S> for JsonBody<T>
+where
+    T: serde::de::DeserializeOwned,
+    S: Send + Sync,
+{
+    type Rejection = Error;
+
+    async fn from_request(
+        req: Request,
+        state: &S,
+    ) -> std::result::Result<Self, Self::Rejection> {
+        let Json(value) = Json::<T>::from_request(req, state)
+            .await
+            .map_err(|rejection: axum::extract::rejection::JsonRejection| {
+                bad(&format!("Malformed request body: {}", rejection.body_text()))
+            })?;
+        Ok(JsonBody(value))
+    }
+}
+
+async fn create(    State(a): State<App>,
     h: HeaderMap,
-    Json(body): Json<entries::EntryRequest>,
+    JsonBody(body): JsonBody<entries::EntryRequest>,
 ) -> Result<Response> {
     let uid = same_user(&h, body.user_id)?;
     let key = h.get("x-idempotency-key").and_then(|v| v.to_str().ok());
@@ -135,7 +191,7 @@ async fn create(
 async fn create_bulk(
     State(a): State<App>,
     h: HeaderMap,
-    Json(body): Json<Vec<entries::EntryRequest>>,
+    JsonBody(body): JsonBody<Vec<entries::EntryRequest>>,
 ) -> Result<Response> {
     let uid = header_user(&h)?;
     if body.is_empty() {
@@ -153,7 +209,7 @@ async fn create_bulk(
 async fn update(
     State(a): State<App>,
     h: HeaderMap,
-    Json(body): Json<entries::EntryRequest>,
+    JsonBody(body): JsonBody<entries::EntryRequest>,
 ) -> Result<Response> {
     let uid = same_user(&h, body.user_id)?;
     Ok(Json(entries::update(&a, uid, body).await?).into_response())
@@ -169,7 +225,7 @@ async fn patch_amount(
     h: HeaderMap,
     Path(id): Path<i64>,
     Query(q): Query<Params>,
-    Json(body): Json<PatchAmount>,
+    JsonBody(body): JsonBody<PatchAmount>,
 ) -> Result<Response> {
     let uid = query_user(&h, &q)?;
     Ok(Json(entries::patch_amount(&a, id, uid, body.amount).await?).into_response())
@@ -190,7 +246,7 @@ async fn bulk_delete(
     State(a): State<App>,
     h: HeaderMap,
     Query(q): Query<Params>,
-    Json(ids): Json<Vec<i64>>,
+    JsonBody(ids): JsonBody<Vec<i64>>,
 ) -> Result<Response> {
     let uid = query_user(&h, &q)?;
     for id in &ids {

@@ -85,7 +85,7 @@ struct GoalRequest {
     target_amount: Option<Value>,
     currency: Option<String>,
     description: Option<String>,
-    deadline: Option<NaiveDate>,
+    deadline: Option<String>,
     priority: Option<String>,
 }
 
@@ -94,7 +94,7 @@ struct GoalRequest {
 struct ContributionRequest {
     amount: Option<Value>,
     description: Option<String>,
-    created_at: Option<NaiveDateTime>,
+    created_at: Option<String>,
     currency: Option<String>,
 }
 
@@ -107,8 +107,8 @@ struct BudgetRequest {
     period: Option<String>,
     currency: Option<String>,
     carry_forward: Option<bool>,
-    custom_start_date: Option<NaiveDate>,
-    custom_end_date: Option<NaiveDate>,
+    custom_start_date: Option<String>,
+    custom_end_date: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -195,7 +195,7 @@ fn goal_json(g: &GoalRow) -> Value {
 async fn create_goal(
     State(a): State<App>,
     h: HeaderMap,
-    Json(body): Json<GoalRequest>,
+    JsonBody(body): JsonBody<GoalRequest>,
 ) -> Result<Response> {
     let user = same_user(&h, body.user_id)?;
     let name = body.name.clone().unwrap_or_default().trim().to_string();
@@ -229,7 +229,13 @@ async fn create_goal(
     .bind(target)
     .bind(&currency)
     .bind(&body.description)
-    .bind(body.deadline)
+    .bind(
+        body.deadline
+            .as_deref()
+            .filter(|v| !v.trim().is_empty())
+            .map(crate::date)
+            .transpose()?,
+    )
     .bind(&priority)
     .fetch_one(&a.db)
     .await?;
@@ -242,7 +248,7 @@ async fn contribute(
     h: HeaderMap,
     Path(id): Path<i64>,
     Query(q): Query<Params>,
-    Json(body): Json<ContributionRequest>,
+    JsonBody(body): JsonBody<ContributionRequest>,
 ) -> Result<Response> {
     let user = query_user(&h, &q)?;
     let amount = parse_amount(
@@ -278,7 +284,13 @@ async fn contribute(
     .bind(amount)
     .bind(&currency)
     .bind(&body.description)
-    .bind(body.created_at)
+    .bind(
+        body.created_at
+            .as_deref()
+            .filter(|v| !v.trim().is_empty())
+            .map(crate::datetime)
+            .transpose()?,
+    )
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query(
@@ -399,7 +411,7 @@ fn budget_json(b: &BudgetRow, spent: Decimal) -> Value {
 async fn create_budget(
     State(a): State<App>,
     h: HeaderMap,
-    Json(body): Json<BudgetRequest>,
+    JsonBody(body): JsonBody<BudgetRequest>,
 ) -> Result<Response> {
     let user = same_user(&h, body.user_id)?;
     let category = body
@@ -423,13 +435,33 @@ async fn create_budget(
         .clone()
         .map(|p| p.to_uppercase())
         .unwrap_or_else(|| "MONTHLY".into());
-    if !PERIODS.contains(&period.as_str()) {
+    if !PERIODS.contains(&period.as_str()) && period != "CUSTOM" {
         return Err(bad("Invalid period"));
     }
     let currency = body.currency.clone().unwrap_or_default();
     if currency.len() != 3 {
         return Err(bad("Currency must be 3 characters"));
     }
+    let custom_start = body
+        .custom_start_date
+        .as_deref()
+        .filter(|v| !v.trim().is_empty())
+        .map(crate::date)
+        .transpose()?;
+    let custom_end = body
+        .custom_end_date
+        .as_deref()
+        .filter(|v| !v.trim().is_empty())
+        .map(crate::date)
+        .transpose()?;
+    // `period` has a CHECK constraint that only allows the four cadences;
+    // "CUSTOM" is a frontend-only concept. Persist MONTHLY and let the custom
+    // date window drive the utilisation range.
+    let period = if period == "CUSTOM" {
+        "MONTHLY".to_string()
+    } else {
+        period
+    };
     let row = sqlx::query_as::<_, BudgetRow>(&format!(
         "INSERT INTO finance.category_budgets \
          (user_id,expense_category,budget_amount,period,currency,active,carry_forward,\
@@ -442,8 +474,8 @@ async fn create_budget(
     .bind(&period)
     .bind(&currency)
     .bind(body.carry_forward.unwrap_or(false))
-    .bind(body.custom_start_date)
-    .bind(body.custom_end_date)
+    .bind(custom_start)
+    .bind(custom_end)
     .fetch_one(&a.db)
     .await?;
     let (start, end) = period_range(&row);
@@ -508,7 +540,7 @@ async fn update_subscription(
     h: HeaderMap,
     Path(id): Path<i64>,
     Query(q): Query<Params>,
-    Json(body): Json<SubscriptionUpdate>,
+    JsonBody(body): JsonBody<SubscriptionUpdate>,
 ) -> Result<Response> {
     let user = query_user(&h, &q)?;
     let name = body.name.clone().unwrap_or_default().trim().to_string();

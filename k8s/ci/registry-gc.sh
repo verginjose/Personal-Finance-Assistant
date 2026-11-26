@@ -132,7 +132,19 @@ manifest_created() {  # repo tag -> RFC3339 creation time from the image config
       | jq -r '.config.digest // empty' || true)"
   fi
   [[ -z "${cfg}" ]] && return 0
-  rcurl -fsSL "${REGISTRY}/v2/$1/blobs/${cfg}" 2>/dev/null | jq -r '.created // empty' || true
+  # Image configs can mix UTC and local offsets. Lexical ordering of the raw
+  # strings made 13:11Z look older than 14:00+05:30, deleting the newer image.
+  # Normalize to UTC before sorting; fractional seconds are irrelevant here.
+  rcurl -fsSL "${REGISTRY}/v2/$1/blobs/${cfg}" 2>/dev/null | jq -r '
+    .created // empty
+    | capture("^(?<date>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\\.[0-9]+)?(?<zone>Z|[+-][0-9]{2}:[0-9]{2})$")
+    | (.date + "Z" | fromdateiso8601) as $local
+    | (if .zone == "Z" then 0 else
+         ((.zone[1:3] | tonumber) * 3600 + (.zone[4:6] | tonumber) * 60)
+         * (if .zone[0:1] == "+" then 1 else -1 end)
+       end) as $offset
+    | $local - $offset | todateiso8601
+  ' || true
 }
 
 # The distribution API has no tag-delete endpoint, and garbage-collect leaves
@@ -155,6 +167,7 @@ rcurl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[] | select(startswit
   [[ -z "${tags}" ]] && continue
 
   : > "${TMP}/tags"
+  unknown_date=false
   for tag in ${tags}; do
     digest="$(manifest_digest "${repo}" "${tag}")"
     if [[ -z "${digest}" ]]; then
@@ -172,10 +185,15 @@ rcurl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[] | select(startswit
       continue
     fi
     created="$(manifest_created "${repo}" "${tag}")"
-    # Fail safe: an unreadable date must never make a tag look oldest. Treat it
-    # as newest so retention keeps it; a bad delete is far worse than a stale tag.
-    printf '%s %s %s\n' "${created:-9999-12-31T23:59:59Z}" "${tag}" "${digest}" >> "${TMP}/tags"
+    if [[ -z "${created}" ]]; then
+      echo "    warn: cannot date ${repo}:${tag}; skipping retention for this repository"
+      unknown_date=true
+    fi
+    printf '%s %s %s\n' "${created}" "${tag}" "${digest}" >> "${TMP}/tags"
   done
+  # Unknown dates make the entire ordering unreliable. Keeping only unknowns
+  # can itself evict a fresh, correctly dated image, so preserve all valid tags.
+  [[ "${unknown_date}" == true ]] && continue
 
   # Resolve what is being kept before deleting anything. Several tags commonly
   # share one manifest digest: builds are byte-for-byte reproducible here, so a

@@ -36,8 +36,8 @@ def run(base, spring_session=None):
         client.cookies.clear()
 
     users = []
-    for _ in range(2):
-        name = 'native_' + uuid.uuid4().hex[:12]
+    for index in range(2):
+        name = ('native_' if index == 0 else 'native.') + uuid.uuid4().hex[:12]
         credentials = {'email': name+'@example.invalid', 'username': name, 'password':'Native-Test-Only-123!', 'defaultCurrency':'INR', 'role':'ADMIN'}
         response = check('register', client.post('/api/auth/register', json=credentials), 201)
         assert response.json()['role'] == 'USER'
@@ -52,6 +52,8 @@ def run(base, spring_session=None):
     auth = {'Authorization':'Bearer '+a['token']}
     other = {'Authorization':'Bearer '+b['token']}
     check('me', client.get('/api/auth/me', headers=auth))
+    check('partial profile preserves legacy username', client.put('/api/auth/profile', headers=other, json={'defaultCurrency':'USD'}))
+    check('malformed JWT rejected',client.get('/api/auth/me',headers={'Authorization':'Bearer a.b.c'}),401)
     check('malformed UUID rejected',client.get('/api/upsert/entries?userId=bad',headers=auth),400)
     check('cross-account ledger denied',client.get('/api/upsert/entries',params={'userId':b['id']},headers={**auth,'X-User-Id':b['id']}),403)
     profile = check('peer profile privacy',client.get('/api/auth/users/'+b['id'],headers=auth)).json()

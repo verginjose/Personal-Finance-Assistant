@@ -426,8 +426,9 @@ async fn profile(
         .get("username")
         .map(|v| v.as_str().unwrap_or("").trim())
         .unwrap_or(&u.username);
-    if !(3..=30).contains(&name.len())
-        || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    if body.get("username").is_some()
+        && (!(3..=30).contains(&name.len())
+            || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'))
     {
         return Err(Error::bad(
             "Username must be 3–30 letters, numbers or underscores",
@@ -437,7 +438,8 @@ async fn profile(
         .get("profilePicture")
         .map(|v| v.as_str().unwrap_or("").trim())
         .unwrap_or(u.profile_picture.as_deref().unwrap_or(""));
-    if !picture.is_empty()
+    if body.get("profilePicture").is_some()
+        && !picture.is_empty()
         && (picture.len() > 512
             || !picture.starts_with("/api/storage/profiles/")
             || !picture

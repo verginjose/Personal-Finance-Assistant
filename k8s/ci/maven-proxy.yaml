@@ -81,7 +81,7 @@ data:
         }
         location ~ ^/cargo/crates/([a-zA-Z0-9_-]+)/([a-zA-Z0-9.+_-]+)/download$ {
           limit_except GET HEAD { deny all; }
-          resolver kube-dns.kube-system.svc.cluster.local valid=300s;
+          resolver kube-dns.kube-system.svc.cluster.local valid=300s ipv6=off;
           proxy_pass https://static.crates.io/crates/$1/$1-$2.crate;
           proxy_set_header Host static.crates.io;
           proxy_ssl_name static.crates.io;

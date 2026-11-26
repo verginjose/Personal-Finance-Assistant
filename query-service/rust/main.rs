@@ -162,8 +162,11 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .username(&std::env::var("DB_USER")?)
         .password(&std::env::var("DB_PASSWORD")?)
         .options([("default_transaction_read_only", "on")]);
+    // Pool size is tunable: 20 starved under 400 users (requests queued on
+    // acquire_timeout). DB replica has max_connections=200.
+    let max_conns: u32 = env("DB_MAX_CONNECTIONS", "50").parse().unwrap_or(50);
     let db = PgPoolOptions::new()
-        .max_connections(20)
+        .max_connections(max_conns)
         .acquire_timeout(Duration::from_secs(10))
         .connect_with(options)
         .await

@@ -1,8 +1,8 @@
-# Advanced CodeQL setup. Default setup cannot drop java-kotlin through the REST
-# API without also dropping the (API-unlisted) rust analysis, so the languages
-# are declared here instead. Rust is analysed with build-mode=none, the only
-# mode its extractor offers. Actions are pinned to full commit SHAs because the
-# repository's Actions policy rejects moving tags.
+# Advanced CodeQL setup. The languages are declared here because default setup
+# cannot drop java-kotlin through the REST API. Rust is intentionally not
+# analysed here: its CodeQL pass adds ~6 minutes per PR, and the Rust services
+# are covered by cargo clippy/build in CI. Actions are pinned to full commit
+# SHAs because the repository's Actions policy rejects moving tags.
 name: CodeQL
 
 on:
@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [actions, javascript-typescript, python, rust]
+        language: [actions, javascript-typescript, python]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
         with:
@@ -36,12 +36,6 @@ jobs:
         uses: github/codeql-action/init@915412ff23e8b7659517e607487dbeae018f2934  # v4.39.5
         with:
           languages: ${{ matrix.language }}
-      - name: Initialize CodeQL (Rust)
-        if: matrix.language == 'rust'
-        uses: github/codeql-action/init@915412ff23e8b7659517e607487dbeae018f2934  # v4.39.5
-        with:
-          languages: rust
-          build-mode: none
       - uses: github/codeql-action/analyze@915412ff23e8b7659517e607487dbeae018f2934  # v4.39.5
         with:
           category: "/language:${{ matrix.language }}"

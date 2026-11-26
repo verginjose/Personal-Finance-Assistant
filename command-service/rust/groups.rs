@@ -116,7 +116,7 @@ struct ExpenseRequest {
     paid_by: Option<Uuid>,
     split_type: Option<String>,
     expense_category: Option<String>,
-    expense_date: Option<NaiveDateTime>,
+    expense_date: Option<String>,
     split_details: Option<Vec<SplitDetail>>,
     receipt_url: Option<String>,
 }
@@ -384,7 +384,7 @@ async fn send_notices(a: &App, notices: Vec<Notice>) {
 async fn create_group(
     State(a): State<App>,
     h: HeaderMap,
-    Json(body): Json<CreateGroup>,
+    JsonBody(body): JsonBody<CreateGroup>,
 ) -> Result<Response> {
     let user = actor(&h)?;
     let created_by = body
@@ -450,7 +450,7 @@ async fn update_group(
     State(a): State<App>,
     h: HeaderMap,
     Path(group_id): Path<i64>,
-    Json(body): Json<UpdateGroup>,
+    JsonBody(body): JsonBody<UpdateGroup>,
 ) -> Result<Response> {
     let user = actor(&h)?;
     let name = body.name.clone().unwrap_or_default().trim().to_string();
@@ -553,7 +553,7 @@ async fn add_member(
     State(a): State<App>,
     h: HeaderMap,
     Path(group_id): Path<i64>,
-    Json(body): Json<AddMember>,
+    JsonBody(body): JsonBody<AddMember>,
 ) -> Result<Response> {
     let user = actor(&h)?;
     let target = body.user_id.ok_or_else(|| bad("userId is required"))?;
@@ -1418,7 +1418,7 @@ async fn add_expense_core(
         paid_by,
         &split_type,
         category.as_deref(),
-        body.expense_date,
+        body.expense_date.as_deref().map(crate::datetime).transpose()?,
         body.receipt_url.as_deref(),
     )
     .await?;
@@ -1483,7 +1483,7 @@ async fn add_expense(
     State(a): State<App>,
     h: HeaderMap,
     Path(group_id): Path<i64>,
-    Json(body): Json<ExpenseRequest>,
+    JsonBody(body): JsonBody<ExpenseRequest>,
 ) -> Result<Response> {
     let user = actor(&h)?;
     let mut tx = a.db.begin().await?;
@@ -1498,7 +1498,7 @@ async fn update_expense(
     State(a): State<App>,
     h: HeaderMap,
     Path((group_id, expense_id)): Path<(i64, i64)>,
-    Json(body): Json<ExpenseRequest>,
+    JsonBody(body): JsonBody<ExpenseRequest>,
 ) -> Result<Response> {
     let user = actor(&h)?;
     let mut tx = a.db.begin().await?;
@@ -1584,7 +1584,7 @@ async fn update_expense(
     .bind(paid_by)
     .bind(&split_type)
     .bind(&category)
-    .bind(body.expense_date)
+    .bind(body.expense_date.as_deref().map(crate::datetime).transpose()?)
     .bind(&body.receipt_url)
     .fetch_one(&mut *tx)
     .await?;

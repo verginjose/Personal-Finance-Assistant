@@ -1,0 +1,126 @@
+# Shares the native image with auth-service; runs only storage and OCR publishing.
+apiVersion: v1
+kind: Service
+metadata:
+  name: storage-service
+  namespace: pfa
+  labels:
+    app: storage-service
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    app: storage-service
+  ports:
+  - name: http
+    port: 8083
+    targetPort: 8083
+  - name: management
+    port: 9090
+    targetPort: 9090
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storage-service-config
+  namespace: pfa
+  labels:
+    app: storage-service
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  SERVICE_MODE: storage
+  REDIS_HOST: redis
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_BUCKET: receipts
+  MINIO_PROFILE_BUCKET: profiles
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: '5672'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-service
+  namespace: pfa
+  labels:
+    app: storage-service
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: storage-service
+  template:
+    metadata:
+      labels:
+        app: storage-service
+        app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        reloader.stakater.com/auto: 'true'
+    spec:
+      terminationGracePeriodSeconds: 20
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 65534
+      containers:
+      - name: storage-service
+        image: 127.0.0.1:30500/finance/auth-service:41da6b02a48d
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        ports:
+        - name: http
+          containerPort: 8083
+        - name: management
+          containerPort: 9090
+        envFrom:
+        - configMapRef:
+            name: storage-service-config
+        - secretRef:
+            name: storage-service-secrets
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: '1'
+            memory: 256Mi
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 9090
+          periodSeconds: 5
+          failureThreshold: 40
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 9090
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 9090
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 4
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

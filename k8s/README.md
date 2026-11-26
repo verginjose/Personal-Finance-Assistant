@@ -40,7 +40,7 @@ k8s/
 │   └── vector.yaml            # DaemonSet (kubelet log files, not the docker socket)
 ├── apps/
 │   ├── auth-service.yaml
-│   ├── api-gateway.yaml
+│   ├── edge-router.yaml
 │   ├── command-service.yaml
 │   ├── query-service.yaml
 │   ├── ocr-service.yaml       # requires an NVIDIA GPU
@@ -153,7 +153,7 @@ operations are in [`ci/README.md`](ci/README.md).
 
 ### What a push updates — and what it does not
 
-Only the six service directories (`auth-service/`, `api-gateway/`,
+Only the six service directories (`auth-service/`, `edge-router/`,
 `command-service/`, `query-service/`, `frontend/`, `ocr-service/`) go through
 the build → tag-bump → Argo path. A commit that touches none of them still runs
 `detect`, finds `services=[]`, **skips the build, and restarts nothing**.
@@ -217,7 +217,7 @@ Caveats:
 | `argocd-dex-server`, `argocd-applicationset-controller`, `argocd-notifications-controller` | `argocd` | Installed, unused (no SSO, one hand-written app, no notifications) | — |
 
 **Application pods** — namespace `pfa`: the six services (`frontend`,
-`api-gateway`, `auth-service`, `command-service`, `query-service`, `ocr-service`) and their
+`edge-router`, `auth-service`, `command-service`, `query-service`, `ocr-service`) and their
 dependencies (`postgres-primary/replica`, `redis`,
 `rabbitmq`, `minio`, `clickhouse`, `vector`, `prometheus`, `grafana`) plus
 `cloudflared` for the public URL. These are *consumers* of the flow, not
@@ -393,7 +393,7 @@ Kubernetes `Service` objects with the same names keep the configuration intact:
 |---|---|---|
 | `spring.cloud.gateway.routes[].uri` | `auth-service:8082`, `command-service:8081`, `query-service:8084` | same |
 | gateway `minio.endpoint` | `minio:9000` | same |
-| `frontend/nginx.conf` `proxy_pass` | `api-gateway:8080` | same |
+| `frontend/nginx.conf` `proxy_pass` | `edge-router:8080` | same |
 | `REDIS_HOST` / `SPRING_DATA_REDIS_HOST` | `redis` | same |
 | `SPRING_DATASOURCE_URL` | `postgres-primary` / `postgres-replica` | same |
 | OCR `RABBITMQ_URL`, `UPSERT_SERVICE_URL` | `rabbitmq`, `command-service` | same |
@@ -588,7 +588,7 @@ reachable with `port-forward` (they are `ClusterIP` services, matching the
   decrypted in-cluster by the Sealed Secrets controller running in
   `kube-system`. `apply.sh` applies `k8s/sealed/` and waits for the Secrets to
   appear. Every Secret is scoped to the workload that reads it: one per
-  application service (`auth-service-secrets`, `api-gateway-secrets`, …), one
+  application service (`auth-service-secrets`, `storage-service-secrets`, …), one
   per infrastructure group (`postgres-secrets`, `redis-secrets`,
   `clickhouse-secrets`, `minio-secrets`, `grafana-secrets`,
   `cloudflared-secrets`) and `pfa-ci-secrets` for the GitHub runner. There is

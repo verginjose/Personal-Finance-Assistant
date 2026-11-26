@@ -29,8 +29,9 @@ flowchart LR
         UI[Web UI / Mobile]
     end
     subgraph Edge
-        GW[API Gateway]
-        Auth[Auth Service]
+        GW[Traefik Edge Router]
+        Auth[Rust Auth Service]
+        Storage[Rust Storage Service]
     end
     subgraph Services
         Command[Command Service]
@@ -54,8 +55,9 @@ flowchart LR
     GW --> Auth
     GW --> Command
     GW --> Query
-    GW --> OCR
-    GW --> MinIO
+    GW --> Storage
+    Storage --> MinIO
+    Storage -.-> RMQ
     Auth --> PG
     Command --> PG
     Query --> PG
@@ -98,23 +100,26 @@ The user interface is engineered as a lightning-fast Single Page Application (SP
 - **Zero-Dependency Core**: Built purely with Vanilla JavaScript (ES6 Modules) and native HTML5/CSS3 to guarantee near-instant load times.
 - **Server-Sent Events (SSE)**: Establishes a real-time, persistent connection with the backend to receive instant UI updates (e.g., when a background AI batch job finishes).
 
-### 2. Edge: API Gateway + Auth Service
-All incoming client traffic passes through the **Spring Cloud Gateway**, which
-does *only* proxy work; credentials are handled by a separate service.
-- **Centralized Routing & CORS**: Routes `/api/auth/**` to Auth, `/api/upsert/**`
-  to Command, `/api/analytics/**` to Query, `/api/storage/**` to MinIO.
-- **Security Validation**: Validates JWT signatures (including the Redis
-  blacklist), then strips any client-supplied `X-User-Id` and injects the value
-  from the signed token.
-- **MinIO Integration**: Streams uploads (bank statements, receipts, avatars) to
-  **MinIO**, off the Netty event loop, then dispatches the async OCR job.
-- **Auth Service**: Owns the `auth.users` schema — registration, login,
-  refresh-token rotation, logout/blacklisting and profile updates. It runs
-  BCrypt on a worker pool, never on an event loop.
+### 2. Edge: Traefik + Rust Auth and Storage
+All API traffic passes through **Traefik** (`edge-router:8080`).
+- **Routing**: `/api/auth/**` goes to Rust auth; writes under `/api/upsert/**`
+  go to Command, reads go to Query; `/api/analytics/**` goes to Query.
+- **Authentication**: Traefik strips client identity headers and calls Rust
+  ForwardAuth, which checks JWT signatures, expiry, Redis revocation and session
+  versions, then provides the trusted `X-User-Id`. Redis rate limits are shared
+  across edge replicas. Short-lived stream tickets authenticate SSE only.
+- **Storage**: Rust `storage-service:8083` spools bounded uploads to disk, checks
+  media signatures, stores private objects in MinIO, and confirms durable OCR
+  jobs through RabbitMQ. Receipt reads check ownership/group access in Command.
+- **Compatibility**: Rust auth retains the existing `auth.users` schema, BCrypt
+  passwords, JWT claims, refresh cookies and Redis session keys. Concurrent
+  refreshes converge on one session pair during the 60-second grace period.
+- **Memory limits**: auth 256 MiB, storage 256 MiB, Traefik 128 MiB. Command and
+  Query remain Spring services. Management endpoints use private port 9090.
 
 ### 3. Core Business Services (CQRS Pattern)
-- **Auth Service**: See §2 — a reactive service of its own (`auth-service:8082`)
-  with its own database schema and the same JWT secret as the gateway.
+- **Auth Service**: See §2 — a Rust/Axum service (`auth-service:8082`)
+  with its own database schema and the same JWT secret as storage.
 - **Command Service**: The primary operational engine. It executes all core mutations (CRUD operations) for transactions, budgets, goals, and shared group bills. It persists canonical state directly to its isolated schema in **PostgreSQL**.
 - **Query Service**: Optimized for ultra-fast reads, aggregations, and dashboard analytics. It maintains a highly optimized cache layer in **Redis** and provides AI-powered financial insights using the **Groq LLM**.
 - **OCR Service**: A Python/FastAPI ML worker. It uses **PaddleOCR** and the shared in-house deterministic parser for receipts and structured CSV imports, with local vector category fallback.
@@ -122,7 +127,7 @@ does *only* proxy work; credentials are handled by a separate service.
 ### 4. Event-Driven Architecture (Asynchronous Flow)
 To ensure high performance and loose coupling, the system leverages **RabbitMQ** and **Redis** for state propagation.
 - **Cache Invalidation & Outbox**: When the Command Service modifies data, it publishes a `transaction-cache-evict` event to RabbitMQ. The Query Service consumes this and instantly invalidates stale pre-computed aggregations in Redis.
-- **Batch AI Processing**: When a user uploads a multi-page Bank Statement PDF, the API Gateway drops the file in MinIO and sends an `ocr.job` event to RabbitMQ. The OCR Service consumes the job, processes receipts and structured CSV locally, and posts the results back to an internal webhook. The Command Service then broadcasts this via SSE so the user's UI updates in real-time.
+- **Batch AI Processing**: When a user uploads a multi-page Bank Statement PDF, the Rust storage service drops the file in MinIO and sends an `ocr.job` event to RabbitMQ. The OCR Service consumes the job, processes receipts and structured CSV locally, and posts the results back to an internal webhook. The Command Service then broadcasts this via SSE so the user's UI updates in real-time.
 
 ### 5. Telemetry & Observability Pipeline
 A robust, enterprise-grade observability stack monitors the entire cluster.
@@ -169,7 +174,7 @@ Services and their in-network ports (see `docker-compose.yml` and
 | Service | Port | Exposed locally |
 |---|---|---|
 | `frontend` (nginx) | 80 | http://localhost:3001 |
-| `api-gateway` | 8080 | http://localhost:8080 |
+| `edge-router` | 8080 | http://localhost:8080 |
 | `auth-service` | 8082 | internal only (reached through the gateway) |
 | `command-service` | 8081 | internal only |
 | `query-service` | 8084 | internal only |
@@ -198,7 +203,7 @@ Expected outcome: `PASS` with every check green. See
 
 Against the k3s cluster, port-forward the gateway first and point the test at it:
 ```bash
-kubectl port-forward -n pfa svc/api-gateway 18090:8080 &
+kubectl port-forward -n pfa svc/edge-router 18090:8080 &
 cd requests
 python3 run_golden_test.py --users 100 --groups 10 --think-time 1.0 \
   --bills 10 --base-url http://localhost:18090 \

@@ -174,7 +174,8 @@ fi
 kubectl -n "${NS}" rollout status deployment/command-service --timeout=300s
 kubectl -n "${NS}" rollout status deployment/query-service --timeout=300s
 kubectl -n "${NS}" rollout status deployment/auth-service --timeout=300s
-kubectl -n "${NS}" rollout status deployment/api-gateway --timeout=300s
+kubectl -n "${NS}" rollout status deployment/edge-router --timeout=300s
+kubectl -n "${NS}" rollout status deployment/storage-service --timeout=300s
 kubectl -n "${NS}" rollout status deployment/frontend --timeout=120s
 
 echo "==> Applying ingress"

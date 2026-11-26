@@ -24,8 +24,8 @@ MEM_Q = ('sum by (pod) (container_memory_working_set_bytes'
          '{namespace="pfa",container!="",container!="POD"})')
 NODE_CPU_Q = '1 - avg(rate(node_cpu_seconds_total{mode="idle"}[30s]))'
 NODE_MEM_Q = 'node_memory_MemAvailable_bytes'
-GW_RPS_Q = ('sum(rate(http_server_requests_seconds_count'
-            '{application="api-gateway"}[15s]))')
+GW_RPS_Q = ('sum(rate(traefik_service_requests_total'
+            '{job="edge-router"}[15s]))')
 
 
 def query(base, q):

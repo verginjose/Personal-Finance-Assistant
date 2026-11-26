@@ -1,0 +1,37 @@
+entryPoints:
+  web:
+    address: ':8080'
+    http:
+      aliasHeadersStrategy: reject
+    transport:
+      respondingTimeouts:
+        readTimeout: 120s
+        writeTimeout: 0s
+        idleTimeout: 180s
+  management:
+    address: ':9090'
+    http:
+      aliasHeadersStrategy: reject
+ping:
+  entryPoint: management
+metrics:
+  prometheus:
+    entryPoint: management
+providers:
+  file:
+    filename: /etc/traefik/routes.yaml
+    watch: false
+log:
+  level: INFO
+  format: json
+accessLog:
+  format: json
+  fields:
+    headers:
+      defaultMode: drop
+    names:
+      RequestPath: drop
+      RequestLine: drop
+      RequestAddr: drop
+      ClientAddr: drop
+      ClientHost: drop

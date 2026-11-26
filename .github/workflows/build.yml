@@ -18,7 +18,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, auth-service, api-gateway, command-service, query-service, frontend, ocr-service]
+        options: [all, auth-service, edge-router, command-service, query-service, frontend, ocr-service]
 
 # Build jobs only read code. Only promotion can push a proposal branch, open
 # its PR, and enable auto-merge for the validated promotion.
@@ -46,6 +46,7 @@ env:
   # Maven resolves through this pull-through cache instead of Central. The
   # certificate is signed by the CI CA, which is passed as a BuildKit secret
   # (id=ci_ca) so the Maven Dockerfiles can import it into the JDK truststore.
+  CARGO_MIRROR_URL: https://maven.pfa.svc.cluster.local:8443/cargo/index/
   MAVEN_MIRROR_URL: https://maven.pfa.svc.cluster.local:8443/
   BUILDKIT_HOST: tcp://buildkitd.pfa-system.svc.cluster.local:1234
   BUILDKIT_TLS_DIR: /certs
@@ -54,7 +55,7 @@ env:
   # asset id used as a download fallback. Bump all three together.
   BUILDCTL_SHA256: 59279df5853bef19a03ec15c5c31b772e59d91d079ab0221e1bafa023cf41c35
   BUILDKIT_ASSET_ID: "186162870"
-  ALL_SERVICES: auth-service api-gateway command-service query-service frontend ocr-service
+  ALL_SERVICES: auth-service edge-router command-service query-service frontend ocr-service
 
 jobs:
   detect:
@@ -187,6 +188,7 @@ jobs:
             --opt filename=Dockerfile \
             --opt build-arg:BASE_IMAGE_REGISTRY="${PUSH_REGISTRY}/base" \
             --opt build-arg:OCR_BASE="${PUSH_REGISTRY}/finance/ocr-base:cu126-py311-v1" \
+            --opt build-arg:CARGO_MIRROR_URL="${CARGO_MIRROR_URL}" \
             --opt build-arg:MAVEN_MIRROR_URL="${MAVEN_MIRROR_URL}" \
             --secret id=ci_ca,src=/certs/ca.crt \
             --output "type=image,name=${PUSH_REGISTRY}/finance/${SERVICE}:${TAG},push=true"
@@ -253,6 +255,9 @@ jobs:
           for svc in $(echo "$SERVICES" | jq -r '.[]'); do
             file="k8s/apps/${svc}.yaml"
             sed -i -E "s#(image: ).*finance/${svc}:.*#\1${PULL_REGISTRY}/finance/${svc}:${TAG}#" "$file"
+            if [[ "$svc" == "auth-service" ]]; then
+              sed -i -E "s#(image: ).*finance/auth-service:.*#\1${PULL_REGISTRY}/finance/auth-service:${TAG}#" k8s/apps/storage-service.yaml
+            fi
             if [[ "$svc" == "ocr-service" ]]; then
               # Activate /ready together with the new image that provides it.
               # The source PR must not send old OCR images to a missing route.

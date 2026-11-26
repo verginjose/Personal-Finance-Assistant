@@ -64,6 +64,33 @@ data:
         proxy_ssl_verify_depth 5;
         proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
 
+        # Cargo sparse index and immutable crate archives share the existing
+        # TLS cache and NetworkPolicy path; BuildKit keeps no internet egress.
+        location = /cargo/index/config.json {
+          default_type application/json;
+          return 200 '{"dl":"https://maven.pfa.svc.cluster.local:8443/cargo/crates","api":"https://crates.io"}';
+        }
+        location /cargo/index/ {
+          limit_except GET HEAD { deny all; }
+          proxy_pass https://index.crates.io/;
+          proxy_set_header Host index.crates.io;
+          proxy_ssl_name index.crates.io;
+          proxy_cache maven;
+          proxy_cache_valid 200 1h;
+          proxy_cache_lock on;
+        }
+        location ~ ^/cargo/crates/([a-zA-Z0-9_-]+)/([a-zA-Z0-9.+_-]+)/download$ {
+          limit_except GET HEAD { deny all; }
+          resolver kube-dns.kube-system.svc.cluster.local valid=300s ipv6=off;
+          proxy_pass https://static.crates.io/crates/$1/$1-$2.crate;
+          proxy_set_header Host static.crates.io;
+          proxy_ssl_name static.crates.io;
+          proxy_cache maven;
+          proxy_cache_valid 200 60d;
+          proxy_cache_lock on;
+        }
+        location /cargo/ { return 404; }
+
         location / {
           limit_except GET HEAD { deny all; }
 

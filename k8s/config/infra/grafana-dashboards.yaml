@@ -2191,7 +2191,7 @@ data:
         ]
       },
       "uid": "finance-assistant",
-      "title": "Finance Assistant — Production Overview",
+      "title": "Finance Assistant \u2014 Production Overview",
       "tags": [
         "finance-assistant"
       ],
@@ -2207,10 +2207,10 @@ data:
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "description": "Prometheus scrape targets currently UP (api-gateway, auth-service, command-service, query-service).",
+          "description": "Prometheus scrape targets currently UP (edge-router, auth-service, storage-service, command-service, query-service).",
           "targets": [
             {
-              "expr": "sum(up{job=~\"api-gateway|auth-service|command-service|query-service\"})",
+              "expr": "sum(up{job=~\"storage-service|edge-router|auth-service|command-service|query-service\"})",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -2269,7 +2269,7 @@ data:
           "description": "HTTP requests per minute handled by all four services.",
           "targets": [
             {
-              "expr": "round(sum(rate(http_server_requests_seconds_count{job=\"api-gateway\"}[$__rate_interval])) * 60)",
+              "expr": "round(sum(rate(traefik_service_requests_total{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval])) * 60)",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -2323,7 +2323,7 @@ data:
           },
           "targets": [
             {
-              "expr": "round(sum(rate(http_server_requests_seconds_count{job=\"api-gateway\",status=~\"5..\"}[$__rate_interval])) * 60)",
+              "expr": "round(sum(rate(traefik_service_requests_total{job=\"edge-router\",service!=\"notifications@file\",code=~\"5..\"}[$__rate_interval])) * 60)",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -2386,7 +2386,7 @@ data:
           "description": "99th percentile request latency across the four Spring services, excluding the SSE stream.",
           "targets": [
             {
-              "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"api-gateway\"}[$__rate_interval]))) * 1000",
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval]))) * 1000",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -2451,7 +2451,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"api-gateway|auth-service|command-service|query-service\"}[$__rate_interval]))",
+              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"storage-service|auth-service|command-service|query-service\"}[$__rate_interval]))",
               "refId": "A",
               "legendFormat": "{{job}}",
               "instant": false,
@@ -2504,7 +2504,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"api-gateway|auth-service|command-service|query-service\",status=~\"5..\"}[$__rate_interval]))",
+              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"storage-service|auth-service|command-service|query-service\",status=~\"5..\"}[$__rate_interval]))",
               "refId": "A",
               "legendFormat": "{{job}}",
               "instant": false,
@@ -2557,14 +2557,14 @@ data:
           },
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"api-gateway|auth-service|command-service|query-service\"}[$__rate_interval]))) * 1000",
+              "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"storage-service|auth-service|command-service|query-service\"}[$__rate_interval]))) * 1000",
               "refId": "A",
               "legendFormat": "{{job}} p95",
               "instant": false,
               "range": true
             },
             {
-              "expr": "histogram_quantile(0.99, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"api-gateway|auth-service|command-service|query-service\"}[$__rate_interval]))) * 1000",
+              "expr": "histogram_quantile(0.99, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"storage-service|auth-service|command-service|query-service\"}[$__rate_interval]))) * 1000",
               "refId": "B",
               "legendFormat": "{{job}} p99",
               "instant": false,
@@ -2610,7 +2610,7 @@ data:
         },
         {
           "id": 10,
-          "title": "Gateway latency by route (max)",
+          "title": "Gateway route p99 latency",
           "type": "timeseries",
           "datasource": {
             "type": "prometheus",
@@ -2618,9 +2618,9 @@ data:
           },
           "targets": [
             {
-              "expr": "max by (routeId) (spring_cloud_gateway_requests_seconds_max{job=\"api-gateway\",routeId!=\"command-service-sse\"}) * 1000",
+              "expr": "histogram_quantile(0.99, sum by (le, service) (rate(traefik_service_request_duration_seconds_bucket{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval]))) * 1000",
               "refId": "A",
-              "legendFormat": "{{routeId}} max",
+              "legendFormat": "{{service}}",
               "instant": false,
               "range": true
             }

@@ -42,6 +42,7 @@ import argparse
 import csv
 import json
 import mimetypes
+from http.cookies import SimpleCookie
 import os
 import random
 import sys
@@ -466,8 +467,15 @@ class GroupState:
 # ────────────────────────────────────────────────────────────────────────────
 # Stage 1 — identity
 # ────────────────────────────────────────────────────────────────────────────
+def _refresh_cookie(headers):
+    value = next((value for key, value in headers.items() if key.lower() == 'set-cookie'), '')
+    cookie = SimpleCookie()
+    cookie.load(value)
+    return cookie['pfa_refresh'].value if 'pfa_refresh' in cookie else None
+
+
 def stage_register(client, member, checks):
-    status, body, _ = client.request(
+    status, body, response_headers = client.request(
         "auth", "/auth/register", "POST",
         body={"email": member.email, "username": member.username,
               "password": member.password, "role": "USER"})
@@ -475,13 +483,13 @@ def stage_register(client, member, checks):
     if status in (200, 201):
         member.user_id = body.get("userId")
 
-    status, body, _ = client.request(
+    status, body, response_headers = client.request(
         "auth", "/auth/login", "POST",
         body={"email": member.email, "password": member.password})
     checks.status(200, status, "login")
     checks.ok(body.get("token") is not None, "login returns a token")
     member.token = body.get("token")
-    member.refresh = body.get("refreshToken")
+    member.refresh = _refresh_cookie(response_headers) or body.get("refreshToken")
     member.user_id = body.get("userId") or member.user_id
     checks.ok(member.user_id is not None, "login returns userId")
 
@@ -638,20 +646,18 @@ def stage_refresh_race(client, member, checks, race=True):
 
     def hit(_):
         return client.request("auth", "/auth/refresh", "POST",
-                              body={"refreshToken": replay})[0]
+                              body={"refreshToken": replay})
 
     with ThreadPoolExecutor(max_workers=4) as pool:
-        codes = list(pool.map(hit, range(4)))
-    checks.ok(sum(1 for c in codes if c == 200) == 1,
-              "concurrent refresh rotates exactly once", f"statuses={codes}")
-
-    status, body, _ = client.request(
-        "auth", "/auth/login", "POST",
-        body={"email": member.email, "password": member.password})
-    checks.status(200, status, "re-login after refresh race")
-    if status == 200 and body.get("token"):
-        member.token = body["token"]
-        member.refresh = body.get("refreshToken") or member.refresh
+        responses = list(pool.map(hit, range(4)))
+    codes = [response[0] for response in responses]
+    checks.ok(all(code == 200 for code in codes),
+              "concurrent refresh converges during grace period", f"statuses={codes}")
+    pairs = {(body.get("token"), _refresh_cookie(headers))
+             for code, body, headers in responses if code == 200}
+    checks.ok(len(pairs) == 1, "concurrent refresh issues one session pair")
+    if pairs:
+        member.token, member.refresh = next(iter(pairs))
 
 
 def stage_idempotency(client, member, checks):
@@ -1312,16 +1318,27 @@ def _read_listing(client, member):
         if not rows:
             break
         for row in rows:
-            amount = float(row.get("amount", 0) or 0)
-            # The summary endpoint deliberately excludes settlements from the
-            # income/expense totals (they move money between people, they are
-            # not spending). Mirror that here or the two sides never agree.
-            if row.get("category") == "SETTLEMENT":
+            # Mirror the public accounting contract; internal reporting
+            # helpers are intentionally omitted from serialized entries.
+            movements = {"SETTLEMENT", "CREDIT_CARD_PAYMENT", "MUTUAL_FUNDS_SIP",
+                         "STOCKS_AND_TRADING", "CRYPTO", "EMERGENCY_FUND",
+                         "FIXED_DEPOSIT", "GOAL", "OWN_ACCOUNT_TRANSFER",
+                         "BORROWING", "LENDING", "LOAN_PRINCIPAL",
+                         "INVESTMENT_WITHDRAWAL"}
+            kind = row.get("transactionKind", "STANDARD")
+            if row.get("reportable") is False or kind in {"TRANSFER", "INVESTMENT"} or row.get("category") in movements:
                 pass
-            elif row.get("type") == "INCOME":
-                income += amount
+            elif row.get("category") == "SETTLEMENT":
+                pass  # Compatibility with older payloads without reportable.
             else:
-                expense += amount
+                amount = float(row.get("reportingAmount", row.get("amount", 0)) or 0)
+                direction = row.get("reportingType", row.get("type"))
+                if kind in {"REFUND", "REIMBURSEMENT"} and "reportingAmount" not in row:
+                    amount, direction = -amount, "EXPENSE"
+                if direction == "INCOME":
+                    income += amount
+                else:
+                    expense += amount
             listed += 1
         page += 1
         if listed >= int(body.get("totalElements", listed) or listed):

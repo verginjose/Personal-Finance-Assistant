@@ -295,22 +295,42 @@ async fn observe(req: Request, next: Next) -> Response {
     .to_string();
     let method = req.method().to_string();
     let r = next.run(req).await;
-    metrics::histogram!("http_server_requests_seconds","uri"=>route,"method"=>method,"status"=>r.status().as_u16().to_string()).record(now.elapsed().as_secs_f64());
+    let status = r.status().as_u16();
+    let elapsed_ms = now.elapsed().as_millis() as u64;
+    if route.starts_with("/actuator/") {
+        // Probes and scrapes are constant background noise; keep them at debug.
+        tracing::debug!(method = %method, uri = %route, status, elapsed_ms, "request");
+    } else if status >= 500 {
+        tracing::error!(method = %method, uri = %route, status, elapsed_ms, "request failed");
+    } else {
+        tracing::info!(method = %method, uri = %route, status, elapsed_ms, "request");
+    }
+    metrics::histogram!("http_server_requests_seconds","uri"=>route,"method"=>method,"status"=>status.to_string()).record(now.elapsed().as_secs_f64());
     r
 }
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .json()
-        .with_env_filter("info")
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
         .init();
+    tracing::info!(
+        service = "query-service",
+        version = env!("CARGO_PKG_VERSION"),
+        "starting"
+    );
     let metrics = metrics_exporter_prometheus::PrometheusBuilder::new()
         .set_buckets(&[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1., 2.5, 5., 10.])?
         .add_global_label("application", "query-service")
         .install_recorder()?;
+    let db_host = env("DB_HOST", "postgres-replica");
+    let db_port = env("DB_PORT", "5432");
     let options = sqlx::postgres::PgConnectOptions::new()
-        .host(&env("DB_HOST", "postgres-replica"))
-        .port(env("DB_PORT", "5432").parse()?)
+        .host(&db_host)
+        .port(db_port.parse()?)
         .database(&env("DB_NAME", "pfa"))
         .username(&std::env::var("DB_USER")?)
         .password(&std::env::var("DB_PASSWORD")?)
@@ -319,12 +339,16 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .max_connections(20)
         .acquire_timeout(Duration::from_secs(10))
         .connect_with(options)
-        .await?;
-    let mut redis_url = url::Url::parse(&format!(
-        "redis://{}:{}/",
-        env("REDIS_HOST", "redis"),
-        env("REDIS_SERVER_PORT", "6379")
-    ))?;
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, host = %db_host, port = %db_port, "database connection failed");
+            e
+        })?;
+    tracing::info!(host = %db_host, port = %db_port, "connected to read replica");
+    let redis_host = env("REDIS_HOST", "redis");
+    let redis_port = env("REDIS_SERVER_PORT", "6379");
+    let mut redis_url =
+        url::Url::parse(&format!("redis://{redis_host}:{redis_port}/"))?;
     let password = env("REDIS_PASSWORD", "");
     if !password.is_empty() {
         redis_url.set_password(Some(&password)).unwrap();
@@ -335,7 +359,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             .set_connection_timeout(Duration::from_secs(3))
             .set_response_timeout(Duration::from_secs(2)),
     )
-    .await?;
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, host = %redis_host, port = %redis_port, "redis connection failed");
+        e
+    })?;
+    tracing::info!(host = %redis_host, port = %redis_port, "connected to redis");
     let app = App {
         db,
         redis,
@@ -377,9 +406,11 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             get(|State(a): State<App>| async move { a.metrics.render() }),
         )
         .with_state(app);
-    let api = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", env("PORT", "8084"))).await?;
-    let mgmt = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", env("MANAGEMENT_PORT", "9090")))
-        .await?;
+    let port = env("PORT", "8084");
+    let management_port = env("MANAGEMENT_PORT", "9090");
+    let api = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
+    let mgmt = tokio::net::TcpListener::bind(format!("0.0.0.0:{management_port}")).await?;
+    tracing::info!(port = %port, management_port = %management_port, "listening");
     tokio::try_join!(
         async {
             axum::serve(api, router)
@@ -398,6 +429,7 @@ async fn shutdown() {
     let mut signal =
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).unwrap();
     tokio::select! {_=signal.recv()=>{},_=tokio::signal::ctrl_c()=>{}}
+    tracing::info!("shutdown signal received");
 }
 
 async fn wait_replica(a: &App, scopes: &[String]) -> Result<()> {

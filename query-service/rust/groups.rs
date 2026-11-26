@@ -1,6 +1,33 @@
 use super::*;
 use crate::ledger::{decimal, money};
 use rust_decimal::Decimal;
+
+// Aggregate each group's expenses once, rather than repeating the scans for
+// every member. Both totals keep PostgreSQL numeric arithmetic and the same
+// settlement treatment as the previous lateral aggregates.
+const BALANCES_SQL: &str = r#"
+WITH paid AS (
+    SELECT paid_by AS user_id, sum(amount) AS paid,
+           sum(amount) FILTER (WHERE split_type <> 'SETTLEMENT') AS spent
+    FROM groups.shared_expenses WHERE group_id = $1 GROUP BY paid_by
+), owed AS (
+    SELECT s.user_id, sum(s.amount) AS owed
+    FROM groups.expense_splits s
+    JOIN groups.shared_expenses e ON e.id = s.shared_expense_id
+    WHERE e.group_id = $1 GROUP BY s.user_id
+)
+SELECT jsonb_build_object(
+    'userId', m.user_id, 'userName', m.name,
+    'totalPaid', round(coalesce(p.paid, 0), 2),
+    'totalSpent', round(coalesce(p.spent, 0), 2),
+    'totalOwed', round(coalesce(o.owed, 0), 2),
+    'netBalance', round(coalesce(p.paid, 0) - coalesce(o.owed, 0), 2)
+)
+FROM groups.group_members m
+LEFT JOIN paid p ON p.user_id = m.user_id
+LEFT JOIN owed o ON o.user_id = m.user_id
+WHERE m.group_id = $1
+"#;
 pub async fn membership(a: &App, id: Uuid, g: i64, accepted: bool) -> Result<()> {
     let ok=sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM groups.group_members m JOIN groups.expense_groups g ON g.id=m.group_id WHERE m.user_id=$1 AND m.group_id=$2 AND NOT g.is_deleted AND (NOT $3 OR m.status='ACCEPTED'))").bind(id).bind(g).bind(accepted).fetch_one(&a.db).await?;
     if !ok {
@@ -22,8 +49,10 @@ pub async fn balances(a: &App, id: Uuid, g: i64) -> Result<Value> {
     .bind(g)
     .fetch_one(&a.db)
     .await?;
-    let sql = "SELECT jsonb_build_object('userId',m.user_id,'userName',m.name,'totalPaid',round(coalesce(p.paid,0),2),'totalSpent',round(coalesce(p.spent,0),2),'totalOwed',round(coalesce(o.owed,0),2),'netBalance',round(coalesce(p.paid,0)-coalesce(o.owed,0),2)) FROM groups.group_members m LEFT JOIN LATERAL(SELECT sum(amount) paid,sum(amount) FILTER(WHERE split_type<>'SETTLEMENT') spent FROM groups.shared_expenses WHERE group_id=m.group_id AND paid_by=m.user_id)p ON true LEFT JOIN LATERAL(SELECT sum(s.amount) owed FROM groups.expense_splits s JOIN groups.shared_expenses e ON e.id=s.shared_expense_id WHERE e.group_id=m.group_id AND s.user_id=m.user_id)o ON true WHERE m.group_id=$1";
-    let members: Vec<Value> = sqlx::query_scalar(sql).bind(g).fetch_all(&a.db).await?;
+    let members: Vec<Value> = sqlx::query_scalar(BALANCES_SQL)
+        .bind(g)
+        .fetch_all(&a.db)
+        .await?;
     let mut debts: Vec<(String, String, Decimal)> = Vec::new();
     let mut credits = Vec::new();
     let mut spent = Decimal::ZERO;

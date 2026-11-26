@@ -102,7 +102,16 @@ async fn observe(req: Request, next: Next) -> Response {
         .unwrap_or_else(|| "unmatched".into());
     let method = req.method().to_string();
     let response = next.run(req).await;
-    metrics::histogram!("http_server_requests_seconds", "uri" => route, "method" => method, "status" => response.status().as_u16().to_string()).record(start.elapsed().as_secs_f64());
+    let status = response.status().as_u16();
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    // Log the matched route only: paths can contain ids but never credentials,
+    // and request bodies/headers (tokens, passwords) are deliberately omitted.
+    if status >= 500 {
+        tracing::error!(method = %method, uri = %route, status, elapsed_ms, "request failed");
+    } else {
+        tracing::info!(method = %method, uri = %route, status, elapsed_ms, "request");
+    }
+    metrics::histogram!("http_server_requests_seconds", "uri" => route, "method" => method, "status" => status.to_string()).record(start.elapsed().as_secs_f64());
     response
 }
 #[tokio::main]
@@ -138,27 +147,50 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     if !password.is_empty() {
         redis_url.set_password(Some(&password)).unwrap();
     }
-    let redis = ConnectionManager::new(redis::Client::open(redis_url.as_str())?).await?;
     let mode = env("SERVICE_MODE", "auth");
+    tracing::info!(
+        service = if mode == "auth" { "auth-service" } else { "storage-service" },
+        version = env!("CARGO_PKG_VERSION"),
+        %mode,
+        "starting"
+    );
+    let redis = ConnectionManager::new(redis::Client::open(redis_url.as_str())?)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "redis connection failed");
+            e
+        })?;
+    tracing::info!("connected to redis");
     let db = if mode == "auth" {
+        let db_host = env("DB_HOST", "postgres-primary");
+        let db_port = env("DB_PORT", "5432");
         let options = sqlx::postgres::PgConnectOptions::new()
-            .host(&env("DB_HOST", "postgres-primary"))
-            .port(env("DB_PORT", "5432").parse()?)
+            .host(&db_host)
+            .port(db_port.parse()?)
             .database(&env("DB_NAME", "pfa"))
             .username(&required("DB_USER"))
             .password(&required("DB_PASSWORD"));
-        Some(
-            sqlx::postgres::PgPoolOptions::new()
-                .max_connections(20)
-                .acquire_timeout(Duration::from_secs(10))
-                .connect_with(options)
-                .await?,
-        )
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(20)
+            .acquire_timeout(Duration::from_secs(10))
+            .connect_with(options)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, host = %db_host, port = %db_port, "database connection failed");
+                e
+            })?;
+        tracing::info!(host = %db_host, port = %db_port, "connected to database");
+        Some(pool)
     } else {
         None
     };
     let storage = if mode == "storage" {
-        Some(Arc::new(storage::Storage::new().await?))
+        let storage = storage::Storage::new().await.map_err(|e| {
+            tracing::error!(error = %e, "storage backend initialisation failed");
+            e
+        })?;
+        tracing::info!("storage backend ready");
+        Some(Arc::new(storage))
     } else {
         None
     };
@@ -193,7 +225,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let port = env("PORT", if mode == "auth" { "8082" } else { "8083" });
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
     let management_listener = tokio::net::TcpListener::bind("0.0.0.0:9090").await?;
-    tracing::info!(%mode, %port, "native service ready");
+    tracing::info!(%mode, %port, management_port = "9090", "listening");
     tokio::try_join!(
         async {
             axum::serve(listener, router)
@@ -212,4 +244,5 @@ async fn shutdown() {
     let mut term =
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).unwrap();
     tokio::select! { _ = tokio::signal::ctrl_c() => {}, _ = term.recv() => {} }
+    tracing::info!("shutdown signal received");
 }

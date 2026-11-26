@@ -1,0 +1,209 @@
+# Pull-through cache for crates.io (Cargo sparse index + crate archives).
+#
+# Why: buildkitd has no internet egress at all (see
+# k8s/system/network-policies.yaml), so Rust builds fetch dependencies through
+# this cache. It is deliberately dumb: an nginx proxy_cache, not a repository
+# manager. Both locations are GET-only.
+#
+# HTTPS matters: Cargo verifies the registry certificate against the CI CA
+# passed as a BuildKit secret (id=ci_ca), so the service terminates TLS with a
+# certificate from that CA.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cargo-proxy-config
+  namespace: pfa
+  labels:
+    app: cargo-proxy
+    app.kubernetes.io/part-of: personal-finance-assistant
+data:
+  nginx.conf: |
+    worker_processes 1;
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr warn;
+
+    events {
+      worker_connections 1024;
+    }
+
+    http {
+      client_body_temp_path /tmp/client_body;
+      proxy_temp_path     /tmp/proxy;
+      fastcgi_temp_path   /tmp/fastcgi;
+      uwsgi_temp_path     /tmp/uwsgi;
+      scgi_temp_path      /tmp/scgi;
+
+      access_log /dev/stdout;
+
+      # 4 GiB holds the crate archives for every Rust service several times
+      # over. max_size is the hard bound; inactive is the GC horizon.
+      proxy_cache_path /cache
+                       levels=1:2
+                       keys_zone=cargo:64m
+                       max_size=4g
+                       inactive=90d
+                       use_temp_path=off;
+
+      server {
+        listen 8443 ssl;
+        ssl_certificate     /proxy-tls/server.crt;
+        ssl_certificate_key /proxy-tls/server.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+
+        proxy_ssl_server_name on;
+        proxy_ssl_verify on;
+        # crates.io fronts through a chain longer than nginx's default depth 1.
+        proxy_ssl_verify_depth 5;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+
+        # Cargo sparse index: the config advertises this proxy for downloads so
+        # clients never contact static.crates.io directly.
+        location = /cargo/index/config.json {
+          default_type application/json;
+          return 200 '{"dl":"https://cargo-proxy.pfa.svc.cluster.local:8443/cargo/crates","api":"https://crates.io"}';
+        }
+        location /cargo/index/ {
+          limit_except GET HEAD { deny all; }
+          proxy_pass https://index.crates.io/;
+          proxy_set_header Host index.crates.io;
+          proxy_ssl_name index.crates.io;
+          proxy_cache cargo;
+          proxy_cache_valid 200 1h;
+          proxy_cache_lock on;
+        }
+        location ~ ^/cargo/crates/([a-zA-Z0-9_-]+)/([a-zA-Z0-9.+_-]+)/download$ {
+          limit_except GET HEAD { deny all; }
+          resolver kube-dns.kube-system.svc.cluster.local valid=300s ipv6=off;
+          proxy_pass https://static.crates.io/crates/$1/$1-$2.crate;
+          proxy_set_header Host static.crates.io;
+          proxy_ssl_name static.crates.io;
+          proxy_cache cargo;
+          proxy_cache_valid 200 60d;
+          proxy_cache_lock on;
+        }
+        location / { return 404; }
+      }
+    }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cargo-cache
+  namespace: pfa
+  labels:
+    app: cargo-proxy
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 4Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cargo-proxy
+  namespace: pfa
+  labels:
+    app: cargo-proxy
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate          # the cache PVC is RWO
+  selector:
+    matchLabels:
+      app: cargo-proxy
+  template:
+    metadata:
+      labels:
+        app: cargo-proxy
+        app.kubernetes.io/part-of: personal-finance-assistant
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # local-path is a hostPath volume, so fsGroup does not chown it.
+        - name: fix-perms
+          image: busybox:1.36
+          command: ["sh", "-c", "chown -R 101:101 /cache"]
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+      containers:
+        - name: nginx
+          image: 127.0.0.1:30500/base/nginx:alpine
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/sbin/nginx", "-g", "daemon off;"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: https
+              containerPort: 8443
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: tls
+              mountPath: /proxy-tls
+              readOnly: true
+            - name: cache
+              mountPath: /cache
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            tcpSocket:
+              port: 8443
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: cargo-proxy-config
+        - name: tls
+          secret:
+            secretName: ci-tls-cargo-proxy
+            defaultMode: 0440
+        - name: cache
+          persistentVolumeClaim:
+            claimName: cargo-cache
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cargo-proxy
+  namespace: pfa
+  labels:
+    app: cargo-proxy
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    app: cargo-proxy
+  ports:
+    - name: https
+      port: 8443
+      targetPort: 8443

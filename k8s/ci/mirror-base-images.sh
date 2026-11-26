@@ -34,16 +34,12 @@ SKOPEO=/usr/bin/skopeo
 CERT_DIR=/certs
 
 # Keep in sync with the FROM lines in */Dockerfile. The tag under base/ is the
-# upstream tag, so maven 3.9.6 and 3.9.9 are two tags in one repository - both
-# well inside registry-gc.sh's retention, which now only trims finance/*.
+# upstream tag. Tags are well inside registry-gc.sh's retention, which only
+# trims finance/*.
 IMAGES=(
   docker.io/library/rust:1.100.0-bookworm
   docker.io/library/debian:bookworm-slim
   docker.io/rancher/mirrored-library-traefik:3.7.13
-  docker.io/library/maven:3.9.9-eclipse-temurin-21
-  docker.io/library/maven:3.9.6-eclipse-temurin-21
-  docker.io/library/eclipse-temurin:21-jre-alpine
-  docker.io/library/eclipse-temurin:21-jdk-jammy
   docker.io/library/nginx:alpine
 )
 
@@ -115,7 +111,7 @@ EOF
 
 failed=0
 for src in "${IMAGES[@]}"; do
-  repo="${src%:*}"            # docker.io/library/maven
+  repo="${src%:*}"            # docker.io/library/rust
   tag="${src##*:}"            # 3.9.9-eclipse-temurin-21
   dst="${DEST}/${repo##*/}:${tag}"
 

@@ -16,7 +16,7 @@ kind: Kustomization
 resources:
   - buildkit-control.yaml
   - buildkit-prune-cron.yaml
-  - maven-proxy.yaml
+  - cargo-proxy.yaml
   - network-policies.yaml
   - registry-gc-cron.yaml
   - registry-proxy.yaml

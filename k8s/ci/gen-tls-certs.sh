@@ -11,7 +11,7 @@
 #       to stop the runner's buildkitd client certificate from being accepted
 #       by the registry.
 #   ./k8s/ci/gen-tls-certs.sh --proxy-certs
-#       Add (or rotate) the registry-proxy and maven server certificates only,
+#       Add (or rotate) the registry-proxy and cargo-proxy server certificates only,
 #       leaving the CA and every existing certificate untouched, then re-seal.
 #       Used when a cluster predates the in-cluster proxy pair.
 #   ./k8s/ci/gen-tls-certs.sh --reseal
@@ -50,7 +50,7 @@ CONTROLLER_NAME="${SEALED_SECRETS_CONTROLLER:-sealed-secrets-controller}"
 REGISTRY_SANS="DNS:registry,DNS:registry.pfa,DNS:registry.pfa.svc,DNS:registry.pfa.svc.cluster.local,IP:127.0.0.1"
 BUILDKIT_SANS="DNS:buildkitd,DNS:buildkitd.pfa,DNS:buildkitd.pfa.svc,DNS:buildkitd.pfa.svc.cluster.local,DNS:buildkitd.pfa-system,DNS:buildkitd.pfa-system.svc,DNS:buildkitd.pfa-system.svc.cluster.local,IP:127.0.0.1"
 REGISTRY_PROXY_SANS="DNS:registry-proxy,DNS:registry-proxy.pfa,DNS:registry-proxy.pfa.svc,DNS:registry-proxy.pfa.svc.cluster.local"
-MAVEN_SANS="DNS:maven,DNS:maven.pfa,DNS:maven.pfa.svc,DNS:maven.pfa.svc.cluster.local"
+CARGO_SANS="DNS:cargo-proxy,DNS:cargo-proxy.pfa,DNS:cargo-proxy.pfa.svc,DNS:cargo-proxy.pfa.svc.cluster.local"
 
 FORCE=false
 APPLY=false
@@ -84,7 +84,7 @@ if [[ "${RESEAL}" == true ]]; then
   # anything the running workloads already trust.
   for f in ca.crt ca.key client.crt client.key registry.crt registry.key \
            buildkitd.crt buildkitd.key registry-proxy.crt registry-proxy.key \
-           maven.crt maven.key registry-client-ca.crt \
+           cargo-proxy.crt cargo-proxy.key registry-client-ca.crt \
            registry-client-ca.key registry-client.crt registry-client.key; do
     [[ -f "${CERT_DIR}/${f}" ]] || {
       echo "--reseal needs the existing material in ${CERT_DIR}; ${f} is missing." >&2
@@ -168,7 +168,7 @@ issue_server buildkitd "${BUILDKIT_SANS}"
 # In-cluster proxies. Signed by the same CI CA buildkitd already trusts, so
 # they need no extra CA mount and no `insecure = true`.
 issue_server registry-proxy "${REGISTRY_PROXY_SANS}"
-issue_server maven "${MAVEN_SANS}"
+issue_server cargo-proxy "${CARGO_SANS}"
 
 # ── Client certificate ──────────────────────────────────────────────────────
 # Shared by the runner (buildctl + registry-gc.sh), buildkitd's registry
@@ -191,13 +191,13 @@ chmod 0644 "${CERT_DIR}"/*.crt
 fi   # RESEAL
 
 # ── Proxy server certificates only ──────────────────────────────────────────
-# For an existing cluster that predates registry-proxy / maven: issue just
-# those two certificates, leave the CA and every existing certificate alone,
-# then re-seal.
+# For an existing cluster that predates registry-proxy / cargo-proxy: issue
+# just those two certificates, leave the CA and every existing certificate
+# alone, then re-seal.
 if [[ "${PROXY_CERTS}" == true ]]; then
   issue_server registry-proxy "${REGISTRY_PROXY_SANS}"
-  issue_server maven "${MAVEN_SANS}"
-  chmod 0600 "${CERT_DIR}/registry-proxy.key" "${CERT_DIR}/maven.key"
+  issue_server cargo-proxy "${CARGO_SANS}"
+  chmod 0600 "${CERT_DIR}/registry-proxy.key" "${CERT_DIR}/cargo-proxy.key"
 fi
 
 # ── Registry client identity ────────────────────────────────────────────────
@@ -274,15 +274,15 @@ seal() {  # secret-name namespace file=path...
     "ca.crt=${CERT_DIR}/ca.crt"
   echo "---"
   # The two in-cluster proxies. Server certificates only: buildkitd verifies
-  # them with the CI CA it already mounts, and the Maven builders get that CA
+  # them with the CI CA it already mounts, and the Rust builders get that CA
   # as a BuildKit secret rather than from these Secrets.
   seal ci-tls-registry-proxy pfa \
     "server.crt=${CERT_DIR}/registry-proxy.crt" \
     "server.key=${CERT_DIR}/registry-proxy.key"
   echo "---"
-  seal ci-tls-maven pfa \
-    "server.crt=${CERT_DIR}/maven.crt" \
-    "server.key=${CERT_DIR}/maven.key"
+  seal ci-tls-cargo-proxy pfa \
+    "server.crt=${CERT_DIR}/cargo-proxy.crt" \
+    "server.key=${CERT_DIR}/cargo-proxy.key"
   echo "---"
   seal ci-tls-client pfa \
     "ca.crt=${CERT_DIR}/ca.crt" \

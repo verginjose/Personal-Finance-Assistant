@@ -44,14 +44,14 @@ spec:
             matchLabels: { app: registry-proxy }
       ports:
         - { protocol: TCP, port: 5001 }
-    # Maven dependencies. A pull-through cache in pfa; the daemon itself has
-    # no route to the internet, so nothing a build step produces can be sent
-    # anywhere else.
+    # Cargo dependencies (sparse index + crate archives). A pull-through cache
+    # in pfa; the daemon itself has no route to the internet, so nothing a
+    # build step produces can be sent anywhere else.
     - to:
         - namespaceSelector:
             matchLabels: { kubernetes.io/metadata.name: pfa }
           podSelector:
-            matchLabels: { app: maven }
+            matchLabels: { app: cargo-proxy }
       ports:
         - { protocol: TCP, port: 8443 }
 ---

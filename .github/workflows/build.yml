@@ -25,7 +25,7 @@ on:
 permissions:
   contents: read
 
-# Never run two builds at once: a Maven build and an OCR build together will
+# Never run two builds at once: a Rust build and an OCR build together will
 # exceed the node's memory, and the tag-bump commits would race.
 concurrency:
   group: build-and-deploy
@@ -39,15 +39,13 @@ env:
   # buildkitd has no registry credential: it pushes and pulls through
   # registry-proxy, which enforces "push only into these six repositories,
   # never DELETE". The runner pod mounts the ci-tls-client Secret at /certs;
-  # that CA also signs the proxy and the Maven cache, and is copied into
-  # Maven build contexts below.
+  # that CA also signs the proxy, and is passed to Rust build contexts below.
   PUSH_REGISTRY: registry-proxy.pfa.svc.cluster.local:5001
   PULL_REGISTRY: 127.0.0.1:30500
-  # Maven resolves through this pull-through cache instead of Central. The
+  # Cargo resolves through this pull-through cache instead of crates.io. The
   # certificate is signed by the CI CA, which is passed as a BuildKit secret
-  # (id=ci_ca) so the Maven Dockerfiles can import it into the JDK truststore.
-  CARGO_MIRROR_URL: https://maven.pfa.svc.cluster.local:8443/cargo/index/
-  MAVEN_MIRROR_URL: https://maven.pfa.svc.cluster.local:8443/
+  # (id=ci_ca) so the builder can verify it.
+  CARGO_MIRROR_URL: https://cargo-proxy.pfa.svc.cluster.local:8443/cargo/index/
   BUILDKIT_HOST: tcp://buildkitd.pfa-system.svc.cluster.local:1234
   BUILDKIT_TLS_DIR: /certs
   BUILDKIT_VERSION: v0.15.2
@@ -171,8 +169,8 @@ jobs:
           TAG="${GITHUB_SHA::12}"
           echo "TAG=$TAG" >> "$GITHUB_ENV"
           echo "Building ${PUSH_REGISTRY}/finance/${SERVICE}:${TAG} from ./${SERVICE}"
-          # Maven dependencies come from the in-cluster pull-through cache
-          # (k8s/ci/maven-proxy.yaml), not from Central. MAVEN_MIRROR_URL is a
+          # Cargo dependencies come from the in-cluster pull-through cache
+          # (k8s/ci/cargo-proxy.yaml), not from crates.io. CARGO_MIRROR_URL is a
           # build arg; the CI CA that signs the cache's certificate is a
           # BuildKit secret, so it never lands in a layer and local
           # `docker build` still works (the Dockerfile treats both as optional).
@@ -191,8 +189,7 @@ jobs:
             --opt filename=Dockerfile \
             --opt build-arg:BASE_IMAGE_REGISTRY="${PUSH_REGISTRY}/base" \
             --opt build-arg:OCR_BASE="${PUSH_REGISTRY}/finance/ocr-base:cu126-py311-v1" \
-            --opt build-arg:CARGO_MIRROR_URL="${CARGO_MIRROR_URL}" \
-            --opt build-arg:MAVEN_MIRROR_URL="${MAVEN_MIRROR_URL}" \
+            --opt build-arg:CARGO_MIRROR_URL="${CARGO_MIRROR_URL}" \ \
             --secret id=ci_ca,src=/certs/ca.crt \
             --output "type=image,name=${PUSH_REGISTRY}/finance/${SERVICE}:${TAG},push=true"
 

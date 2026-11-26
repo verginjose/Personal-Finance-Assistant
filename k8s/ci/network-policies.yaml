@@ -6,12 +6,12 @@
 # and push images" model.
 #
 #   ci-runner  --1234-->  buildkitd  --5001-->  registry-proxy  --5000-->  registry
-#   buildkitd  --8443-->  maven
+#   buildkitd  --8443-->  cargo-proxy
 #   buildkit-prune --1234--> buildkitd
 #   registry-gc / mirror-base-images --5000--> registry
 #
 # The proxy is the only workload holding the registry client certificate, and
-# the only route buildkitd has out of the cluster is the Maven cache. Nothing
+# the only route buildkitd has out of the cluster is the Cargo cache. Nothing
 # in the build path has general internet egress.
 #
 # Egress is restricted too, because a compromised runner holding a CI
@@ -19,7 +19,7 @@
 # pod keeps exactly the destinations it needs:
 #   * DNS in kube-system, for everything;
 #   * the CI pods above;
-#   * 443 to the internet only for the runner (GitHub) and maven (Central);
+#   * 443 to the internet only for the runner (GitHub) and the cargo proxy (crates.io);
 #   * the Kubernetes API for the registry-gc job (it patches the registry
 #     Deployment and execs into it).
 #
@@ -233,11 +233,11 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: maven
+  name: cargo-proxy
   namespace: pfa
 spec:
   podSelector:
-    matchLabels: { app: maven }
+    matchLabels: { app: cargo-proxy }
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
@@ -253,8 +253,8 @@ spec:
       ports:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
-    # Maven Central and the CDN it resolves to. This pod is the only one in
-    # the build path with internet egress.
+    # crates.io index and the static.crates.io CDN. This pod is the only one
+    # in the build path with internet egress.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0

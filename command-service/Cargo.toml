@@ -1,0 +1,30 @@
+[package]
+name = "pfa-command"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "pfa-command"
+path = "rust/main.rs"
+
+[dependencies]
+axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+futures-util = "0.3"
+rust_decimal = { version = "1", features = ["serde-with-str"] }
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.17", default-features = false }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "derive", "json", "chrono", "rust_decimal"] }
+tokio = { version = "1", features = ["full"] }
+tower = { version = "0.5", features = ["limit"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+url = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[profile.release]
+strip = true
+lto = "thin"

@@ -26,15 +26,10 @@ metadata:
     app: command-service
     app.kubernetes.io/part-of: personal-finance-assistant
 data:
-  SPRING_JPA_HIBERNATE_DDL_AUTO: update
-  # No SPRING_JPA_DATABASE_PLATFORM: Hibernate 6 infers PostgreSQL from the
-  # JDBC connection. Setting it explicitly triggers HHH90000025 on every boot.
+  # Rust service settings only. DB_USER/DB_PASSWORD/DB_NAME/REDIS_PASSWORD and
+  # INTERNAL_API_TOKEN come from command-service-secrets; DB_HOST defaults to
+  # postgres-primary (the write side of CQRS).
   REDIS_HOST: redis
-  RABBITMQ_HOST: rabbitmq
-  RABBITMQ_PORT: "5672"
-  SPRING_RABBITMQ_HOST: rabbitmq
-  ANALYTICS_SERVICE_URL: http://query-service:8084
-  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -60,10 +55,7 @@ spec:
     spec:
       terminationGracePeriodSeconds: 30
       automountServiceAccountToken: false
-      # Writable /tmp for the JVM (hsperfdata, Tomcat work dir); the rest of
-      # the root filesystem is read-only. 65534 is `nobody`, which exists in
-      # both the Alpine and the Ubuntu base images, so no passwd entry is
-      # missing when the process resolves its own uid.
+      # Read-only root filesystem; 65534 is `nobody`, used by the Rust image.
       securityContext:
         fsGroup: 65534
       containers:
@@ -89,31 +81,19 @@ spec:
             - secretRef:
                 name: command-service-secrets
           env:
-            # Structured (one-line JSON) stdout for the Vector -> ClickHouse
-            # pipeline. Without this profile logback logs a human-readable
-            # line, which is what local runs want.
-            - name: SPRING_PROFILES_ACTIVE
-              value: structured-logs
-            # Write side of CQRS: always hits the primary.
-            - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres-primary:5432/$(DB_NAME)
-            - name: SPRING_DATASOURCE_USERNAME
-              value: $(DB_USER)
-            - name: SPRING_DATASOURCE_PASSWORD
-              value: $(DB_PASSWORD)
-            - name: SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA
-              value: $(FINANCE_DB_SCHEMA)
-            - name: SPRING_DATASOURCE_HIKARI_SCHEMA
-              value: $(FINANCE_DB_SCHEMA)
+            # Write side of CQRS: always hits the primary. The Rust service
+            # reads JSON logs straight to stdout for the Vector pipeline.
+            - name: DB_HOST
+              value: postgres-primary
           resources:
             requests:
               cpu: 250m
-              memory: 512Mi
+              memory: 64Mi
             limits:
               # Host has 16 vCPU; 3 keeps the write path responsive under the
               # 50-user scenario while leaving cores for the desktop.
               cpu: "3"
-              memory: 3Gi
+              memory: 512Mi
           startupProbe:
             httpGet:
               path: /actuator/health/liveness

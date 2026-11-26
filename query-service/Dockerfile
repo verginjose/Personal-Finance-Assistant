@@ -1,60 +1,21 @@
-# Full-service rebuild: verify latest code with the PR-based deployment flow.
-# Step 1: Build stage
-# Base images come from the in-cluster mirror in CI (k8s/ci/mirror-base-images.sh)
-# and from Docker Hub when this Dockerfile is built outside the cluster.
 ARG BASE_IMAGE_REGISTRY=docker.io/library
-FROM ${BASE_IMAGE_REGISTRY}/maven:3.9.6-eclipse-temurin-21 AS builder
+FROM ${BASE_IMAGE_REGISTRY}/rust:1.100.0-bookworm AS build
+ARG CARGO_MIRROR_URL=
+WORKDIR /build
+COPY Cargo.toml Cargo.lock ./
+COPY rust ./rust
+# CI uses the read-only Cargo cache over the existing dependency-proxy route.
+# The CI CA is a build secret and is never copied into a layer.
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,target=/build/target,sharing=locked --mount=type=secret,id=ci_ca \
+    if [ -n "$CARGO_MIRROR_URL" ]; then \
+      printf '[source.crates-io]\nreplace-with = "pfa-cache"\n[source.pfa-cache]\nregistry = "sparse+%s"\n' "$CARGO_MIRROR_URL" > /usr/local/cargo/config.toml; \
+      export CARGO_HTTP_CAINFO=/run/secrets/ci_ca; \
+    fi; \
+    cargo clean -p pfa-query && cargo clean --release -p pfa-query && cargo test --locked && cargo build --locked --release && cp target/release/pfa-query /pfa-query
 
-WORKDIR /app
-
-# In CI, .github/workflows/build.yml points Maven at the in-cluster cache and
-# passes the CI CA as a BuildKit secret so the JDK can verify that cache's
-# certificate. Outside CI both are absent: Maven resolves from Central and the
-# keytool step is skipped.
-ARG MAVEN_MIRROR_URL=""
-
-RUN --mount=type=secret,id=ci_ca,required=false \
-    if [ -s /run/secrets/ci_ca ]; then \
-      keytool -importcert -noprompt -cacerts -storepass changeit \
-              -alias pfa-ci -file /run/secrets/ci_ca; \
-    fi
-
-RUN if [ -n "$MAVEN_MIRROR_URL" ]; then \
-      mkdir -p /etc/maven && \
-      printf '%s\n' \
-        '<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">' \
-        '  <mirrors>' \
-        '    <mirror>' \
-        '      <id>in-cluster</id>' \
-        '      <mirrorOf>central</mirrorOf>' \
-        "      <url>${MAVEN_MIRROR_URL}</url>" \
-        '    </mirror>' \
-        '  </mirrors>' \
-        '</settings>' > /etc/maven/settings.xml; \
-    fi
-
-# Copy pom.xml and download dependencies (layer caching optimization).
-# The BuildKit cache mount keeps ~/.m2 on the buildkitd cache volume across
-# builds, so repeat builds do not re-download the same dependencies.
-COPY pom.xml .
-RUN --mount=type=cache,target=/root/.m2,sharing=locked \
-    mvn $([ -f /etc/maven/settings.xml ] && echo "-s /etc/maven/settings.xml") dependency:go-offline -B
-
-# Copy the rest of the source code and build the jar
-COPY src ./src
-RUN --mount=type=cache,target=/root/.m2,sharing=locked \
-    mvn $([ -f /etc/maven/settings.xml ] && echo "-s /etc/maven/settings.xml") clean package -Dmaven.test.skip=true
-
-# Step 2: Runtime stage
-FROM ${BASE_IMAGE_REGISTRY}/eclipse-temurin:21-jdk-jammy
-
-WORKDIR /app
-
-# Copy only the final JAR from builder stage
-COPY --from=builder /app/target/query-service-0.0.1-SNAPSHOT.jar app.jar
-
-# Expose service port
-EXPOSE 8084
-
-# Run Spring Boot application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+FROM ${BASE_IMAGE_REGISTRY}/debian:bookworm-slim
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=build /pfa-query /usr/local/bin/pfa-query
+USER 65534:65534
+EXPOSE 8084 9090
+ENTRYPOINT ["/usr/local/bin/pfa-query"]

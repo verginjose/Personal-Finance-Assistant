@@ -153,7 +153,7 @@ docker run --rm --cpus=2 --memory=2g \
   -v /tmp/ocr-models:/root/.paddleocr \
   127.0.0.1:30500/finance/ocr-service:local-cpu-legacy-v1 \
   python /workspace/ocr-service/bench/compare_runtime.py \
-  --images /workspace/requests/fixtures/documents \
+  --images /workspace/requests/large-receipt-image-dataset-SRD \
   --labels /workspace/ocr-service/bench/tests/fixtures/account_labels.json \
   --out /results/cpu-legacy.json
 ```

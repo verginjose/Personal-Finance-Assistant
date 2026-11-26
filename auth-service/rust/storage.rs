@@ -342,6 +342,20 @@ fn upload_busy_response() -> Response {
         .insert("retry-after", HeaderValue::from_static("1"));
     response
 }
+async fn reject_busy_upload(mut multipart: Multipart) -> Response {
+    // An early close can interrupt the proxy's in-flight POST body and turn
+    // this 429 into a broken-pipe 502. Discard the already bounded body without
+    // allocating a spool or holding an upload slot. Slow clients cannot hold
+    // this rejection indefinitely.
+    let _ = tokio::time::timeout(Duration::from_secs(5), async {
+        while let Some(mut field) = multipart.next_field().await? {
+            while field.chunk().await?.is_some() {}
+        }
+        Ok::<(), axum::extract::multipart::MultipartError>(())
+    })
+    .await;
+    upload_busy_response()
+}
 async fn upload(
     State(app): State<App>,
     headers: HeaderMap,
@@ -353,7 +367,7 @@ async fn upload(
     let s = storage(&app);
     let _permit = match s.uploads.try_acquire() {
         Ok(permit) => permit,
-        Err(_) => return Ok(upload_busy_response()),
+        Err(_) => return Ok(reject_busy_upload(multipart).await),
     };
     let profile = uri.path() == "/api/profile/upload";
     let batch = uri.path().starts_with("/api/bill/batch-process/");
@@ -644,6 +658,49 @@ mod tests {
         .await;
         server.abort();
         response.expect("busy upload response must close promptly");
+    }
+
+    #[tokio::test]
+    async fn busy_upload_drains_body_before_closing_connection() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new()
+                    .route("/upload", post(reject_busy_upload))
+                    .layer(axum::extract::DefaultBodyLimit::max(12 * 1024 * 1024)),
+            )
+            .await
+            .unwrap();
+        });
+        let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
+        let start = b"--boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"test.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
+        let mut body = start.to_vec();
+        body.extend(vec![1; 300000]);
+        body.extend(b"\r\n--boundary--\r\n");
+        let headers = format!(
+            "POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: multipart/form-data; boundary=boundary\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        );
+        socket.write_all(headers.as_bytes()).await.unwrap();
+        socket.write_all(&body[..start.len() + 10]).await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(25), socket.read(&mut [0; 1]))
+                .await
+                .is_err(),
+            "rejection must not close an in-flight body"
+        );
+        socket.write_all(&body[start.len() + 10..]).await.unwrap();
+        let mut response = Vec::new();
+        tokio::time::timeout(Duration::from_secs(2), socket.read_to_end(&mut response))
+            .await
+            .unwrap()
+            .unwrap();
+        server.abort();
+        let response = String::from_utf8(response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 429"));
+        assert!(response.contains("Too many uploads in progress"));
     }
 
     #[test]

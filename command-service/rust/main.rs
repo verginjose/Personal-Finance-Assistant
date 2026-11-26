@@ -272,7 +272,11 @@ async fn metrics_handler(State(a): State<App>) -> String {
 async fn observe(req: Request, next: Next) -> Response {
     let started = std::time::Instant::now();
     let method = req.method().to_string();
-    let path = req.uri().path().to_string();
+    let path = req
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map(|route| route.as_str().to_owned())
+        .unwrap_or_else(|| "unmatched".to_string());
     let response = next.run(req).await;
     let status = response.status().as_u16();
     let elapsed_ms = started.elapsed().as_millis() as u64;
@@ -406,4 +410,57 @@ async fn shutdown() {
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).unwrap();
     tokio::select! {_=signal.recv()=>{},_=tokio::signal::ctrl_c()=>{}}
     tracing::info!("shutdown signal received");
+}
+
+#[cfg(test)]
+mod observability_tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn transaction_ids_do_not_create_metric_series() {
+        let recorder = metrics_exporter_prometheus::PrometheusBuilder::new().build_recorder();
+        let handle = recorder.handle();
+        metrics::set_global_recorder(recorder).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let router = Router::new()
+            .route(
+                "/upsert/delete/{id}",
+                rt::delete(|| async { StatusCode::NO_CONTENT }),
+            )
+            .layer(middleware::from_fn(observe));
+        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let known = (90000..90100).map(|id| ("DELETE", format!("/upsert/delete/{id}"), 204));
+        let unknown = (91000..91003).map(|id| ("GET", format!("/unknown/{id}"), 404));
+        for (method, path, status) in known.chain(unknown) {
+            let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
+            socket.write_all(format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 0\r\n\r\n").as_bytes()).await.unwrap();
+            let mut response = Vec::new();
+            tokio::time::timeout(Duration::from_secs(2), socket.read_to_end(&mut response))
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(
+                String::from_utf8(response)
+                    .unwrap()
+                    .starts_with(&format!("HTTP/1.1 {status}"))
+            );
+        }
+        server.abort();
+        let rendered = handle.render();
+        let labels: std::collections::BTreeSet<_> = rendered
+            .lines()
+            .filter_map(|line| {
+                line.split_once("uri=\"")
+                    .map(|(_, rest)| rest.split('"').next().unwrap())
+            })
+            .collect();
+        assert!(labels.contains("/upsert/delete/{id}"));
+        assert!(
+            labels
+                .iter()
+                .all(|label| matches!(*label, "/upsert/delete/{id}" | "unmatched"))
+        );
+    }
 }

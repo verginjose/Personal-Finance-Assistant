@@ -28,7 +28,18 @@ data:
     set -eu
     : "${RABBITMQ_DEFAULT_USER:?Missing service username}"
     : "${RABBITMQ_DEFAULT_PASS:?Missing service password}"
-    rabbitmqctl --timeout 120 await_startup >/dev/null
+    # postStart runs concurrently with the entrypoint. The first CLI call
+    # can fail before the Erlang node/pid file exists; retry instead of making
+    # kubelet kill an otherwise healthy broker during its first seconds.
+    attempts=0
+    until rabbitmqctl --timeout 10 await_startup >/dev/null 2>&1; do
+      attempts=$((attempts + 1))
+      if [ "$attempts" -ge 30 ]; then
+        echo 'RabbitMQ did not become available for service-account reconciliation' >&2
+        exit 1
+      fi
+      sleep 2
+    done
     if ! rabbitmqctl authenticate_user "$RABBITMQ_DEFAULT_USER" "$RABBITMQ_DEFAULT_PASS" >/dev/null 2>&1; then
       if rabbitmqctl -q list_users | awk -v user="$RABBITMQ_DEFAULT_USER" '$1 == user { found=1 } END { exit !found }'; then
         rabbitmqctl change_password "$RABBITMQ_DEFAULT_USER" "$RABBITMQ_DEFAULT_PASS" >/dev/null
@@ -88,6 +99,9 @@ spec:
               exec:
                 command: ["/bin/sh", "/etc/rabbitmq/ensure-service-user.sh"]
           env:
+            # Keep each short-lived CLI VM small under the 500m CPU quota.
+            - name: RABBITMQ_CTL_ERL_ARGS
+              value: "+S 1:1 +A 2"
             - name: RABBITMQ_DEFAULT_USER
               valueFrom:
                 secretKeyRef: { name: rabbitmq-secrets, key: RABBITMQ_USER }

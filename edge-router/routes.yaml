@@ -99,7 +99,9 @@ http:
           - url: http://storage-service:8083
   serversTransports:
     auth:
-      forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 15s, idleConnTimeout: 10s}
+      # 5s dial timeout produced 504s when a login burst briefly saturated the
+      # auth pod's accept path; 15s rides out the transient SYN backlog.
+      forwardingTimeouts: {dialTimeout: 15s, responseHeaderTimeout: 15s, idleConnTimeout: 10s}
     command:
       forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 15s, idleConnTimeout: 10s}
     query:

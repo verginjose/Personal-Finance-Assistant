@@ -2,10 +2,10 @@
 
 *Personal finance, kept straight.*
 
-[![Java](https://img.shields.io/badge/java-21%20%28OpenJDK%29-ED8B00?style=for-the-badge&logo=java)](https://openjdk.org/)
+[![Rust](https://img.shields.io/badge/rust-1.100-000000?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![JavaScript](https://img.shields.io/badge/javascript-ES6+-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
 [![HTML5](https://img.shields.io/badge/html5-Vanilla-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML)
-[![Spring Boot](https://img.shields.io/badge/spring%20boot-3.2-6DB33F?style=for-the-badge&logo=springboot)](https://spring.io/projects/spring-boot)
+[![Axum](https://img.shields.io/badge/axum-0.8-1F425F?style=for-the-badge)](https://github.com/tokio-rs/axum)
 [![Docker](https://img.shields.io/badge/docker-24.0.5-2496ED?style=for-the-badge&logo=docker)](https://www.docker.com/)
 [![PostgreSQL]( https://img.shields.io/badge/postgresql-15-336791?style=for-the-badge&logo=postgresql)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/redis-7-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
@@ -114,25 +114,26 @@ All API traffic passes through **Traefik** (`edge-router:8080`).
 - **Compatibility**: Rust auth retains the existing `auth.users` schema, BCrypt
   passwords, JWT claims, refresh cookies and Redis session keys. Concurrent
   refreshes converge on one session pair during the 60-second grace period.
-- **Memory limits**: auth 256 MiB, storage 256 MiB, Traefik 128 MiB. Command and
-  Query remain Spring services. Management endpoints use private port 9090.
+- **Memory limits**: auth 256 MiB, storage 256 MiB, Traefik 128 MiB, Command
+  512 MiB, Query 256 MiB. Every backend service is Rust now. Management
+  endpoints use private port 9090.
 
 ### 3. Core Business Services (CQRS Pattern)
 - **Auth Service**: See §2 — a Rust/Axum service (`auth-service:8082`)
   with its own database schema and the same JWT secret as storage.
-- **Command Service**: The primary operational engine. It executes all core mutations (CRUD operations) for transactions, budgets, goals, and shared group bills. It persists canonical state directly to its isolated schema in **PostgreSQL**.
-- **Query Service**: Optimized for ultra-fast reads, aggregations, and dashboard analytics. It maintains a highly optimized cache layer in **Redis** and provides AI-powered financial insights using the **Groq LLM**.
+- **Command Service**: Rust/Axum (`command-service:8081`), the primary operational engine. It executes every mutation (transactions, budgets, goals, shared group bills), persists canonical state to the **PostgreSQL primary**, and publishes cache-invalidation tokens to Redis.
+- **Query Service**: Rust/Axum (`query-service:8084`), reading from the streaming **PostgreSQL replica**. It serves the ledger, analytics, goals and group reads, and provides AI-powered insights through the configured LLM provider.
 - **OCR Service**: A Python/FastAPI ML worker. It uses **PaddleOCR** and the shared in-house deterministic parser for receipts and structured CSV imports, with local vector category fallback.
 
 ### 4. Event-Driven Architecture (Asynchronous Flow)
 To ensure high performance and loose coupling, the system leverages **RabbitMQ** and **Redis** for state propagation.
-- **Cache Invalidation & Outbox**: When the Command Service modifies data, it publishes a `transaction-cache-evict` event to RabbitMQ. The Query Service consumes this and instantly invalidates stale pre-computed aggregations in Redis.
+- **Cache Invalidation & Outbox**: When the Command Service commits a write it bumps `finance:gen:<scope>` and publishes the write's WAL position in `finance:wal:<scope>`, then deletes the affected Redis keys. The Query Service refuses to cache a fill whose generation moved or whose WAL the replica has not replayed; a small outbox retries the eviction if Redis is briefly unavailable.
 - **Batch AI Processing**: When a user uploads a multi-page Bank Statement PDF, the Rust storage service drops the file in MinIO and sends an `ocr.job` event to RabbitMQ. The OCR Service consumes the job, processes receipts and structured CSV locally, and posts the results back to an internal webhook. The Command Service then broadcasts this via SSE so the user's UI updates in real-time.
 
 ### 5. Telemetry & Observability Pipeline
 A robust, enterprise-grade observability stack monitors the entire cluster.
 - **Log Aggregation (Vector & ClickHouse)**: Every microservice outputs structured JSON logs. **Vector** acts as an ultra-fast, lightweight log aggregator that scrapes the Docker socket, sanitizes the payloads (redacting PII like emails and passwords), and ships the logs in bulk to **ClickHouse**—a columnar database optimized for massive analytical queries.
-- **Metrics Scraping (Prometheus)**: Each Spring Boot microservice exposes a `/actuator/prometheus` endpoint. **Prometheus** periodically scrapes these endpoints to collect JVM metrics, HTTP latencies, and connection pool statuses. It also scrapes kubelet's **cAdvisor** endpoint (`/metrics/cadvisor`), which is where per-pod CPU, memory and restart metrics come from. Additionally, Vector computes real-time error rates from the log streams and exposes them as native Prometheus metrics.
+- **Metrics Scraping (Prometheus)**: Every backend service exposes `/actuator/prometheus`. **Prometheus** periodically scrapes these endpoints to collect HTTP latencies, connection-pool statuses and process metrics. It also scrapes kubelet's **cAdvisor** endpoint (`/metrics/cadvisor`), which is where per-pod CPU, memory and restart metrics come from. Additionally, Vector computes real-time error rates from the log streams and exposes them as native Prometheus metrics.
 - **Visualization (Grafana)**: **Grafana** serves as the single pane of glass. It is pre-configured with ClickHouse and Prometheus data sources and four dashboards: *Finance Assistant — Overview & Debug*, *Pods — CPU / memory / restarts*, *Redis — Debug & Runbook*, and *Postgres — Debug & Runbook*.
 
 ---
@@ -152,8 +153,7 @@ A robust, enterprise-grade observability stack monitors the entire cluster.
 
 ### Prerequisites
 - Docker and Docker Compose (v24 or newer)
-- Java 21 (optional, required only for local compilation)
-- Maven 3.9+ (optional, required only for local compilation)
+- Rust 1.100+ / Cargo (optional, for local compilation and `cargo clippy`)
 
 ### 1. Clone the Repository
 ```bash
@@ -398,4 +398,4 @@ This repository ships with a comprehensive Python-based End-to-End (E2E) test su
 - AI-driven insight generation and cache eviction workflows via Kafka.
 - Analytics generation and complex aggregation workflows.
 
-The suite can be executed locally using the commands outlined above. Continuous Integration pipelines are configured to execute this script on every push to ensure system integrity. Furthermore, each microservice contains a comprehensive suite of Unit and Integration tests leveraging JUnit and Spring Boot Test. These can be executed by running `mvn test` in each respective service directory.
+The suite can be executed locally using the commands outlined above. Continuous Integration pipelines are configured to execute this script on every push to ensure system integrity. The Rust services are checked with `cargo clippy --locked` and `cargo build --locked`; the Python golden suite is the end-to-end gate.

@@ -1,26 +1,20 @@
-# Pull-through cache for Maven Central.
+# Pull-through cache for crates.io (Cargo sparse index + crate archives).
 #
-# Why: buildkitd's only required internet dependency was the Maven build
-# stage. With this in place the daemon can have no egress at all (see
-# k8s/system/network-policies.yaml), which removes the exfiltration path that
-# --oci-worker-no-process-sandbox otherwise leaves open.
+# Why: buildkitd has no internet egress at all (see
+# k8s/system/network-policies.yaml), so Rust builds fetch dependencies through
+# this cache. It is deliberately dumb: an nginx proxy_cache, not a repository
+# manager. Both locations are GET-only.
 #
-# It is deliberately dumb: an nginx proxy_cache, not Nexus. Maven only issues
-# GETs, and this repository has one ecosystem. If npm or PyPI ever need a
-# build-time dependency, promote this to a real repository manager.
-#
-# HTTPS matters: Maven 3.8.1+ refuses plain-HTTP repositories ("Blocked
-# mirror for repositories"), so the service terminates TLS with a certificate
-# from the CI CA. The builder stage trusts that CA — k8s/ci/build.yml copies
-# /certs/ca.crt into the build context and the Maven Dockerfiles import it
-# into the JDK truststore before running mvn.
+# HTTPS matters: Cargo verifies the registry certificate against the CI CA
+# passed as a BuildKit secret (id=ci_ca), so the service terminates TLS with a
+# certificate from that CA.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: maven-proxy-config
+  name: cargo-proxy-config
   namespace: pfa
   labels:
-    app: maven
+    app: cargo-proxy
     app.kubernetes.io/part-of: personal-finance-assistant
 data:
   nginx.conf: |
@@ -41,12 +35,12 @@ data:
 
       access_log /dev/stdout;
 
-      # 8 GiB of artifacts covers the Spring dependency tree several times
+      # 4 GiB holds the crate archives for every Rust service several times
       # over. max_size is the hard bound; inactive is the GC horizon.
       proxy_cache_path /cache
                        levels=1:2
-                       keys_zone=maven:64m
-                       max_size=8g
+                       keys_zone=cargo:64m
+                       max_size=4g
                        inactive=90d
                        use_temp_path=off;
 
@@ -58,24 +52,22 @@ data:
 
         proxy_ssl_server_name on;
         proxy_ssl_verify on;
-        # nginx defaults to a verify depth of 1. Maven Central's chain is
-        # leaf -> YE1 -> Root YE -> ISRG Root X2 -> ISRG Root X1, so the
-        # default fails with "unable to get local issuer certificate".
+        # crates.io fronts through a chain longer than nginx's default depth 1.
         proxy_ssl_verify_depth 5;
         proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
 
-        # Cargo sparse index and immutable crate archives share the existing
-        # TLS cache and NetworkPolicy path; BuildKit keeps no internet egress.
+        # Cargo sparse index: the config advertises this proxy for downloads so
+        # clients never contact static.crates.io directly.
         location = /cargo/index/config.json {
           default_type application/json;
-          return 200 '{"dl":"https://maven.pfa.svc.cluster.local:8443/cargo/crates","api":"https://crates.io"}';
+          return 200 '{"dl":"https://cargo-proxy.pfa.svc.cluster.local:8443/cargo/crates","api":"https://crates.io"}';
         }
         location /cargo/index/ {
           limit_except GET HEAD { deny all; }
           proxy_pass https://index.crates.io/;
           proxy_set_header Host index.crates.io;
           proxy_ssl_name index.crates.io;
-          proxy_cache maven;
+          proxy_cache cargo;
           proxy_cache_valid 200 1h;
           proxy_cache_lock on;
         }
@@ -85,55 +77,36 @@ data:
           proxy_pass https://static.crates.io/crates/$1/$1-$2.crate;
           proxy_set_header Host static.crates.io;
           proxy_ssl_name static.crates.io;
-          proxy_cache maven;
+          proxy_cache cargo;
           proxy_cache_valid 200 60d;
           proxy_cache_lock on;
         }
-        location /cargo/ { return 404; }
-
-        location / {
-          limit_except GET HEAD { deny all; }
-
-          proxy_pass https://repo.maven.apache.org/maven2/;
-          proxy_set_header Host repo.maven.apache.org;
-          proxy_read_timeout 120s;
-
-          proxy_cache maven;
-          proxy_cache_valid 200 301 302 60d;
-          # Short negative cache: a dependency that does not exist yet must
-          # not be remembered for a week.
-          proxy_cache_valid 404 1m;
-          proxy_cache_use_stale error timeout updating
-                                http_500 http_502 http_503 http_504;
-          proxy_cache_lock on;
-
-          add_header X-Cache-Status $upstream_cache_status always;
-        }
+        location / { return 404; }
       }
     }
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: maven-cache
+  name: cargo-cache
   namespace: pfa
   labels:
-    app: maven
+    app: cargo-proxy
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: local-path
   resources:
     requests:
-      storage: 10Gi
+      storage: 4Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: maven
+  name: cargo-proxy
   namespace: pfa
   labels:
-    app: maven
+    app: cargo-proxy
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
   replicas: 1
@@ -142,11 +115,11 @@ spec:
     type: Recreate          # the cache PVC is RWO
   selector:
     matchLabels:
-      app: maven
+      app: cargo-proxy
   template:
     metadata:
       labels:
-        app: maven
+        app: cargo-proxy
         app.kubernetes.io/part-of: personal-finance-assistant
     spec:
       automountServiceAccountToken: false
@@ -162,9 +135,6 @@ spec:
         - name: fix-perms
           image: busybox:1.36
           command: ["sh", "-c", "chown -R 101:101 /cache"]
-          # One-shot root: chown needs CAP_CHOWN, and the pod-level
-          # runAsNonRoot/runAsUser would otherwise apply here too. The nginx
-          # container itself stays uid 101.
           securityContext:
             runAsUser: 0
             runAsNonRoot: false
@@ -211,28 +181,28 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: maven-proxy-config
+            name: cargo-proxy-config
         - name: tls
           secret:
-            secretName: ci-tls-maven
+            secretName: ci-tls-cargo-proxy
             defaultMode: 0440
         - name: cache
           persistentVolumeClaim:
-            claimName: maven-cache
+            claimName: cargo-cache
         - name: tmp
           emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: maven
+  name: cargo-proxy
   namespace: pfa
   labels:
-    app: maven
+    app: cargo-proxy
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
   selector:
-    app: maven
+    app: cargo-proxy
   ports:
     - name: https
       port: 8443

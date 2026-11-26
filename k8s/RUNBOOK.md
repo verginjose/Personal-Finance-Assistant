@@ -335,12 +335,11 @@ pointing the same panel at a much larger dataset.
 
 ### Log format
 
-Spring services emit one-line JSON only under the `structured-logs` profile,
-which `k8s/apps/*.yaml` sets through `SPRING_PROFILES_ACTIVE`. That is what
-lets Vector fill the `service`, `level`, `logger`, `thread` and `pod` columns
-in ClickHouse. Without the profile — `mvn spring-boot:run`, docker compose —
-logback prints a human-readable line instead, which is what you want when
-reading logs in a terminal.
+Every service emits one-line JSON to stdout unconditionally (the Rust services
+via `tracing`, the Python OCR worker via its stdout handler). That is what lets
+Vector fill the `service`, `level`, `logger`, `thread` and `pod` columns in
+ClickHouse. For a human-readable local run, set `RUST_LOG` and pipe through
+`jq`.
 
 Vector drops health-probe noise (`kube-probe`, `GET /health`, `GET /v2/`),
 the registry's duplicate `response completed` line, and the command-service

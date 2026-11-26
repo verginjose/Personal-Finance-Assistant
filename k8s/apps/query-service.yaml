@@ -43,9 +43,10 @@ metadata:
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
   revisionHistoryLimit: 3
-  # 2 replicas: read side is stateless (replica DB + shared Redis caches), so a
-  # request burst is split across two accept paths instead of stalling one.
-  replicas: 2
+  # 3 replicas: stateless read side. With DB_MAX_CONNECTIONS=50 that is 150
+  # pooled connections (< the replica's max_connections=200), enough for 400+
+  # users without requests queueing on the 10s acquire_timeout.
+  replicas: 3
   selector:
     matchLabels:
       app: query-service
@@ -84,6 +85,9 @@ spec:
                 name: query-service-config
             - secretRef:
                 name: query-service-secrets
+          env:
+            - name: DB_MAX_CONNECTIONS
+              value: "50"
           # CQRS read side: DB_HOST defaults to postgres-replica. The service
           # writes JSON logs to stdout for the Vector -> ClickHouse pipeline.
           # Right-sized for the Rust service: it idles at ~2 MiB (cgroup

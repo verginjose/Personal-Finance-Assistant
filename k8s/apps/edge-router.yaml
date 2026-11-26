@@ -51,7 +51,7 @@ spec:
         fsGroup: 65534
       containers:
       - name: edge-router
-        image: 127.0.0.1:30500/finance/edge-router:a00a4b133cf2
+        image: 127.0.0.1:30500/finance/edge-router:d9d79d64f2bc
         imagePullPolicy: IfNotPresent
         env:
         # Leave headroom for connection buffers at the tested 500-user load.

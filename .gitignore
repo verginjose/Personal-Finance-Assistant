@@ -35,3 +35,10 @@ requests/golden-users*.csv
 # CI mTLS material: plaintext CA and certificates. The encrypted copies live in
 # k8s/sealed/ci-tls-secrets.yaml; see k8s/ci/gen-tls-certs.sh.
 .certs/
+
+# Editor recovery files
+*.swp
+*.swo
+
+# Per-run local credentials must never be committed
+requests/results/**/credentials.csv

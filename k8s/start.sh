@@ -3,8 +3,8 @@
 #
 # Starts k3s if it is not running, waits for the workloads in namespace pfa,
 # reports Argo CD's sync state, then prints every URL and credential (read from
-# .env and from the cluster). Nothing is deployed: k3s replays the stored
-# desired state, so this works after any reboot.
+# .env and from the cluster). Removes hospital while retaining storage and
+# restores finance from the workspace snapshot when available.
 #
 #   ./k8s/start.sh                      # start + status; forwards UIs; passwords hidden
 #   ./k8s/start.sh --secrets            # print only the credentials, then exit
@@ -97,20 +97,24 @@ secret_text() {   # print a password, or a placeholder with --no-secrets
 print_credentials() {
   # The Argo CD password lives in the cluster; fall back to .env when the
   # cluster is down, since --secrets must work without starting anything.
-  local argo_pw
+  local argo_pw minio_user rabbitmq_user
   argo_pw="$(kubectl -n argocd get secret argocd-initial-admin-secret \
     -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)"
   [[ -z "${argo_pw}" ]] && argo_pw="$(env_value ARGOCD_PASSWORD)"
+  # These usernames are not "admin"/"guest": the k8s Secrets seal them from
+  # .env, so read them there (with the upstream defaults as a last resort).
+  minio_user="$(env_value MINIO_ACCESS_KEY)";      [[ -n "${minio_user}" ]]    || minio_user="admin"
+  rabbitmq_user="$(env_value RABBITMQ_USER)";      [[ -n "${rabbitmq_user}" ]] || rabbitmq_user="guest"
 
   printf '    postgres       user %s / %s   database %s\n' \
     "$(env_value DB_USER)" "$(secret_text "$(env_value DB_PASSWORD)" DB_PASSWORD)" "$(env_value DB_NAME)"
   printf '    redis          %s\n' "$(secret_text "$(env_value REDIS_PASSWORD)" REDIS_PASSWORD)"
   printf '    clickhouse     user default / %s\n' "$(secret_text "$(env_value CLICKHOUSE_PASSWORD)" CLICKHOUSE_PASSWORD)"
   printf '    grafana        user admin / %s\n' "$(secret_text "$(env_value GRAFANA_ADMIN_PASSWORD)" GRAFANA_ADMIN_PASSWORD)"
-  printf '    minio          user admin / %s   (API svc/minio:9000)\n' \
-    "$(secret_text "$(env_value MINIO_ROOT_PASSWORD)" MINIO_ROOT_PASSWORD)"
-  printf '    rabbitmq       user guest / %s   (management svc/rabbitmq:15672)\n' \
-    "$(secret_text guest RABBITMQ_PASSWORD)"
+  printf '    minio          user %s / %s   (API svc/minio:9000)\n' \
+    "${minio_user}" "$(secret_text "$(env_value MINIO_ROOT_PASSWORD)" MINIO_ROOT_PASSWORD)"
+  printf '    rabbitmq       user %s / %s   (management svc/rabbitmq:15672)\n' \
+    "${rabbitmq_user}" "$(secret_text "$(env_value RABBITMQ_PASSWORD)" RABBITMQ_PASSWORD)"
   if [[ -n "${argo_pw}" ]]; then
     printf '    argocd         user admin / %s\n' "$(secret_text "${argo_pw}" ARGOCD_PASSWORD)"
   fi
@@ -424,6 +428,9 @@ for i in $(seq 1 90); do
   [[ $i -eq 90 ]] && { fail "no node became Ready within 3 minutes"; exit 1; }
 done
 ok "node Ready ($(kubectl get nodes -o jsonpath='{.items[0].metadata.name}'))"
+
+# Select this project before starting any workloads or maintenance builds.
+python3 "${ROOT_DIR}/../Advanced_Hospital_Management_System/scripts/workspace.py" switch finance
 
 if ! kubectl get namespace "${NS}" >/dev/null 2>&1; then
   warn "namespace ${NS} does not exist"

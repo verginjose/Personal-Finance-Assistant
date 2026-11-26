@@ -26,17 +26,12 @@ metadata:
     app: query-service
     app.kubernetes.io/part-of: personal-finance-assistant
 data:
-  SPRING_JPA_HIBERNATE_DDL_AUTO: update
-  # No SPRING_JPA_DATABASE_PLATFORM: Hibernate 6 infers PostgreSQL from the
-  # JDBC connection. Setting it explicitly triggers HHH90000025 on every boot.
+  # Rust service settings only. DB_USER/DB_PASSWORD/DB_NAME/REDIS_PASSWORD and
+  # GROQ_API_KEY come from query-service-secrets; the service defaults DB_HOST
+  # to postgres-replica and DB_PORT to 5432.
   REDIS_HOST: redis
-  SPRING_DATA_REDIS_HOST: redis
-  SPRING_DATA_REDIS_PORT: "6379"
-  RABBITMQ_HOST: rabbitmq
-  SPRING_RABBITMQ_HOST: rabbitmq
   GROQ_MODEL: openai/gpt-oss-120b
   GROQ_URL: https://api.groq.com/openai/v1/chat/completions
-  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -62,10 +57,7 @@ spec:
     spec:
       terminationGracePeriodSeconds: 30
       automountServiceAccountToken: false
-      # Writable /tmp for the JVM (hsperfdata, Tomcat work dir); the rest of
-      # the root filesystem is read-only. 65534 is `nobody`, which exists in
-      # both the Alpine and the Ubuntu base images, so no passwd entry is
-      # missing when the process resolves its own uid.
+      # Read-only root filesystem; 65534 is `nobody`, used by the Rust image.
       securityContext:
         fsGroup: 65534
       containers:
@@ -90,28 +82,8 @@ spec:
                 name: query-service-config
             - secretRef:
                 name: query-service-secrets
-          env:
-            # Structured (one-line JSON) stdout for the Vector -> ClickHouse
-            # pipeline. Without this profile logback logs a human-readable
-            # line, which is what local runs want.
-            - name: SPRING_PROFILES_ACTIVE
-              value: structured-logs
-            # Read side of CQRS: reads from the streaming replica.
-            - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres-replica:5432/$(DB_NAME)
-            - name: SPRING_DATASOURCE_USERNAME
-              value: $(DB_USER)
-            - name: SPRING_DATASOURCE_PASSWORD
-              value: $(DB_PASSWORD)
-            - name: SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA
-              value: $(FINANCE_DB_SCHEMA)
-            - name: SPRING_DATASOURCE_HIKARI_SCHEMA
-              value: $(FINANCE_DB_SCHEMA)
-            # Spring's Redis property expects a different name than the
-            # REDIS_PASSWORD the Secret stores.
-            - name: SPRING_DATA_REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef: { name: query-service-secrets, key: REDIS_PASSWORD }
+          # CQRS read side: DB_HOST defaults to postgres-replica. The service
+          # writes JSON logs to stdout for the Vector -> ClickHouse pipeline.
           resources:
             requests:
               cpu: 250m

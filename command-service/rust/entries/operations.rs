@@ -1,371 +1,11 @@
+use crate::*;
 use super::*;
 use crate::{cache, subscriptions};
 use chrono::{NaiveDateTime, Utc};
 use rust_decimal::Decimal;
-use serde::Deserialize;
 use serde_json::Value;
 use sqlx::{Postgres, Transaction};
-use std::str::FromStr;
 use uuid::Uuid;
-
-const INCOME_CATEGORIES: &[&str] = &[
-    "SALARY", "COMMISSION", "CAPITAL_GAINS", "FREELANCE", "BUSINESS", "INVESTMENTS",
-    "RENTAL_INCOME", "DIVIDENDS", "INTEREST", "BONUS", "PENSION", "GOVT_BENEFITS",
-    "CASHBACK_REWARDS", "GIFTS_RECEIVED", "TAX_REFUND", "SIDE_HUSTLE", "OTHER_INCOME",
-];
-const MOVEMENT_CATEGORIES: &[&str] = &[
-    "SETTLEMENT", "CREDIT_CARD_PAYMENT", "MUTUAL_FUNDS_SIP", "STOCKS_AND_TRADING", "CRYPTO",
-    "EMERGENCY_FUND", "FIXED_DEPOSIT", "GOAL", "OWN_ACCOUNT_TRANSFER", "BORROWING", "LENDING",
-    "LOAN_PRINCIPAL", "INVESTMENT_WITHDRAWAL",
-];
-const KINDS: &[&str] = &["STANDARD", "TRANSFER", "INVESTMENT", "REFUND", "REIMBURSEMENT"];
-const PERIODS: &[&str] = &["DAILY", "WEEKLY", "MONTHLY", "YEARLY"];
-const CATEGORIES: &[&str] = &[
-    "SALARY", "COMMISSION", "CAPITAL_GAINS", "FREELANCE", "BUSINESS", "INVESTMENTS",
-    "RENTAL_INCOME", "DIVIDENDS", "INTEREST", "BONUS", "PENSION", "GOVT_BENEFITS",
-    "CASHBACK_REWARDS", "GIFTS_RECEIVED", "TAX_REFUND", "SIDE_HUSTLE", "OTHER_INCOME", "RENT",
-    "HOME_LOAN_EMI", "FURNITURE", "HOUSEHOLD_SUPPLIES", "DOMESTIC_HELP", "SOCIETY_MAINTENANCE",
-    "HOME_MAINTENANCE", "PROPERTY_TAX", "ELECTRICITY", "WATER", "GAS", "INTERNET", "MOBILE_PHONE",
-    "OTT_SUBSCRIPTIONS", "GROCERIES", "RESTAURANTS", "FOOD_DELIVERY", "COFFEE_AND_SNACKS", "FUEL",
-    "PUBLIC_TRANSPORT", "CAB_AND_AUTO", "VEHICLE_EMI", "VEHICLE_MAINTENANCE", "PARKING_AND_TOLLS",
-    "FLIGHT_AND_TRAIN", "DOCTOR_AND_CLINIC", "MEDICINES", "HEALTH_INSURANCE", "GYM_AND_FITNESS",
-    "MENTAL_WELLNESS", "TUITION_AND_FEES", "BOOKS_AND_COURSES", "COACHING", "STUDENT_LOAN_EMI",
-    "CLOTHING", "ELECTRONICS", "HOME_APPLIANCES", "PERSONAL_CARE", "GIFTS_GIVEN",
-    "MOVIES_AND_EVENTS", "GAMING", "SPORTS_AND_HOBBIES", "BOOKS_AND_MAGAZINES",
-    "TRAVEL_VACATION", "HOTEL_AND_STAYS", "BANK_CHARGES", "CARD_FEES", "LOAN_INTEREST",
-    "SOFTWARE_SUBSCRIPTIONS", "CLOUD_STORAGE", "PROFESSIONAL_MEMBERSHIPS", "LIFE_INSURANCE",
-    "VEHICLE_INSURANCE", "CREDIT_CARD_PAYMENT", "LOAN_REPAYMENT", "MUTUAL_FUNDS_SIP",
-    "STOCKS_AND_TRADING", "CRYPTO", "EMERGENCY_FUND", "FIXED_DEPOSIT", "CHARITY_AND_DONATIONS",
-    "TAXES", "FINES_AND_PENALTIES", "PETS", "CHILDCARE", "ELDER_CARE", "GOAL", "SETTLEMENT",
-    "OTHERS", "OWN_ACCOUNT_TRANSFER", "BORROWING", "LENDING", "LOAN_PRINCIPAL",
-    "INVESTMENT_WITHDRAWAL",
-];
-
-const ENTRY_COLS: &str = "id,user_id,name,amount,type::text AS type,category::text AS category,\
-currency,description,created_at,updated_at,recurring,recurring_period::text AS recurring_period,\
-next_run_date,deleted_at,receipt_url,transaction_kind::text AS transaction_kind,\
-original_transaction_id,subcategory";
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EntryRequest {
-    pub id: Option<i64>,
-    pub user_id: Option<Uuid>,
-    pub name: Option<String>,
-    pub amount: Option<Value>,
-    pub r#type: Option<String>,
-    pub category: Option<String>,
-    pub currency: Option<String>,
-    pub description: Option<String>,
-    pub recurring: Option<bool>,
-    pub recurring_period: Option<String>,
-    pub created_at: Option<String>,
-    pub receipt_url: Option<String>,
-    pub transaction_kind: Option<String>,
-    pub original_transaction_id: Option<i64>,
-    pub subcategory: Option<String>,
-}
-
-#[derive(Clone)]
-struct Validated {
-    name: String,
-    amount: Decimal,
-    r#type: String,
-    kind: String,
-    category: Option<String>,
-    currency: String,
-    description: Option<String>,
-    recurring: bool,
-    period: Option<String>,
-    created_at: Option<NaiveDateTime>,
-    receipt_url: Option<String>,
-    original_id: Option<i64>,
-    subcategory: Option<String>,
-}
-
-#[derive(Debug, sqlx::FromRow)]
-#[allow(dead_code)]
-pub struct EntryRow {
-    pub id: i64,
-    pub user_id: Uuid,
-    pub name: String,
-    pub amount: Decimal,
-    #[sqlx(rename = "type")]
-    pub r#type: String,
-    pub category: Option<String>,
-    pub currency: String,
-    pub description: Option<String>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: Option<NaiveDateTime>,
-    pub recurring: bool,
-    pub recurring_period: Option<String>,
-    pub next_run_date: Option<NaiveDateTime>,
-    pub deleted_at: Option<NaiveDateTime>,
-    pub receipt_url: Option<String>,
-    pub transaction_kind: Option<String>,
-    pub original_transaction_id: Option<i64>,
-    pub subcategory: Option<String>,
-}
-
-pub fn valid_category(category: &str) -> bool {
-    CATEGORIES.contains(&category)
-}
-
-fn is_recovery(kind: &str) -> bool {
-    kind == "REFUND" || kind == "REIMBURSEMENT"
-}
-
-pub fn reportable(kind: &str, category: Option<&str>) -> bool {
-    kind != "TRANSFER"
-        && kind != "INVESTMENT"
-        && !MOVEMENT_CATEGORIES.contains(&category.unwrap_or("OTHERS"))
-}
-
-fn parse_amount(v: &Value) -> Result<Decimal> {
-    Decimal::from_str(v.to_string().trim_matches('"')).map_err(|_| bad("Invalid amount format"))
-}
-
-fn require_owned(url: Option<&str>, user: Uuid) -> Result<()> {
-    if let Some(url) = url
-        && !url.is_empty()
-    {
-        let prefix = format!("/api/storage/receipts/{user}");
-        if !url.starts_with(&format!("{prefix}/")) && !url.starts_with(&format!("{prefix}-batch-")) {
-            return Err(forbidden("Receipt was not uploaded by this user"));
-        }
-    }
-    Ok(())
-}
-
-fn basic(req: &EntryRequest) -> Result<Validated> {
-    let name = req.name.clone().unwrap_or_default().trim().to_string();
-    if name.is_empty() {
-        return Err(bad("Name is required"));
-    }
-    if name.chars().count() > 100 {
-        return Err(bad("Name cannot exceed 100 characters"));
-    }
-    let amount = parse_amount(req.amount.as_ref().ok_or_else(|| bad("Amount is required"))?)?;
-    if amount <= Decimal::ZERO {
-        return Err(bad("Amount must be greater than zero"));
-    }
-    if amount.scale() > 2 || amount.abs().trunc().to_string().len() > 10 {
-        return Err(bad("Invalid amount format"));
-    }
-    let r#type = req.r#type.clone().unwrap_or_default();
-    if !["INCOME", "EXPENSE"].contains(&r#type.as_str()) {
-        return Err(bad("Transaction type is required"));
-    }
-    let kind = req
-        .transaction_kind
-        .clone()
-        .unwrap_or_else(|| "STANDARD".into());
-    if !KINDS.contains(&kind.as_str()) {
-        return Err(bad("Invalid transaction kind"));
-    }
-    let category = match &req.category {
-        Some(c) if !CATEGORIES.contains(&c.as_str()) => return Err(bad("Invalid category")),
-        other => other.clone(),
-    };
-    let currency = req.currency.clone().unwrap_or_default();
-    if currency.len() != 3 {
-        return Err(bad("Currency must be 3 characters"));
-    }
-    let description = req.description.clone().filter(|d| !d.is_empty());
-    if description.as_ref().is_some_and(|d| d.chars().count() > 500) {
-        return Err(bad("Description cannot exceed 500 characters"));
-    }
-    let subcategory = req.subcategory.clone().map(|s| s.trim().to_string());
-    if subcategory.as_ref().is_some_and(|s| s.chars().count() > 80) {
-        return Err(bad("Subcategory cannot exceed 80 characters"));
-    }
-    let subcategory = subcategory.filter(|s| !s.is_empty());
-    let period = req.recurring_period.clone();
-    if period
-        .as_ref()
-        .is_some_and(|p| !PERIODS.contains(&p.as_str()))
-    {
-        return Err(bad("Invalid recurring period"));
-    }
-    Ok(Validated {
-        name,
-        amount,
-        r#type,
-        kind,
-        category,
-        currency,
-        description,
-        recurring: req.recurring.unwrap_or(false),
-        period,
-        created_at: match req.created_at.as_deref() {
-            None => None,
-            Some(value) if value.trim().is_empty() => None,
-            Some(value) => Some(crate::datetime(value)?),
-        },
-        receipt_url: req.receipt_url.clone().filter(|r| !r.is_empty()),
-        original_id: req.original_transaction_id,
-        subcategory,
-    })
-}
-
-fn rules(v: &Validated, self_id: Option<i64>) -> Result<()> {
-    if !is_recovery(&v.kind) {
-        let category = v
-            .category
-            .as_ref()
-            .ok_or_else(|| bad("Category is required"))?;
-        if v.original_id.is_some() {
-            return Err(bad("Only refunds and reimbursements can link to an expense"));
-        }
-        if v.kind == "STANDARD"
-            && !MOVEMENT_CATEGORIES.contains(&category.as_str())
-            && ((v.r#type == "INCOME") != INCOME_CATEGORIES.contains(&category.as_str()))
-        {
-            return Err(bad("Category does not match the transaction direction"));
-        }
-        return Ok(());
-    }
-    if v.r#type != "INCOME"
-        || v.recurring
-        || v.original_id.is_none()
-        || (self_id.is_some() && v.original_id == self_id)
-    {
-        return Err(bad(
-            "A refund or reimbursement must be a non-recurring incoming payment linked to an expense",
-        ));
-    }
-    Ok(())
-}
-
-async fn validate_recovery(
-    tx: &mut Transaction<'_, Postgres>,
-    user: Uuid,
-    v: &mut Validated,
-    self_id: Option<i64>,
-) -> Result<()> {
-    let original_id = v.original_id.unwrap();
-    let original = sqlx::query_as::<_, EntryRow>(&format!(
-        "SELECT {ENTRY_COLS} FROM finance.transaction_entries \
-         WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL FOR UPDATE"
-    ))
-    .bind(original_id)
-    .bind(user)
-    .fetch_optional(&mut **tx)
-    .await?
-    .ok_or_else(|| bad("Original expense not found"))?;
-    let original_kind = original
-        .transaction_kind
-        .clone()
-        .unwrap_or_else(|| "STANDARD".into());
-    if original.r#type != "EXPENSE"
-        || !reportable(&original_kind, original.category.as_deref())
-        || is_recovery(&original_kind)
-        || !original.currency.eq_ignore_ascii_case(&v.currency)
-    {
-        return Err(bad(
-            "The original transaction must be an expense in the same currency",
-        ));
-    }
-    if group_link_exists(tx, original.id).await? {
-        return Err(bad("For a shared expense, adjust the expense in its group"));
-    }
-    let recovered: Decimal = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(amount),0) FROM finance.transaction_entries \
-         WHERE original_transaction_id=$1 AND deleted_at IS NULL \
-           AND ($2::bigint IS NULL OR id<>$2) \
-           AND transaction_kind IN ('REFUND','REIMBURSEMENT')",
-    )
-    .bind(original.id)
-    .bind(self_id)
-    .fetch_one(&mut **tx)
-    .await?;
-    if recovered + v.amount > original.amount {
-        return Err(bad(
-            "Refunds and reimbursements cannot exceed the original expense",
-        ));
-    }
-    v.category = original.category;
-    v.subcategory = original.subcategory;
-    Ok(())
-}
-
-async fn validate(
-    tx: &mut Transaction<'_, Postgres>,
-    user: Uuid,
-    req: &EntryRequest,
-    self_id: Option<i64>,
-) -> Result<Validated> {
-    let mut v = basic(req)?;
-    rules(&v, self_id)?;
-    require_owned(v.receipt_url.as_deref(), user)?;
-    if is_recovery(&v.kind) {
-        validate_recovery(tx, user, &mut v, self_id).await?;
-    }
-    Ok(v)
-}
-
-/// Re-run the accounting rules after an amount-only change; editable fields are
-/// unchanged, but a refund must still not exceed its original expense.
-async fn validate_patched(
-    tx: &mut Transaction<'_, Postgres>,
-    user: Uuid,
-    row: &EntryRow,
-    amount: Decimal,
-) -> Result<()> {
-    let mut v = Validated {
-        name: row.name.clone(),
-        amount,
-        r#type: row.r#type.clone(),
-        kind: row
-            .transaction_kind
-            .clone()
-            .unwrap_or_else(|| "STANDARD".into()),
-        category: row.category.clone(),
-        currency: row.currency.clone(),
-        description: row.description.clone(),
-        recurring: row.recurring,
-        period: row.recurring_period.clone(),
-        created_at: Some(row.created_at),
-        receipt_url: row.receipt_url.clone(),
-        original_id: row.original_transaction_id,
-        subcategory: row.subcategory.clone(),
-    };
-    rules(&v, Some(row.id))?;
-    if is_recovery(&v.kind) {
-        validate_recovery(tx, user, &mut v, Some(row.id)).await?;
-    }
-    Ok(())
-}
-
-async fn group_link_exists(
-    tx: &mut Transaction<'_, Postgres>,
-    id: i64,
-) -> Result<bool> {
-    Ok(sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM groups.expense_transaction_links WHERE transaction_entry_id=$1)",
-    )
-    .bind(id)
-    .fetch_one(&mut **tx)
-    .await?)
-}
-
-async fn outbox(
-    tx: &mut Transaction<'_, Postgres>,
-    user: Uuid,
-    event: &str,
-    entity: i64,
-) -> Result<()> {
-    sqlx::query(
-        "INSERT INTO finance.outbox_events (user_id, event_type, entity_id, status, created_at) \
-         VALUES ($1,$2,$3,'PENDING',now())",
-    )
-    .bind(user)
-    .bind(event)
-    .bind(entity)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
-}
 
 pub fn next_run(created: Option<NaiveDateTime>, period: &str) -> Option<NaiveDateTime> {
     let base = created.unwrap_or_else(|| Utc::now().naive_utc());
@@ -379,7 +19,7 @@ pub fn next_run(created: Option<NaiveDateTime>, period: &str) -> Option<NaiveDat
     next.date().and_hms_opt(0, 0, 0)
 }
 
-async fn insert(
+pub(crate) async fn insert(
     tx: &mut Transaction<'_, Postgres>,
     user: Uuid,
     v: &Validated,
@@ -473,7 +113,7 @@ pub async fn create(
     Ok(entry_response(&row))
 }
 
-async fn replay(a: &App, user: Uuid, key: &str) -> Result<Value> {
+pub(crate) async fn replay(a: &App, user: Uuid, key: &str) -> Result<Value> {
     let transaction_id: Option<i64> = sqlx::query_scalar(
         "SELECT transaction_id FROM finance.idempotency_records \
          WHERE user_id=$1 AND idempotency_key=$2",
@@ -528,7 +168,7 @@ pub async fn create_bulk(
     Ok(rows.iter().map(entry_response).collect())
 }
 
-async fn detect_subscription(a: &App, row: &EntryRow) {
+pub(crate) async fn detect_subscription(a: &App, row: &EntryRow) {
     let period = row
         .recurring_period
         .clone()
@@ -548,7 +188,7 @@ async fn detect_subscription(a: &App, row: &EntryRow) {
     }
 }
 
-fn reportable_text(row: &EntryRow) -> bool {
+pub(crate) fn reportable_text(row: &EntryRow) -> bool {
     reportable(
         row.transaction_kind.as_deref().unwrap_or("STANDARD"),
         row.category.as_deref(),
@@ -699,7 +339,7 @@ pub async fn delete(a: &App, id: i64, user: Uuid) -> Result<()> {
     Ok(())
 }
 
-async fn require_no_recoveries(
+pub(crate) async fn require_no_recoveries(
     tx: &mut Transaction<'_, Postgres>,
     user: Uuid,
     row: &EntryRow,
@@ -723,7 +363,7 @@ async fn require_no_recoveries(
 
 /// Adjust the goal allocation for an amount change (`change_allocation=true`)
 /// or revert the goal's saved amount on delete (`false`).
-async fn adjust_allocation(
+pub(crate) async fn adjust_allocation(
     tx: &mut Transaction<'_, Postgres>,
     user: Uuid,
     transaction_id: i64,

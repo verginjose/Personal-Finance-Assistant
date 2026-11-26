@@ -35,6 +35,8 @@ spec:
   # just after a build sitting for up to an hour (observed: 54 GB idle for 3
   # minutes in the 2026-11-07 run). A no-op run on a clean cache is seven
   # `prune` calls that delete nothing, so the tighter cadence is cheap.
+  # CI prunes before stopping the on-demand builder.
+  suspend: true
   schedule: "7,22,37,52 * * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 600

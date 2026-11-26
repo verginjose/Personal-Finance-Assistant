@@ -130,6 +130,9 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Start builder on demand
+        run: python3 k8s/ci/buildkit-demand.py start
+
       - name: Install buildctl
         run: |
           set -euo pipefail
@@ -222,6 +225,18 @@ jobs:
       # Tag retention used to run here. It needs a registry client
       # certificate, which this pod no longer has (by design); the hourly
       # registry-gc CronJob owns retention now.
+
+  stop-builder:
+    needs: [detect, build]
+    if: always() && needs.detect.outputs.services != '[]' && needs.detect.outputs.services != ''
+    runs-on: [self-hosted, linux, x64, pfa]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Stop builder and retain its cache
+        run: python3 k8s/ci/buildkit-demand.py stop
 
   # Promotion goes through a PR and passing checks. The job validates the exact
   # generated manifest commit and enables GitHub's native auto-merge; GitHub

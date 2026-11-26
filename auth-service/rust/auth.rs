@@ -604,6 +604,9 @@ async fn bulk(
 }
 
 async fn rate(app: &App, key: &str, replenish: f64, burst: f64) -> Result<()> {
+    if app.rate_limit_disabled {
+        return Ok(());
+    }
     let allowed: i32 = redis::Script::new(r#"
         local t=redis.call('TIME'); local now=tonumber(t[1])+tonumber(t[2])/1000000
         local data=redis.call('HMGET',KEYS[1],'tokens','at'); local tokens=tonumber(data[1]) or tonumber(ARGV[2]); local at=tonumber(data[2]) or now

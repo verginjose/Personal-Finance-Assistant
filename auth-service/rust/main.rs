@@ -26,6 +26,10 @@ struct App {
     hash_slots: Arc<Semaphore>,
     storage: Option<Arc<storage::Storage>>,
     metrics: metrics_exporter_prometheus::PrometheusHandle,
+    // Load-test switch: when set, the per-IP/per-user token buckets in
+    // `/internal/verify` are skipped so a capacity test measures the services
+    // rather than the limiter. Off unless RATE_LIMIT_DISABLED=true.
+    rate_limit_disabled: bool,
 }
 
 #[derive(Debug)]
@@ -201,6 +205,10 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         hash_slots: Arc::new(Semaphore::new(4)),
         storage,
         metrics,
+        rate_limit_disabled: matches!(
+            env("RATE_LIMIT_DISABLED", "false").to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes"
+        ),
     };
     let routes = if mode == "auth" {
         auth::routes()

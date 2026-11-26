@@ -85,17 +85,41 @@ data:
           .thread          = ""
 
           raw = string(.message) ?? ""
+          # The k8s source sets .timestamp to a real timestamp. The Rust
+          # services also emit a `timestamp` key, but as an RFC 3339 string,
+          # so merging would replace the typed value and make the
+          # format_timestamp! below fail ("expected timestamp, got string"),
+          # dropping every Rust line. Keep the source value for the fallback.
+          src_ts = .timestamp
           parsed, err = parse_json(raw)
           if err == null {
              . = merge!(., parsed)
+             # tracing_subscriber (Rust) nests the text under fields.message
+             # and puts the useful values in sibling fields; flatten the
+             # request fields into the message so Grafana shows them.
+             if is_object(.fields) {
+                base = string(.fields.message) ?? raw
+                extra = ""
+                if exists(.fields.method) { extra = extra + " method=" + (to_string(.fields.method) ?? "") }
+                if exists(.fields.uri) { extra = extra + " uri=" + (to_string(.fields.uri) ?? "") }
+                if exists(.fields.status) { extra = extra + " status=" + (to_string(.fields.status) ?? "") }
+                if exists(.fields.elapsed_ms) { extra = extra + " elapsed_ms=" + (to_string(.fields.elapsed_ms) ?? "") }
+                if exists(.fields.error) { extra = extra + " error=" + (to_string(.fields.error) ?? "") }
+                .message = base + extra
+                del(.fields)
+             }
+             if is_string(.timestamp) {
+                .timestamp = parse_timestamp(.timestamp, "%+") ?? src_ts
+             }
              .level = upcase(string(.level) ?? "INFO")
              .trace_id = string(.traceId) ?? ""
              .span_id = string(.spanId) ?? ""
-             .logger = string(.logger_name) ?? ""
+             .logger = string(.logger_name) ?? string(.target) ?? ""
              .thread = string(.thread_name) ?? ""
              if exists(.stack_trace) {
                 .stack_trace = string(.stack_trace) ?? ""
              }
+             del(.target)
           } else {
              # Plain-text services (nginx, uvicorn, registry, Postgres, Redis).
              # Use the level token the source already prints instead of

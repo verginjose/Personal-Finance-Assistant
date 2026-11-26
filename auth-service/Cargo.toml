@@ -1,0 +1,39 @@
+[package]
+name = "pfa-native"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "pfa-native"
+path = "rust/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["multipart"] }
+base64 = "0.22"
+bcrypt = "0.17"
+chrono = "0.4"
+futures-util = "0.3"
+hmac = "0.12"
+hex = "0.4"
+jsonwebtoken = "9"
+lapin = "2"
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.17", default-features = false }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "derive"] }
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
+tower = { version = "0.5", features = ["limit"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+url = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[profile.release]
+strip = true
+lto = "thin"

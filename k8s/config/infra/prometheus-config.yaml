@@ -15,32 +15,20 @@ data:
       evaluation_interval: 15s
 
     scrape_configs:
-      - job_name: api-gateway
-        metrics_path: /actuator/prometheus
-        # The gateway serves actuator on its private management port.
+      - job_name: edge-router
+        metrics_path: /metrics
         static_configs:
-          - targets: ['api-gateway:9090']
-        metric_relabel_configs:
-          # The notifications endpoint is a long-lived SSE stream: its observed
-          # duration is connection lifetime, not request latency, and one
-          # reconnecting browser is enough to own the 99th percentile. Drop the
-          # route-level series so it cannot skew the gateway panels.
-          - source_labels: [routeId]
-            regex: command-service-sse
-            action: drop
-          # The same stream is also recorded by the gateway's own
-          # http_server_requests_* series, which carry no routeId (every proxied
-          # request is uri="UNKNOWN"). The gateway tags the notifications path
-          # with a constant pattern (SseObservationConfig), so drop it there too;
-          # otherwise a stream's lifetime lands in the latency histograms.
-          - source_labels: [uri]
-            regex: /api/upsert/notifications/.*
-            action: drop
+          - targets: ['edge-router:9090']
 
       - job_name: auth-service
         metrics_path: /actuator/prometheus
         static_configs:
-          - targets: ['auth-service:8082']
+          - targets: ['auth-service:9090']
+
+      - job_name: storage-service
+        metrics_path: /actuator/prometheus
+        static_configs:
+          - targets: ['storage-service:9090']
 
       - job_name: command-service
         metrics_path: /actuator/prometheus
@@ -61,7 +49,7 @@ data:
 
       - job_name: vector
         static_configs:
-          - targets: ['vector.pfa-system.svc.cluster.local:9090']
+          - targets: ['vector:9090']
 
       # Per-pod CPU / memory / network. This is the kubelet's cAdvisor endpoint and
       # the only source of container_* metrics (the "Pods" Grafana dashboard).

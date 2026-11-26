@@ -1,0 +1,104 @@
+# Traefik replaces Spring Cloud Gateway. Routing config is packaged in edge-router/.
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-router
+  namespace: pfa
+  labels:
+    app: edge-router
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  selector:
+    app: edge-router
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: management
+    port: 9090
+    targetPort: 9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge-router
+  namespace: pfa
+  labels:
+    app: edge-router
+    app.kubernetes.io/part-of: personal-finance-assistant
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: edge-router
+  template:
+    metadata:
+      labels:
+        app: edge-router
+        app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        reloader.stakater.com/auto: 'true'
+    spec:
+      terminationGracePeriodSeconds: 30
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 65534
+      containers:
+      - name: edge-router
+        image: 127.0.0.1:30500/finance/edge-router:dd1964fdda72
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: management
+          containerPort: 9090
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: '1'
+            memory: 128Mi
+        startupProbe:
+          httpGet:
+            path: /ping
+            port: 9090
+          periodSeconds: 5
+          failureThreshold: 40
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 9090
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 9090
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 4
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

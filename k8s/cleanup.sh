@@ -81,7 +81,7 @@ if ${DO_IMAGES}; then
     done || true
   fi
   echo "==> Removing finance images from Docker"
-  docker rmi finance/api-gateway:latest finance/command-service:latest \
+  docker rmi finance/edge-router:latest finance/command-service:latest \
              finance/query-service:latest finance/frontend:latest \
              finance/ocr-service:latest 2>/dev/null || true
   echo "==> Removing pipeline artifacts"

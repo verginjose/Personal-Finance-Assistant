@@ -68,9 +68,9 @@ export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/k3s.yaml}"
 ENV_FILE="${ROOT_DIR}/.env"
 PUSH_REGISTRY="${PUSH_REGISTRY:-}"
 TAG="${TAG:-latest}"
-ALL_SERVICES=(auth-service api-gateway command-service query-service frontend ocr-service)
+ALL_SERVICES=(auth-service edge-router command-service query-service frontend ocr-service)
 if [[ "${SKIP_OCR}" == "true" ]]; then
-  ALL_SERVICES=(auth-service api-gateway command-service query-service frontend)
+  ALL_SERVICES=(auth-service edge-router command-service query-service frontend)
 fi
 
 env_value() {

@@ -1,3 +1,4 @@
+# Rust authentication; existing database, BCrypt and Redis session formats retained.
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,12 +11,13 @@ spec:
   selector:
     app: auth-service
   ports:
-    - name: http
-      port: 8082
-      targetPort: 8082
+  - name: http
+    port: 8082
+    targetPort: 8082
+  - name: management
+    port: 9090
+    targetPort: 9090
 ---
-# Non-secret configuration for this service only. Credentials live in the
-# auth-service-secrets Secret, rendered by k8s/apply.sh from env/auth-service.env.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -26,10 +28,8 @@ metadata:
     app.kubernetes.io/part-of: personal-finance-assistant
 data:
   REDIS_HOST: redis
-  # The browser reaches auth-service over HTTPS through the edge, so the
-  # refresh cookie is marked Secure.
-  COOKIE_SECURE: "true"
-  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70.0 -XX:+UseZGC -XX:+ZGenerational -XX:+ExitOnOutOfMemoryError"
+  COOKIE_SECURE: 'true'
+  SERVICE_MODE: auth
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -45,7 +45,7 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 1
+      maxUnavailable: 0
       maxSurge: 1
   selector:
     matchLabels:
@@ -56,87 +56,70 @@ spec:
         app: auth-service
         app.kubernetes.io/part-of: personal-finance-assistant
       annotations:
-        reloader.stakater.com/auto: "true"
+        reloader.stakater.com/auto: 'true'
     spec:
       terminationGracePeriodSeconds: 20
       automountServiceAccountToken: false
-      # Writable /tmp for the JVM (hsperfdata, Tomcat work dir); the rest of
-      # the root filesystem is read-only. 65534 is `nobody`, which exists in
-      # both the Alpine and the Ubuntu base images, so no passwd entry is
-      # missing when the process resolves its own uid.
       securityContext:
         fsGroup: 65534
       containers:
-        - name: auth-service
-          image: 127.0.0.1:30500/finance/auth-service:bb8821793c1b
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 65534
-            runAsGroup: 65534
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: ["ALL"]
-            seccompProfile:
-              type: RuntimeDefault
-          ports:
-            - name: http
-              containerPort: 8082
-          # Bulk config and credentials; both are injected before `env` below.
-          envFrom:
-            - configMapRef:
-                name: auth-service-config
-            - secretRef:
-                name: auth-service-secrets
-          env:
-            # Structured (one-line JSON) stdout for the Vector -> ClickHouse
-            # pipeline. Without this profile logback logs a human-readable
-            # line, which is what local runs want.
-            - name: SPRING_PROFILES_ACTIVE
-              value: structured-logs
-            # Derived values. $(VAR) resolves against the envFrom variables,
-            # which Kubernetes injects before this list.
-            - name: SPRING_R2DBC_URL
-              value: r2dbc:postgresql://postgres-primary:5432/$(DB_NAME)?schema=$(AUTH_DB_SCHEMA)
-            - name: SPRING_R2DBC_USERNAME
-              value: $(DB_USER)
-            - name: SPRING_R2DBC_PASSWORD
-              value: $(DB_PASSWORD)
-          resources:
-            requests:
-              cpu: 150m
-              memory: 384Mi
-            limits:
-              # BCrypt login/register is CPU-bound (~60-100 ms per hash). A
-              # burst of 100 simultaneous logins on a 2-core limit queued for
-              # ~1.6 s each (p99 multi-second, measured by the golden test);
-              # 4 cores halves the queue while staying well inside the node.
-              cpu: "4"
-              memory: 1536Mi
-          startupProbe:
-            httpGet:
-              path: /actuator/health/liveness
-              port: 8082
-            periodSeconds: 5
-            failureThreshold: 40
-          readinessProbe:
-            httpGet:
-              path: /actuator/health/readiness
-              port: 8082
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-          livenessProbe:
-            httpGet:
-              path: /actuator/health/liveness
-              port: 8082
-            periodSeconds: 15
-            timeoutSeconds: 5
-            failureThreshold: 4
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-      volumes:
+      - name: auth-service
+        image: 127.0.0.1:30500/finance/auth-service:7ab297ffe02c
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          runAsGroup: 65534
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        ports:
+        - name: http
+          containerPort: 8082
+        - name: management
+          containerPort: 9090
+        envFrom:
+        - configMapRef:
+            name: auth-service-config
+        - secretRef:
+            name: auth-service-secrets
+        env:
+        - name: DB_HOST
+          value: postgres-primary
+        resources:
+          requests:
+            cpu: 150m
+            memory: 32Mi
+          limits:
+            cpu: '4'
+            memory: 256Mi
+        startupProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 9090
+          periodSeconds: 5
+          failureThreshold: 40
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 9090
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 9090
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 4
+        volumeMounts:
         - name: tmp
-          emptyDir: {}
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}

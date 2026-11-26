@@ -113,7 +113,7 @@ install -d -m 700 -o "${TARGET_USER}" -g "${TARGET_GROUP}" "${TARGET_HOME}/.kube
 install -m 600 -o "${TARGET_USER}" -g "${TARGET_GROUP}" /etc/rancher/k3s/k3s.yaml "${KUBECONFIG_OUT}"
 
 echo "==> Importing locally built application images into k3s"
-for img in api-gateway command-service query-service frontend; do
+for img in edge-router command-service query-service frontend; do
   if docker image inspect "finance/${img}:latest" >/dev/null 2>&1; then
     echo "    importing finance/${img}:latest"
     docker save "finance/${img}:latest" | k3s ctr images import -

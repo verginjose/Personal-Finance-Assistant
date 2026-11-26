@@ -12,24 +12,20 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: api-gateway
-    metrics_path: /actuator/prometheus
+  - job_name: edge-router
+    metrics_path: /metrics
     static_configs:
-      # The gateway serves actuator on its private management port.
-      - targets: ['api-gateway:9090']
-    metric_relabel_configs:
-      # The notifications endpoint is a long-lived SSE stream: its observed
-      # duration is connection lifetime, not request latency, and one
-      # reconnecting browser is enough to own the 99th percentile. Drop the
-      # route-level series so it cannot skew the gateway panels.
-      - source_labels: [routeId]
-        regex: command-service-sse
-        action: drop
+      - targets: ['edge-router:9090']
 
   - job_name: auth-service
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['auth-service:8082']
+      - targets: ['auth-service:9090']
+
+  - job_name: storage-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['storage-service:9090']
 
   - job_name: command-service
     metrics_path: /actuator/prometheus

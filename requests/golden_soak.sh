@@ -16,8 +16,8 @@ ensure_gateway() {
   for _ in 1 2 3; do
     if curl -fsS -m 5 "$GATEWAY/actuator/health" >/dev/null 2>&1; then return 0; fi
     log "gateway not reachable; (re)starting port-forward"
-    pkill -f 'port-forward -n pfa svc/api-gateway 18090:8080' 2>/dev/null || true
-    nohup kubectl port-forward -n pfa svc/api-gateway 18090:8080 >>"$LOG" 2>&1 &
+    pkill -f 'port-forward -n pfa svc/edge-router 18090:8080' 2>/dev/null || true
+    nohup kubectl port-forward -n pfa svc/edge-router 18090:8080 >>"$LOG" 2>&1 &
     for _ in $(seq 1 30); do
       sleep 1
       curl -fsS -m 2 "$GATEWAY/actuator/health" >/dev/null 2>&1 && return 0

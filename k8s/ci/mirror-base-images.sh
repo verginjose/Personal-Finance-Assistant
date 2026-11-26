@@ -37,6 +37,9 @@ CERT_DIR=/certs
 # upstream tag, so maven 3.9.6 and 3.9.9 are two tags in one repository - both
 # well inside registry-gc.sh's retention, which now only trims finance/*.
 IMAGES=(
+  docker.io/library/rust:1.100.0-bookworm
+  docker.io/library/debian:bookworm-slim
+  docker.io/rancher/mirrored-library-traefik:3.7.13
   docker.io/library/maven:3.9.9-eclipse-temurin-21
   docker.io/library/maven:3.9.6-eclipse-temurin-21
   docker.io/library/eclipse-temurin:21-jre-alpine

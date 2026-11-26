@@ -1,0 +1,110 @@
+http:
+  routers:
+    auth:
+      rule: PathPrefix(`/api/auth/`)
+      entryPoints: [web]
+      service: auth
+      middlewares: [sanitize, authenticate, auth-breaker]
+    notifications:
+      rule: Path(`/api/upsert/notifications`) || PathPrefix(`/api/upsert/notifications/`)
+      priority: 200
+      entryPoints: [web]
+      service: notifications
+      middlewares: [sanitize, authenticate, strip-notifications]
+    writes:
+      rule: PathPrefix(`/api/upsert/`) && (Method(`POST`) || Method(`PUT`) || Method(`PATCH`) || Method(`DELETE`))
+      entryPoints: [web]
+      service: command
+      middlewares: [sanitize, authenticate, strip-api, command-breaker]
+    reads:
+      rule: PathPrefix(`/api/upsert/`) && Method(`GET`)
+      entryPoints: [web]
+      service: query
+      middlewares: [sanitize, authenticate, strip-api, query-breaker]
+    analytics:
+      rule: PathPrefix(`/api/analytics/`)
+      entryPoints: [web]
+      service: query
+      middlewares: [sanitize, authenticate, strip-api, query-breaker]
+    storage:
+      rule: PathPrefix(`/api/receipt/`) || PathPrefix(`/api/profile/`) || PathPrefix(`/api/bill/`) || PathPrefix(`/api/storage/`)
+      entryPoints: [web]
+      service: storage
+      middlewares: [sanitize, authenticate]
+  middlewares:
+    sanitize:
+      headers:
+        customRequestHeaders:
+          X-User-Id: ''
+          X-User-Email: ''
+          X-User-Role: ''
+          X-Forwarded-Uri: ''
+          X-Forwarded-Method: ''
+          CF-Connecting-IP: ''
+        customResponseHeaders:
+          X-Content-Type-Options: nosniff
+          X-Frame-Options: DENY
+    authenticate:
+      forwardAuth:
+        address: http://auth-service:8082/internal/verify
+        trustForwardHeader: false
+        maxResponseBodySize: 65536
+        authRequestHeaders: [Authorization, X-Real-IP]
+        authResponseHeaders: [X-User-Id]
+    strip-api:
+      stripPrefix:
+        prefixes: [/api]
+    strip-notifications:
+      stripPrefix:
+        prefixes: [/api/upsert]
+    auth-breaker:
+      circuitBreaker:
+        expression: NetworkErrorRatio() > 0.6
+        responseCode: 503
+    command-breaker:
+      circuitBreaker:
+        expression: NetworkErrorRatio() > 0.8
+        responseCode: 503
+    query-breaker:
+      circuitBreaker:
+        expression: NetworkErrorRatio() > 0.8
+        responseCode: 503
+  services:
+    auth:
+      loadBalancer:
+        serversTransport: auth
+        servers:
+          - url: http://auth-service:8082
+    command:
+      loadBalancer:
+        serversTransport: command
+        servers:
+          - url: http://command-service:8081
+    query:
+      loadBalancer:
+        serversTransport: query
+        servers:
+          - url: http://query-service:8084
+    notifications:
+      loadBalancer:
+        serversTransport: notifications
+        responseForwarding:
+          flushInterval: -1ms
+        servers:
+          - url: http://command-service:8081
+    storage:
+      loadBalancer:
+        serversTransport: storage
+        servers:
+          - url: http://storage-service:8083
+  serversTransports:
+    auth:
+      forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 15s, idleConnTimeout: 10s}
+    command:
+      forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 15s, idleConnTimeout: 10s}
+    query:
+      forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 45s, idleConnTimeout: 10s}
+    notifications:
+      forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 1800s, idleConnTimeout: 10s}
+    storage:
+      forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 120s, idleConnTimeout: 10s}

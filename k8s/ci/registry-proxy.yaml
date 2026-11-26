@@ -75,14 +75,14 @@ data:
 
         # Upload sessions: the registry client cancels a failed upload with
         # DELETE on the session, which removes no content.
-        location ~ ^/v2/finance/(auth-service|api-gateway|command-service|query-service|frontend|ocr-service)/blobs/uploads/ {
+        location ~ ^/v2/finance/(auth-service|edge-router|command-service|query-service|frontend|ocr-service)/blobs/uploads/ {
           limit_except GET HEAD POST PUT PATCH DELETE { deny all; }
           proxy_pass https://registry.pfa.svc.cluster.local:5000;
         }
 
         # Pushes into the six service repositories. Everything else in
         # finance/* (ocr-base, for example) is pulled, never overwritten.
-        location ~ ^/v2/finance/(auth-service|api-gateway|command-service|query-service|frontend|ocr-service)/(blobs|manifests)/ {
+        location ~ ^/v2/finance/(auth-service|edge-router|command-service|query-service|frontend|ocr-service)/(blobs|manifests)/ {
           limit_except GET HEAD POST PUT PATCH { deny all; }
           proxy_pass https://registry.pfa.svc.cluster.local:5000;
         }

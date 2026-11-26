@@ -245,7 +245,7 @@ if wanted pfa-ci-secrets; then
 fi
 
 # 3. One secret per application service.
-for svc in auth-service api-gateway command-service query-service ocr-service; do
+for svc in auth-service storage-service command-service query-service ocr-service; do
   wanted "${svc}-secrets" || continue
   merged="$(merged_envfile "${svc}")"
   seal_envfile "${svc}-secrets" "${merged}"

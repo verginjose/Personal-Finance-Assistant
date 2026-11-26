@@ -53,6 +53,10 @@ spec:
       - name: edge-router
         image: 127.0.0.1:30500/finance/edge-router:dd1964fdda72
         imagePullPolicy: IfNotPresent
+        env:
+        # Leave room below the 128 MiB cgroup cap for non-Go memory.
+        - name: GOMEMLIMIT
+          value: 96MiB
         securityContext:
           runAsNonRoot: true
           runAsUser: 65534

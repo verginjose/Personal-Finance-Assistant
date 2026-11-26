@@ -78,6 +78,10 @@ spec:
         - name: prometheus
           image: prom/prometheus:v2.55.0
           imagePullPolicy: IfNotPresent
+          env:
+            # Bound Go-managed memory below the 512 MiB container limit.
+            - name: GOMEMLIMIT
+              value: 384MiB
           args:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus

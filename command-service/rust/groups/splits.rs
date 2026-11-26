@@ -122,21 +122,35 @@ pub(crate) async fn insert_splits(
         }
         _ => split_equally(expense.amount, accepted.len()),
     };
-    let mut rows = Vec::new();
-    for (i, m) in accepted.iter().enumerate() {
-        let row = sqlx::query_as::<_, SplitRow>(&format!(
-            "INSERT INTO groups.expense_splits \
-             (shared_expense_id,user_id,user_name,amount,is_settled) \
-             VALUES ($1,$2,$3,$4,$5) RETURNING {SPLIT_COLS}"
-        ))
-        .bind(expense.id)
-        .bind(m.user_id)
-        .bind(&m.name)
-        .bind(amounts.get(i).copied().unwrap_or(Decimal::ZERO))
-        .bind(m.user_id == expense.paid_by)
-        .fetch_one(&mut **tx)
-        .await?;
-        rows.push(row);
-    }
+    // One multi-row INSERT instead of one statement per member.
+    let user_ids: Vec<Uuid> = accepted.iter().map(|m| m.user_id).collect();
+    let names: Vec<String> = accepted.iter().map(|m| m.name.clone()).collect();
+    let amts: Vec<Decimal> = (0..accepted.len())
+        .map(|i| amounts.get(i).copied().unwrap_or(Decimal::ZERO))
+        .collect();
+    let settled: Vec<bool> = accepted.iter().map(|m| m.user_id == expense.paid_by).collect();
+    sqlx::query(
+        "INSERT INTO groups.expense_splits (shared_expense_id,user_id,user_name,amount,is_settled) \
+         SELECT $1, u, n, a, s \
+         FROM unnest($2::uuid[],$3::text[],$4::numeric[],$5::bool[]) AS t(u,n,a,s)",
+    )
+    .bind(expense.id)
+    .bind(&user_ids)
+    .bind(&names)
+    .bind(&amts)
+    .bind(&settled)
+    .execute(&mut **tx)
+    .await?;
+    let rows: Vec<SplitRow> = (0..accepted.len())
+        .map(|i| SplitRow {
+            id: 0,
+            shared_expense_id: expense.id,
+            user_id: accepted[i].user_id,
+            user_name: Some(accepted[i].name.clone()),
+            amount: amounts.get(i).copied().unwrap_or(Decimal::ZERO),
+            is_settled: accepted[i].user_id == expense.paid_by,
+            settled_at: None,
+        })
+        .collect();
     Ok(rows)
 }

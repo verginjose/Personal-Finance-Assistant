@@ -193,7 +193,7 @@ pub(crate) async fn add_expense_core(
     body: &ExpenseRequest,
     user: Uuid,
 ) -> Result<ExpenseOutcome> {
-    let g = group(tx, group_id).await?;
+    let _g = group(tx, group_id).await?;
     let all = members(tx, group_id).await?;
     let actor_row = all
         .iter()
@@ -245,12 +245,11 @@ pub(crate) async fn add_expense_core(
     )
     .await?;
     let splits = insert_splits(tx, &expense, &all, body).await?;
-    let payer_name = all
-        .iter()
-        .find(|m| m.user_id == paid_by)
-        .map(|m| m.name.clone())
-        .unwrap_or_default();
-    create_personal_transactions(tx, &expense, &splits, &g.name, &payer_name).await?;
+    // Per-member personal transactions are materialised asynchronously by the
+    // outbox worker (fanout_expense) so the request only pays for the shared
+    // expense + splits instead of the O(members) fan-out. The event is written
+    // in this transaction, so the work is durable if the request later fails.
+    crate::entries::outbox(tx, user, "FANOUT", expense.id).await?;
 
     let (kind, message) = if split_type == "SETTLEMENT" {
         (
@@ -599,4 +598,48 @@ pub(crate) async fn settle_debt(
         apply_outcome(&a, group_id, outcome).await;
     }
     Ok(Json(json!({"message":"Settlement recorded successfully"})).into_response())
+}
+
+/// Materialise the per-member personal transactions for a group expense.
+/// Called by the outbox worker, off the request path. Idempotent: the
+/// expense_transaction_links rows are the completion marker, and the whole
+/// fan-out commits in one transaction, so a retry either redoes nothing or
+/// completes the work atomically.
+pub(crate) async fn fanout_expense(a: &App, expense_id: i64) -> Result<()> {
+    let mut tx = a.db.begin().await?;
+    let existing: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM groups.expense_transaction_links WHERE shared_expense_id=$1",
+    )
+    .bind(expense_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if existing > 0 {
+        return Ok(());
+    }
+    let expense: ExpenseRow = sqlx::query_as(&format!(
+        "SELECT {EXPENSE_COLS} FROM groups.shared_expenses WHERE id=$1"
+    ))
+    .bind(expense_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| not_found("Expense not found"))?;
+    let splits: Vec<SplitRow> = sqlx::query_as(&format!(
+        "SELECT {SPLIT_COLS} FROM groups.expense_splits WHERE shared_expense_id=$1"
+    ))
+    .bind(expense_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let group_name: String =
+        sqlx::query_scalar("SELECT name FROM groups.expense_groups WHERE id=$1")
+            .bind(expense.group_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    let payer_name = splits
+        .iter()
+        .find(|s| s.user_id == expense.paid_by)
+        .and_then(|s| s.user_name.clone())
+        .unwrap_or_default();
+    create_personal_transactions(&mut tx, &expense, &splits, &group_name, &payer_name).await?;
+    tx.commit().await?;
+    Ok(())
 }

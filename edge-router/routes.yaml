@@ -59,15 +59,18 @@ http:
         prefixes: [/api/upsert]
     auth-breaker:
       circuitBreaker:
-        expression: NetworkErrorRatio() > 0.6
+        expression: NetworkErrorRatio() > 0.9
         responseCode: 503
     command-breaker:
       circuitBreaker:
-        expression: NetworkErrorRatio() > 0.8
+        expression: NetworkErrorRatio() > 0.95
         responseCode: 503
     query-breaker:
+      # A brief accept-path stall (a few dial timeouts) tripped this at >0.8 and
+      # turned a ~4s blip into an 8.6s hard-503 outage while query was healthy.
+      # Require near-total failure before opening.
       circuitBreaker:
-        expression: NetworkErrorRatio() > 0.8
+        expression: NetworkErrorRatio() > 0.95
         responseCode: 503
   services:
     auth:
@@ -103,9 +106,11 @@ http:
       # auth pod's accept path; 15s rides out the transient SYN backlog.
       forwardingTimeouts: {dialTimeout: 15s, responseHeaderTimeout: 15s, idleConnTimeout: 10s}
     command:
-      forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 15s, idleConnTimeout: 10s}
+      forwardingTimeouts: {dialTimeout: 15s, responseHeaderTimeout: 15s, idleConnTimeout: 10s}
     query:
-      forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 45s, idleConnTimeout: 10s}
+      # 15s dial rides out the transient accept-path stall seen at 500 users;
+      # the 5s value produced dial-timeout network errors that tripped the breaker.
+      forwardingTimeouts: {dialTimeout: 15s, responseHeaderTimeout: 45s, idleConnTimeout: 10s}
     notifications:
       forwardingTimeouts: {dialTimeout: 5s, responseHeaderTimeout: 1800s, idleConnTimeout: 10s}
     storage:

@@ -11,7 +11,7 @@
 # Administration:write only; it cannot read or write code. A PAT is not
 # accepted: it could push to master, and Argo deploys master.
 #
-# The runner has no cluster permissions: it builds and pushes a tag-bump
+# The runner can scale only the isolated BuildKit deployment: it builds and pushes a tag-bump
 # branch and opens its PR with the promotion job token. Validated bot promotions
 # enable auto-merge; GitHub merges after the required checks pass and Argo CD
 # deploys. Registration App permissions stay unchanged. No review token is used.
@@ -212,6 +212,9 @@ spec:
           volumeMounts:
             - name: work
               mountPath: /tmp/runner
+            - name: buildkit-control
+              mountPath: /var/run/pfa-buildkit
+              readOnly: true
             - name: runner-registration
               mountPath: /runner-registration
             # buildctl is downloaded once per node, not once per job: the
@@ -237,6 +240,18 @@ spec:
             periodSeconds: 30
             failureThreshold: 3
       volumes:
+        - name: buildkit-control
+          projected:
+            defaultMode: 0444
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
         - name: work
           emptyDir: {}
         - name: runner-registration

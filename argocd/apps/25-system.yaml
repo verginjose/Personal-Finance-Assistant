@@ -20,12 +20,19 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: pfa-system
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: buildkitd
+      namespace: pfa-system
+      jsonPointers: [/spec/replicas]
   syncPolicy:
     automated:
       prune: false
       selfHeal: true
     syncOptions:
       - CreateNamespace=false
+      - RespectIgnoreDifferences=true
     retry:
       limit: 5
       backoff:

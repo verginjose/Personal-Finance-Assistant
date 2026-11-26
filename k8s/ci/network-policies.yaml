@@ -102,6 +102,12 @@ spec:
         - { protocol: TCP, port: 1234 }
     # No direct registry access: retention moved to the registry-gc CronJob,
     # and pushes go through registry-proxy.
+    # Narrow builder-scale API access; RBAC permits only buildkitd.
+    - to:
+        - ipBlock: { cidr: 10.99.99.1/32 }
+      ports:
+        - { protocol: TCP, port: 6443 }
+
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

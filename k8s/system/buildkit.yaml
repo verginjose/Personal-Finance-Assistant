@@ -49,6 +49,7 @@ data:
     # records used more recently than the duration, it does not expire them.
     [worker.oci]
       gc = true
+      max-parallelism = 2
 
       # Pin by omission: the base images every service build needs (maven,
       # eclipse-temurin, nginx, dockerfile frontend) match no rule below, so
@@ -120,7 +121,7 @@ metadata:
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
   revisionHistoryLimit: 3
-  replicas: 1
+  replicas: 0
   strategy:
     type: Recreate
   selector:

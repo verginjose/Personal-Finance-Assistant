@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked --mount=t
       printf '[source.crates-io]\nreplace-with = "pfa-cache"\n[source.pfa-cache]\nregistry = "sparse+%s"\n' "$CARGO_MIRROR_URL" > /usr/local/cargo/config.toml; \
       export CARGO_HTTP_CAINFO=/run/secrets/ci_ca; \
     fi; \
-    cargo clean -p pfa-native && cargo test --locked && cargo build --locked --release && cp target/release/pfa-native /pfa-native
+    cargo clean -p pfa-native && cargo clean --release -p pfa-native && cargo test --locked && cargo build --locked --release && cp target/release/pfa-native /pfa-native
 
 FROM ${BASE_IMAGE_REGISTRY}/debian:bookworm-slim
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt

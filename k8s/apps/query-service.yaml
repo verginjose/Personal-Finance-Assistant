@@ -43,7 +43,9 @@ metadata:
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
   revisionHistoryLimit: 3
-  replicas: 1
+  # 2 replicas: read side is stateless (replica DB + shared Redis caches), so a
+  # request burst is split across two accept paths instead of stalling one.
+  replicas: 2
   selector:
     matchLabels:
       app: query-service

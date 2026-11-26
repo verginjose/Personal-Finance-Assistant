@@ -62,7 +62,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: query-service
-          image: 127.0.0.1:30500/finance/query-service:6888b3f5f651
+          image: 127.0.0.1:30500/finance/query-service:b5874afbded6
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true

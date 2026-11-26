@@ -84,13 +84,17 @@ spec:
                 name: query-service-secrets
           # CQRS read side: DB_HOST defaults to postgres-replica. The service
           # writes JSON logs to stdout for the Vector -> ClickHouse pipeline.
+          # Right-sized for the Rust service: it idles at ~2 MiB (cgroup
+          # total ~5 MiB), so 256Mi leaves ample headroom for the sqlx pool
+          # and streamed CSV exports. The old Spring numbers (512Mi request /
+          # 3Gi limit) reserved memory it never used.
           resources:
             requests:
               cpu: 250m
-              memory: 512Mi
+              memory: 64Mi
             limits:
               cpu: "3"
-              memory: 3Gi
+              memory: 256Mi
           startupProbe:
             httpGet:
               path: /actuator/health/liveness

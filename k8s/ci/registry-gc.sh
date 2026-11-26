@@ -25,7 +25,7 @@ REGISTRY="${REGISTRY:-https://127.0.0.1:30500}"
 KEEP=2
 DRY_RUN=false
 RETENTION_ONLY=false
-ACCEPT="application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json"
+ACCEPT="application/vnd.docker.distribution.manifest.v2+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.oci.image.index.v1+json"
 # registry-config ConfigMap (`http.storage.filesystem.rootdirectory`).
 STORAGE_ROOT=/var/lib/registry
 
@@ -118,9 +118,19 @@ manifest_digest() {  # repo tag -> digest, empty if the tag is dangling
 }
 
 manifest_created() {  # repo tag -> RFC3339 creation time from the image config
-  local cfg
-  cfg="$(rcurl -fsS -H "Accept: ${ACCEPT}" "${REGISTRY}/v2/$1/manifests/$2" 2>/dev/null \
-    | jq -r '.config.digest // empty' || true)"
+  local doc cfg child
+  doc="$(rcurl -fsS -H "Accept: ${ACCEPT}" "${REGISTRY}/v2/$1/manifests/$2" 2>/dev/null || true)"
+  cfg="$(printf '%s' "${doc}" | jq -r '.config.digest // empty' 2>/dev/null || true)"
+  if [[ -z "${cfg}" ]]; then
+    # An OCI index / Docker manifest list has no top-level .config. Resolve its
+    # first platform manifest before giving up: BuildKit pushes an index for
+    # `type=image,push=true`, and treating that as "no date" made the retention
+    # sort every freshly built image as 1970 and delete it (2026-11-26).
+    child="$(printf '%s' "${doc}" | jq -r '.manifests[0].digest // empty' 2>/dev/null || true)"
+    [[ -z "${child}" ]] && return 0
+    cfg="$(rcurl -fsS -H "Accept: ${ACCEPT}" "${REGISTRY}/v2/$1/manifests/${child}" 2>/dev/null \
+      | jq -r '.config.digest // empty' || true)"
+  fi
   [[ -z "${cfg}" ]] && return 0
   rcurl -fsSL "${REGISTRY}/v2/$1/blobs/${cfg}" 2>/dev/null | jq -r '.created // empty' || true
 }
@@ -162,7 +172,9 @@ rcurl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[] | select(startswit
       continue
     fi
     created="$(manifest_created "${repo}" "${tag}")"
-    printf '%s %s %s\n' "${created:-1970-01-01T00:00:00Z}" "${tag}" "${digest}" >> "${TMP}/tags"
+    # Fail safe: an unreadable date must never make a tag look oldest. Treat it
+    # as newest so retention keeps it; a bad delete is far worse than a stale tag.
+    printf '%s %s %s\n' "${created:-9999-12-31T23:59:59Z}" "${tag}" "${digest}" >> "${TMP}/tags"
   done
 
   # Resolve what is being kept before deleting anything. Several tags commonly

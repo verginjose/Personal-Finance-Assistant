@@ -54,9 +54,9 @@ spec:
         image: 127.0.0.1:30500/finance/edge-router:dd1964fdda72
         imagePullPolicy: IfNotPresent
         env:
-        # Leave room below the 128 MiB cgroup cap for non-Go memory.
+        # Leave headroom for connection buffers at the tested 500-user load.
         - name: GOMEMLIMIT
-          value: 96MiB
+          value: 192MiB
         securityContext:
           runAsNonRoot: true
           runAsUser: 65534
@@ -79,7 +79,7 @@ spec:
             memory: 32Mi
           limits:
             cpu: '1'
-            memory: 128Mi
+            memory: 256Mi
         startupProbe:
           httpGet:
             path: /ping

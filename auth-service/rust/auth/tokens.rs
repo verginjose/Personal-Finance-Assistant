@@ -53,12 +53,18 @@ pub(crate) fn mint(app: &App, user: &User, sv: i64, stream: bool) -> Result<Stri
     )
     .map_err(Error::internal)
 }
+fn token_validation(key: &[u8]) -> Validation {
+    let mut validation = Validation::new(algorithm(key));
+    validation.algorithms = vec![Algorithm::HS256, Algorithm::HS384, Algorithm::HS512];
+    validation.leeway = 0;
+    validation.validate_nbf = true;
+    validation
+}
+
 pub async fn validate(app: &App, token: &str, stream: bool) -> Result<Claims> {
     // JJWT chooses the signing algorithm based on the HMAC key length. Accept
     // the HMAC family for existing tokens, never asymmetric or unsigned tokens.
-    let mut validation = Validation::new(algorithm(&app.key));
-    validation.algorithms = vec![Algorithm::HS256, Algorithm::HS384, Algorithm::HS512];
-    validation.leeway = 0;
+    let validation = token_validation(&app.key);
     let claims =
         jsonwebtoken::decode::<Claims>(token, &DecodingKey::from_secret(&app.key), &validation)
             .map_err(|_| Error::unauthorized())?
@@ -134,4 +140,33 @@ pub(crate) fn input_string<'a>(body: &'a Value, name: &str) -> Result<&'a str> {
         .and_then(Value::as_str)
         .filter(|s| !s.trim().is_empty())
         .ok_or_else(|| Error::bad(&format!("{name} is required")))
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_existing_hmac_algorithms() {
+        let key = [7u8; 64];
+        for algorithm in [Algorithm::HS256, Algorithm::HS384, Algorithm::HS512] {
+            let claims = json!({"sub": "test", "exp": now() + 300});
+            let token = jsonwebtoken::encode(&Header::new(algorithm), &claims, &EncodingKey::from_secret(&key)).unwrap();
+            assert!(jsonwebtoken::decode::<Value>(&token, &DecodingKey::from_secret(&key), &token_validation(&key)).is_ok());
+        }
+    }
+
+    #[test]
+    fn rejects_malformed_or_future_time_claims() {
+        let key = [7u8; 64];
+        for claims in [
+            json!({"exp": (now() + 300).to_string()}),
+            json!({"exp": now() + 300, "nbf": "99999999999"}),
+            json!({"exp": now() + 300, "nbf": now() + 300}),
+            json!({"exp": now() - 300}),
+        ] {
+            let token = jsonwebtoken::encode(&Header::new(Algorithm::HS512), &claims, &EncodingKey::from_secret(&key)).unwrap();
+            assert!(jsonwebtoken::decode::<Value>(&token, &DecodingKey::from_secret(&key), &token_validation(&key)).is_err());
+        }
+    }
 }

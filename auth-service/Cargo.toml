@@ -15,7 +15,7 @@ chrono = "0.4"
 futures-util = "0.3"
 hmac = "0.12"
 hex = "0.4"
-jsonwebtoken = "9"
+jsonwebtoken = { version = "10.3", default-features = false, features = ["rust_crypto"] }
 lapin = "2"
 metrics = "0.24"
 metrics-exporter-prometheus = { version = "0.17", default-features = false }

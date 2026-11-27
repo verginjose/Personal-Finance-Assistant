@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small production journeys, paced globally; invoke through laptop_guard.py."""
+"""Small production journeys with bounded concurrency and globally paced traffic."""
 import argparse
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed

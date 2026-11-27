@@ -347,64 +347,48 @@ are saved to `/tmp/pfa-production-reset-report.json`. If anything fails it
 leaves services paused; inspect the report and retained state before using
 `--restore-state`. Do not use this command while a test or build is running.
 
-### Realistic load tests and laptop guard
+### Realistic load tests and OCR availability
 
-The manual workflow runs on the existing PFA runner so it can reach the private
-`laptop-health` telemetry service. It serializes with builds, permits 5–50
-virtual sessions, and caps traffic at **one request/second globally**. Only
-three browser journeys are active at once, with 4–12 second think times,
-mostly reads, a few personal expenses and a small household split. It has no
-refresh races, large fan-out or automatic transport retries. Any unexpected
-HTTP response, including a 5xx, stops the scenario.
+The manual workflow runs on the existing PFA runner and serializes with builds.
+It permits 5–50 virtual sessions and caps traffic at **one request/second
+globally**. Only three browser journeys are active at once, with 4–12 second
+think times, mostly reads, a few personal expenses and a small household split.
+It has no refresh races, large fan-out or automatic transport retries. Any
+unexpected HTTP response, including a 5xx, stops the scenario.
 
 Bills are **0–2 total for the entire workflow**, rather than per user. They are
 uploaded sequentially, at least 60 seconds apart, with no second upload until
 the previous parse finishes. No ledger transaction is created from parsed
-receipts. Ordinary scenario writes and synthetic accounts persist; a clean
-production reset must run after validation if an empty deployment is required.
+receipts. Ordinary scenario writes and synthetic accounts persist.
 
-The guard requires 60 measured cool seconds at or below 65°C CPU, 55°C GPU, 60°C
-SSD, at least 8 GiB available RAM and at most 50% CPU before launching traffic.
-It refuses to start if these conditions are not met within two minutes.
-Brief temperature excursions pause this clock; confirmed heat resets it.
-During the run it samples every half-second. Temperatures at/above 78°C CPU or
-65°C GPU must persist for two seconds; SSD at/above 70°C must persist for five
-seconds. Confirmation uses distinct sensor timestamps, so fetching the same
-reading again cannot confirm heat. Isolated warnings and their clearance are
-recorded, with UTC timestamps and the last 120 readings retained in the report.
-The client and independent server watchdog use the same confirmation policy.
+OCR normally runs with **one replica**, managed by Argo CD. A bill upload
+publishes a RabbitMQ job; it does not start a scaled-to-zero Deployment.
+The worker unloads its model process after five idle minutes and reloads it
+on the next bill while keeping its RabbitMQ consumer available. Argo no longer
+ignores the OCR replica count, so self-heal restores the declared one replica.
+Maintenance commands that explicitly stop the project or reset data still
+pause workloads for the duration of those operations.
 
-Critical readings stop immediately: CPU 85°C, GPU 75°C or SSD 82°C. Host CPU at
-80%, available RAM below 6 GiB, active swap-out, memory PSI full above 1%, and
-missing/invalid/stale (>3s) telemetry also stop immediately. A server watchdog
-trip remains latched so the client stops even if the next temperature is cool.
-The hard run ceiling remains ten minutes; workflow/CLI inputs cannot relax the
-limits. Builds use four CPU cores with one BuildKit task at a time.
+The in-cluster laptop-health service, its host mounts and its OCR scaling RBAC
+have been removed. The manual workflow does not wait for hardware telemetry or
+arm a watchdog, and it does not change the OCR replica count. Builds retain one
+BuildKit task at a time and their configured CPU and memory limits.
 
-An armed telemetry service independently watches these limits and can only
-patch the `ocr-service` replica count, using narrowly scoped RBAC. A trip pauses
-OCR and stops the load generator; Argo respects this pause. After cooling,
-verify telemetry and explicitly resume `kubectl -n pfa scale deploy/ocr-service
---replicas=1`. Do not automatically restart a thermally aborted test. Unfinished
-OCR messages requeue; the broker accepts at most three waiting jobs plus one
-in flight. Full queues reject publishers with 429/Retry-After instead of
-discarding earlier receipts. Dead letters are also bounded. Storage allows at
-most two concurrent multipart uploads, and the scanner recovers missed live
-notifications from the durable inbox.
+Unfinished OCR messages requeue; the broker accepts at most three waiting jobs
+plus one in flight. Full queues reject publishers instead of discarding older
+receipts. Dead letters are also bounded. The storage backpressure and scanner
+inbox recovery changes require their corresponding application image rollout;
+check the deployed image before relying on those behaviors.
 
-For a host-side guarded run, without a workflow:
+For an optional host-side guarded run, use local sensors explicitly:
 
 ```bash
 python3 requests/laptop_guard.py run --local-sensors --report /tmp/guard.json -- \
   python3 requests/run_realistic_test.py --users 5 --duration 120 --bills-total 0 --out /tmp/realistic.json
 ```
 
-Use the private health service and `--pause-ocr-on-abort` for runs containing
-bills; `--local-sensors` alone stops the generator but cannot pause cluster OCR.
-Regenerate its ConfigMap after editing the guard with
-`python3 scripts/render-laptop-health.py`. The telemetry process loads no ML
-models, reserves no compute GPU, and only exposes hardware readings inside the
-cluster; it does not publish host metrics to the public application.
+This optional local supervisor stops its generator only; it does not control
+cluster OCR replicas.
 
 ### Data layer datasources
 

@@ -32,7 +32,6 @@ data:
   SERVICE_MODE: auth
   # Load-test switch: skip the /internal/verify token buckets so a capacity
   # ladder measures the services, not the limiter. Remove to restore limits.
-  RATE_LIMIT_DISABLED: 'true'
 ---
 apiVersion: apps/v1
 kind: Deployment

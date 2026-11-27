@@ -381,14 +381,20 @@ The merge gate must be enforced by GitHub, not only by the helper script. On
 
 - **Require a pull request before merging**, with **0** required approvals. The
   bot prepares and merges its own PR, so requiring an approval would block it.
-- **Require status checks to pass** and select the four contexts
-  `Analyze (actions)`, `Analyze (java-kotlin)`,
-  `Analyze (javascript-typescript)` and `Analyze (python)`. These come from
+- **Require status checks to pass** and select the three contexts
+  `Analyze (actions)`, `Analyze (javascript-typescript)` and `Analyze (python)`. These come from
   CodeQL default setup, which runs on the bot-authored PR.
 - **Include administrators**, so the same rules apply to admin pushes.
 
 Leave *Require branches to be up to date* disabled; auto-merge does not need it,
 and the promotion commit is a manifest-only change.
+
+Keep branch protection enabled for the repository as well as configuring the
+`master` rule. If protection evaluation is disabled, the rule can still appear
+in settings while GitHub reports the branch as unprotected. Promotion then fails
+with `Pull request is in clean status` when enabling native auto-merge. Verify
+`gh api repos/verginjose/Personal-Finance-Assistant/branches/master/protection`
+returns the required checks, rather than a disabled-protection error.
 
 If CodeQL default setup is moved to a checked-in workflow, a PR authored by
 `GITHUB_TOKEN` will not trigger it and promotion merges stop (fail closed) until

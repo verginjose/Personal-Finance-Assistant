@@ -72,7 +72,7 @@ describe('scanner accounting handoff', () => {
 });
 
 describe('scanner upload and completion ordering', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
   async function pendingScan() {
     const container = await scannerResult({ name: 'Previous result', amount: 1, currency: 'USD' });
@@ -147,5 +147,28 @@ describe('scanner upload and completion ordering', () => {
     await Promise.resolve();
     expect(container.querySelector('#bs-name').value).toBe('Chilis Hamburgers');
     expect(window._bsReceiptUrl).toBe('/api/storage/receipts/u1/new.jpg');
+  });
+
+  it('recovers a durable result when the live event was missed', async () => {
+    const { container, resolveUpload } = await pendingScan();
+    vi.useFakeTimers();
+    vi.spyOn(api, 'get').mockResolvedValue({ items: [{ payload: JSON.stringify(completed) }] });
+    resolveUpload({ receiptId: 'current-receipt' });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(container.querySelector('#bs-name').value).toBe('Chilis Hamburgers');
+    expect(container.querySelector('.advisor-skeleton')).toBeNull();
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(api.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not poll after leaving the scanner', async () => {
+    const { container, resolveUpload } = await pendingScan();
+    vi.useFakeTimers();
+    vi.spyOn(api, 'get').mockResolvedValue({ items: [] });
+    resolveUpload({ receiptId: 'current-receipt' });
+    await vi.advanceTimersByTimeAsync(0);
+    container.remove();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(api.get).not.toHaveBeenCalled();
   });
 });

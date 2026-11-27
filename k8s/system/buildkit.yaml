@@ -49,7 +49,7 @@ data:
     # records used more recently than the duration, it does not expire them.
     [worker.oci]
       gc = true
-      max-parallelism = 2
+      max-parallelism = 1
 
       # Pin by omission: the base images every service build needs (rust,
       # debian, nginx, dockerfile frontend) match no rule below, so
@@ -233,10 +233,8 @@ spec:
               cpu: 500m
               memory: 1Gi
             limits:
-              # 6 cores made image builds pin every core and heat the laptop;
-              # 4 still outruns the test suite and leaves headroom for builds
-              # that overlap with a live deployment.
-              cpu: "4"
+              # Laptop health takes priority over build speed.
+              cpu: "2"
               memory: 3Gi
       volumes:
         - name: config

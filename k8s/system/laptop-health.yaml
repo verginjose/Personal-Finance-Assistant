@@ -1,0 +1,364 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: laptop-health-script
+  namespace: pfa-system
+data:
+  laptop_guard.py: "#!/usr/bin/env python3\n\"\"\"Fail-closed hardware guard for this\
+    \ laptop. Limits cannot be relaxed by CLI.\"\"\"\nimport argparse\nfrom http.server\
+    \ import BaseHTTPRequestHandler, ThreadingHTTPServer\nimport json\nimport math\n\
+    import os\nfrom pathlib import Path\nimport signal\nimport ssl\nimport subprocess\n\
+    import threading\nimport time\nimport urllib.request\n\nLIMITS = dict(cpu_c=78,\
+    \ gpu_c=65, ssd_c=70, available_gib=6, cpu_percent=80)\n# The display keeps this\
+    \ laptop's GPU around 50\u201352C at idle. Keep ten\n# degrees of headroom while\
+    \ allowing a genuinely idle laptop to start.\nSTART = dict(cpu_c=65, gpu_c=55,\
+    \ ssd_c=60, available_gib=8, cpu_percent=50)\nFRESH_SECONDS = 3\nCOOL_SECONDS\
+    \ = 60\n\n\ndef violation(sample, starting=False, now=None):\n    now = time.time()\
+    \ if now is None else now\n    if not sample.get('valid') or not 0 <= now - sample.get('timestamp',\
+    \ 0) <= FRESH_SECONDS:\n        return 'hardware telemetry missing, invalid or\
+    \ stale'\n    limits = START if starting else LIMITS\n    for key, limit in limits.items():\n\
+    \        value = sample.get(key)\n        if not isinstance(value, (int, float))\
+    \ or not math.isfinite(value):\n            return f'{key} unavailable'\n    \
+    \    high = value > limit if starting else value >= limit\n        if (key ==\
+    \ 'available_gib' and value < limit) or (key != 'available_gib' and high):\n \
+    \           return f'{key}={value:.2f} reached safety limit {limit}'\n    pressure\
+    \ = sample.get('memory_pressure_full', float('nan'))\n    if not isinstance(pressure,\
+    \ (int, float)) or not math.isfinite(pressure) or pressure > 1:\n        return\
+    \ 'memory pressure exceeds 1%'\n    return None\n\n\nclass Sensors:\n    def __init__(self,\
+    \ sys_root='/sys', proc_root='/proc'):\n        self.sys_root, self.proc_root\
+    \ = Path(sys_root), Path(proc_root)\n        self.previous_cpu = None\n      \
+    \  self.previous_swap = None\n\n    def sample(self):\n        result = {'timestamp':\
+    \ time.time(), 'valid': False}\n        try:\n            cpu, ssd = [], []\n\
+    \            for folder in (self.sys_root / 'class/hwmon').glob('hwmon*'):\n \
+    \               name = (folder / 'name').read_text().strip()\n               \
+    \ if name in ('coretemp', 'k10temp'):\n                    cpu += [float(p.read_text())\
+    \ / 1000 for p in folder.glob('temp*_input')]\n                elif name == 'nvme':\n\
+    \                    # Composite sensor, rather than the hotter controller sensor.\n\
+    \                    ssd.append(float((folder / 'temp1_input').read_text()) /\
+    \ 1000)\n            result['cpu_c'], result['ssd_c'] = max(cpu), max(ssd)\n \
+    \           gpu = subprocess.check_output(['nvidia-smi', '--query-gpu=temperature.gpu',\n\
+    \                                           '--format=csv,noheader,nounits'],\
+    \ timeout=1.5, text=True)\n            result['gpu_c'] = max(float(v) for v in\
+    \ gpu.splitlines())\n            mem = dict((line.split(':', 1)[0], line.split(':',\
+    \ 1)[1].strip())\n                       for line in (self.proc_root / 'meminfo').read_text().splitlines())\n\
+    \            result['available_gib'] = int(mem['MemAvailable'].split()[0]) / 1024**2\n\
+    \            ticks = list(map(int, (self.proc_root / 'stat').read_text().splitlines()[0].split()[1:9]))\n\
+    \            total, idle = sum(ticks), ticks[3] + ticks[4]\n            if self.previous_cpu:\n\
+    \                dt, di = total - self.previous_cpu[0], idle - self.previous_cpu[1]\n\
+    \                result['cpu_percent'] = 100 * (1 - di / dt) if dt > 0 else 0\n\
+    \            self.previous_cpu = (total, idle)\n            vm = dict(line.split()\
+    \ for line in (self.proc_root / 'vmstat').read_text().splitlines())\n        \
+    \    swap = int(vm['pswpout'])\n            result['swapout_total'] = swap\n \
+    \           result['swapout_pages'] = 0 if self.previous_swap is None else max(0,\
+    \ swap - self.previous_swap)\n            self.previous_swap = swap\n        \
+    \    pressure = (self.proc_root / 'pressure/memory').read_text().splitlines()\n\
+    \            full = next(line for line in pressure if line.startswith('full '))\n\
+    \            result['memory_pressure_full'] = float(dict(v.split('=') for v in\
+    \ full.split()[1:])['avg10'])\n            result['valid'] = 'cpu_percent' in\
+    \ result\n        except (OSError, ValueError, KeyError, StopIteration, subprocess.SubprocessError):\n\
+    \            # Never treat a sensor failure as a safe zero temperature.\n    \
+    \        result['error'] = 'required hardware sensor unavailable'\n        return\
+    \ result\n\n\ndef serve(args):\n    sensors = Sensors(args.sys_root, args.proc_root)\n\
+    \    latest = {'valid': False}\n    armed_until = 0\n    tripped = False\n   \
+    \ def pause_ocr():\n        nonlocal tripped\n        token = Path('/var/run/secrets/kubernetes.io/serviceaccount/token').read_text().strip()\n\
+    \        context = ssl.create_default_context(cafile='/var/run/secrets/kubernetes.io/serviceaccount/ca.crt')\n\
+    \        request = urllib.request.Request('https://kubernetes.default.svc/apis/apps/v1/namespaces/pfa/deployments/ocr-service/scale',\n\
+    \            data=b'{\"spec\":{\"replicas\":0}}', method='PATCH', headers={\n\
+    \                'Authorization':'Bearer '+token,'Content-Type':'application/merge-patch+json'})\n\
+    \        with urllib.request.urlopen(request,context=context,timeout=2) as response:\n\
+    \            response.read()\n        tripped = True\n    def update():\n    \
+    \    nonlocal latest\n        while True:\n            latest = sensors.sample()\n\
+    \            if time.monotonic() < armed_until and violation(latest):\n      \
+    \          try:\n                    pause_ocr()\n                except Exception:\n\
+    \                    latest['ocr_pause_failed'] = True\n            latest['test_armed']\
+    \ = time.monotonic() < armed_until\n            latest['ocr_paused'] = tripped\n\
+    \            time.sleep(0.5)\n    threading.Thread(target=update, daemon=True).start()\n\
+    \    class Handler(BaseHTTPRequestHandler):\n        def do_GET(self):\n     \
+    \       if self.path != '/health':\n                self.send_error(404)\n   \
+    \             return\n            body = json.dumps(latest).encode()\n       \
+    \     self.send_response(200)\n            self.send_header('Content-Type', 'application/json')\n\
+    \            self.send_header('Cache-Control', 'no-store')\n            self.send_header('Content-Length',\
+    \ str(len(body)))\n            self.end_headers()\n            self.wfile.write(body)\n\
+    \        def do_POST(self):\n            nonlocal armed_until\n            if\
+    \ self.path == '/arm' and not violation(latest, starting=True):\n            \
+    \    armed_until = time.monotonic() + 600\n            elif self.path == '/disarm':\n\
+    \                armed_until = 0\n            elif self.path == '/trip':\n   \
+    \             # This private endpoint is reachable only from the CI runner.\n\
+    \                # A missing sensor is also a valid reason to pause GPU work.\n\
+    \                try:\n                    pause_ocr()\n                except\
+    \ Exception:\n                    self.send_error(503)\n                    return\n\
+    \                armed_until = 0\n            else:\n                self.send_error(409)\n\
+    \                return\n            self.send_response(204)\n            self.end_headers()\n\
+    \        def log_message(self, *unused):\n            pass\n    ThreadingHTTPServer(('0.0.0.0',\
+    \ args.port), Handler).serve_forever()\n\n\ndef terminate(process):\n    if process.poll()\
+    \ is not None:\n        return\n    os.killpg(process.pid, signal.SIGTERM)\n \
+    \   try:\n        process.wait(timeout=1)\n    except subprocess.TimeoutExpired:\n\
+    \        os.killpg(process.pid, signal.SIGKILL)\n        process.wait(timeout=2)\n\
+    \n\ndef supervise(args):\n    sensors = Sensors() if args.local_sensors else None\n\
+    \    def sample():\n        if sensors:\n            return sensors.sample()\n\
+    \        try:\n            with urllib.request.urlopen(args.health_url, timeout=1.5)\
+    \ as response:\n                return json.load(response)\n        except Exception:\n\
+    \            return {'valid': False}\n    report = dict(verdict='REFUSED', limits=LIMITS,\
+    \ start_limits=START,\n                  cool_seconds=COOL_SECONDS, samples=0,\
+    \ peaks={}, reason='preflight incomplete')\n    process = None\n    previous_swap\
+    \ = None\n    def swap_active(reading):\n        nonlocal previous_swap\n    \
+    \    value = reading.get('swapout_total')\n        if not isinstance(value, int):\n\
+    \            return True\n        active = previous_swap is not None and value\
+    \ > previous_swap\n        previous_swap = value\n        return active\n    def\
+    \ control(action):\n        if not getattr(args, 'pause_ocr_on_abort', False):\n\
+    \            return\n        url = args.health_url.rsplit('/health',1)[0] + '/'\
+    \ + action\n        request = urllib.request.Request(url, data=b'', method='POST')\n\
+    \        with urllib.request.urlopen(request,timeout=2) as response:\n       \
+    \     response.read()\n    try:\n        # Wait at most two minutes for 60 continuous\
+    \ seconds below start limits.\n        cool_since = None\n        deadline = time.monotonic()\
+    \ + 120\n        while time.monotonic() < deadline:\n            reading = sample()\n\
+    \            reason = violation(reading, starting=True)\n            if not reason\
+    \ and swap_active(reading):\n                reason = 'active swap-out'\n    \
+    \        if reason:\n                cool_since = None\n                report['reason']\
+    \ = reason\n                if not reading.get('valid'):\n                   \
+    \ # First local sample establishes a CPU delta; allow one tick.\n            \
+    \        if sensors and sensors.previous_cpu and report['samples'] == 0:\n   \
+    \                     report['samples'] += 1\n                        time.sleep(0.5)\n\
+    \                        continue\n                    return 3\n            elif\
+    \ cool_since is None:\n                cool_since = time.monotonic()\n       \
+    \     elif time.monotonic() - cool_since >= COOL_SECONDS:\n                break\n\
+    \            report['samples'] += 1\n            time.sleep(0.5)\n        else:\n\
+    \            return 3\n        if not args.command:\n            raise ValueError('No\
+    \ guarded command supplied')\n        control('arm')\n        process = subprocess.Popen(args.command,\
+    \ start_new_session=True,\n                                   env={**os.environ,\
+    \ 'PFA_STRICT_HEALTH_GUARD':'1'})\n        started = time.monotonic()\n      \
+    \  def interrupted(signum, frame):\n            raise KeyboardInterrupt\n    \
+    \    for sig in (signal.SIGTERM, signal.SIGINT):\n            signal.signal(sig,\
+    \ interrupted)\n        while process.poll() is None:\n            reading = sample()\n\
+    \            report['samples'] += 1\n            for key in LIMITS:\n        \
+    \        if isinstance(reading.get(key), (int, float)):\n                    previous\
+    \ = report['peaks'].get(key, reading[key])\n                    report['peaks'][key]\
+    \ = min(previous, reading[key]) if key == 'available_gib' else max(previous, reading[key])\n\
+    \            reason = violation(reading)\n            if swap_active(reading):\n\
+    \                reason = 'active swap-out'\n            if time.monotonic() -\
+    \ started >= 600:\n                reason = 'ten-minute hard runtime limit'\n\
+    \            if reason:\n                report.update(verdict='ABORTED', reason=reason)\n\
+    \                terminate(process)\n                try:\n                  \
+    \  control('trip')\n                    report['ocr_paused'] = getattr(args, 'pause_ocr_on_abort',\
+    \ False)\n                except Exception:\n                    report['ocr_pause_failed']\
+    \ = True\n                return 3\n            time.sleep(0.5)\n        report.update(verdict='PASS'\
+    \ if process.returncode == 0 else 'FAILED', reason='guarded process finished')\n\
+    \        if process.returncode == 0:\n            control('disarm')\n        else:\n\
+    \            control('trip')\n            report['ocr_paused'] = getattr(args,\
+    \ 'pause_ocr_on_abort', False)\n        return process.returncode\n    except\
+    \ KeyboardInterrupt:\n        report.update(verdict='ABORTED', reason='cancelled')\n\
+    \        try:\n            control('trip')\n        except Exception:\n      \
+    \      report['ocr_pause_failed'] = True\n        return 3\n    finally:\n   \
+    \     if process:\n            terminate(process)\n        Path(args.report).write_text(json.dumps(report,\
+    \ indent=2) + '\\n')\n        print(json.dumps(report), flush=True)\n\n\ndef main():\n\
+    \    p = argparse.ArgumentParser(description=__doc__)\n    commands = p.add_subparsers(dest='mode',\
+    \ required=True)\n    server = commands.add_parser('serve')\n    server.add_argument('--sys-root',\
+    \ default='/sys')\n    server.add_argument('--proc-root', default='/proc')\n \
+    \   server.add_argument('--port', type=int, default=9187)\n    run = commands.add_parser('run')\n\
+    \    run.add_argument('--health-url', default='http://laptop-health.pfa-system.svc.cluster.local:9187/health')\n\
+    \    run.add_argument('--local-sensors', action='store_true')\n    run.add_argument('--pause-ocr-on-abort',\
+    \ action='store_true')\n    run.add_argument('--report', required=True)\n    run.add_argument('command',\
+    \ nargs=argparse.REMAINDER)\n    args = p.parse_args()\n    if args.mode == 'serve':\n\
+    \        serve(args)\n        return 0\n    if args.command[:1] == ['--']:\n \
+    \       args.command = args.command[1:]\n    return supervise(args)\n\n\nif __name__\
+    \ == '__main__':\n    raise SystemExit(main())\n"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: laptop-health
+  namespace: pfa-system
+spec:
+  selector:
+    app: laptop-health
+  ports:
+  - name: http
+    port: 9187
+    targetPort: 9187
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: laptop-health
+  namespace: pfa-system
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: laptop-health
+  template:
+    metadata:
+      labels:
+        app: laptop-health
+        app.kubernetes.io/part-of: personal-finance-assistant
+      annotations:
+        reloader.stakater.com/auto: 'true'
+    spec:
+      automountServiceAccountToken: true
+      runtimeClassName: nvidia
+      securityContext:
+        runAsUser: 65534
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: health
+        image: 127.0.0.1:30500/finance/ocr-service:6888b3f5f651
+        command:
+        - python3
+        - /guard/laptop_guard.py
+        - serve
+        - --sys-root
+        - /host/sys
+        - --proc-root
+        - /host/proc
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: all
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: utility
+        ports:
+        - containerPort: 9187
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 10m
+            memory: 24Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9187
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9187
+          periodSeconds: 10
+        volumeMounts:
+        - name: script
+          mountPath: /guard
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: meminfo
+          mountPath: /host/proc/meminfo
+          readOnly: true
+        - name: stat
+          mountPath: /host/proc/stat
+          readOnly: true
+        - name: vmstat
+          mountPath: /host/proc/vmstat
+          readOnly: true
+        - name: pressure
+          mountPath: /host/proc/pressure/memory
+          readOnly: true
+      volumes:
+      - name: script
+        configMap:
+          name: laptop-health-script
+      - name: sys
+        hostPath:
+          path: /sys
+          type: Directory
+      - name: meminfo
+        hostPath:
+          path: /proc/meminfo
+          type: File
+      - name: stat
+        hostPath:
+          path: /proc/stat
+          type: File
+      - name: vmstat
+        hostPath:
+          path: /proc/vmstat
+          type: File
+      - name: pressure
+        hostPath:
+          path: /proc/pressure/memory
+          type: File
+      serviceAccountName: laptop-health
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: laptop-health
+  namespace: pfa-system
+spec:
+  podSelector:
+    matchLabels:
+      app: laptop-health
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  - to:
+    - ipBlock:
+        cidr: 10.99.99.1/32
+    ports:
+    - protocol: TCP
+      port: 6443
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: pfa
+      podSelector:
+        matchLabels:
+          app: ci-runner
+    ports:
+    - protocol: TCP
+      port: 9187
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: laptop-health
+  namespace: pfa-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: laptop-health-ocr-pause
+  namespace: pfa
+rules:
+- apiGroups:
+  - apps
+  resources:
+  - deployments/scale
+  resourceNames:
+  - ocr-service
+  verbs:
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: laptop-health-ocr-pause
+  namespace: pfa
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: laptop-health-ocr-pause
+subjects:
+- kind: ServiceAccount
+  name: laptop-health
+  namespace: pfa-system

@@ -19,12 +19,20 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: pfa
+  ignoreDifferences:
+    # A thermal trip pauses OCR until an operator verifies cooldown and resumes.
+    - group: apps
+      kind: Deployment
+      name: ocr-service
+      namespace: pfa
+      jsonPointers: [/spec/replicas]
   syncPolicy:
     automated:
       prune: false
       selfHeal: true
     syncOptions:
       - CreateNamespace=false
+      - RespectIgnoreDifferences=true
     retry:
       limit: 5
       backoff:

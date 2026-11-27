@@ -10,7 +10,7 @@ MANIFEST = Path(__file__).resolve().parents[1] / 'rabbitmq.yaml'
 FAKE_CTL = '''#!/usr/bin/env python3
 import os, pathlib, sys
 args = sys.argv[1:]
-ops = ['await_startup', 'authenticate_user', 'list_users', 'change_password', 'add_user', 'set_permissions']
+ops = ['await_startup', 'authenticate_user', 'list_users', 'change_password', 'add_user', 'set_permissions', 'set_policy']
 op = next(a for a in args if a in ops)
 root = pathlib.Path(os.environ['TEST_ROOT'])
 with (root / 'calls').open('a') as f: f.write(op + '\\n')
@@ -51,6 +51,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('add_user', calls)
         self.assertIn('set_permissions', calls)
+        self.assertIn('set_policy', calls)
 
     def test_stale_password_is_reconciled(self):
         result, calls = self.run_hook('wrong')

@@ -69,7 +69,11 @@ data:
       exclude_self:
         type: filter
         inputs: ["k8s_logs"]
-        condition: '.kubernetes.pod_labels.app != "vector"'
+        condition: |
+          # A production reset moves this checkpoint forward so old kubelet
+          # files cannot repopulate the cleared log datasource on restart.
+          cutoff = parse_timestamp(get_env_var("PFA_LOG_START_TIME") ?? "1970-01-01T00:00:00Z", format: "%+") ?? t'1970-01-01T00:00:00Z'
+          .kubernetes.pod_labels.app != "vector" && .timestamp >= cutoff
 
       parse_logs:
         type: remap
@@ -285,6 +289,12 @@ spec:
           imagePullPolicy: IfNotPresent
           args: ["--config", "/etc/vector/vector.yaml"]
           env:
+            - name: PFA_LOG_START_TIME
+              valueFrom:
+                configMapKeyRef:
+                  name: pfa-log-reset-checkpoint
+                  key: cutoff
+                  optional: true
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
                 secretKeyRef: { name: clickhouse-secrets, key: CLICKHOUSE_PASSWORD }

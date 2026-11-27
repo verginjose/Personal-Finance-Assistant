@@ -1853,4 +1853,7 @@ def parse_args(argv):
 
 
 if __name__ == "__main__":
-    sys.exit(run(parse_args(sys.argv[1:])))
+    args = parse_args(sys.argv[1:])
+    if (args.users >= 25 or args.bills > 0) and os.getenv('PFA_STRICT_HEALTH_GUARD') != '1':
+        sys.exit('Refusing an unguarded load/OCR run. Use the guarded realistic workflow or laptop_guard.py.')
+    sys.exit(run(args))

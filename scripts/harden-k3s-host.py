@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 CONFIG = Path('/etc/rancher/k3s/config.yaml.d/90-pfa-security.yaml')
 POLICY = Path('/var/lib/rancher/k3s/server/audit-policy.yaml')
 SERVER = Path('/var/lib/rancher/k3s/server')
+KUBELET = Path('/var/lib/rancher/k3s/agent/etc/kubelet.conf.d/99-pfa-security.conf')
 DROPIN = '''# Managed by scripts/harden-k3s-host.py. Preserve earlier config with append keys.
 secrets-encryption: true
 secrets-encryption-provider: secretbox
@@ -23,8 +24,6 @@ kube-apiserver-arg+:
   - audit-log-maxage=7
   - audit-log-maxbackup=3
   - audit-log-maxsize=50
-kubelet-arg+:
-  - seccomp-default=true
 '''
 AUDIT = '''apiVersion: audit.k8s.io/v1
 kind: Policy
@@ -77,7 +76,7 @@ def main():
 
     before = secret_fingerprint()
     (backup / 'preflight.json').write_text(json.dumps({'status': status}))
-    if CONFIG.exists() and CONFIG.read_text() != DROPIN:
+    if CONFIG.exists() and CONFIG.read_text() not in (DROPIN, DROPIN + 'kubelet-arg+:\n  - seccomp-default=true\n'):
         raise SystemExit('Existing managed drop-in differs; review it before changing host settings.')
     # Current k3s procedure: enable while running, restart with the flag, rotate
     # to encrypt existing Secrets, and restart again. Do not use legacy --force.
@@ -88,12 +87,17 @@ def main():
     try:
         with tarfile.open(backup / 'control-plane.tar.gz', 'w:gz') as archive:
             for source in [SERVER / 'db', SERVER / 'tls', SERVER / 'cred', SERVER / 'token',
-                           SERVER / 'agent-token', Path('/etc/rancher/k3s'), Path('/etc/systemd/system/k3s.service'),
+                           SERVER / 'agent-token', KUBELET.parent, Path('/etc/rancher/k3s'), Path('/etc/systemd/system/k3s.service'),
                            Path('/etc/systemd/system/k3s.service.env')]:
                 if source.exists():
                     archive.add(source, arcname=str(source).lstrip('/'))
         CONFIG.parent.mkdir(parents=True, exist_ok=True)
         (SERVER / 'logs').mkdir(exist_ok=True, mode=0o700)
+        KUBELET.parent.mkdir(parents=True, exist_ok=True)
+        if KUBELET.exists() and KUBELET.read_text() != 'apiVersion: kubelet.config.k8s.io/v1beta1\nkind: KubeletConfiguration\nseccompDefault: true\n':
+            raise RuntimeError('Existing managed kubelet configuration differs; restore/review it first.')
+        KUBELET.write_text('apiVersion: kubelet.config.k8s.io/v1beta1\nkind: KubeletConfiguration\nseccompDefault: true\n')
+        KUBELET.chmod(0o600)
         POLICY.write_text(AUDIT)
         POLICY.chmod(0o600)
         CONFIG.write_text(DROPIN)

@@ -14,5 +14,4 @@ datasources:
       username: default
       tlsSkipVerify: true
     secureJsonData:
-      # Rendered from .env by k8s/apply.sh
-      password: ${CLICKHOUSE_PASSWORD}
+      password: $__env{CLICKHOUSE_PASSWORD}

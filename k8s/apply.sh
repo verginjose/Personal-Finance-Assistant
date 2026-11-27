@@ -110,9 +110,7 @@ cp "${ROOT_DIR}/observability/grafana/provisioning/datasources/prometheus.yml" "
 # Deployment environment ($__env{...}), so their files carry no secrets.
 cp "${K8S_DIR}/config/grafana/postgres.yml" "${grafana_dir}/"
 cp "${K8S_DIR}/config/grafana/redis.yml" "${grafana_dir}/"
-envsubst '${CLICKHOUSE_PASSWORD}' \
-  < "${K8S_DIR}/config/grafana/clickhouse.yml" \
-  > "${grafana_dir}/clickhouse.yml"
+cp "${K8S_DIR}/config/grafana/clickhouse.yml" "${grafana_dir}/"
 kubectl create configmap grafana-datasources -n "${NS}" \
   --from-file="${grafana_dir}" \
   --dry-run=client -o yaml | kubectl apply -f -

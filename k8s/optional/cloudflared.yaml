@@ -36,7 +36,7 @@ spec:
           env:
             - name: TUNNEL_TOKEN
               valueFrom:
-                secretKeyRef: { name: cloudflared-secrets, key: CLOUDFLARE_TUNNEL_TOKEN }
+                secretKeyRef: {name: cloudflared-secrets, key: CLOUDFLARE_TUNNEL_TOKEN}
           resources:
             requests:
               cpu: 10m
@@ -44,3 +44,16 @@ spec:
             limits:
               cpu: 200m
               memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532

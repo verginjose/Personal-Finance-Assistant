@@ -81,9 +81,8 @@ spec:
           imagePullPolicy: IfNotPresent
           # Native sidecar (k8s >= 1.29): starts before the runner and stays up.
           restartPolicy: Always
-          # Runs as a UID the job steps (1001) do not share; the token file is
-          # 0600, so jobs cannot read it. The emptyDir is world-writable
-          # (fsGroup 121).
+          # The App signing key is isolated under a separate UID. Only its
+          # short-lived registration token is shared with the runner group.
           securityContext:
             runAsUser: 1002
             runAsGroup: 121
@@ -105,48 +104,30 @@ spec:
               value: verginjose/Personal-Finance-Assistant
             - name: APP_ID
               valueFrom:
-                secretKeyRef: { name: pfa-ci-secrets, key: APP_ID }
+                secretKeyRef: {name: pfa-ci-secrets, key: APP_ID}
             - name: APP_PRIVATE_KEY
               valueFrom:
-                secretKeyRef: { name: pfa-ci-secrets, key: APP_PRIVATE_KEY }
+                secretKeyRef: {name: pfa-ci-secrets, key: APP_PRIVATE_KEY}
           command: ["/bin/bash", "-c"]
           args:
-            - |
-              set -uo pipefail
-              token_file=/runner-registration/token
-              b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
-              mint() {
-                local now exp header payload key sig jwt installation access token
-                now=$(date +%s); exp=$((now + 540))
-                header=$(printf %s '{"alg":"RS256","typ":"JWT"}' | b64url)
-                payload=$(printf %s "{\"iat\":${now},\"exp\":${exp},\"iss\":\"${APP_ID}\"}" | b64url)
-                key="$(mktemp)"
-                printf '%s' "${APP_PRIVATE_KEY//\\n/$'\n'}" > "$key"
-                sig=$(printf %s "${header}.${payload}" | openssl dgst -sha256 -sign "$key" | b64url) || return 1
-                rm -f "$key"
-                jwt="${header}.${payload}.${sig}"
-                installation=$(curl -fsS -H "Authorization: Bearer ${jwt}" \
-                    -H 'Accept: application/vnd.github+json' \
-                    "https://api.github.com/app/installations" \
-                  | jq -er --arg owner "${REPO%%/*}" \
-                      '[.[] | select(.account.login == $owner) | .id][0]') || return 1
-                access=$(curl -fsS -X POST -H "Authorization: Bearer ${jwt}" \
-                    -H 'Accept: application/vnd.github+json' \
-                    "https://api.github.com/app/installations/${installation}/access_tokens" \
-                  | jq -er .token) || return 1
-                token=$(curl -fsS -X POST -H "Authorization: Bearer ${access}" \
-                    -H 'Accept: application/vnd.github+json' \
-                    "https://api.github.com/repos/${REPO}/actions/runners/registration-token" \
-                  | jq -er .token) || return 1
-                printf '%s' "$token" > "${token_file}.new"
-                chmod 600 "${token_file}.new"
-                mv "${token_file}.new" "$token_file"
-                echo "registration token refreshed"
-              }
-              # Registration tokens are valid for one hour; refresh at 45 min.
-              while true; do
-                if mint; then sleep 2700; else echo "token refresh failed; retrying in 30s" >&2; sleep 30; fi
-              done
+            - "set -uo pipefail\ntoken_file=/runner-registration/token\nb64url() { openssl base64 -A | tr '+/' '-_'
+              | tr -d '='; }\nmint() {\n  local now exp header payload key sig jwt installation access token\n \
+              \ now=$(date +%s); exp=$((now + 540))\n  header=$(printf %s '{\"alg\":\"RS256\",\"typ\":\"JWT\"}'
+              | b64url)\n  payload=$(printf %s \"{\\\"iat\\\":${now},\\\"exp\\\":${exp},\\\"iss\\\":\\\"${APP_ID}\\\
+              \"}\" | b64url)\n  key=\"$(mktemp)\"\n  printf '%s' \"${APP_PRIVATE_KEY//\\\\n/$'\\n'}\" > \"$key\"\
+              \n  sig=$(printf %s \"${header}.${payload}\" | openssl dgst -sha256 -sign \"$key\" | b64url) || return
+              1\n  rm -f \"$key\"\n  jwt=\"${header}.${payload}.${sig}\"\n  installation=$(curl -fsS -H \"Authorization:
+              Bearer ${jwt}\" \\\n      -H 'Accept: application/vnd.github+json' \\\n      \"https://api.github.com/app/installations\"\
+              \ \\\n    | jq -er --arg owner \"${REPO%%/*}\" \\\n        '[.[] | select(.account.login == $owner)
+              | .id][0]') || return 1\n  access=$(curl -fsS -X POST -H \"Authorization: Bearer ${jwt}\" \\\n   \
+              \   -H 'Accept: application/vnd.github+json' \\\n      \"https://api.github.com/app/installations/${installation}/access_tokens\"\
+              \ \\\n    | jq -er .token) || return 1\n  token=$(curl -fsS -X POST -H \"Authorization: Bearer ${access}\"\
+              \ \\\n      -H 'Accept: application/vnd.github+json' \\\n      \"https://api.github.com/repos/${REPO}/actions/runners/registration-token\"\
+              \ \\\n    | jq -er .token) || return 1\n  printf '%s' \"$token\" > \"${token_file}.new\"\n  chmod
+              640 \"${token_file}.new\"\n  mv \"${token_file}.new\" \"$token_file\"\n  echo \"registration token
+              refreshed\"\n}\n# Registration tokens are valid for one hour; refresh at 45 min.\nwhile true; do\n\
+              \  if mint; then sleep 2700; else echo \"token refresh failed; retrying in 30s\" >&2; sleep 30; fi\n\
+              done\n"
           volumeMounts:
             - name: runner-registration
               mountPath: /runner-registration
@@ -154,33 +135,25 @@ spec:
         - name: runner
           image: myoung34/github-runner:2.338.2-ubuntu-jammy
           imagePullPolicy: IfNotPresent
-          # The entrypoint still starts as root (it registers the runner and
-          # then drops privileges); RUN_AS_ROOT=false makes it hand the
-          # Runner.Listener and every job step to UID 1001. That matters
-          # because jobs used to be root and could read the PAT from
-          # /proc/1/environ and the client key from /certs.
+          # Registration and job execution both run as the unprivileged runner.
           securityContext:
             allowPrivilegeEscalation: false
             seccompProfile:
               type: RuntimeDefault
-          # Wait for the sidecar's token, make it root-only (job steps run as
-          # UID 1001 and cannot read it), and start the runner. The App private
-          # key is not in this container.
+          # The short-lived registration token is group-readable. The App private
+          # key remains isolated in the sidecar and is never passed to jobs.
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 121
+            capabilities:
+              drop:
+                - ALL
           command: ["/bin/bash", "-c"]
           args:
-            - |
-              set -euo pipefail
-              token_file=/runner-registration/token
-              for _ in $(seq 1 120); do
-                [ -s "$token_file" ] && break
-                sleep 1
-              done
-              [ -s "$token_file" ] || { echo '::error::registration token was not minted'; exit 1; }
-              RUNNER_TOKEN="$(cat "$token_file")"
-              chown root:root "$token_file"
-              chmod 600 "$token_file"
-              export RUNNER_TOKEN
-              exec /entrypoint.sh /actions-runner/run.sh
+            - "set -euo pipefail\ntoken_file=/runner-registration/token\nfor _ in $(seq 1 120); do\n  [ -s \"$token_file\"\
+              \ ] && break\n  sleep 1\ndone\n[ -s \"$token_file\" ] || { echo '::error::registration token was not
+              minted'; exit 1; }\nRUNNER_TOKEN=\"$(cat \"$token_file\")\"\nexport RUNNER_TOKEN\nexec /entrypoint.sh
+              /actions-runner/run.sh\n"
           env:
             # Jobs run as `runner`, so HOME must point at a directory that
             # user owns; the image's default is /root.
@@ -209,6 +182,8 @@ spec:
             # registry uses a separate identity (ci-tls-registry-client) that
             # this pod deliberately does not mount, so a compromised build
             # cannot push or delete images.
+            - name: UNSET_CONFIG_VARS
+              value: 'true'
           volumeMounts:
             - name: work
               mountPath: /tmp/runner
@@ -242,7 +217,7 @@ spec:
       volumes:
         - name: buildkit-control
           projected:
-            defaultMode: 0444
+            defaultMode: 292
             sources:
               - serviceAccountToken:
                   path: token
@@ -262,4 +237,4 @@ spec:
         - name: ci-tls
           secret:
             secretName: ci-tls-client
-            defaultMode: 0440
+            defaultMode: 288

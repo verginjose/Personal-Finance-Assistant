@@ -11,7 +11,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "4"
 spec:
-  project: default
+  project: pfa-edge
   source:
     repoURL: https://github.com/verginjose/Personal-Finance-Assistant.git
     targetRevision: master

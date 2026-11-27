@@ -11,7 +11,7 @@ metadata:
   name: pfa-prometheus
 rules:
   - apiGroups: [""]
-    resources: ["nodes", "nodes/metrics", "nodes/proxy", "pods", "services", "endpoints"]
+    resources: ["nodes", "nodes/metrics", "pods", "services", "endpoints"]
     verbs: ["get", "list", "watch"]
   - nonResourceURLs: ["/metrics"]
     verbs: ["get"]
@@ -74,6 +74,8 @@ spec:
         fsGroup: 65534
         runAsUser: 65534
         runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: prometheus
           image: prom/prometheus:v2.55.0
@@ -114,6 +116,12 @@ spec:
               port: 9090
             initialDelaySeconds: 30
             periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
       volumes:
         - name: config
           configMap:

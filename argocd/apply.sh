@@ -98,9 +98,11 @@ if ! kubectl get ns argocd >/dev/null 2>&1; then
   kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
   kubectl -n argocd rollout status statefulset/argocd-application-controller --timeout=300s
   kubectl -n argocd patch cm argocd-cmd-params-cm --type merge -p '{"data":{"server.insecure":"true"}}'
-    kubectl -n argocd patch svc argocd-server -p \
-      '{"spec":{"type":"NodePort","ports":[{"name":"http","port":80,"targetPort":8080,"nodePort":30080}]}}'
+  kubectl -n argocd patch svc argocd-server --type merge -p '{"spec":{"type":"ClusterIP"}}'
 fi
+
+kubectl apply -f "${ARGOCD_DIR}/projects.yaml"
+kubectl apply -f "${ARGOCD_DIR}/network-policies.yaml"
 
 echo "==> Configuring the GitHub webhook secret"
 # Argo CD validates X-Hub-Signature-256 with webhook.github.secret from

@@ -50,10 +50,10 @@ spec:
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
-                secretKeyRef: { name: minio-secrets, key: MINIO_ACCESS_KEY }
+                secretKeyRef: {name: minio-secrets, key: MINIO_ACCESS_KEY}
             - name: MINIO_ROOT_PASSWORD
               valueFrom:
-                secretKeyRef: { name: minio-secrets, key: MINIO_ROOT_PASSWORD }
+                secretKeyRef: {name: minio-secrets, key: MINIO_ROOT_PASSWORD}
           ports:
             - name: api
               containerPort: 9000
@@ -83,6 +83,20 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 20
             timeoutSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
   volumeClaimTemplates:
     - metadata:
         name: data

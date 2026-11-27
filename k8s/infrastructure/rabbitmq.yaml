@@ -110,10 +110,10 @@ spec:
               value: "+S 1:1 +A 2"
             - name: RABBITMQ_DEFAULT_USER
               valueFrom:
-                secretKeyRef: { name: rabbitmq-secrets, key: RABBITMQ_USER }
+                secretKeyRef: {name: rabbitmq-secrets, key: RABBITMQ_USER}
             - name: RABBITMQ_DEFAULT_PASS
               valueFrom:
-                secretKeyRef: { name: rabbitmq-secrets, key: RABBITMQ_PASSWORD }
+                secretKeyRef: {name: rabbitmq-secrets, key: RABBITMQ_PASSWORD}
           ports:
             - name: amqp
               containerPort: 5672
@@ -149,10 +149,24 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 10
             failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       volumes:
         - name: config
           configMap:
             name: rabbitmq-config
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 100
+        runAsGroup: 101
+        runAsNonRoot: true
+        fsGroup: 101
+        fsGroupChangePolicy: OnRootMismatch
   volumeClaimTemplates:
     - metadata:
         name: data

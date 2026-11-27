@@ -1,0 +1,25 @@
+name: native-validation
+on:
+  pull_request:
+    paths:
+      - auth-service/**
+      - .github/workflows/native-validation.yml
+permissions:
+  contents: read
+concurrency:
+  group: native-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  native-tests:
+    # Compile/test away from the laptop; deployment builds remain bounded.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install stable --profile minimal --component clippy
+      - run: cargo +stable test --locked --manifest-path auth-service/Cargo.toml
+      - run: cargo +stable clippy --locked --manifest-path auth-service/Cargo.toml -- -D warnings

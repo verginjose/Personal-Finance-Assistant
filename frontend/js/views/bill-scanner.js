@@ -70,6 +70,7 @@ export async function renderBillScanner(container) {
   let uploadInFlight = false;
   let pendingCompletions = [];
   let completedReceiptId = null;
+  let completionTimer = null;
   window._bsReceiptId = null;
   window._bsReceiptUrl = null;
 
@@ -111,6 +112,7 @@ export async function renderBillScanner(container) {
   async function readReceipt() {
     if (!selectedFile) return;
     const sequence = ++uploadSequence;
+    clearTimeout(completionTimer);
     const file = selectedFile;
     uploadInFlight = true;
     pendingCompletions = [];
@@ -165,6 +167,7 @@ export async function renderBillScanner(container) {
       const earlyCompletion = pendingCompletions.find(detail => detail.receiptId === window._bsReceiptId);
       pendingCompletions = [];
       if (earlyCompletion) handleOcrCompletion(earlyCompletion);
+      else if (window._bsReceiptId) recoverCompletion(sequence, window._bsReceiptId, Date.now());
     } catch (err) {
       if (sequence !== uploadSequence) return;
       uploadInFlight = false;
@@ -395,6 +398,7 @@ export async function renderBillScanner(container) {
   }
 
   function resetScanner() {
+    clearTimeout(completionTimer);
     uploadSequence++;
     uploadInFlight = false;
     pendingCompletions = [];
@@ -429,6 +433,7 @@ export async function renderBillScanner(container) {
     if (detail.receiptId) {
       if (detail.receiptId !== window._bsReceiptId || detail.receiptId === completedReceiptId) return;
       completedReceiptId = detail.receiptId;
+      clearTimeout(completionTimer);
     }
     if (detail.status === 'SUCCESS' && detail.data) {
       showReview(detail.data);
@@ -441,6 +446,30 @@ export async function renderBillScanner(container) {
   if (window._bsOcrListener) window.removeEventListener('ocr-completed', window._bsOcrListener);
   window._bsOcrListener = e => handleOcrCompletion(e.detail);
   window.addEventListener('ocr-completed', window._bsOcrListener);
+
+  function recoverCompletion(sequence, receiptId, started) {
+    completionTimer = setTimeout(async () => {
+      if (!fileInput.isConnected || sequence !== uploadSequence || completedReceiptId === receiptId) return;
+      try {
+        // Results are durable even if the SSE connection briefly drops.
+        const inbox = await api.get('/upsert/notifications', { page: 0, size: 25 });
+        if (!fileInput.isConnected || sequence !== uploadSequence) return;
+        for (const item of inbox.items || []) {
+          let detail;
+          try { detail = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload; } catch { continue; }
+          if (detail?.receiptId === receiptId) {
+            handleOcrCompletion(detail);
+            if (completedReceiptId === receiptId) return;
+          }
+        }
+      } catch { /* a temporary connection problem is checked again below */ }
+      if (Date.now() - started >= 15 * 60 * 1000) {
+        showError('This scan is taking too long. Try again later or enter the details manually.');
+        return;
+      }
+      if (sequence === uploadSequence && completedReceiptId !== receiptId) recoverCompletion(sequence, receiptId, started);
+    }, 5000);
+  }
 
   async function saveTransaction(uid) {
     const saveBtn = document.getElementById('bs-save');

@@ -28,7 +28,7 @@ permissions:
 # Never run two builds at once: a Rust build and an OCR build together will
 # exceed the node's memory, and the tag-bump commits would race.
 concurrency:
-  group: build-and-deploy
+  group: pfa-host-intensive
   cancel-in-progress: false
 
 env:

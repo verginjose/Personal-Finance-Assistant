@@ -49,6 +49,12 @@ data:
     fi
     rabbitmqctl set_permissions -p / "$RABBITMQ_DEFAULT_USER" '.*' '.*' '.*' >/dev/null
     rabbitmqctl authenticate_user "$RABBITMQ_DEFAULT_USER" "$RABBITMQ_DEFAULT_PASS" >/dev/null 2>&1
+    # One OCR job runs at a time (prefetch=1). Bound waiting work and reject
+    # new publishes with publisher NACKs; never silently discard old receipts.
+    rabbitmqctl set_policy --apply-to queues pfa-ocr-capacity '^ocr-jobs$' \
+      '{"max-length":3,"overflow":"reject-publish"}' >/dev/null
+    rabbitmqctl set_policy --apply-to queues pfa-ocr-dead-capacity '^ocr-jobs-dead$' \
+      '{"max-length":32,"overflow":"reject-publish"}' >/dev/null
     echo 'Configured RabbitMQ service account is ready'
 ---
 apiVersion: v1

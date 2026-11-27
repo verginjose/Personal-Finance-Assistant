@@ -320,6 +320,83 @@ directly with `./k8s/apply-observability.sh dashboards`.
 > Note: anything you change *inside* the Grafana UI is lost on the next
 > rollout for provisioned dashboards. Change the JSON file instead.
 
+### Clean production reset
+
+`scripts/reset-production-data.py` inventories the dedicated PFA stores by
+default. It does not erase anything without both explicit execution flags:
+
+```bash
+python3 scripts/reset-production-data.py
+python3 scripts/reset-production-data.py --execute --acknowledge-delete-all-pfa-data
+```
+
+This erases all application accounts, ledger/group/planning data, receipt and
+profile objects (including object versions), Redis sessions/cache, pending and
+dead-letter OCR jobs, and historical ClickHouse/Prometheus data. It retains
+schemas, sequence definitions, credentials, buckets/policies, dashboards,
+volumes, model files, container images and the PostgreSQL read replica.
+Identity sequences restart at their initial values. Existing log files are
+excluded using the runtime `pfa-system/pfa-log-reset-checkpoint` ConfigMap so
+Vector cannot replay them into the empty log database after restarting.
+
+The reset holds Argo reconciliation and pauses application writers, consumers,
+public ingress, monitoring and log collection before deleting data. It verifies
+empty application stores and replica rows, then restores recorded replicas and
+previous Argo annotations. Counts, rather than row contents or credentials,
+are saved to `/tmp/pfa-production-reset-report.json`. If anything fails it
+leaves services paused; inspect the report and retained state before using
+`--restore-state`. Do not use this command while a test or build is running.
+
+### Realistic load tests and laptop guard
+
+The manual workflow runs on the existing PFA runner so it can reach the private
+`laptop-health` telemetry service. It serializes with builds, permits 5–50
+virtual sessions, and caps traffic at **one request/second globally**. Only
+three browser journeys are active at once, with 4–12 second think times,
+mostly reads, a few personal expenses and a small household split. It has no
+refresh races, large fan-out or automatic transport retries. Any unexpected
+HTTP response, including a 5xx, stops the scenario.
+
+Bills are **0–2 total for the entire workflow**, rather than per user. They are
+uploaded sequentially, at least 60 seconds apart, with no second upload until
+the previous parse finishes. No ledger transaction is created from parsed
+receipts. Ordinary scenario writes and synthetic accounts persist; a clean
+production reset must run after validation if an empty deployment is required.
+
+The guard requires 60 continuous seconds at or below 65°C CPU, 55°C GPU, 60°C
+SSD, at least 8 GiB available RAM and at most 50% CPU before launching traffic.
+It refuses to start if these conditions are not met within two minutes.
+During the run it samples every half-second and immediately aborts at 78°C
+CPU, 65°C GPU, 70°C SSD, 80% host CPU, less than 6 GiB available RAM, active
+swap-out, or full memory pressure above 1%. Missing/invalid sensors or telemetry
+older than three seconds also stop the run. The hard run ceiling is ten minutes;
+thresholds cannot be relaxed through workflow inputs or CLI flags.
+
+An armed telemetry service independently watches these limits and can only
+patch the `ocr-service` replica count, using narrowly scoped RBAC. A trip pauses
+OCR and stops the load generator; Argo respects this pause. After cooling,
+verify telemetry and explicitly resume `kubectl -n pfa scale deploy/ocr-service
+--replicas=1`. Do not automatically restart a thermally aborted test. Unfinished
+OCR messages requeue; the broker accepts at most three waiting jobs plus one
+in flight. Full queues reject publishers with 429/Retry-After instead of
+discarding earlier receipts. Dead letters are also bounded. Storage allows at
+most two concurrent multipart uploads, and the scanner recovers missed live
+notifications from the durable inbox.
+
+For a host-side guarded run, without a workflow:
+
+```bash
+python3 requests/laptop_guard.py run --local-sensors --report /tmp/guard.json -- \
+  python3 requests/run_realistic_test.py --users 5 --duration 120 --bills-total 0 --out /tmp/realistic.json
+```
+
+Use the private health service and `--pause-ocr-on-abort` for runs containing
+bills; `--local-sensors` alone stops the generator but cannot pause cluster OCR.
+Regenerate its ConfigMap after editing the guard with
+`python3 scripts/render-laptop-health.py`. The telemetry process loads no ML
+models, reserves no compute GPU, and only exposes hardware readings inside the
+cluster; it does not publish host metrics to the public application.
+
 ### Data layer datasources
 
 The **Data — Overview**, **Postgres** and **Redis** dashboards need two datasources that the

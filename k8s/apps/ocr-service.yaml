@@ -77,7 +77,8 @@ spec:
         reloader.stakater.com/auto: "true"
     spec:
       automountServiceAccountToken: false
-      terminationGracePeriodSeconds: 60
+      # Requeue unfinished jobs and release GPU work promptly on a thermal stop.
+      terminationGracePeriodSeconds: 5
       # Remove the GPU request below (and set FLAGS_fraction_of_gpu_memory_to_use=0)
       # if you run this on a cluster/node without an NVIDIA GPU.
       tolerations:

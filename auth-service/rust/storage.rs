@@ -33,6 +33,16 @@ fn hmac(key: &[u8], data: &str) -> Vec<u8> {
 fn digest(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
+fn confirmed_publish(confirmation: lapin::publisher_confirm::Confirmation) -> Result<()> {
+    match confirmation {
+        lapin::publisher_confirm::Confirmation::Ack(None) => Ok(()),
+        lapin::publisher_confirm::Confirmation::Nack(_) => Err(Error(
+            StatusCode::TOO_MANY_REQUESTS,
+            "The receipt reader is busy. Please try again in 15 seconds.".into(),
+        )),
+        _ => Err(Error::internal("OCR job was not routed and confirmed")),
+    }
+}
 impl Storage {
     pub async fn new() -> Result<Self> {
         let rabbit = Self::connect_rabbit().await?;
@@ -50,7 +60,7 @@ impl Storage {
             profiles: env("MINIO_PROFILE_BUCKET", "profiles"),
             command_url: env("COMMAND_SERVICE_URL", "http://command-service:8081"),
             rabbit: tokio::sync::Mutex::new(rabbit),
-            uploads: Semaphore::new(8),
+            uploads: Semaphore::new(2),
         };
         for bucket in [&storage.receipts, &storage.profiles] {
             let response = storage
@@ -200,10 +210,7 @@ impl Storage {
             .map_err(Error::internal)?
             .await
             .map_err(Error::internal)?;
-        match confirmation {
-            lapin::publisher_confirm::Confirmation::Ack(None) => Ok(()),
-            _ => Err(Error::internal("OCR job was not routed and confirmed")),
-        }
+        confirmed_publish(confirmation)
     }
     async fn request(
         &self,
@@ -342,7 +349,10 @@ fn upload_busy_response() -> Response {
         .insert("retry-after", HeaderValue::from_static("1"));
     response
 }
-async fn reject_busy_upload(mut multipart: Multipart) -> Response {
+async fn reject_busy_upload(multipart: Multipart) -> Response {
+    drain_rejected_upload(multipart, upload_busy_response()).await
+}
+async fn drain_rejected_upload(mut multipart: Multipart, mut response: Response) -> Response {
     // An early close can interrupt the proxy's in-flight POST body and turn
     // this 429 into a broken-pipe 502. Discard the already bounded body without
     // allocating a spool or holding an upload slot. Slow clients cannot hold
@@ -354,7 +364,8 @@ async fn reject_busy_upload(mut multipart: Multipart) -> Response {
         Ok::<(), axum::extract::multipart::MultipartError>(())
     })
     .await;
-    upload_busy_response()
+    response.headers_mut().insert("connection", HeaderValue::from_static("close"));
+    response
 }
 async fn upload(
     State(app): State<App>,
@@ -505,7 +516,24 @@ async fn upload(
                 }
                 event["targetCurrency"] = json!(c);
             }
-            s.publish(event).await?;
+            if let Err(error) = s.publish(event).await {
+                if error.0 == StatusCode::TOO_MANY_REQUESTS {
+                    // A confirmed broker rejection means the job was not
+                    // queued. Remove its object instead of leaking uploads.
+                    let cleanup = s.request(reqwest::Method::DELETE, bucket, &name,
+                                            false, &digest(b""), None).await;
+                    if !matches!(cleanup, Ok(ref response) if response.status().is_success()) {
+                        tracing::warn!("failed to remove a rejected OCR upload");
+                    }
+                    // Trailing multipart fields may still be in flight. Use
+                    // the same bounded drain as the concurrent-upload guard.
+                    drop(field);
+                    let mut response = drain_rejected_upload(multipart, error.into_response()).await;
+                    response.headers_mut().insert("retry-after", HeaderValue::from_static("15"));
+                    return Ok(response);
+                }
+                return Err(error);
+            }
             return Ok((StatusCode::ACCEPTED,Json(json!({"message":if batch {"Batch statement accepted for processing"} else {"Receipt accepted for OCR processing"},"receiptId":receipt_id,"url":url}))).into_response());
         }
         return Ok(Json(json!({"url":url})).into_response());
@@ -607,6 +635,20 @@ pub fn routes() -> Router<App> {
 mod tests {
     use super::*;
     use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+
+    #[test]
+    fn full_ocr_queue_is_busy_not_a_false_acceptance() {
+        let error = confirmed_publish(lapin::publisher_confirm::Confirmation::Nack(None)).unwrap_err();
+        assert_eq!(error.0, StatusCode::TOO_MANY_REQUESTS);
+        assert!(error.1.contains("15 seconds"));
+        assert!(confirmed_publish(lapin::publisher_confirm::Confirmation::Ack(None)).is_ok());
+    }
+
+    #[test]
+    fn missing_publisher_confirmation_is_not_accepted() {
+        let error = confirmed_publish(lapin::publisher_confirm::Confirmation::NotRequested).unwrap_err();
+        assert_eq!(error.0, StatusCode::SERVICE_UNAVAILABLE);
+    }
 
     #[tokio::test]
     async fn busy_upload_closes_unread_request_connection() {

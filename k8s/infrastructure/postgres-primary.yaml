@@ -78,13 +78,13 @@ spec:
           env:
             - name: POSTGRES_DB
               valueFrom:
-                secretKeyRef: { name: postgres-secrets, key: DB_NAME }
+                secretKeyRef: {name: postgres-secrets, key: DB_NAME}
             - name: POSTGRES_USER
               valueFrom:
-                secretKeyRef: { name: postgres-secrets, key: DB_USER }
+                secretKeyRef: {name: postgres-secrets, key: DB_USER}
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: { name: postgres-secrets, key: DB_PASSWORD }
+                secretKeyRef: {name: postgres-secrets, key: DB_PASSWORD}
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:
@@ -93,6 +93,8 @@ spec:
             - name: initdb
               mountPath: /docker-entrypoint-initdb.d
               readOnly: true
+            - name: socket
+              mountPath: /var/run/postgresql
           resources:
             requests:
               cpu: 500m
@@ -118,11 +120,27 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       volumes:
         - name: initdb
           configMap:
             name: postgres-init
-            defaultMode: 0755
+            defaultMode: 493
+        - name: socket
+          emptyDir: {}
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
   volumeClaimTemplates:
     - metadata:
         name: data

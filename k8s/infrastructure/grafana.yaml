@@ -42,6 +42,8 @@ spec:
         fsGroup: 472
         runAsUser: 472
         runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: grafana
           image: grafana/grafana:11.1.4
@@ -51,7 +53,7 @@ spec:
               value: admin
             - name: GF_SECURITY_ADMIN_PASSWORD
               valueFrom:
-                secretKeyRef: { name: grafana-secrets, key: GRAFANA_ADMIN_PASSWORD }
+                secretKeyRef: {name: grafana-secrets, key: GRAFANA_ADMIN_PASSWORD}
             - name: GF_INSTALL_PLUGINS
               # redis-datasource powers the "Data — Postgres & Redis" dashboard
               # (live DBSIZE / INFO / SCAN queries, no exporter pod needed).
@@ -60,18 +62,18 @@ spec:
             # single source; the provisioning file only references these names.
             - name: POSTGRES_DS_DB
               valueFrom:
-                secretKeyRef: { name: postgres-secrets, key: DB_NAME }
+                secretKeyRef: {name: postgres-secrets, key: DB_NAME}
             - name: POSTGRES_DS_USER
               valueFrom:
-                secretKeyRef: { name: postgres-secrets, key: DB_USER }
+                secretKeyRef: {name: postgres-secrets, key: DB_USER}
             - name: POSTGRES_DS_PASSWORD
               valueFrom:
-                secretKeyRef: { name: postgres-secrets, key: DB_PASSWORD }
+                secretKeyRef: {name: postgres-secrets, key: DB_PASSWORD}
             - name: REDIS_PASSWORD
               valueFrom:
-                secretKeyRef: { name: redis-secrets, key: REDIS_PASSWORD }
+                secretKeyRef: {name: redis-secrets, key: REDIS_PASSWORD}
             - name: GF_SECURITY_ALLOW_EMBEDDING
-              value: "true"
+              value: 'false'
             - name: GF_AUTH_ANONYMOUS_ENABLED
               value: "false"
             - name: GF_AUTH_DISABLE_LOGIN_FORM
@@ -88,6 +90,11 @@ spec:
               value: "false"
             - name: GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES
               value: "false"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-secrets
+                  key: CLICKHOUSE_PASSWORD
           ports:
             - name: http
               containerPort: 3000
@@ -103,6 +110,8 @@ spec:
             - name: dashboards
               mountPath: /var/lib/grafana/dashboards
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 100m
@@ -124,6 +133,12 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 20
             failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
       volumes:
         - name: data
           persistentVolumeClaim:
@@ -138,6 +153,9 @@ spec:
         - name: dashboards
           configMap:
             name: grafana-dashboards
+        - name: tmp
+          emptyDir: {}
+      automountServiceAccountToken: false
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

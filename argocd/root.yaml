@@ -21,7 +21,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: personal-finance-assistant
 spec:
-  project: default
+  project: pfa-root
   source:
     repoURL: https://github.com/verginjose/Personal-Finance-Assistant.git
     targetRevision: master

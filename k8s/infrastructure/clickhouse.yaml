@@ -49,7 +49,7 @@ spec:
               value: default
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
-                secretKeyRef: { name: clickhouse-secrets, key: CLICKHOUSE_PASSWORD }
+                secretKeyRef: {name: clickhouse-secrets, key: CLICKHOUSE_PASSWORD}
             - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
               value: "1"
           ports:
@@ -96,6 +96,11 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       volumes:
         # Created by k8s/apply.sh from observability/clickhouse/init.
         - name: init
@@ -104,6 +109,15 @@ spec:
         - name: tuning
           configMap:
             name: clickhouse-tuning
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 101
+        runAsGroup: 101
+        runAsNonRoot: true
+        fsGroup: 101
+        fsGroupChangePolicy: OnRootMismatch
   volumeClaimTemplates:
     - metadata:
         name: data

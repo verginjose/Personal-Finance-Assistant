@@ -45,10 +45,10 @@ spec:
           env:
             - name: POSTGRES_USER
               valueFrom:
-                secretKeyRef: { name: postgres-secrets, key: DB_USER }
+                secretKeyRef: {name: postgres-secrets, key: DB_USER}
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: { name: postgres-secrets, key: DB_PASSWORD }
+                secretKeyRef: {name: postgres-secrets, key: DB_PASSWORD}
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           command:
@@ -70,6 +70,11 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       containers:
         - name: postgres
           image: ankane/pgvector:v0.5.1
@@ -89,18 +94,20 @@ spec:
           env:
             - name: POSTGRES_DB
               valueFrom:
-                secretKeyRef: { name: postgres-secrets, key: DB_NAME }
+                secretKeyRef: {name: postgres-secrets, key: DB_NAME}
             - name: POSTGRES_USER
               valueFrom:
-                secretKeyRef: { name: postgres-secrets, key: DB_USER }
+                secretKeyRef: {name: postgres-secrets, key: DB_USER}
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: { name: postgres-secrets, key: DB_PASSWORD }
+                secretKeyRef: {name: postgres-secrets, key: DB_PASSWORD}
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            - name: socket
+              mountPath: /var/run/postgresql
           resources:
             requests:
               cpu: 250m
@@ -122,6 +129,23 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+      volumes:
+        - name: socket
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: data

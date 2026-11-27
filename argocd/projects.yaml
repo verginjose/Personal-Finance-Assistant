@@ -1,0 +1,276 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: pfa-root
+  namespace: argocd
+spec:
+  description: Scoped Personal Finance Assistant root
+  sourceRepos:
+  - https://github.com/verginjose/Personal-Finance-Assistant.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: argocd
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+  - group: argoproj.io
+    kind: Application
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: pfa-apps
+  namespace: argocd
+spec:
+  description: Scoped Personal Finance Assistant apps
+  sourceRepos:
+  - https://github.com/verginjose/Personal-Finance-Assistant.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: pfa
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ConfigMap
+  - group: ''
+    kind: Secret
+  - group: ''
+    kind: Service
+  - group: ''
+    kind: ServiceAccount
+  - group: ''
+    kind: PersistentVolumeClaim
+  - group: apps
+    kind: Deployment
+  - group: apps
+    kind: StatefulSet
+  - group: apps
+    kind: DaemonSet
+  - group: batch
+    kind: Job
+  - group: batch
+    kind: CronJob
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: networking.k8s.io
+    kind: Ingress
+  - group: rbac.authorization.k8s.io
+    kind: Role
+  - group: rbac.authorization.k8s.io
+    kind: RoleBinding
+  - group: bitnami.com
+    kind: SealedSecret
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: pfa-infra
+  namespace: argocd
+spec:
+  description: Scoped Personal Finance Assistant infra
+  sourceRepos:
+  - https://github.com/verginjose/Personal-Finance-Assistant.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: pfa
+  clusterResourceWhitelist:
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRole
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRoleBinding
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ConfigMap
+  - group: ''
+    kind: Secret
+  - group: ''
+    kind: Service
+  - group: ''
+    kind: ServiceAccount
+  - group: ''
+    kind: PersistentVolumeClaim
+  - group: apps
+    kind: Deployment
+  - group: apps
+    kind: StatefulSet
+  - group: apps
+    kind: DaemonSet
+  - group: batch
+    kind: Job
+  - group: batch
+    kind: CronJob
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: networking.k8s.io
+    kind: Ingress
+  - group: rbac.authorization.k8s.io
+    kind: Role
+  - group: rbac.authorization.k8s.io
+    kind: RoleBinding
+  - group: bitnami.com
+    kind: SealedSecret
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: pfa-ci
+  namespace: argocd
+spec:
+  description: Scoped Personal Finance Assistant ci
+  sourceRepos:
+  - https://github.com/verginjose/Personal-Finance-Assistant.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: pfa
+  - server: https://kubernetes.default.svc
+    namespace: pfa-system
+  - server: https://kubernetes.default.svc
+    namespace: argocd
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ConfigMap
+  - group: ''
+    kind: Secret
+  - group: ''
+    kind: Service
+  - group: ''
+    kind: ServiceAccount
+  - group: ''
+    kind: PersistentVolumeClaim
+  - group: apps
+    kind: Deployment
+  - group: apps
+    kind: StatefulSet
+  - group: apps
+    kind: DaemonSet
+  - group: batch
+    kind: Job
+  - group: batch
+    kind: CronJob
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: networking.k8s.io
+    kind: Ingress
+  - group: rbac.authorization.k8s.io
+    kind: Role
+  - group: rbac.authorization.k8s.io
+    kind: RoleBinding
+  - group: bitnami.com
+    kind: SealedSecret
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: pfa-system
+  namespace: argocd
+spec:
+  description: Scoped Personal Finance Assistant system
+  sourceRepos:
+  - https://github.com/verginjose/Personal-Finance-Assistant.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: pfa-system
+  clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRole
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRoleBinding
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ConfigMap
+  - group: ''
+    kind: Secret
+  - group: ''
+    kind: Service
+  - group: ''
+    kind: ServiceAccount
+  - group: ''
+    kind: PersistentVolumeClaim
+  - group: apps
+    kind: Deployment
+  - group: apps
+    kind: StatefulSet
+  - group: apps
+    kind: DaemonSet
+  - group: batch
+    kind: Job
+  - group: batch
+    kind: CronJob
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: networking.k8s.io
+    kind: Ingress
+  - group: rbac.authorization.k8s.io
+    kind: Role
+  - group: rbac.authorization.k8s.io
+    kind: RoleBinding
+  - group: bitnami.com
+    kind: SealedSecret
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: pfa-secrets
+  namespace: argocd
+spec:
+  description: Scoped Personal Finance Assistant secrets
+  sourceRepos:
+  - https://github.com/verginjose/Personal-Finance-Assistant.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: pfa
+  - server: https://kubernetes.default.svc
+    namespace: pfa-system
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+  - group: bitnami.com
+    kind: SealedSecret
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: pfa-edge
+  namespace: argocd
+spec:
+  description: Scoped Personal Finance Assistant edge
+  sourceRepos:
+  - https://github.com/verginjose/Personal-Finance-Assistant.git
+  destinations:
+  - server: https://kubernetes.default.svc
+    namespace: pfa
+  - server: https://kubernetes.default.svc
+    namespace: argocd
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ConfigMap
+  - group: ''
+    kind: Secret
+  - group: ''
+    kind: Service
+  - group: ''
+    kind: ServiceAccount
+  - group: ''
+    kind: PersistentVolumeClaim
+  - group: apps
+    kind: Deployment
+  - group: apps
+    kind: StatefulSet
+  - group: apps
+    kind: DaemonSet
+  - group: batch
+    kind: Job
+  - group: batch
+    kind: CronJob
+  - group: networking.k8s.io
+    kind: NetworkPolicy
+  - group: networking.k8s.io
+    kind: Ingress
+  - group: rbac.authorization.k8s.io
+    kind: Role
+  - group: rbac.authorization.k8s.io
+    kind: RoleBinding
+  - group: bitnami.com
+    kind: SealedSecret

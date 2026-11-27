@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { renderBillScanner } from '../../js/views/bill-scanner.js';
-import { Auth } from '../../js/utils/api.js';
+import { api, Auth } from '../../js/utils/api.js';
 
 async function scannerResult(data) {
   Auth.save({ token: 't', refreshToken: 'r', userId: 'u1', email: 'a@b.com' });
@@ -68,5 +68,84 @@ describe('scanner accounting handoff', () => {
     expect([...container.querySelector('#bs-category').options].map(o => o.value)).toContain('MUTUAL_FUNDS_SIP');
     expect(container.querySelector('#bs-accounting-help').textContent).toContain('excluded');
     expect(container.querySelector('#bs-dest').disabled).toBe(true);
+  });
+});
+
+describe('scanner upload and completion ordering', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  async function pendingScan() {
+    const container = await scannerResult({ name: 'Previous result', amount: 1, currency: 'USD' });
+    container.querySelector('#bs-scan-another').click();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:receipt') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    let resolveUpload;
+    vi.spyOn(api, 'upload').mockImplementation(() => new Promise(resolve => { resolveUpload = resolve; }));
+    const input = container.querySelector('#bs-file');
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File(['receipt'], 'receipt.jpg', { type: 'image/jpeg' })] });
+    input.dispatchEvent(new Event('change'));
+    return { container, resolveUpload };
+  }
+
+  const completed = { receiptId: 'current-receipt', status: 'SUCCESS', data: {
+    name: 'Chilis Hamburgers', amount: 28.31, currency: 'USD', date: '2017-11-24', type: 'EXPENSE', category: 'RESTAURANTS',
+  } };
+
+  function complete(detail) {
+    window.dispatchEvent(new CustomEvent('ocr-completed', { detail }));
+  }
+
+  it('keeps a fast OCR result that arrives before the upload response', async () => {
+    const { container, resolveUpload } = await pendingScan();
+    complete(completed);
+    resolveUpload({ receiptId: 'current-receipt', url: '/api/storage/receipts/u1/receipt.jpg' });
+    await vi.waitFor(() => expect(container.querySelector('#bs-name')?.value).toBe('Chilis Hamburgers'));
+    expect(container.querySelector('#bs-amount').value).toBe('28.31');
+    expect(container.querySelector('.advisor-skeleton')).toBeNull();
+    expect(window._bsReceiptUrl).toBe('/api/storage/receipts/u1/receipt.jpg');
+  });
+
+  it('keeps an early OCR error instead of restoring the loading skeleton', async () => {
+    const { container, resolveUpload } = await pendingScan();
+    complete({ receiptId: 'current-receipt', status: 'ERROR', message: 'No readable text' });
+    resolveUpload({ receiptId: 'current-receipt', url: '/api/storage/receipts/u1/receipt.jpg' });
+    await vi.waitFor(() => expect(container.querySelector('#bs-result').textContent).toContain('No readable text'));
+    expect(container.querySelector('.advisor-skeleton')).toBeNull();
+  });
+
+  it('matches buffered completions to this receipt and ignores later stale events', async () => {
+    const { container, resolveUpload } = await pendingScan();
+    complete({ ...completed, receiptId: 'old-receipt', data: { ...completed.data, name: 'Stale receipt' } });
+    complete(completed);
+    resolveUpload({ receiptId: 'current-receipt' });
+    await vi.waitFor(() => expect(container.querySelector('#bs-name')?.value).toBe('Chilis Hamburgers'));
+    container.querySelector('#bs-name').value = 'Reviewed merchant';
+    complete({ ...completed, receiptId: 'old-receipt' });
+    complete(completed);
+    expect(container.querySelector('#bs-name').value).toBe('Reviewed merchant');
+  });
+
+  it('still fills the form when OCR finishes after upload acknowledgement', async () => {
+    const { container, resolveUpload } = await pendingScan();
+    resolveUpload({ receiptId: 'current-receipt' });
+    await vi.waitFor(() => expect(container.querySelector('.advisor-skeleton')).not.toBeNull());
+    complete(completed);
+    expect(container.querySelector('#bs-name').value).toBe('Chilis Hamburgers');
+  });
+
+  it('does not let an older upload response replace a newer scan', async () => {
+    const { container, resolveUpload } = await pendingScan();
+    let resolveNewUpload;
+    api.upload.mockImplementationOnce(() => new Promise(resolve => { resolveNewUpload = resolve; }));
+    const input = container.querySelector('#bs-file');
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File(['new receipt'], 'new.jpg', { type: 'image/jpeg' })] });
+    input.dispatchEvent(new Event('change'));
+    resolveNewUpload({ receiptId: 'current-receipt', url: '/api/storage/receipts/u1/new.jpg' });
+    await vi.waitFor(() => expect(window._bsReceiptId).toBe('current-receipt'));
+    complete(completed);
+    resolveUpload({ receiptId: 'old-receipt', url: '/api/storage/receipts/u1/old.jpg' });
+    await Promise.resolve();
+    expect(container.querySelector('#bs-name').value).toBe('Chilis Hamburgers');
+    expect(window._bsReceiptUrl).toBe('/api/storage/receipts/u1/new.jpg');
   });
 });

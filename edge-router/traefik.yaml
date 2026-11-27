@@ -17,6 +17,9 @@ ping:
 metrics:
   prometheus:
     entryPoint: management
+    # Finer buckets so gateway latency percentiles are meaningful in ms
+    # (Traefik's defaults are 0.1/0.3/1.2/5s, too coarse to read).
+    buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10]
 providers:
   file:
     filename: /etc/traefik/routes.yaml

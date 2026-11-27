@@ -38,7 +38,7 @@
   "panels": [
     {
       "id": 1,
-      "title": "Healthy backend targets (expected: 4)",
+      "title": "Healthy backend targets (expected: 5)",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -106,7 +106,7 @@
       "description": "HTTP requests per minute handled by all four services.",
       "targets": [
         {
-          "expr": "round(sum(rate(traefik_service_requests_total{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval])) * 60)",
+          "expr": "round(sum(rate(traefik_service_requests_total{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval])) * 60) or vector(0)",
           "refId": "A",
           "instant": true,
           "format": "table"
@@ -160,7 +160,7 @@
       },
       "targets": [
         {
-          "expr": "round(sum(rate(traefik_service_requests_total{job=\"edge-router\",service!=\"notifications@file\",code=~\"5..\"}[$__rate_interval])) * 60)",
+          "expr": "round(sum(rate(traefik_service_requests_total{job=\"edge-router\",service!=\"notifications@file\",code=~\"5..\"}[$__rate_interval])) * 60) or vector(0)",
           "refId": "A",
           "instant": true,
           "format": "table"
@@ -220,10 +220,10 @@
         "type": "prometheus",
         "uid": "prometheus-ds"
       },
-      "description": "99th percentile request latency across the four Spring services, excluding the SSE stream.",
+      "description": "99th percentile gateway (Traefik) request latency, excluding the SSE stream. Hidden when traffic is below 1 req/s so a handful of samples cannot produce a misleading percentile.",
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval]))) * 1000",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval]))) * 1000 and (sum(rate(traefik_service_requests_total{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval])) > 1)",
           "refId": "A",
           "instant": true,
           "format": "table"
@@ -440,64 +440,10 @@
       "gridPos": {
         "x": 0,
         "y": 12,
-        "w": 12,
+        "w": 24,
         "h": 8
       },
       "description": "Response time percentiles per service (ms), excluding the long-lived notifications SSE stream."
-    },
-    {
-      "id": 10,
-      "title": "Gateway route p99 latency",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus-ds"
-      },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99, sum by (le, service) (rate(traefik_service_request_duration_seconds_bucket{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval]))) * 1000",
-          "refId": "A",
-          "legendFormat": "{{service}}",
-          "instant": false,
-          "range": true
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "decimals": 2,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 8,
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "axisSoftMin": 0
-          }
-        }
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "calcs": []
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 12,
-        "w": 12,
-        "h": 8
-      },
-      "description": "Maximum response time per Spring Cloud Gateway route (ms). The notifications SSE route is excluded because its duration is connection lifetime."
     }
   ],
   "description": "Application health, traffic, errors and latency. Metrics cover the four instrumented backend services; gateway traffic represents incoming requests. Open Pods, Logs or Data for investigation.",

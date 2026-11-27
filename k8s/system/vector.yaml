@@ -73,7 +73,8 @@ data:
           # A production reset moves this checkpoint forward so old kubelet
           # files cannot repopulate the cleared log datasource on restart.
           cutoff = parse_timestamp(get_env_var("PFA_LOG_START_TIME") ?? "1970-01-01T00:00:00Z", format: "%+") ?? t'1970-01-01T00:00:00Z'
-          .kubernetes.pod_labels.app != "vector" && .timestamp >= cutoff
+          event_time = timestamp(.timestamp) ?? t'1970-01-01T00:00:00Z'
+          .kubernetes.pod_labels.app != "vector" && event_time >= cutoff
 
       parse_logs:
         type: remap

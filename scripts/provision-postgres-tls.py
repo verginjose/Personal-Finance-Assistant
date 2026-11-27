@@ -28,6 +28,8 @@ def main():
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     ca_key, ca_cert = directory / 'postgres-ca.key', directory / 'postgres-ca.crt'
     key, cert = directory / 'postgres.key', directory / 'postgres.crt'
+    if args.renew and not all(path.exists() for path in (ca_key, ca_cert, key, cert)):
+        raise SystemExit('Renewal requires the existing CA and server material; restore the private backup first.')
     if ca_key.exists() != ca_cert.exists():
         raise SystemExit('Incomplete CA material; restore the existing CA before proceeding.')
     if not ca_key.exists():
@@ -36,6 +38,8 @@ def main():
         run(['openssl', 'ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', str(ca_key)])
         run(['openssl', 'req', '-new', '-x509', '-sha256', '-days', '1825', '-key', str(ca_key),
              '-out', str(ca_cert), '-subj', '/CN=PFA PostgreSQL CA'])
+    if run(['openssl', 'pkey', '-in', str(ca_key), '-pubout']) != run(['openssl', 'x509', '-in', str(ca_cert), '-pubkey', '-noout']):
+        raise SystemExit('CA certificate/key mismatch; restore the matching material.')
     if key.exists() != cert.exists():
         raise SystemExit('Incomplete server material; restore it or move both files aside before reissuing.')
     if args.renew or not cert.exists():
@@ -53,6 +57,8 @@ def main():
                  '-CAkey', str(ca_key), '-CAcreateserial', '-out', str(server_cert), '-extfile', str(extensions)])
             server_key.replace(key)
             server_cert.replace(cert)
+    if run(['openssl', 'pkey', '-in', str(key), '-pubout']) != run(['openssl', 'x509', '-in', str(cert), '-pubkey', '-noout']):
+        raise SystemExit('Server certificate/key mismatch; refusing to seal unusable TLS material.')
     run(['openssl', 'verify', '-CAfile', str(ca_cert), str(cert)])
     run(['openssl', 'x509', '-checkend', '2592000', '-noout', '-in', str(cert)])
     for private_key in (ca_key, key):

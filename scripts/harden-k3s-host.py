@@ -53,7 +53,7 @@ def main():
         return
     os.umask(0o077)
     backup = Path('/var/backups/pfa-k3s-security-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ'))
-    backup.mkdir(mode=0o700)
+    backup.mkdir(mode=0o700, parents=True)
     log = open(backup / 'operations.log', 'wb')
 
     def run(command):

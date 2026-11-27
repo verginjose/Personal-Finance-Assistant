@@ -623,3 +623,14 @@ vendor digest and review the scheduled security scan. Service builds publish
 BuildKit digest metadata as run artifacts; promotion retains the source tag and
 adds its immutable digest. Registry retention also preserves every deployed tag,
 including `tag@digest` references, before collecting old builds.
+
+To enable host controls on the verified single-server SQLite k3s installation,
+run `sudo python3 scripts/harden-k3s-host.py` for a check, then run it with
+`--apply`. The helper follows the current k3s enable/rotate/restart procedure,
+backs up the stopped control-plane datastore and keys under root-only
+`/var/backups/pfa-k3s-security-*`, and verifies all Secret values are unchanged.
+It appends a managed configuration drop-in, enables Secretbox encryption and
+rewrites existing Secrets, records metadata-only audit events with bounded
+rotation, and enables kubelet default seccomp. Preserve the backup and final
+encryption keys together. Do not restore an old database into a running server.
+Use the k3s recovery procedure with the corresponding datastore/config/keys.

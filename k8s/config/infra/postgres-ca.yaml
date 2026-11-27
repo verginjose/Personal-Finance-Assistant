@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-ca
+  namespace: pfa
+data:
+  ca.crt: '-----BEGIN CERTIFICATE-----
+
+    MIIBjjCCATOgAwIBAgIUIkGO1S6/410DaIbH1Uk+K17I/f0wCgYIKoZIzj0EAwIw
+
+    HDEaMBgGA1UEAwwRUEZBIFBvc3RncmVTUUwgQ0EwHhcNMjYxMTI3MTkxMTAyWhcN
+
+    MzExMTI2MTkxMTAyWjAcMRowGAYDVQQDDBFQRkEgUG9zdGdyZVNRTCBDQTBZMBMG
+
+    ByqGSM49AgEGCCqGSM49AwEHA0IABP0dwuBtEyUXuaRWFWnxoaY77wdeaYkhiBVK
+
+    8RUGZFP3rKd94ZE18lnt6hqBBaA3G12wblaog/4/YKHkimYIWi+jUzBRMB0GA1Ud
+
+    DgQWBBQKoxC+e+tAHsoY3ZhkglqjBptolzAfBgNVHSMEGDAWgBQKoxC+e+tAHsoY
+
+    3ZhkglqjBptolzAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMCA0kAMEYCIQDi
+
+    NYOIfO0R78kW2QcOO0uLrlKUQMOZY/OD6dAxPfQJxgIhAM4B/J+fUMKQv44HUv+G
+
+    gUiJzQDH6IQcIp0TqIpKwVv/
+
+    -----END CERTIFICATE-----
+
+    '

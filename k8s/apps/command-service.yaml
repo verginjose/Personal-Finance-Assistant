@@ -85,6 +85,10 @@ spec:
             # reads JSON logs straight to stdout for the Vector pipeline.
             - name: DB_HOST
               value: postgres-primary
+            - name: PGSSLMODE
+              value: verify-full
+            - name: PGSSLROOTCERT
+              value: /etc/postgres-ca/ca.crt
           resources:
             requests:
               cpu: 250m
@@ -117,6 +121,12 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: postgres-ca
+          configMap:
+            name: postgres-ca

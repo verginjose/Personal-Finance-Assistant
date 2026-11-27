@@ -135,6 +135,7 @@ kubectl -n "${NS}" rollout restart deploy/prometheus >/dev/null 2>&1 || true
 
 echo "==> Waiting for stateful infrastructure"
 kubectl -n "${NS}" rollout status statefulset/postgres-primary --timeout=300s
+python3 "${ROOT_DIR}/scripts/configure-postgres-roles.py" --namespace "${NS}"
 kubectl -n "${NS}" rollout status statefulset/redis --timeout=180s
 kubectl -n "${NS}" rollout status statefulset/rabbitmq --timeout=240s
 kubectl -n "${NS}" rollout status statefulset/minio --timeout=180s

@@ -34,23 +34,28 @@ spec:
         app: postgres-replica
         app.kubernetes.io/part-of: personal-finance-assistant
       annotations:
-        secret.reloader.stakater.com/reload: "postgres-secrets"
+        secret.reloader.stakater.com/reload: "postgres-replica-secrets,postgres-tls"
+        configmap.reloader.stakater.com/reload: postgres-security
     spec:
       # pg_basebackup only runs on first boot: the PVC is seeded once, then the
       # main container starts streaming replication using the -R recovery config.
       initContainers:
         - name: basebackup
-          image: ankane/pgvector:v0.5.1
+          image: pgvector/pgvector:pg15-bookworm@sha256:e0b617fffc06dd37323ee99873c7a8683f19f1dce34633670262b0113ce32638
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_USER
               valueFrom:
-                secretKeyRef: {name: postgres-secrets, key: DB_USER}
+                secretKeyRef: {name: postgres-replica-secrets, key: DB_USER}
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: {name: postgres-secrets, key: DB_PASSWORD}
+                secretKeyRef: {name: postgres-replica-secrets, key: DB_PASSWORD}
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
+            - name: PGSSLMODE
+              value: verify-full
+            - name: PGSSLROOTCERT
+              value: /etc/postgres-tls/ca.crt
           command:
             - sh
             - -c
@@ -70,6 +75,12 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            - name: postgres-tls
+              mountPath: /etc/postgres-tls
+              readOnly: true
+            - name: postgres-security
+              mountPath: /etc/postgres-security
+              readOnly: true
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -77,7 +88,7 @@ spec:
                 - ALL
       containers:
         - name: postgres
-          image: ankane/pgvector:v0.5.1
+          image: pgvector/pgvector:pg15-bookworm@sha256:e0b617fffc06dd37323ee99873c7a8683f19f1dce34633670262b0113ce32638
           imagePullPolicy: IfNotPresent
           # max_connections must be >= the primary's or the standby refuses to
           # accept connections; shared_buffers stays at 1 GiB to match.
@@ -88,26 +99,48 @@ spec:
             - "shared_buffers=1GB"
             - "-c"
             - "effective_cache_size=2GB"
+            - -c
+            - ssl=on
+            - -c
+            - ssl_cert_file=/etc/postgres-tls/tls.crt
+            - -c
+            - ssl_key_file=/etc/postgres-tls/tls.key
+            - -c
+            - ssl_min_protocol_version=TLSv1.2
+            - -c
+            - hba_file=/etc/postgres-security/pg_hba.conf
+            - -c
+            - ident_file=/etc/postgres-security/pg_ident.conf
           ports:
             - name: postgres
               containerPort: 5432
           env:
             - name: POSTGRES_DB
               valueFrom:
-                secretKeyRef: {name: postgres-secrets, key: DB_NAME}
+                secretKeyRef: {name: postgres-replica-secrets, key: DB_NAME}
             - name: POSTGRES_USER
               valueFrom:
-                secretKeyRef: {name: postgres-secrets, key: DB_USER}
+                secretKeyRef: {name: postgres-replica-secrets, key: DB_USER}
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: {name: postgres-secrets, key: DB_PASSWORD}
+                secretKeyRef: {name: postgres-replica-secrets, key: DB_PASSWORD}
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
+            - name: PGSSLMODE
+              value: verify-full
+            - name: PGSSLROOTCERT
+              value: /etc/postgres-tls/ca.crt
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
             - name: socket
               mountPath: /var/run/postgresql
+            - name: postgres-tls
+              mountPath: /etc/postgres-tls
+              readOnly: true
+            - name: postgres-security
+              mountPath: /etc/postgres-security
+              readOnly: true
           resources:
             requests:
               cpu: 250m
@@ -117,14 +150,20 @@ spec:
               memory: 3Gi
           readinessProbe:
             exec:
-              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+              command:
+                - "sh"
+                - "-c"
+                - "pg_isready -U pfa_admin -d \"$POSTGRES_DB\""
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
           livenessProbe:
             exec:
-              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+              command:
+                - "sh"
+                - "-c"
+                - "pg_isready -U pfa_admin -d \"$POSTGRES_DB\""
             initialDelaySeconds: 40
             periodSeconds: 15
             timeoutSeconds: 5
@@ -146,6 +185,13 @@ spec:
       volumes:
         - name: socket
           emptyDir: {}
+        - name: postgres-tls
+          secret:
+            secretName: postgres-tls
+            defaultMode: 288
+        - name: postgres-security
+          configMap:
+            name: postgres-security
   volumeClaimTemplates:
     - metadata:
         name: data

@@ -72,6 +72,8 @@ spec:
   destinations:
   - server: https://kubernetes.default.svc
     namespace: pfa
+  - server: https://kubernetes.default.svc
+    namespace: kube-system
   clusterResourceWhitelist:
   - group: rbac.authorization.k8s.io
     kind: ClusterRole

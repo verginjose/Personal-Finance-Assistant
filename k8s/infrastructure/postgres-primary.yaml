@@ -36,12 +36,13 @@ spec:
       annotations:
         # Restart only for the credentials this workload reads, not for every
         # Secret in the namespace.
-        secret.reloader.stakater.com/reload: "postgres-secrets"
-        configmap.reloader.stakater.com/reload: "postgres-init"
+        secret.reloader.stakater.com/reload: "postgres-secrets,postgres-tls"
+        configmap.reloader.stakater.com/reload: "postgres-security"
     spec:
       containers:
         - name: postgres
-          image: ankane/pgvector:v0.5.1
+          image:
+            pgvector/pgvector:pg15-bookworm@sha256:e0b617fffc06dd37323ee99873c7a8683f19f1dce34633670262b0113ce32638
           imagePullPolicy: IfNotPresent
           # Each WAL flush on this host costs ~4.6 ms (LUKS + consumer NVMe),
           # so the default commit path measured 9 ms / 110 tps. Turning
@@ -72,6 +73,18 @@ spec:
             - "work_mem=8MB"
             - "-c"
             - "maintenance_work_mem=256MB"
+            - -c
+            - ssl=on
+            - -c
+            - ssl_cert_file=/etc/postgres-tls/tls.crt
+            - -c
+            - ssl_key_file=/etc/postgres-tls/tls.key
+            - -c
+            - ssl_min_protocol_version=TLSv1.2
+            - -c
+            - hba_file=/etc/postgres-security/pg_hba.conf
+            - -c
+            - ident_file=/etc/postgres-security/pg_ident.conf
           ports:
             - name: postgres
               containerPort: 5432
@@ -87,6 +100,10 @@ spec:
                 secretKeyRef: {name: postgres-secrets, key: DB_PASSWORD}
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
+            - name: PGSSLMODE
+              value: verify-full
+            - name: PGSSLROOTCERT
+              value: /etc/postgres-tls/ca.crt
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
@@ -95,6 +112,12 @@ spec:
               readOnly: true
             - name: socket
               mountPath: /var/run/postgresql
+            - name: postgres-tls
+              mountPath: /etc/postgres-tls
+              readOnly: true
+            - name: postgres-security
+              mountPath: /etc/postgres-security
+              readOnly: true
           resources:
             requests:
               cpu: 500m
@@ -132,6 +155,13 @@ spec:
             defaultMode: 493
         - name: socket
           emptyDir: {}
+        - name: postgres-tls
+          secret:
+            secretName: postgres-tls
+            defaultMode: 288
+        - name: postgres-security
+          configMap:
+            name: postgres-security
       automountServiceAccountToken: false
       securityContext:
         seccompProfile:

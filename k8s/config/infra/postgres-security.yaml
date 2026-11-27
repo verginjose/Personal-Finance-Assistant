@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-security
+  namespace: pfa
+data:
+  pg_hba.conf: '# Administrative access stays on the local Unix socket under peer
+    authentication.
+
+    local all pfa_admin peer map=pfa-local
+
+    local all all scram-sha-256
+
+    hostnossl all all 0.0.0.0/0 reject
+
+    hostnossl all all ::/0 reject
+
+    hostssl replication pfa_replicator 10.42.0.0/16 scram-sha-256
+
+    hostssl all pfa_auth,pfa_command,pfa_query,pfa_grafana 10.42.0.0/16 scram-sha-256
+
+    '
+  pg_ident.conf: 'pfa-local postgres pfa_admin
+
+    '

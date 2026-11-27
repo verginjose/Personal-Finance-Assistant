@@ -563,3 +563,33 @@ sudo /usr/local/bin/k3s-uninstall.sh
 
 `--ci` leaves the in-cluster images in the registry volume; `--app` is what
 actually deletes them (the PVC lives in namespace pfa).
+
+
+### PostgreSQL service identities and TLS
+
+PostgreSQL primary and replica use the pinned PostgreSQL 15.20/pgvector image.
+Application connections and replication verify the server hostname against the
+private PostgreSQL CA. Plaintext connections and remote administrator logins
+are rejected; operator access remains available through the primary pod's
+local Unix socket as `pfa_admin`.
+
+The local ignored `.env` holds separate `AUTH_DB_USER`/`AUTH_DB_PASSWORD`,
+`COMMAND_DB_USER`/`COMMAND_DB_PASSWORD`, `QUERY_DB_USER`/`QUERY_DB_PASSWORD`,
+`GRAFANA_DB_USER`/`GRAFANA_DB_PASSWORD` and
+`REPLICATION_DB_USER`/`REPLICATION_DB_PASSWORD` values. The sealer maps these
+into workload-specific Secrets; it never falls back to the administrator for
+application accounts. `DB_USER`/`DB_PASSWORD` are for the primary administrator
+only. Keep private CA material under the ignored `.certs/postgres/` directory.
+
+After initializing a database or rotating a scoped database credential, run:
+
+```bash
+python3 scripts/configure-postgres-roles.py --kubeconfig "$HOME/.kube/k3s.yaml"
+```
+
+The bootstrap apply script runs this after the primary is available, before
+waiting for the replica. It grants only each service's required privileges and
+updates the replica's persisted connection information with the dedicated
+replication account and certificate verification. Query and Grafana are
+read-only; command/query/Grafana cannot read stored password hashes.
+Grafana provisioning contains only Secret-backed environment references.

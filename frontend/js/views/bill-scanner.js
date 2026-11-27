@@ -66,6 +66,12 @@ export async function renderBillScanner(container) {
   const fileInput = document.getElementById('bs-file');
   let selectedFile = null;
   let previewUrl = null;
+  let uploadSequence = 0;
+  let uploadInFlight = false;
+  let pendingCompletions = [];
+  let completedReceiptId = null;
+  window._bsReceiptId = null;
+  window._bsReceiptUrl = null;
 
   dropZone.onclick = () => fileInput.click();
   dropZone.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } };
@@ -104,6 +110,13 @@ export async function renderBillScanner(container) {
 
   async function readReceipt() {
     if (!selectedFile) return;
+    const sequence = ++uploadSequence;
+    const file = selectedFile;
+    uploadInFlight = true;
+    pendingCompletions = [];
+    completedReceiptId = null;
+    window._bsReceiptId = null;
+    window._bsReceiptUrl = null;
     const drop = document.getElementById('bs-drop');
     if (drop) drop.classList.add('drag-over');
     const reason = document.getElementById('bs-reason');
@@ -111,9 +124,11 @@ export async function renderBillScanner(container) {
 
     try {
       const fd = new FormData();
-      fd.append('file', selectedFile);
+      fd.append('file', file);
       const target = encodeURIComponent(Auth.getDefaultCurrency());
       const res = await api.upload(`/bill/process/${userId}?targetCurrency=${target}`, fd);
+      if (sequence !== uploadSequence) return;
+      uploadInFlight = false;
       if (res && res.url) window._bsReceiptUrl = res.url;
       // The gateway returns the id of this upload; the OCR callback echoes it
       // back, so a stale notification cannot overwrite a newer scan.
@@ -127,14 +142,14 @@ export async function renderBillScanner(container) {
         resultStage.hidden = false;
         resultStage.className = 'scanner-grid';
       }
-      renderPreview(selectedFile);
+      renderPreview(file);
       const form = document.getElementById('bs-preview-form');
       if (form) {
         form.innerHTML = `
           <div class="ocr-summary"><div class="ocr-summary-main">
             <span class="ocr-summary-label">Reading</span>
             <div class="ocr-amount" style="color:var(--text-2)">…</div>
-            <div class="ocr-summary-name">${esc(selectedFile.name)}</div>
+            <div class="ocr-summary-name">${esc(file.name)}</div>
           </div></div>
           <div class="advisor-skeleton">
             <div class="skeleton advisor-skeleton-line advisor-skeleton-line--short"></div>
@@ -145,7 +160,15 @@ export async function renderBillScanner(container) {
       }
       if (reason) reason.textContent = 'Finding the merchant, amount and date…';
       toast('Receipt uploaded. Reading it now…', 'info');
+      // Cached OCR can finish before the upload response reaches this tab.
+      // Match its result only after the receipt id and review layout exist.
+      const earlyCompletion = pendingCompletions.find(detail => detail.receiptId === window._bsReceiptId);
+      pendingCompletions = [];
+      if (earlyCompletion) handleOcrCompletion(earlyCompletion);
     } catch (err) {
+      if (sequence !== uploadSequence) return;
+      uploadInFlight = false;
+      pendingCompletions = [];
       if (drop) drop.classList.remove('drag-over');
       if (reason) reason.textContent = 'That file could not be read. Try a clearer photo or a PDF.';
       toast('Could not read that receipt: ' + err.message, 'error');
@@ -372,6 +395,10 @@ export async function renderBillScanner(container) {
   }
 
   function resetScanner() {
+    uploadSequence++;
+    uploadInFlight = false;
+    pendingCompletions = [];
+    completedReceiptId = null;
     selectedFile = null;
     if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
     const upload = document.getElementById('bs-upload-stage');
@@ -392,12 +419,17 @@ export async function renderBillScanner(container) {
     window._bsReceiptId = null;
   }
 
-  if (window._bsOcrListener) window.removeEventListener('ocr-completed', window._bsOcrListener);
-  window._bsOcrListener = (e) => {
-    const detail = e.detail;
+  function handleOcrCompletion(detail) {
+    if (!detail || !['SUCCESS', 'ERROR'].includes(detail.status)) return;
+    if (uploadInFlight) {
+      if (detail.receiptId) pendingCompletions = [...pendingCompletions.slice(-15), detail];
+      return;
+    }
     // Ignore a result for a different upload than the one in flight.
-    if (detail.receiptId && window._bsReceiptId && detail.receiptId !== window._bsReceiptId) return;
-    if (detail.receiptId && detail.receiptId === window._bsReceiptId) window._bsReceiptId = null;
+    if (detail.receiptId) {
+      if (detail.receiptId !== window._bsReceiptId || detail.receiptId === completedReceiptId) return;
+      completedReceiptId = detail.receiptId;
+    }
     if (detail.status === 'SUCCESS' && detail.data) {
       showReview(detail.data);
       const reason = document.getElementById('bs-reason');
@@ -405,7 +437,9 @@ export async function renderBillScanner(container) {
     } else if (detail.status === 'ERROR') {
       showError(detail.message || "We couldn't read this receipt.");
     }
-  };
+  }
+  if (window._bsOcrListener) window.removeEventListener('ocr-completed', window._bsOcrListener);
+  window._bsOcrListener = e => handleOcrCompletion(e.detail);
   window.addEventListener('ocr-completed', window._bsOcrListener);
 
   async function saveTransaction(uid) {

@@ -2377,13 +2377,13 @@ data:
         },
         {
           "id": 11,
-          "title": "Gateway p99 latency",
+          "title": "Traefik-to-service p99",
           "type": "stat",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "description": "99th percentile gateway (Traefik) request latency, excluding the SSE stream. Hidden when traffic is below 1 req/s so a handful of samples cannot produce a misleading percentile.",
+          "description": "p99 duration measured by Traefik while processing a request on its backend service. It can exceed application handler time when requests wait outside the handler; compare with the application latency panel below. Hidden below 1 request/second.",
           "targets": [
             {
               "expr": "histogram_quantile(0.99, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval]))) * 1000 and (sum(rate(traefik_service_requests_total{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval])) > 1)",
@@ -2549,7 +2549,7 @@ data:
         },
         {
           "id": 8,
-          "title": "Latency p95 / p99 by service (excl. SSE)",
+          "title": "Application handler p95 / p99 by service",
           "type": "timeseries",
           "datasource": {
             "type": "prometheus",
@@ -2606,7 +2606,7 @@ data:
             "w": 24,
             "h": 8
           },
-          "description": "Response time percentiles per service (ms), excluding the long-lived notifications SSE stream."
+          "description": "Time recorded inside each backend application handler, excluding the time before the handler starts and after it returns. Compare with Traefik-to-service p99 above."
         }
       ],
       "description": "Application health, traffic, errors and latency. Metrics cover the four instrumented backend services; gateway traffic represents incoming requests. Open Pods, Logs or Data for investigation.",
@@ -3147,11 +3147,12 @@ data:
   pods.json: |
     {
       "uid": "pfa-pods",
-      "title": "Pods — Resource Health",
+      "title": "Pods \u2014 App, CI & Infrastructure",
       "tags": [
         "pods",
         "cadvisor",
-        "kubernetes"
+        "kubernetes",
+        "argocd-groups"
       ],
       "timezone": "browser",
       "schemaVersion": 39,
@@ -3169,6 +3170,41 @@ data:
       "templating": {
         "list": [
           {
+            "name": "app_group",
+            "label": "Workload group",
+            "type": "custom",
+            "query": "All : .*, pfa-apps : ^(auth-service|edge-router|command-service|query-service|frontend|storage-service|ocr-service)-.*, ci : ^(ci-runner|cargo-proxy|registry-proxy|registry|buildkitd|buildkit-prune|registry-gc|mirror-base-images)-.*, infra : ^(postgres-primary|postgres-replica|redis|rabbitmq|minio|clickhouse|prometheus|grafana|vector|cloudflared)-.*",
+            "options": [
+              {
+                "selected": true,
+                "text": "All",
+                "value": ".*"
+              },
+              {
+                "selected": false,
+                "text": "pfa-apps",
+                "value": "^(auth-service|edge-router|command-service|query-service|frontend|storage-service|ocr-service)-.*"
+              },
+              {
+                "selected": false,
+                "text": "ci",
+                "value": "^(ci-runner|cargo-proxy|registry-proxy|registry|buildkitd|buildkit-prune|registry-gc|mirror-base-images)-.*"
+              },
+              {
+                "selected": false,
+                "text": "infra",
+                "value": "^(postgres-primary|postgres-replica|redis|rabbitmq|minio|clickhouse|prometheus|grafana|vector|cloudflared)-.*"
+              }
+            ],
+            "current": {
+              "selected": true,
+              "text": "All",
+              "value": ".*"
+            },
+            "hide": 0,
+            "skipUrlSync": false
+          },
+          {
             "name": "pod",
             "label": "Pod",
             "type": "query",
@@ -3176,11 +3212,8 @@ data:
               "type": "prometheus",
               "uid": "prometheus-ds"
             },
-            "query": {
-              "query": "query_result(max by (pod) (container_last_seen{namespace=~\"pfa\"}) > time() - 120)",
-              "refId": "pod"
-            },
-            "definition": "query_result(max by (pod) (container_last_seen{namespace=~\"pfa\"}) > time() - 120)",
+            "query": "query_result(max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\",pod=~\"${app_group:raw}\"}) > time() - 120)",
+            "definition": "query_result(max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\",pod=~\"${app_group:raw}\"}) > time() - 120)",
             "includeAll": true,
             "allValue": ".*",
             "multi": true,
@@ -3236,7 +3269,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "sum((rate(container_cpu_usage_seconds_total{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120))",
+              "expr": "sum((rate(container_cpu_usage_seconds_total{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120))",
               "legendFormat": "",
               "refId": "A",
               "instant": true,
@@ -3247,7 +3280,7 @@ data:
         {
           "type": "stat",
           "title": "Memory used",
-          "description": "Working set — memory the containers actually hold.",
+          "description": "Working set summed over the selected pods. Use Memory usage % by pod below to assess pressure against each pod limit.",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus-ds"
@@ -3275,7 +3308,7 @@ data:
               "fields": "",
               "values": false
             },
-            "colorMode": "value",
+            "colorMode": "none",
             "graphMode": "area",
             "textMode": "auto"
           },
@@ -3285,7 +3318,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "sum((container_memory_working_set_bytes{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120))",
+              "expr": "sum((container_memory_working_set_bytes{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120))",
               "legendFormat": "",
               "refId": "A",
               "instant": true,
@@ -3347,7 +3380,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "sum((changes(container_start_time_seconds{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120))",
+              "expr": "sum((changes(container_start_time_seconds{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120))",
               "legendFormat": "",
               "refId": "A",
               "instant": true,
@@ -3358,7 +3391,7 @@ data:
         {
           "type": "timeseries",
           "title": "CPU usage % by pod",
-          "description": "Percentage of each pod's CPU limit in use. Nearing 100% means it is being throttled.",
+          "description": "CPU use as a percentage of each pod limit. Use the Workload group selector to reduce clutter.",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus-ds"
@@ -3403,7 +3436,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120)",
+              "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120)",
               "legendFormat": "{{pod}}",
               "refId": "A",
               "instant": false,
@@ -3414,7 +3447,7 @@ data:
         {
           "type": "timeseries",
           "title": "Memory usage % by pod",
-          "description": "Percentage of each pod's memory limit held. Nearing 100% means an OOM kill is next.",
+          "description": "Working set as a percentage of each pod memory limit. Use the Workload group selector to reduce clutter.",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus-ds"
@@ -3459,7 +3492,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120)",
+              "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120)",
               "legendFormat": "{{pod}}",
               "refId": "A",
               "instant": false,
@@ -3515,11 +3548,111 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus-ds"
               },
-              "expr": "(sum by (pod) (changes(container_start_time_seconds{namespace=~\"pfa\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa\"} @ end()))) - 120)",
+              "expr": "(sum by (pod) (changes(container_start_time_seconds{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120)",
               "legendFormat": "{{pod}}",
               "refId": "A",
               "instant": false,
               "range": true
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "title": "Current memory by pod",
+          "description": "Current working set for each selected pod, sorted highest first.",
+          "id": 7,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 20,
+            "w": 12,
+            "h": 10
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "decimals": 1,
+              "custom": {
+                "align": "auto",
+                "displayMode": "auto"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "displayName": "Value",
+                "desc": true
+              }
+            ]
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus-ds"
+              },
+              "expr": "sort_desc(sum by (namespace,pod) (container_memory_working_set_bytes{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))",
+              "legendFormat": "{{namespace}} / {{pod}}",
+              "refId": "A",
+              "instant": true,
+              "range": false,
+              "format": "table"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "title": "Current CPU by pod",
+          "description": "Average CPU cores used over the last 5 minutes, sorted highest first.",
+          "id": 8,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 20,
+            "w": 12,
+            "h": 10
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 3,
+              "custom": {
+                "align": "auto",
+                "displayMode": "auto"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "displayName": "Value",
+                "desc": true
+              }
+            ]
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus-ds"
+              },
+              "expr": "sort_desc(sum by (namespace,pod) (rate(container_cpu_usage_seconds_total{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m])))",
+              "legendFormat": "{{namespace}} / {{pod}}",
+              "refId": "A",
+              "instant": true,
+              "range": false,
+              "format": "table"
             }
           ]
         }
@@ -3573,7 +3706,8 @@ data:
           "includeVars": false,
           "targetBlank": false
         }
-      ]
+      ],
+      "description": "Pod resources across workload groups aligned with Argo responsibilities. Groups are selected by pod name because cAdvisor metrics do not expose Argo application labels."
     }
   postgres-debug.json: |
     {

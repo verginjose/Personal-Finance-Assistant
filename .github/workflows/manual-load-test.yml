@@ -1,0 +1,139 @@
+name: manual-load-test
+
+run-name: PFA load test — ${{ inputs.users }} users, ${{ inputs.ramp_seconds }}s ramp
+
+on:
+  workflow_dispatch:
+    inputs:
+      users:
+        description: "Simulated users (bounded to 500)"
+        required: true
+        type: choice
+        default: "100"
+        options: ["25", "50", "100", "200", "300", "400", "500"]
+      ramp_seconds:
+        description: "Spread each stage over this many seconds"
+        required: true
+        type: choice
+        default: "300"
+        options: ["60", "120", "300", "600"]
+      confirm_production_test:
+        description: "I understand the test writes synthetic users and ledger rows that are not automatically removed"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pfa-manual-load-test
+  cancel-in-progress: false
+
+jobs:
+  load-test:
+    name: Golden load test (receipts excluded)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PFA_USERS: ${{ inputs.users }}
+      PFA_RAMP_SECONDS: ${{ inputs.ramp_seconds }}
+      PFA_CONFIRM: ${{ inputs.confirm_production_test }}
+      PFA_BASE_URL: https://verginjose.cloud
+    steps:
+      - name: Validate dispatch inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/master" ]] || {
+            echo "::error::Run this workflow from master only."; exit 1;
+          }
+          [[ "$PFA_CONFIRM" == "true" ]] || {
+            echo "::error::Confirm that this writes synthetic users and ledger rows."; exit 1;
+          }
+          case "$PFA_USERS" in 25|50|100|200|300|400|500) ;; *)
+            echo "::error::Unsupported user count."; exit 1;; esac
+          case "$PFA_RAMP_SECONDS" in 60|120|300|600) ;; *)
+            echo "::error::Unsupported ramp duration."; exit 1;; esac
+
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          sparse-checkout: requests/run_golden_test.py
+          sparse-checkout-cone-mode: false
+
+      - name: Run realistic load test
+        id: test
+        shell: bash
+        run: |
+          set -uo pipefail
+          csv="$RUNNER_TEMP/pfa-load-test-users.csv"
+          report="$RUNNER_TEMP/pfa-load-test-report.json"
+          log="$RUNNER_TEMP/pfa-load-test.log"
+          trap 'rm -f "$csv" "$report" "$log"' EXIT
+
+          python3 requests/run_golden_test.py \
+            --users "$PFA_USERS" \
+            --bills 0 \
+            --realistic \
+            --ramp-seconds "$PFA_RAMP_SECONDS" \
+            --base-url "$PFA_BASE_URL" \
+            --csv "$csv" \
+            --out "$report" >"$log" 2>&1
+          test_status=$?
+
+          if ! python3 - "$report" "$GITHUB_STEP_SUMMARY" "$PFA_USERS" "$PFA_RAMP_SECONDS" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report_path, summary_path, users, ramp = sys.argv[1:]
+          path = pathlib.Path(report_path)
+          if not path.exists():
+              pathlib.Path(summary_path).write_text(
+                  "## PFA manual load test\n\n**Result:** no report was produced.\n")
+              raise SystemExit("test report missing")
+
+          raw = json.loads(path.read_text())
+          checks = raw.get("checks", [])
+          safe = {
+              "verdict": raw.get("verdict", "UNKNOWN"),
+              "users": int(users),
+              "ramp_seconds": int(ramp),
+              "receipts_and_ocr": "excluded",
+              "duration_seconds": raw.get("duration_s"),
+              "checks": {
+                  "passed": sum(bool(item.get("ok")) for item in checks),
+                  "total": len(checks),
+              },
+              "http_totals": raw.get("totals", {}),
+              "retries": raw.get("retries", {}),
+              "rate_limited_429": raw.get("throttled_429", {}),
+              "breaker_503": raw.get("breaker_503", {}),
+          }
+          lines = [
+              "## PFA manual load test",
+              "",
+              f"**Result:** {safe['verdict']}",
+              f"**Scenario:** {safe['users']} users, {safe['ramp_seconds']}s stage ramp; receipts/OCR excluded.",
+              f"**Checks:** {safe['checks']['passed']}/{safe['checks']['total']}",
+              f"**Duration:** {safe['duration_seconds']}s",
+              "",
+              "Synthetic users and ledger rows remain in the application database.",
+              "",
+              "```json",
+              json.dumps(safe, indent=2, sort_keys=True),
+              "```",
+              "",
+          ]
+          pathlib.Path(summary_path).write_text("\n".join(lines))
+          PY
+          then
+            echo "::error::Could not produce the sanitized run summary."
+            exit 1
+          fi
+
+          if (( test_status != 0 )); then
+            echo "::error::Golden load test failed; see the sanitized job summary."
+            exit "$test_status"
+          fi

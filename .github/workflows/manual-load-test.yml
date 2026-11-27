@@ -86,9 +86,12 @@ jobs:
           for name, filename in zip(('laptop_guard', 'scenario'), sys.argv[1:3]):
               path = pathlib.Path(filename)
               result[name] = json.loads(path.read_text()) if path.exists() else {'verdict': 'NOT_RUN'}
+          samples = result['laptop_guard'].pop('recent_samples', [])
           pathlib.Path(sys.argv[3]).write_text(
               '## Guarded realistic PFA test\n\n'
               'Hardware limits are mandatory; missing or stale telemetry stops traffic.\n\n'
-              'Synthetic application data persists.\n\n```json\n' + json.dumps(result, indent=2) + '\n```\n')
+              'Synthetic application data persists.\n\n```json\n' + json.dumps(result, indent=2) + '\n```\n'
+              '\n<details><summary>Timestamped hardware samples</summary>\n\n```json\n'
+              + json.dumps(samples, indent=2) + '\n```\n</details>\n')
           PYTHON
           exit "$result"

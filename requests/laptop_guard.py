@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Fail-closed hardware guard for this laptop. Limits cannot be relaxed by CLI."""
 import argparse
+from collections import deque
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import math
@@ -11,9 +13,12 @@ import ssl
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 
 LIMITS = dict(cpu_c=78, gpu_c=65, ssd_c=70, available_gib=6, cpu_percent=80)
+CRITICAL = dict(cpu_c=85, gpu_c=75, ssd_c=82)
+THERMAL_CONFIRM_SECONDS = dict(cpu_c=2, gpu_c=2, ssd_c=5)
 # The display keeps this laptop's GPU around 50–52C at idle. Keep ten
 # degrees of headroom while allowing a genuinely idle laptop to start.
 START = dict(cpu_c=65, gpu_c=55, ssd_c=60, available_gib=8, cpu_percent=50)
@@ -21,22 +26,108 @@ FRESH_SECONDS = 3
 COOL_SECONDS = 60
 
 
-def violation(sample, starting=False, now=None):
+def invalid_sample(sample, now=None):
     now = time.time() if now is None else now
-    if not sample.get('valid') or not 0 <= now - sample.get('timestamp', 0) <= FRESH_SECONDS:
+    if not isinstance(sample, dict):
+        return 'malformed hardware telemetry'
+    stamp = sample.get('timestamp')
+    if (sample.get('valid') is not True or not isinstance(stamp, (int, float))
+            or not math.isfinite(stamp) or not 0 <= now - stamp <= FRESH_SECONDS):
         return 'hardware telemetry missing, invalid or stale'
-    limits = START if starting else LIMITS
-    for key, limit in limits.items():
+    for key in LIMITS:
         value = sample.get(key)
         if not isinstance(value, (int, float)) or not math.isfinite(value):
             return f'{key} unavailable'
-        high = value > limit if starting else value >= limit
-        if (key == 'available_gib' and value < limit) or (key != 'available_gib' and high):
-            return f'{key}={value:.2f} reached safety limit {limit}'
+    if not isinstance(sample.get('swapout_total'), int) or sample['swapout_total'] < 0:
+        return 'swap-out telemetry unavailable'
     pressure = sample.get('memory_pressure_full', float('nan'))
     if not isinstance(pressure, (int, float)) or not math.isfinite(pressure) or pressure > 1:
         return 'memory pressure exceeds 1%'
     return None
+
+
+def violation(sample, starting=False, now=None):
+    """Raw limits, also used to avoid arming during a pending hot reading."""
+    error = invalid_sample(sample, now)
+    if error:
+        return error
+    limits = START if starting else LIMITS
+    for key, limit in limits.items():
+        value = sample[key]
+        high = value > limit if starting else value >= limit
+        if (key == 'available_gib' and value < limit) or (key != 'available_gib' and high):
+            return f'{key}={value:.2f} reached safety limit {limit}'
+    return None
+
+
+def utc(stamp):
+    try:
+        return datetime.fromtimestamp(stamp, timezone.utc).isoformat().replace('+00:00', 'Z')
+    except (ValueError, OverflowError, OSError, TypeError):
+        return None
+
+
+class SafetyWindow:
+    """Confirm ordinary heat using sensor time, never repeated HTTP samples."""
+    def __init__(self, starting=False):
+        self.starting = starting
+        self.hot = {}
+        self.last_stamp = None
+        self.events = deque(maxlen=64)
+        self.immediate = False
+        self.previous_swap = None
+
+    def check(self, sample, now=None):
+        self.immediate = True
+        error = invalid_sample(sample, now)
+        if error:
+            return error
+        if not self.starting and sample.get('safety_trip'):
+            return 'server watchdog tripped: ' + str(sample['safety_trip'])
+        swap = sample['swapout_total']
+        previous_swap, self.previous_swap = self.previous_swap, swap
+        if previous_swap is not None and swap != previous_swap:
+            return 'active swap-out' if swap > previous_swap else 'swap-out counter moved backwards'
+        limits = START if self.starting else LIMITS
+        if sample['available_gib'] < limits['available_gib']:
+            return f"available_gib={sample['available_gib']:.2f} below safety limit {limits['available_gib']}"
+        busy = sample['cpu_percent'] > limits['cpu_percent'] if self.starting else sample['cpu_percent'] >= limits['cpu_percent']
+        if busy:
+            return 'host CPU utilization reached safety limit'
+        for key, limit in CRITICAL.items():
+            if sample[key] >= limit:
+                event = dict(kind='critical', sensor=key, value=sample[key], limit=limit,
+                             sample_utc=utc(sample['timestamp']))
+                if not self.events or self.events[-1] != event:
+                    self.events.append(event)
+                return f'{key}={sample[key]:.2f} reached immediate critical limit {limit}'
+        self.immediate = False
+        stamp = sample['timestamp']
+        if self.last_stamp is not None and stamp < self.last_stamp:
+            self.immediate = True
+            return 'hardware telemetry timestamp moved backwards'
+        fresh = stamp != self.last_stamp
+        self.last_stamp = stamp
+        for key in CRITICAL:
+            high = sample[key] > limits[key] if self.starting else sample[key] >= limits[key]
+            if not high:
+                previous = self.hot.pop(key, None)
+                if previous:
+                    self.events.append(dict(kind='cleared', sensor=key, first_sample_utc=utc(previous['first']),
+                                            sample_utc=utc(stamp), peak=previous['peak']))
+                continue
+            if key not in self.hot:
+                self.hot[key] = dict(first=stamp, peak=sample[key])
+                self.events.append(dict(kind='warning', sensor=key, value=sample[key], limit=limits[key],
+                                        sample_utc=utc(stamp)))
+            self.hot[key]['peak'] = max(self.hot[key]['peak'], sample[key])
+            if fresh and stamp - self.hot[key]['first'] >= THERMAL_CONFIRM_SECONDS[key]:
+                event = dict(kind='confirmed', sensor=key, value=sample[key], limit=limits[key],
+                             first_sample_utc=utc(self.hot[key]['first']), sample_utc=utc(stamp),
+                             duration_seconds=round(stamp-self.hot[key]['first'], 3))
+                self.events.append(event)
+                return f'{key}={sample[key]:.2f} exceeded {limits[key]} for {event["duration_seconds"]}s'
+        return None
 
 
 class Sensors:
@@ -89,8 +180,10 @@ def serve(args):
     latest = {'valid': False}
     armed_until = 0
     tripped = False
-    def pause_ocr():
-        nonlocal tripped
+    trip_reason = None
+    runtime_window = SafetyWindow()
+    def pause_ocr(reason):
+        nonlocal tripped, trip_reason
         token = Path('/var/run/secrets/kubernetes.io/serviceaccount/token').read_text().strip()
         context = ssl.create_default_context(cafile='/var/run/secrets/kubernetes.io/serviceaccount/ca.crt')
         request = urllib.request.Request('https://kubernetes.default.svc/apis/apps/v1/namespaces/pfa/deployments/ocr-service/scale',
@@ -99,17 +192,24 @@ def serve(args):
         with urllib.request.urlopen(request,context=context,timeout=2) as response:
             response.read()
         tripped = True
+        trip_reason = reason
     def update():
         nonlocal latest
         while True:
-            latest = sensors.sample()
-            if time.monotonic() < armed_until and violation(latest):
+            reading = sensors.sample()
+            reason = runtime_window.check(reading)
+            reading['thermal_warning'] = dict(runtime_window.hot)
+            reading['safety_events'] = list(runtime_window.events)
+            if time.monotonic() < armed_until and reason and not tripped:
                 try:
-                    pause_ocr()
+                    pause_ocr(reason)
                 except Exception:
-                    latest['ocr_pause_failed'] = True
-            latest['test_armed'] = time.monotonic() < armed_until
-            latest['ocr_paused'] = tripped
+                    reading['ocr_pause_failed'] = True
+            reading['test_armed'] = time.monotonic() < armed_until
+            reading['ocr_paused'] = tripped
+            reading['safety_trip'] = trip_reason
+            reading['guard_policy'] = dict(thermal_seconds=THERMAL_CONFIRM_SECONDS, critical=CRITICAL)
+            latest = reading
             time.sleep(0.5)
     threading.Thread(target=update, daemon=True).start()
     class Handler(BaseHTTPRequestHandler):
@@ -118,15 +218,20 @@ def serve(args):
                 self.send_error(404)
                 return
             body = json.dumps(latest).encode()
-            self.send_response(200)
+            self.send_response(200 if latest.get('valid') else 503)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Cache-Control', 'no-store')
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
             self.wfile.write(body)
         def do_POST(self):
-            nonlocal armed_until
+            nonlocal armed_until, runtime_window, trip_reason, tripped
             if self.path == '/arm' and not violation(latest, starting=True):
+                runtime_window = SafetyWindow()
+                trip_reason = None
+                tripped = False
+                latest['safety_trip'] = None
+                latest['ocr_paused'] = False
                 armed_until = time.monotonic() + 600
             elif self.path == '/disarm':
                 armed_until = 0
@@ -134,7 +239,7 @@ def serve(args):
                 # This private endpoint is reachable only from the CI runner.
                 # A missing sensor is also a valid reason to pause GPU work.
                 try:
-                    pause_ocr()
+                    pause_ocr('load supervisor requested stop')
                 except Exception:
                     self.send_error(503)
                     return
@@ -152,11 +257,18 @@ def serve(args):
 def terminate(process):
     if process.poll() is not None:
         return
-    os.killpg(process.pid, signal.SIGTERM)
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        process.wait(timeout=2)
+        return
     try:
         process.wait(timeout=1)
     except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         process.wait(timeout=2)
 
 
@@ -167,12 +279,28 @@ def supervise(args):
             return sensors.sample()
         try:
             with urllib.request.urlopen(args.health_url, timeout=1.5) as response:
-                return json.load(response)
+                reading = json.load(response)
+                return reading if isinstance(reading, dict) else {'valid':False}
         except Exception:
             return {'valid': False}
-    report = dict(verdict='REFUSED', limits=LIMITS, start_limits=START,
+    report = dict(verdict='REFUSED', limits=LIMITS, start_limits=START, critical_limits=CRITICAL,
+                  thermal_confirmation_seconds=THERMAL_CONFIRM_SECONDS,
                   cool_seconds=COOL_SECONDS, samples=0, peaks={}, reason='preflight incomplete')
     process = None
+    armed = False
+    preflight_window = SafetyWindow(starting=True)
+    runtime_window = SafetyWindow()
+    trace = deque(maxlen=120)
+    def remember(reading, phase):
+        row = dict(phase=phase, observed_utc=utc(time.time()), sample_utc=utc(reading.get('timestamp')),
+                   valid=bool(reading.get('valid')))
+        for key in ['timestamp', *LIMITS, 'memory_pressure_full', 'swapout_total']:
+            value = reading.get(key)
+            row[key] = value if isinstance(value, (int, float)) and math.isfinite(value) else None
+        trace.append(row)
+        if reading.get('safety_events'):
+            report['server_events'] = reading['safety_events'][-8:]
+        report['samples'] += 1
     previous_swap = None
     def swap_active(reading):
         nonlocal previous_swap
@@ -190,50 +318,72 @@ def supervise(args):
         with urllib.request.urlopen(request,timeout=2) as response:
             response.read()
     try:
-        # Wait at most two minutes for 60 continuous seconds below start limits.
-        cool_since = None
-        deadline = time.monotonic() + 120
-        while time.monotonic() < deadline:
-            reading = sample()
-            reason = violation(reading, starting=True)
-            if not reason and swap_active(reading):
-                reason = 'active swap-out'
-            if reason:
-                cool_since = None
-                report['reason'] = reason
-                if not reading.get('valid'):
-                    # First local sample establishes a CPU delta; allow one tick.
-                    if sensors and sensors.previous_cpu and report['samples'] == 0:
-                        report['samples'] += 1
-                        time.sleep(0.5)
-                        continue
-                    return 3
-            elif cool_since is None:
-                cool_since = time.monotonic()
-            elif time.monotonic() - cool_since >= COOL_SECONDS:
-                break
-            report['samples'] += 1
-            time.sleep(0.5)
-        else:
-            return 3
-        if not args.command:
-            raise ValueError('No guarded command supplied')
-        control('arm')
-        process = subprocess.Popen(args.command, start_new_session=True,
-                                   env={**os.environ, 'PFA_STRICT_HEALTH_GUARD':'1'})
-        started = time.monotonic()
         def interrupted(signum, frame):
             raise KeyboardInterrupt
         for sig in (signal.SIGTERM, signal.SIGINT):
             signal.signal(sig, interrupted)
+        # Only fresh, cool intervals count. A short spike pauses this clock;
+        # confirmed heat resets it, rather than erasing it for one bad sample.
+        cool_seconds = 0
+        previous_cool_stamp = None
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            reading = sample()
+            remember(reading, 'preflight')
+            reason = preflight_window.check(reading)
+            if invalid_sample(reading) is None and swap_active(reading):
+                reason = 'active swap-out'
+            if reason:
+                cool_seconds = 0
+                previous_cool_stamp = None
+                report['reason'] = reason
+                if preflight_window.immediate and ('critical' in reason or invalid_sample(reading)):
+                    # First local sample establishes a CPU delta; allow one tick.
+                    if sensors and sensors.previous_cpu and report['samples'] == 1:
+                        time.sleep(0.5)
+                        continue
+                    return 3
+            elif violation(reading, starting=True) is None:
+                if previous_cool_stamp is not None:
+                    cool_seconds += min(max(0, reading['timestamp'] - previous_cool_stamp), FRESH_SECONDS)
+                    if cool_seconds >= COOL_SECONDS:
+                        report['preflight_cool_seconds'] = round(cool_seconds, 3)
+                        try:
+                            control('arm')
+                            armed = bool(getattr(args, 'pause_ocr_on_abort', False))
+                            break
+                        except urllib.error.HTTPError as error:
+                            code = error.code
+                            error.close()
+                            if code != 409:
+                                report['reason'] = 'hardware watchdog could not be armed'
+                                return 3
+                            # A new hot sample arrived between checking and arming.
+                            previous_cool_stamp = None
+                        except OSError:
+                            report['reason'] = 'hardware watchdog could not be armed'
+                            return 3
+                previous_cool_stamp = reading['timestamp']
+            else:
+                previous_cool_stamp = None
+            report['preflight_cool_seconds'] = round(cool_seconds, 3)
+            time.sleep(0.5)
+        else:
+            report['reason'] = f'cooldown incomplete: {cool_seconds:.1f}/{COOL_SECONDS} cool seconds'
+            return 3
+        if not args.command:
+            raise ValueError('No guarded command supplied')
+        process = subprocess.Popen(args.command, start_new_session=True,
+                                   env={**os.environ, 'PFA_STRICT_HEALTH_GUARD':'1'})
+        started = time.monotonic()
         while process.poll() is None:
             reading = sample()
-            report['samples'] += 1
+            remember(reading, 'runtime')
             for key in LIMITS:
-                if isinstance(reading.get(key), (int, float)):
+                if isinstance(reading.get(key), (int, float)) and math.isfinite(reading[key]):
                     previous = report['peaks'].get(key, reading[key])
                     report['peaks'][key] = min(previous, reading[key]) if key == 'available_gib' else max(previous, reading[key])
-            reason = violation(reading)
+            reason = runtime_window.check(reading)
             if swap_active(reading):
                 reason = 'active swap-out'
             if time.monotonic() - started >= 600:
@@ -248,9 +398,18 @@ def supervise(args):
                     report['ocr_pause_failed'] = True
                 return 3
             time.sleep(0.5)
+        final_reading = sample()
+        remember(final_reading, 'finished')
+        final_reason = runtime_window.check(final_reading)
+        if final_reason:
+            report.update(verdict='ABORTED', reason=final_reason)
+            control('trip')
+            report['ocr_paused'] = getattr(args, 'pause_ocr_on_abort', False)
+            return 3
         report.update(verdict='PASS' if process.returncode == 0 else 'FAILED', reason='guarded process finished')
         if process.returncode == 0:
             control('disarm')
+            armed = False
         else:
             control('trip')
             report['ocr_paused'] = getattr(args, 'pause_ocr_on_abort', False)
@@ -258,15 +417,35 @@ def supervise(args):
     except KeyboardInterrupt:
         report.update(verdict='ABORTED', reason='cancelled')
         try:
-            control('trip')
+            if armed or process:
+                control('trip')
+        except Exception:
+            report['ocr_pause_failed'] = True
+        return 3
+    except Exception as error:
+        report.update(verdict='ABORTED' if process else 'REFUSED',
+                      reason=f'watchdog operation failed ({type(error).__name__})')
+        try:
+            if armed or process:
+                control('trip')
         except Exception:
             report['ocr_pause_failed'] = True
         return 3
     finally:
         if process:
             terminate(process)
+        elif armed:
+            try:
+                control('disarm')
+            except Exception:
+                report['watchdog_disarm_failed'] = True
+        report['preflight_events'] = list(preflight_window.events)
+        report['runtime_events'] = list(runtime_window.events)
+        report['recent_samples'] = list(trace)
         Path(args.report).write_text(json.dumps(report, indent=2) + '\n')
-        print(json.dumps(report), flush=True)
+        summary = {k:v for k,v in report.items() if k not in ('recent_samples', 'preflight_events', 'runtime_events')}
+        summary['recorded_samples'] = len(trace)
+        print(json.dumps(summary), flush=True)
 
 
 def main():

@@ -214,13 +214,13 @@
     },
     {
       "id": 11,
-      "title": "Gateway p99 latency",
+      "title": "Traefik-to-service p99",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus-ds"
       },
-      "description": "99th percentile gateway (Traefik) request latency, excluding the SSE stream. Hidden when traffic is below 1 req/s so a handful of samples cannot produce a misleading percentile.",
+      "description": "p99 duration measured by Traefik while processing a request on its backend service. It can exceed application handler time when requests wait outside the handler; compare with the application latency panel below. Hidden below 1 request/second.",
       "targets": [
         {
           "expr": "histogram_quantile(0.99, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval]))) * 1000 and (sum(rate(traefik_service_requests_total{job=\"edge-router\",service!=\"notifications@file\"}[$__rate_interval])) > 1)",
@@ -386,7 +386,7 @@
     },
     {
       "id": 8,
-      "title": "Latency p95 / p99 by service (excl. SSE)",
+      "title": "Application handler p95 / p99 by service",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -443,7 +443,7 @@
         "w": 24,
         "h": 8
       },
-      "description": "Response time percentiles per service (ms), excluding the long-lived notifications SSE stream."
+      "description": "Time recorded inside each backend application handler, excluding the time before the handler starts and after it returns. Compare with Traefik-to-service p99 above."
     }
   ],
   "description": "Application health, traffic, errors and latency. Metrics cover the four instrumented backend services; gateway traffic represents incoming requests. Open Pods, Logs or Data for investigation.",

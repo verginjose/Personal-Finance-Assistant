@@ -149,6 +149,20 @@ git push            # done
 
 Deploys can also be triggered from the Actions tab (`workflow_dispatch`).
 
+### Manual production load test
+
+Use **Actions → manual-load-test → Run workflow** to run the golden scenario
+against `https://verginjose.cloud`. Choose a user count (up to 500) and a stage
+ramp (60–600 seconds). Receipts/OCR are always excluded. The workflow requires
+the production-write acknowledgement, runs only from `master`, and allows one
+run at a time. It uses a GitHub-hosted runner and holds no Kubernetes
+credentials. Normal auth and API rate limits stay enabled. The result summary
+omits generated account details.
+
+Each run creates synthetic accounts, transactions, and groups; the workflow
+does not delete that data. Keep the ramp enabled and choose the smallest cohort
+that answers the capacity question.
+
 ### Base images
 
 The service Dockerfiles take their base images from the registry mirror

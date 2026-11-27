@@ -9,7 +9,7 @@
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "30s",
   "editable": true,
   "graphTooltip": 1,
@@ -122,7 +122,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sum((rate(container_cpu_usage_seconds_total{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120))",
+          "expr": "sum((rate(container_cpu_usage_seconds_total{namespace=~\"pfa|pfa-system\",pod=~\"${pod:regex}\",pod=~\"${app_group:raw}\",container!=\"\",container!=\"POD\"}[5m])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -171,7 +171,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sum((container_memory_working_set_bytes{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120))",
+          "expr": "sum((container_memory_working_set_bytes{namespace=~\"pfa|pfa-system\",pod=~\"${pod:regex}\",pod=~\"${app_group:raw}\",container!=\"\",container!=\"POD\"}) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -233,7 +233,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sum((changes(container_start_time_seconds{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120))",
+          "expr": "sum((changes(container_start_time_seconds{namespace=~\"pfa|pfa-system\",pod=~\"${pod:regex}\",pod=~\"${app_group:raw}\",container!=\"\",container!=\"POD\"}[1h])) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120))",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -244,7 +244,7 @@
     {
       "type": "timeseries",
       "title": "CPU usage % by pod",
-      "description": "CPU use as a percentage of each pod limit. Use the Workload group selector to reduce clutter.",
+      "description": "CPU use as a percentage of each pod limit. Use the Workload group selector to reduce clutter. Both Workload group and Pod filters apply, including when Pod is All.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus-ds"
@@ -253,7 +253,7 @@
         "x": 0,
         "y": 4,
         "w": 12,
-        "h": 8
+        "h": 9
       },
       "id": 4,
       "fieldConfig": {
@@ -274,9 +274,12 @@
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
-          "calcs": []
+          "calcs": [
+            "lastNotNull"
+          ],
+          "height": 72
         },
         "tooltip": {
           "mode": "multi",
@@ -289,7 +292,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120)",
+          "expr": "(100 * (sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=~\"pfa|pfa-system\",pod=~\"${pod:regex}\",pod=~\"${app_group:raw}\",container!=\"\",container!=\"POD\"}[5m]))) / (sum by (pod) (container_spec_cpu_quota{namespace=~\"pfa|pfa-system\",pod=~\"${pod:regex}\",pod=~\"${app_group:raw}\",container!=\"\",container!=\"POD\"} / container_spec_cpu_period{namespace=~\"pfa|pfa-system\",pod=~\"${pod:regex}\",pod=~\"${app_group:raw}\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120)",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "instant": false,
@@ -300,7 +303,7 @@
     {
       "type": "timeseries",
       "title": "Memory usage % by pod",
-      "description": "Working set as a percentage of each pod memory limit. Use the Workload group selector to reduce clutter.",
+      "description": "Working set as a percentage of each pod memory limit. Use the Workload group selector to reduce clutter. Both Workload group and Pod filters apply, including when Pod is All.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus-ds"
@@ -309,7 +312,7 @@
         "x": 12,
         "y": 4,
         "w": 12,
-        "h": 8
+        "h": 9
       },
       "id": 5,
       "fieldConfig": {
@@ -330,9 +333,12 @@
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
-          "calcs": []
+          "calcs": [
+            "lastNotNull"
+          ],
+          "height": 72
         },
         "tooltip": {
           "mode": "multi",
@@ -345,7 +351,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120)",
+          "expr": "(100 * (sum by (pod) (container_memory_working_set_bytes{namespace=~\"pfa|pfa-system\",pod=~\"${pod:regex}\",pod=~\"${app_group:raw}\",container!=\"\",container!=\"POD\"})) / (sum by (pod) (container_spec_memory_limit_bytes{namespace=~\"pfa|pfa-system\",pod=~\"${pod:regex}\",pod=~\"${app_group:raw}\",container!=\"\",container!=\"POD\"}))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120)",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "instant": false,
@@ -356,16 +362,16 @@
     {
       "type": "timeseries",
       "title": "Container restarts by pod (1h)",
-      "description": "Restarts in the last hour per pod.",
+      "description": "Restarts in the last hour per pod. Both Workload group and Pod filters apply, including when Pod is All.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus-ds"
       },
       "gridPos": {
         "x": 0,
-        "y": 12,
+        "y": 13,
         "w": 24,
-        "h": 8
+        "h": 9
       },
       "id": 6,
       "fieldConfig": {
@@ -379,16 +385,21 @@
             "showPoints": "never",
             "stacking": {
               "mode": "none"
-            }
+            },
+            "axisSoftMin": 0,
+            "axisSoftMax": 1
           }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
-          "calcs": []
+          "calcs": [
+            "lastNotNull"
+          ],
+          "height": 72
         },
         "tooltip": {
           "mode": "multi",
@@ -401,7 +412,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "(sum by (pod) (changes(container_start_time_seconds{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[1h]))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120)",
+          "expr": "(sum by (pod) (changes(container_start_time_seconds{namespace=~\"pfa|pfa-system\",pod=~\"${pod:regex}\",pod=~\"${app_group:raw}\",container!=\"\",container!=\"POD\"}[1h]))) and on(pod) (max by (pod) (container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()) > scalar(max(timestamp(container_last_seen{namespace=~\"pfa|pfa-system\"} @ end()))) - 120)",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "instant": false,
@@ -420,7 +431,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 20,
+        "y": 22,
         "w": 12,
         "h": 10
       },
@@ -450,7 +461,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sort_desc(sum by (namespace,pod) (container_memory_working_set_bytes{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}))",
+          "expr": "sort_desc(sum by (namespace,pod) (container_memory_working_set_bytes{namespace=~\"pfa|pfa-system\",pod=~\"${pod:regex}\",pod=~\"${app_group:raw}\",container!=\"\",container!=\"POD\"}))",
           "legendFormat": "{{namespace}} / {{pod}}",
           "refId": "A",
           "instant": true,
@@ -470,7 +481,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 20,
+        "y": 22,
         "w": 12,
         "h": 10
       },
@@ -500,7 +511,7 @@
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "expr": "sort_desc(sum by (namespace,pod) (rate(container_cpu_usage_seconds_total{namespace=~\"pfa|pfa-system\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}[5m])))",
+          "expr": "sort_desc(sum by (namespace,pod) (rate(container_cpu_usage_seconds_total{namespace=~\"pfa|pfa-system\",pod=~\"${pod:regex}\",pod=~\"${app_group:raw}\",container!=\"\",container!=\"POD\"}[5m])))",
           "legendFormat": "{{namespace}} / {{pod}}",
           "refId": "A",
           "instant": true,
@@ -520,14 +531,6 @@
       "targetBlank": false
     },
     {
-      "title": "Pods",
-      "type": "link",
-      "url": "/d/pods",
-      "keepTime": true,
-      "includeVars": false,
-      "targetBlank": false
-    },
-    {
       "title": "Logs",
       "type": "link",
       "url": "/d/logs-explorer",
@@ -536,7 +539,7 @@
       "targetBlank": false
     },
     {
-      "title": "Data",
+      "title": "Data overview",
       "type": "link",
       "url": "/d/data-explorer",
       "keepTime": true,

@@ -1,6 +1,6 @@
 name: manual-load-test
 
-run-name: Guarded realistic test — ${{ inputs.users }} users, ${{ inputs.bills_total }} bills total
+run-name: Realistic test — ${{ inputs.users }} users, ${{ inputs.bills_total }} bills total
 
 on:
   workflow_dispatch:
@@ -39,7 +39,7 @@ concurrency:
 
 jobs:
   load-test:
-    name: Realistic journeys with strict laptop guard
+    name: Realistic paced journeys
     runs-on: [self-hosted, linux, x64, pfa]
     timeout-minutes: 15
     env:
@@ -64,34 +64,26 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             requests/run_realistic_test.py
-            requests/laptop_guard.py
             requests/large-receipt-image-dataset-SRD/1131-receipt.jpg
 
-      - name: Run only under fresh laptop telemetry
+      - name: Run paced production journeys
         shell: bash
         run: |
           set -uo pipefail
-          guard="$RUNNER_TEMP/pfa-guard.json"
           report="$RUNNER_TEMP/pfa-realistic.json"
           log="$RUNNER_TEMP/pfa-realistic.log"
-          trap 'rm -f "$guard" "$report" "$log"' EXIT
-          python3 requests/laptop_guard.py run --pause-ocr-on-abort --report "$guard" -- \
-            python3 requests/run_realistic_test.py \
-              --users "$PFA_USERS" --duration "$PFA_DURATION" \
-              --bills-total "$PFA_BILLS" --rps 1 --out "$report" >"$log" 2>&1
+          trap 'rm -f "$report" "$log"' EXIT
+          python3 requests/run_realistic_test.py \
+            --users "$PFA_USERS" --duration "$PFA_DURATION" \
+            --bills-total "$PFA_BILLS" --rps 1 --out "$report" >"$log" 2>&1
           result=$?
-          python3 - "$guard" "$report" "$GITHUB_STEP_SUMMARY" <<'PYTHON'
+          python3 - "$report" "$GITHUB_STEP_SUMMARY" <<'PYTHON'
           import json, pathlib, sys
-          result = {}
-          for name, filename in zip(('laptop_guard', 'scenario'), sys.argv[1:3]):
-              path = pathlib.Path(filename)
-              result[name] = json.loads(path.read_text()) if path.exists() else {'verdict': 'NOT_RUN'}
-          samples = result['laptop_guard'].pop('recent_samples', [])
-          pathlib.Path(sys.argv[3]).write_text(
-              '## Guarded realistic PFA test\n\n'
-              'Hardware limits are mandatory; missing or stale telemetry stops traffic.\n\n'
-              'Synthetic application data persists.\n\n```json\n' + json.dumps(result, indent=2) + '\n```\n'
-              '\n<details><summary>Timestamped hardware samples</summary>\n\n```json\n'
-              + json.dumps(samples, indent=2) + '\n```\n</details>\n')
+          path = pathlib.Path(sys.argv[1])
+          result = json.loads(path.read_text()) if path.exists() else {'verdict': 'NOT_RUN'}
+          pathlib.Path(sys.argv[2]).write_text(
+              '## Realistic PFA test\n\n'
+              'Traffic is paced globally at one request per second.\n\n'
+              'Synthetic application data persists.\n\n```json\n' + json.dumps(result, indent=2) + '\n```\n')
           PYTHON
           exit "$result"

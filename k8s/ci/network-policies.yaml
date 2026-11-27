@@ -97,12 +97,6 @@ spec:
     - to:
         - namespaceSelector:
             matchLabels: { kubernetes.io/metadata.name: pfa-system }
-          podSelector: { matchLabels: { app: laptop-health } }
-      ports:
-        - { protocol: TCP, port: 9187 }
-    - to:
-        - namespaceSelector:
-            matchLabels: { kubernetes.io/metadata.name: pfa-system }
           podSelector: { matchLabels: { app: buildkitd } }
       ports:
         - { protocol: TCP, port: 1234 }

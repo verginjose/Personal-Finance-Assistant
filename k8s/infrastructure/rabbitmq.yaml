@@ -167,6 +167,38 @@ spec:
         runAsNonRoot: true
         fsGroup: 101
         fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+        - name: volume-permissions
+          image: rabbitmq:3-management-alpine
+          command:
+            - /bin/sh
+            - -c
+            - "set -eu\nif [ \"$(stat -c %u /var/lib/rabbitmq)\" != \"100\" ]; then
+              chown -R 100:101 /var/lib/rabbitmq; fi\nif [ -f /var/lib/rabbitmq/.erlang.cookie
+              ]; then chown 100:101 /var/lib/rabbitmq/.erlang.cookie; chmod 600 /var/lib/rabbitmq/.erlang.cookie;
+              fi\n"
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - FOWNER
+                - DAC_OVERRIDE
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
   volumeClaimTemplates:
     - metadata:
         name: data

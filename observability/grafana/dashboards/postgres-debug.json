@@ -1,13 +1,13 @@
 {
   "uid": "postgres-debug",
-  "title": "Postgres — Diagnostics",
+  "title": "Postgres \u2014 Health & Diagnostics",
   "tags": [
     "finance-assistant",
     "postgres"
   ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "30s",
   "editable": true,
   "graphTooltip": 1,
@@ -51,45 +51,877 @@
   },
   "panels": [
     {
-      "id": 1,
-      "title": "Recent logs",
-      "type": "logs",
-      "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "clickhouse-ds"
-      },
-      "description": "Service-scoped logs. Use Search to narrow messages.",
-      "targets": [
-        {
-          "queryType": "sql",
-          "rawSql": "SELECT timestamp, message, level, service, pod, logger FROM default.logs WHERE service IN ('postgres-primary', 'postgres-replica') AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
-          "refId": "A",
-          "format": "logs"
-        }
-      ],
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showTime": true,
-        "showLabels": false,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
+      "id": 100,
+      "title": "Capacity & replication",
+      "type": "row",
+      "collapsed": false,
       "gridPos": {
         "x": 0,
         "y": 0,
         "w": 24,
-        "h": 10
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 1,
+      "title": "Database size",
+      "type": "stat",
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-ds"
+      },
+      "description": "Total on-disk size of the finance_assistant database.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT pg_database_size(current_database()) AS value"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "textMode": "auto",
+        "colorMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
       }
     },
     {
       "id": 2,
+      "title": "Connections used / limit",
+      "type": "stat",
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-ds"
+      },
+      "description": "Backends currently connected (Used) out of max_connections (Max).",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS \"Used\", current_setting('max_connections')::int AS \"Max\" FROM pg_stat_activity"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "id": 3,
+      "title": "Cache hit ratio",
+      "type": "stat",
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-ds"
+      },
+      "description": "Shared-buffer hit ratio for this database. Below ~99% means the working set no longer fits.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(round(100.0 * blks_hit / NULLIF(blks_hit + blks_read, 0), 1), 100) AS value FROM pg_stat_database WHERE datname = current_database()"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "id": 4,
+      "title": "Replica lag",
+      "type": "stat",
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-ds"
+      },
+      "description": "Largest replay lag across connected standbys, in seconds. Zero means caught up.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(round(max(extract(epoch FROM replay_lag))), 0) AS value FROM pg_stat_replication"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 60
+              }
+            ]
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "id": 101,
+      "title": "Activity & tables",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 5,
+      "title": "Uptime",
+      "type": "stat",
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-ds"
+      },
+      "description": "Time since the primary last started.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT extract(epoch FROM now() - pg_postmaster_start_time()) AS value"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 6,
+        "h": 5
+      }
+    },
+    {
+      "id": 6,
+      "title": "Deadlocks",
+      "type": "stat",
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-ds"
+      },
+      "description": "Cumulative deadlocks since the primary started.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT deadlocks AS value FROM pg_stat_database WHERE datname = current_database()"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "noValue": "No data"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "graphMode": "none",
+        "textMode": "value",
+        "colorMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 6,
+        "w": 6,
+        "h": 5
+      }
+    },
+    {
+      "id": 8,
+      "title": "Outbox backlog",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-ds"
+      },
+      "description": "Outbox events by status. A growing PENDING count means the publisher is behind.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT status AS \"Status\",\n       count(*) AS \"Events\",\n       to_char(min(created_at), 'MM-DD HH24:MI') AS \"Oldest\",\n       to_char(max(created_at), 'MM-DD HH24:MI') AS \"Newest\"\nFROM finance.outbox_events\nGROUP BY status\nORDER BY count(*) DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Events"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Events",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 5
+      }
+    },
+    {
+      "id": 7,
+      "title": "Tables \u2014 rows, size, scans",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-ds"
+      },
+      "description": "Every user table with live/dead tuple counts, total and index size, scan counts and last vacuum.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT schemaname AS \"Schema\",\n       relname AS \"Table\",\n       n_live_tup AS \"Rows\",\n       n_dead_tup AS \"Dead\",\n       pg_total_relation_size(relid) AS \"Size\",\n       pg_indexes_size(relid) AS \"Indexes\",\n       seq_scan AS \"Seq scans\",\n       idx_scan AS \"Idx scans\",\n       to_char(last_vacuum, 'MM-DD HH24:MI') AS \"Last vacuum\"\nFROM pg_stat_user_tables\nORDER BY pg_total_relation_size(relid) DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Size"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Indexes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Rows"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Dead"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1000
+                    },
+                    {
+                      "color": "red",
+                      "value": 10000
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Seq scans"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Idx scans"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Size",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 24,
+        "h": 9
+      }
+    },
+    {
+      "id": 9,
+      "title": "Active sessions",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-ds"
+      },
+      "description": "Non-idle backends, longest first. Look here for idle-in-transaction and lock waits.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT pid AS \"PID\",\n       usename AS \"User\",\n       state AS \"State\",\n       wait_event_type AS \"Wait type\",\n       wait_event AS \"Wait\",\n       round(extract(epoch FROM now() - state_change)) AS \"Seconds\",\n       left(query, 90) AS \"Query\"\nFROM pg_stat_activity\nWHERE pid <> pg_backend_pid() AND state <> 'idle'\nORDER BY \"Seconds\" DESC NULLS LAST\nLIMIT 25"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Seconds"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Seconds",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 7
+      }
+    },
+    {
+      "id": 10,
+      "title": "Unused indexes",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "postgres-ds"
+      },
+      "description": "Indexes with zero scans since the last statistics reset, largest first. Candidates for removal.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT schemaname AS \"Schema\",\n       relname AS \"Table\",\n       indexrelname AS \"Index\",\n       idx_scan AS \"Scans\",\n       pg_relation_size(indexrelid) AS \"Size\"\nFROM pg_stat_user_indexes\nWHERE idx_scan = 0\nORDER BY pg_relation_size(indexrelid) DESC\nLIMIT 20"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Size"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Size",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        }
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 24,
+        "h": 7
+      }
+    },
+    {
+      "id": 102,
+      "title": "Primary & replica resources",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 202,
       "title": "CPU usage % by pod",
       "type": "timeseries",
       "datasource": {
@@ -140,13 +972,13 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 10,
+        "y": 35,
         "w": 12,
         "h": 8
       }
     },
     {
-      "id": 3,
+      "id": 203,
       "title": "Memory usage % by pod",
       "type": "timeseries",
       "datasource": {
@@ -197,26 +1029,154 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 10,
+        "y": 35,
         "w": 12,
         "h": 8
       }
     },
     {
-      "id": 100,
+      "id": 103,
+      "title": "PostgreSQL logs",
       "type": "row",
-      "title": "Operational runbook",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 201,
+      "title": "Recent logs",
+      "type": "logs",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse-ds"
+      },
+      "description": "Service-scoped logs. Use Search to narrow messages.",
+      "targets": [
+        {
+          "queryType": "sql",
+          "rawSql": "SELECT timestamp, message, level, service, pod, logger FROM default.logs WHERE service IN ('postgres-primary', 'postgres-replica') AND message ILIKE '%${search}%' AND $__timeFilter(timestamp) ORDER BY timestamp DESC LIMIT 500",
+          "refId": "A",
+          "format": "logs"
+        }
+      ],
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 24,
+        "h": 10
+      }
+    },
+    {
+      "id": 104,
+      "title": "Server settings",
+      "type": "row",
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 18,
+        "y": 54,
         "w": 24,
         "h": 1
       },
       "panels": [
         {
-          "id": 4,
-          "title": "Runbook — psql commands",
+          "id": 11,
+          "title": "Settings",
+          "type": "table",
+          "datasource": {
+            "type": "postgres",
+            "uid": "postgres-ds"
+          },
+          "description": "The settings that explain most performance behaviour. server_version and shared_buffers are the first to check.",
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "postgres",
+                "uid": "postgres-ds"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT name AS \"Setting\", setting AS \"Value\", unit AS \"Unit\", short_desc AS \"Description\"\nFROM pg_settings\nWHERE name IN (\n    'server_version', 'max_connections', 'shared_buffers', 'work_mem',\n    'maintenance_work_mem', 'effective_cache_size', 'max_wal_size',\n    'min_wal_size', 'wal_level', 'max_wal_senders', 'max_replication_slots',\n    'autovacuum', 'autovacuum_naptime', 'checkpoint_completion_target',\n    'random_page_cost'\n)\nORDER BY name"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false,
+                "filterable": true
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "sortBy": [],
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "fields": ""
+            }
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 55,
+            "w": 24,
+            "h": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "title": "Operational runbook",
+      "type": "row",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 55,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [
+        {
+          "id": 204,
+          "title": "Runbook \u2014 psql commands",
           "type": "text",
           "options": {
             "mode": "markdown",
@@ -228,7 +1188,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 19,
+            "y": 56,
             "w": 24,
             "h": 22
           },
@@ -237,7 +1197,7 @@
       ]
     }
   ],
-  "description": "Service-scoped logs and CPU / memory pressure. Expand the operational runbook for investigation commands.",
+  "description": "Primary database statistics, replica lag, table capacity, sessions, pod resources and logs. Advanced settings and runbook are expandable.",
   "links": [
     {
       "title": "Overview",
@@ -250,7 +1210,7 @@
     {
       "title": "Pods",
       "type": "link",
-      "url": "/d/pods",
+      "url": "/d/pfa-pods",
       "keepTime": true,
       "includeVars": false,
       "targetBlank": false
@@ -264,7 +1224,7 @@
       "targetBlank": false
     },
     {
-      "title": "Data",
+      "title": "Data overview",
       "type": "link",
       "url": "/d/data-explorer",
       "keepTime": true,

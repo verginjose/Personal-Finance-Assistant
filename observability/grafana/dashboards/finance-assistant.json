@@ -1,7 +1,7 @@
 {
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "30s",
   "time": {
     "from": "now-1h",
@@ -451,7 +451,7 @@
     {
       "title": "Pods",
       "type": "link",
-      "url": "/d/pods",
+      "url": "/d/pfa-pods",
       "keepTime": true,
       "includeVars": false,
       "targetBlank": false
@@ -465,7 +465,7 @@
       "targetBlank": false
     },
     {
-      "title": "Data",
+      "title": "Data overview",
       "type": "link",
       "url": "/d/data-explorer",
       "keepTime": true,

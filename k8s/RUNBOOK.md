@@ -284,12 +284,24 @@ kubectl -n pfa exec deploy/grafana -- \
 
 | Dashboard | What it answers |
 |---|---|
-| **Finance Assistant — Overview & Debug** | service health, traffic, 5xx, p95/p99 latency and resource pressure |
-| **Logs — Search & Debug** | searchable ClickHouse logs with service/level filters, matched/error/warn counts and volume over time |
-| **Data — Postgres & Redis** | live row counts and table sizes, outbox backlog, active sessions, indexes, settings; Redis keys, memory, clients and per-prefix key counts |
-| **Pods — CPU / memory / restarts** | which pod is under CPU/memory pressure or restarting |
-| **Redis — Debug & Runbook** | Redis logs, pod pressure, memory/keyspace and copy-paste `redis-cli` commands |
-| **Postgres — Debug & Runbook** | Postgres primary/replica logs, replication and recovery, pod pressure, and copy-paste `psql` commands |
+| **Finance Assistant — Production Overview** | service health, traffic, 5xx and gateway/application latency |
+| **Logs — Investigation** | searchable ClickHouse logs with service/level filters, matched/error/warn counts and volume over time |
+| **Data — Overview** | eight summary cards for PostgreSQL and Redis, with links to their dedicated details |
+| **Pods — App, CI & Infrastructure** | CPU, memory and restarts across `pfa` and `pfa-system`; Workload group and Pod filters apply together to all panels |
+| **Redis — Health & Diagnostics** | keys, throughput, memory, clients, keyspace, replication, pod resources and logs; expandable prefix counts and runbook |
+| **Postgres — Health & Diagnostics** | database capacity, replica lag, table sizes, outbox backlog, sessions, indexes, pod resources and logs; expandable settings and runbook |
+
+Pods navigation uses dashboard UID `pfa-pods`. Workload group applies directly
+to panel queries even when Pod is All; choosing a specific Pod further narrows
+the group. Data overview contains only summary cards. PostgreSQL and Redis
+details live on their respective dashboards instead of nested diagnostic rows
+inside Data overview.
+
+Validate dashboard links, layout and filter contracts with:
+
+```bash
+python3 -m unittest discover -s observability/grafana/tests -v
+```
 
 Dashboards are files in `observability/grafana/dashboards/`. The committed
 `k8s/config/infra/grafana-dashboards.yaml` ConfigMap is generated from them and
@@ -310,7 +322,7 @@ directly with `./k8s/apply-observability.sh dashboards`.
 
 ### Data layer datasources
 
-The **Data — Postgres & Redis** dashboard needs two datasources that the
+The **Data — Overview**, **Postgres** and **Redis** dashboards need two datasources that the
 Argo-managed Grafana Deployment provides but that are not stored in git:
 
 - **Postgres** (`postgres-ds`) — built-in datasource pointing at
@@ -330,7 +342,8 @@ Render and apply the ConfigMap with:
 ```
 
 The per-prefix Redis counters use `KEYS <prefix>*`, which is O(N) and blocks
-the server. That is acceptable for the ~10k keys here; use `SCAN` before
+the server. They are in the collapsed **Key counts by prefix (on demand)** row
+on the Redis dashboard and run only when it is expanded. Use `SCAN` before
 pointing the same panel at a much larger dataset.
 
 ### Log format

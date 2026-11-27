@@ -138,6 +138,15 @@ spec:
           securityContext:
             runAsUser: 0
             runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - FOWNER
+                - DAC_OVERRIDE
+            readOnlyRootFilesystem: true
           volumeMounts:
             - name: cache
               mountPath: /cache

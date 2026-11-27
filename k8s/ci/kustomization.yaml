@@ -23,6 +23,7 @@ resources:
   - registry.yaml
   - runner.yaml
 
+  - registry-gc-policy.yaml
 configMapGenerator:
   - name: registry-gc-script
     namespace: pfa

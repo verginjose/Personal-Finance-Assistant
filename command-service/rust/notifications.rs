@@ -108,6 +108,59 @@ pub async fn send_fields(
     a.events.publish(user, text).await;
 }
 
+/// Persist many notifications in one multi-row INSERT, then publish each SSE
+/// event. Returns nothing; failures are logged (same contract as send_fields).
+pub async fn send_batch(
+    a: &App,
+    items: Vec<(Uuid, String, Option<String>, String, Option<i64>, Value)>,
+) {
+    if items.is_empty() {
+        return;
+    }
+    let users: Vec<Uuid> = items.iter().map(|i| i.0).collect();
+    let statuses: Vec<String> = items.iter().map(|i| i.1.clone()).collect();
+    let events: Vec<Option<String>> = items.iter().map(|i| i.2.clone()).collect();
+    let messages: Vec<String> = items.iter().map(|i| i.3.clone()).collect();
+    let groups: Vec<Option<i64>> = items.iter().map(|i| i.4).collect();
+    let payloads: Vec<String> = items
+        .iter()
+        .map(|i| serde_json::to_string(&i.5).unwrap_or_default())
+        .collect();
+    let inserted: Vec<(i64, Uuid)> = match sqlx::query_as(
+        "INSERT INTO finance.notifications (user_id,status,event,message,group_id,payload,created_at) \
+         SELECT u,s,e,m,g,p,now() \
+         FROM unnest($1::uuid[],$2::text[],$3::text[],$4::text[],$5::bigint[],$6::text[]) AS t(u,s,e,m,g,p) \
+         RETURNING id, user_id",
+    )
+    .bind(&users)
+    .bind(&statuses)
+    .bind(&events)
+    .bind(&messages)
+    .bind(&groups)
+    .bind(&payloads)
+    .fetch_all(&a.db)
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to persist notifications");
+            return;
+        }
+    };
+    let mut ids: std::collections::HashMap<Uuid, i64> =
+        inserted.into_iter().map(|(id, u)| (u, id)).collect();
+    for (user, _status, _event, _message, _group, payload) in items {
+        let mut outbound = payload;
+        if let Some(id) = ids.remove(&user) {
+            if outbound.is_object() {
+                outbound["notificationId"] = json!(id);
+            }
+        }
+        let text = serde_json::to_string(&outbound).unwrap_or_default();
+        a.events.publish(user, text).await;
+    }
+}
+
 pub async fn send_raw(a: &App, user: Uuid, payload: Value) {
     let status = payload["status"]
         .as_str()

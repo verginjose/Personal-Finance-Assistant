@@ -184,9 +184,9 @@ async fn process_one(a: &App, row: &RecurringRow) -> sqlx::Result<()> {
 
 async fn outbox(a: App) {
     loop {
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        let events: Vec<(i64, Uuid)> = match sqlx::query_as(
-            "SELECT id, user_id FROM finance.outbox_events \
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let events: Vec<(i64, Uuid, String, i64)> = match sqlx::query_as(
+            "SELECT id, user_id, event_type, entity_id FROM finance.outbox_events \
              WHERE status='PENDING' ORDER BY created_at LIMIT 200",
         )
         .fetch_all(&a.db)
@@ -198,8 +198,16 @@ async fn outbox(a: App) {
                 continue;
             }
         };
-        for (id, user) in events {
-            if cache::evict_user_keys(&a, &HashSet::from([user])).await {
+        for (id, user, kind, entity) in events {
+            let mut ok = cache::evict_user_keys(&a, &HashSet::from([user])).await;
+            // Deferred per-member fan-out for group expenses (see add_expense_core).
+            if ok && kind == "FANOUT" {
+                if let Err(e) = crate::groups::fanout_expense(&a, entity).await {
+                    tracing::warn!(error = ?e, event = id, "expense fan-out failed; will retry");
+                    ok = false;
+                }
+            }
+            if ok {
                 let _ = sqlx::query("UPDATE finance.outbox_events SET status='PROCESSED' WHERE id=$1")
                     .bind(id)
                     .execute(&a.db)

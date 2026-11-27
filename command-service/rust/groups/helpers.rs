@@ -216,17 +216,10 @@ impl Notice {
 }
 
 pub(crate) async fn send_notices(a: &App, notices: Vec<Notice>) {
-    for n in notices {
-        notifications::send_fields(
-            a,
-            n.user,
-            &n.status,
-            Some(&n.event),
-            &n.message,
-            Some(n.group),
-            n.payload,
-        )
-        .await;
-    }
+    let items = notices
+        .into_iter()
+        .map(|n| (n.user, n.status, Some(n.event), n.message, Some(n.group), n.payload))
+        .collect();
+    notifications::send_batch(a, items).await;
 }
 

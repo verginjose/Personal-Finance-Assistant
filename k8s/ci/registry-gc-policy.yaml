@@ -1,0 +1,263 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: pfa-registry-gc-exec
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - ''
+      apiVersions:
+      - v1
+      resources:
+      - pods/exec
+      operations:
+      - CONNECT
+  matchConditions:
+  - name: registry-maintenance-identity
+    expression: request.userInfo.username == 'system:serviceaccount:pfa:registry-gc'
+  validations:
+  - expression: "request.namespace == 'pfa' && has(object.command) &&\n(!has(object.stdin) || !object.stdin) &&\
+      \ (!has(object.tty) || !object.tty) && (\n  (request.name.matches('^ci-runner-[a-z0-9]+-[a-z0-9]+$') && object.command\
+      \ == ['pgrep','-f','Runner.Worker']) ||\n  (request.name.matches('^registry-[a-z0-9]+-[a-z0-9]+$') && (\n\
+      \    object.command == ['registry','garbage-collect','--dry-run','--delete-untagged','/etc/registry/config.yml']\
+      \ ||\n    object.command == ['registry','garbage-collect','--delete-untagged','/etc/registry/config.yml']\
+      \ ||\n    (size(object.command) == 3 && object.command[0] == 'rm' && object.command[1] == '-rf' &&\n     object.command[2].matches('^/var/lib/registry/docker/registry/v2/repositories/finance/[a-z0-9][a-z0-9._-]*/_manifests/tags/[a-zA-Z0-9][a-zA-Z0-9._-]*$'))\n\
+      \  ))\n)"
+    message: Registry maintenance may only check runner activity or run the fixed registry garbage-collection/tag-retention
+      commands.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: pfa-registry-gc-exec
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  policyName: pfa-registry-gc-exec
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: pfa-registry-gc-deployment
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - apps
+      apiVersions:
+      - v1
+      resources:
+      - deployments
+      operations:
+      - UPDATE
+  matchConditions:
+  - name: registry-maintenance-identity
+    expression: request.userInfo.username == 'system:serviceaccount:pfa:registry-gc'
+  validations:
+  - expression: request.namespace == 'pfa' && request.name == 'registry'
+    message: Registry maintenance can update only the registry Deployment.
+  - expression: size(object.spec.template.spec.containers) == 1 && size(oldObject.spec.template.spec.containers)
+      == 1
+    message: Registry maintenance cannot add containers.
+  - expression: (has(object.spec.replicas) == has(oldObject.spec.replicas) && (!has(object.spec.replicas) || object.spec.replicas
+      == oldObject.spec.replicas))
+    message: Registry maintenance cannot change Deployment replicas.
+  - expression: (has(object.spec.selector) == has(oldObject.spec.selector) && (!has(object.spec.selector) || object.spec.selector
+      == oldObject.spec.selector))
+    message: Registry maintenance cannot change Deployment selector.
+  - expression: (has(object.spec.strategy) == has(oldObject.spec.strategy) && (!has(object.spec.strategy) || object.spec.strategy
+      == oldObject.spec.strategy))
+    message: Registry maintenance cannot change Deployment strategy.
+  - expression: (has(object.spec.paused) == has(oldObject.spec.paused) && (!has(object.spec.paused) || object.spec.paused
+      == oldObject.spec.paused))
+    message: Registry maintenance cannot change Deployment paused.
+  - expression: (has(object.spec.minReadySeconds) == has(oldObject.spec.minReadySeconds) && (!has(object.spec.minReadySeconds)
+      || object.spec.minReadySeconds == oldObject.spec.minReadySeconds))
+    message: Registry maintenance cannot change Deployment minReadySeconds.
+  - expression: (has(object.spec.revisionHistoryLimit) == has(oldObject.spec.revisionHistoryLimit) && (!has(object.spec.revisionHistoryLimit)
+      || object.spec.revisionHistoryLimit == oldObject.spec.revisionHistoryLimit))
+    message: Registry maintenance cannot change Deployment revisionHistoryLimit.
+  - expression: (has(object.spec.progressDeadlineSeconds) == has(oldObject.spec.progressDeadlineSeconds) && (!has(object.spec.progressDeadlineSeconds)
+      || object.spec.progressDeadlineSeconds == oldObject.spec.progressDeadlineSeconds))
+    message: Registry maintenance cannot change Deployment progressDeadlineSeconds.
+  - expression: (has(object.spec.template.metadata.labels) == has(oldObject.spec.template.metadata.labels) && (!has(object.spec.template.metadata.labels)
+      || object.spec.template.metadata.labels == oldObject.spec.template.metadata.labels))
+    message: Registry maintenance cannot change pod labels.
+  - expression: (has(object.spec.template.metadata.annotations) == has(oldObject.spec.template.metadata.annotations)
+      && (!has(object.spec.template.metadata.annotations) || object.spec.template.metadata.annotations == oldObject.spec.template.metadata.annotations))
+    message: Registry maintenance cannot change pod annotations.
+  - expression: (has(object.spec.template.spec.serviceAccountName) == has(oldObject.spec.template.spec.serviceAccountName)
+      && (!has(object.spec.template.spec.serviceAccountName) || object.spec.template.spec.serviceAccountName ==
+      oldObject.spec.template.spec.serviceAccountName))
+    message: Registry maintenance cannot change pod serviceAccountName.
+  - expression: (has(object.spec.template.spec.serviceAccount) == has(oldObject.spec.template.spec.serviceAccount)
+      && (!has(object.spec.template.spec.serviceAccount) || object.spec.template.spec.serviceAccount == oldObject.spec.template.spec.serviceAccount))
+    message: Registry maintenance cannot change pod serviceAccount.
+  - expression: (has(object.spec.template.spec.automountServiceAccountToken) == has(oldObject.spec.template.spec.automountServiceAccountToken)
+      && (!has(object.spec.template.spec.automountServiceAccountToken) || object.spec.template.spec.automountServiceAccountToken
+      == oldObject.spec.template.spec.automountServiceAccountToken))
+    message: Registry maintenance cannot change pod automountServiceAccountToken.
+  - expression: (has(object.spec.template.spec.volumes) == has(oldObject.spec.template.spec.volumes) && (!has(object.spec.template.spec.volumes)
+      || object.spec.template.spec.volumes == oldObject.spec.template.spec.volumes))
+    message: Registry maintenance cannot change pod volumes.
+  - expression: (has(object.spec.template.spec.securityContext) == has(oldObject.spec.template.spec.securityContext)
+      && (!has(object.spec.template.spec.securityContext) || object.spec.template.spec.securityContext == oldObject.spec.template.spec.securityContext))
+    message: Registry maintenance cannot change pod securityContext.
+  - expression: (has(object.spec.template.spec.initContainers) == has(oldObject.spec.template.spec.initContainers)
+      && (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers == oldObject.spec.template.spec.initContainers))
+    message: Registry maintenance cannot change pod initContainers.
+  - expression: (has(object.spec.template.spec.hostNetwork) == has(oldObject.spec.template.spec.hostNetwork) &&
+      (!has(object.spec.template.spec.hostNetwork) || object.spec.template.spec.hostNetwork == oldObject.spec.template.spec.hostNetwork))
+    message: Registry maintenance cannot change pod hostNetwork.
+  - expression: (has(object.spec.template.spec.hostPID) == has(oldObject.spec.template.spec.hostPID) && (!has(object.spec.template.spec.hostPID)
+      || object.spec.template.spec.hostPID == oldObject.spec.template.spec.hostPID))
+    message: Registry maintenance cannot change pod hostPID.
+  - expression: (has(object.spec.template.spec.hostIPC) == has(oldObject.spec.template.spec.hostIPC) && (!has(object.spec.template.spec.hostIPC)
+      || object.spec.template.spec.hostIPC == oldObject.spec.template.spec.hostIPC))
+    message: Registry maintenance cannot change pod hostIPC.
+  - expression: (has(object.spec.template.spec.shareProcessNamespace) == has(oldObject.spec.template.spec.shareProcessNamespace)
+      && (!has(object.spec.template.spec.shareProcessNamespace) || object.spec.template.spec.shareProcessNamespace
+      == oldObject.spec.template.spec.shareProcessNamespace))
+    message: Registry maintenance cannot change pod shareProcessNamespace.
+  - expression: (has(object.spec.template.spec.runtimeClassName) == has(oldObject.spec.template.spec.runtimeClassName)
+      && (!has(object.spec.template.spec.runtimeClassName) || object.spec.template.spec.runtimeClassName == oldObject.spec.template.spec.runtimeClassName))
+    message: Registry maintenance cannot change pod runtimeClassName.
+  - expression: (has(object.spec.template.spec.imagePullSecrets) == has(oldObject.spec.template.spec.imagePullSecrets)
+      && (!has(object.spec.template.spec.imagePullSecrets) || object.spec.template.spec.imagePullSecrets == oldObject.spec.template.spec.imagePullSecrets))
+    message: Registry maintenance cannot change pod imagePullSecrets.
+  - expression: (has(object.spec.template.spec.nodeName) == has(oldObject.spec.template.spec.nodeName) && (!has(object.spec.template.spec.nodeName)
+      || object.spec.template.spec.nodeName == oldObject.spec.template.spec.nodeName))
+    message: Registry maintenance cannot change pod nodeName.
+  - expression: (has(object.spec.template.spec.nodeSelector) == has(oldObject.spec.template.spec.nodeSelector) &&
+      (!has(object.spec.template.spec.nodeSelector) || object.spec.template.spec.nodeSelector == oldObject.spec.template.spec.nodeSelector))
+    message: Registry maintenance cannot change pod nodeSelector.
+  - expression: (has(object.spec.template.spec.affinity) == has(oldObject.spec.template.spec.affinity) && (!has(object.spec.template.spec.affinity)
+      || object.spec.template.spec.affinity == oldObject.spec.template.spec.affinity))
+    message: Registry maintenance cannot change pod affinity.
+  - expression: (has(object.spec.template.spec.tolerations) == has(oldObject.spec.template.spec.tolerations) &&
+      (!has(object.spec.template.spec.tolerations) || object.spec.template.spec.tolerations == oldObject.spec.template.spec.tolerations))
+    message: Registry maintenance cannot change pod tolerations.
+  - expression: (has(object.spec.template.spec.dnsPolicy) == has(oldObject.spec.template.spec.dnsPolicy) && (!has(object.spec.template.spec.dnsPolicy)
+      || object.spec.template.spec.dnsPolicy == oldObject.spec.template.spec.dnsPolicy))
+    message: Registry maintenance cannot change pod dnsPolicy.
+  - expression: (has(object.spec.template.spec.dnsConfig) == has(oldObject.spec.template.spec.dnsConfig) && (!has(object.spec.template.spec.dnsConfig)
+      || object.spec.template.spec.dnsConfig == oldObject.spec.template.spec.dnsConfig))
+    message: Registry maintenance cannot change pod dnsConfig.
+  - expression: (has(object.spec.template.spec.hostAliases) == has(oldObject.spec.template.spec.hostAliases) &&
+      (!has(object.spec.template.spec.hostAliases) || object.spec.template.spec.hostAliases == oldObject.spec.template.spec.hostAliases))
+    message: Registry maintenance cannot change pod hostAliases.
+  - expression: (has(object.spec.template.spec.restartPolicy) == has(oldObject.spec.template.spec.restartPolicy)
+      && (!has(object.spec.template.spec.restartPolicy) || object.spec.template.spec.restartPolicy == oldObject.spec.template.spec.restartPolicy))
+    message: Registry maintenance cannot change pod restartPolicy.
+  - expression: (has(object.spec.template.spec.containers[0].name) == has(oldObject.spec.template.spec.containers[0].name)
+      && (!has(object.spec.template.spec.containers[0].name) || object.spec.template.spec.containers[0].name ==
+      oldObject.spec.template.spec.containers[0].name))
+    message: Registry maintenance cannot change container name.
+  - expression: (has(object.spec.template.spec.containers[0].image) == has(oldObject.spec.template.spec.containers[0].image)
+      && (!has(object.spec.template.spec.containers[0].image) || object.spec.template.spec.containers[0].image ==
+      oldObject.spec.template.spec.containers[0].image))
+    message: Registry maintenance cannot change container image.
+  - expression: (has(object.spec.template.spec.containers[0].imagePullPolicy) == has(oldObject.spec.template.spec.containers[0].imagePullPolicy)
+      && (!has(object.spec.template.spec.containers[0].imagePullPolicy) || object.spec.template.spec.containers[0].imagePullPolicy
+      == oldObject.spec.template.spec.containers[0].imagePullPolicy))
+    message: Registry maintenance cannot change container imagePullPolicy.
+  - expression: (has(object.spec.template.spec.containers[0].command) == has(oldObject.spec.template.spec.containers[0].command)
+      && (!has(object.spec.template.spec.containers[0].command) || object.spec.template.spec.containers[0].command
+      == oldObject.spec.template.spec.containers[0].command))
+    message: Registry maintenance cannot change container command.
+  - expression: (has(object.spec.template.spec.containers[0].args) == has(oldObject.spec.template.spec.containers[0].args)
+      && (!has(object.spec.template.spec.containers[0].args) || object.spec.template.spec.containers[0].args ==
+      oldObject.spec.template.spec.containers[0].args))
+    message: Registry maintenance cannot change container args.
+  - expression: (has(object.spec.template.spec.containers[0].securityContext) == has(oldObject.spec.template.spec.containers[0].securityContext)
+      && (!has(object.spec.template.spec.containers[0].securityContext) || object.spec.template.spec.containers[0].securityContext
+      == oldObject.spec.template.spec.containers[0].securityContext))
+    message: Registry maintenance cannot change container securityContext.
+  - expression: (has(object.spec.template.spec.containers[0].volumeMounts) == has(oldObject.spec.template.spec.containers[0].volumeMounts)
+      && (!has(object.spec.template.spec.containers[0].volumeMounts) || object.spec.template.spec.containers[0].volumeMounts
+      == oldObject.spec.template.spec.containers[0].volumeMounts))
+    message: Registry maintenance cannot change container volumeMounts.
+  - expression: (has(object.spec.template.spec.containers[0].volumeDevices) == has(oldObject.spec.template.spec.containers[0].volumeDevices)
+      && (!has(object.spec.template.spec.containers[0].volumeDevices) || object.spec.template.spec.containers[0].volumeDevices
+      == oldObject.spec.template.spec.containers[0].volumeDevices))
+    message: Registry maintenance cannot change container volumeDevices.
+  - expression: (has(object.spec.template.spec.containers[0].envFrom) == has(oldObject.spec.template.spec.containers[0].envFrom)
+      && (!has(object.spec.template.spec.containers[0].envFrom) || object.spec.template.spec.containers[0].envFrom
+      == oldObject.spec.template.spec.containers[0].envFrom))
+    message: Registry maintenance cannot change container envFrom.
+  - expression: (has(object.spec.template.spec.containers[0].workingDir) == has(oldObject.spec.template.spec.containers[0].workingDir)
+      && (!has(object.spec.template.spec.containers[0].workingDir) || object.spec.template.spec.containers[0].workingDir
+      == oldObject.spec.template.spec.containers[0].workingDir))
+    message: Registry maintenance cannot change container workingDir.
+  - expression: (has(object.spec.template.spec.containers[0].lifecycle) == has(oldObject.spec.template.spec.containers[0].lifecycle)
+      && (!has(object.spec.template.spec.containers[0].lifecycle) || object.spec.template.spec.containers[0].lifecycle
+      == oldObject.spec.template.spec.containers[0].lifecycle))
+    message: Registry maintenance cannot change container lifecycle.
+  - expression: (has(object.spec.template.spec.containers[0].startupProbe) == has(oldObject.spec.template.spec.containers[0].startupProbe)
+      && (!has(object.spec.template.spec.containers[0].startupProbe) || object.spec.template.spec.containers[0].startupProbe
+      == oldObject.spec.template.spec.containers[0].startupProbe))
+    message: Registry maintenance cannot change container startupProbe.
+  - expression: (has(object.spec.template.spec.containers[0].livenessProbe) == has(oldObject.spec.template.spec.containers[0].livenessProbe)
+      && (!has(object.spec.template.spec.containers[0].livenessProbe) || object.spec.template.spec.containers[0].livenessProbe
+      == oldObject.spec.template.spec.containers[0].livenessProbe))
+    message: Registry maintenance cannot change container livenessProbe.
+  - expression: (has(object.spec.template.spec.containers[0].readinessProbe) == has(oldObject.spec.template.spec.containers[0].readinessProbe)
+      && (!has(object.spec.template.spec.containers[0].readinessProbe) || object.spec.template.spec.containers[0].readinessProbe
+      == oldObject.spec.template.spec.containers[0].readinessProbe))
+    message: Registry maintenance cannot change container readinessProbe.
+  - expression: (has(object.spec.template.spec.containers[0].ports) == has(oldObject.spec.template.spec.containers[0].ports)
+      && (!has(object.spec.template.spec.containers[0].ports) || object.spec.template.spec.containers[0].ports ==
+      oldObject.spec.template.spec.containers[0].ports))
+    message: Registry maintenance cannot change container ports.
+  - expression: (has(object.spec.template.spec.containers[0].resources) == has(oldObject.spec.template.spec.containers[0].resources)
+      && (!has(object.spec.template.spec.containers[0].resources) || object.spec.template.spec.containers[0].resources
+      == oldObject.spec.template.spec.containers[0].resources))
+    message: Registry maintenance cannot change container resources.
+  - expression: (has(object.spec.template.spec.containers[0].terminationMessagePath) == has(oldObject.spec.template.spec.containers[0].terminationMessagePath)
+      && (!has(object.spec.template.spec.containers[0].terminationMessagePath) || object.spec.template.spec.containers[0].terminationMessagePath
+      == oldObject.spec.template.spec.containers[0].terminationMessagePath))
+    message: Registry maintenance cannot change container terminationMessagePath.
+  - expression: (has(object.spec.template.spec.containers[0].terminationMessagePolicy) == has(oldObject.spec.template.spec.containers[0].terminationMessagePolicy)
+      && (!has(object.spec.template.spec.containers[0].terminationMessagePolicy) || object.spec.template.spec.containers[0].terminationMessagePolicy
+      == oldObject.spec.template.spec.containers[0].terminationMessagePolicy))
+    message: Registry maintenance cannot change container terminationMessagePolicy.
+  - expression: (has(object.spec.template.spec.containers[0].stdin) == has(oldObject.spec.template.spec.containers[0].stdin)
+      && (!has(object.spec.template.spec.containers[0].stdin) || object.spec.template.spec.containers[0].stdin ==
+      oldObject.spec.template.spec.containers[0].stdin))
+    message: Registry maintenance cannot change container stdin.
+  - expression: (has(object.spec.template.spec.containers[0].stdinOnce) == has(oldObject.spec.template.spec.containers[0].stdinOnce)
+      && (!has(object.spec.template.spec.containers[0].stdinOnce) || object.spec.template.spec.containers[0].stdinOnce
+      == oldObject.spec.template.spec.containers[0].stdinOnce))
+    message: Registry maintenance cannot change container stdinOnce.
+  - expression: (has(object.spec.template.spec.containers[0].tty) == has(oldObject.spec.template.spec.containers[0].tty)
+      && (!has(object.spec.template.spec.containers[0].tty) || object.spec.template.spec.containers[0].tty == oldObject.spec.template.spec.containers[0].tty))
+    message: Registry maintenance cannot change container tty.
+  - expression: '(has(object.spec.template.spec.containers[0].env) ? object.spec.template.spec.containers[0].env
+      : []).filter(e,e.name != ''REGISTRY_STORAGE_MAINTENANCE_READONLY'') == (has(oldObject.spec.template.spec.containers[0].env)
+      ? oldObject.spec.template.spec.containers[0].env : []).filter(e,e.name != ''REGISTRY_STORAGE_MAINTENANCE_READONLY'')'
+    message: Registry maintenance cannot change other environment variables or introduce secret references.
+  - expression: '(has(object.spec.template.spec.containers[0].env) ? object.spec.template.spec.containers[0].env
+      : []).filter(e,e.name == ''REGISTRY_STORAGE_MAINTENANCE_READONLY'').size() <= 1 && (has(object.spec.template.spec.containers[0].env)
+      ? object.spec.template.spec.containers[0].env : []).filter(e,e.name == ''REGISTRY_STORAGE_MAINTENANCE_READONLY'').all(e,!has(e.valueFrom)
+      && has(e.value) && e.value in [''{enabled: true}'',''{enabled: false}''])'
+    message: Only a literal registry read-only boolean may be changed.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: pfa-registry-gc-deployment
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+spec:
+  policyName: pfa-registry-gc-deployment
+  validationActions:
+  - Deny

@@ -126,6 +126,9 @@ spec:
             capabilities:
               drop:
                 - ALL
+          env:
+            - name: REGISTRY_STORAGE_MAINTENANCE_READONLY
+              value: '{enabled: false}'
       volumes:
         - name: config
           configMap:

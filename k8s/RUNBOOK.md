@@ -593,3 +593,20 @@ updates the replica's persisted connection information with the dedicated
 replication account and certificate verification. Query and Grafana are
 read-only; command/query/Grafana cannot read stored password hashes.
 Grafana provisioning contains only Secret-backed environment references.
+
+
+### Registry maintenance permissions
+
+The cleanup account cannot patch Argo Applications or the CI runner template.
+Admission policies permit only the runner activity check, the fixed registry
+GC commands and removal of finance tag links. Database pod execution, changed
+images/commands/probes, added secret mounts and service-account changes are
+denied. Only the registry read-only environment value may change; Argo ignores
+that value during maintenance while continuing to reconcile all other fields.
+The cleanup job runs without root or Linux capabilities.
+
+Verify these boundaries without changing Deployments or application data:
+
+```bash
+python3 scripts/verify-registry-gc-boundaries.py --kubeconfig "$HOME/.kube/k3s.yaml"
+```

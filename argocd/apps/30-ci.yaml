@@ -26,9 +26,17 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=false
+      - RespectIgnoreDifferences=true
     retry:
       limit: 5
       backoff:
         duration: 10s
         factor: 2
         maxDuration: 3m
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: registry
+      namespace: pfa
+      jqPathExpressions:
+        - .spec.template.spec.containers[] | select(.name == "registry") | .env[]? | select(.name == "REGISTRY_STORAGE_MAINTENANCE_READONLY") | .value

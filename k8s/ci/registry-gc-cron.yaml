@@ -1,33 +1,3 @@
-# Hourly garbage collection for the in-cluster registry.
-#
-# `registry garbage-collect` frees the blobs behind tags that phase 1 of
-# registry-gc.sh deleted. It is a mark-and-sweep: it marks the blobs reachable
-# from every manifest, then deletes the rest. If a push lands between the mark
-# and the sweep, its blobs look unreferenced and get deleted, corrupting the
-# image - the filesystem driver takes no lock between the registry and the GC
-# process.
-#
-# Stopping the registry would close that hole but also break pulls, so this job
-# uses the read-only variant instead: the Deployment gets
-# REGISTRY_STORAGE_MAINTENANCE_READONLY=true, which makes the registry refuse
-# writes (503 on push) while continuing to serve pulls, deploys and readiness
-# probes. GC then runs inside that pod against the same store. Cost is one
-# Recreate rollout each way, and builds that try to push in that window fail.
-#
-# Argo CD manages the registry Deployment with selfHeal, so it would revert the
-# read-only env mid-sweep. The job disables automated sync for the duration and
-# restores the exact policy from a trap.
-#
-# The dry run at the top means most hours do nothing: if no tag was deleted
-# since the last sweep there is no garbage, so the registry is never touched.
-#
-# Tag retention runs before that gate, using the same k8s/ci/registry-gc.sh the
-# CI build calls (published as a ConfigMap by kustomization.yaml). The runner
-# has no cluster credentials, so over HTTP it can only skip a tag that shares
-# its manifest with a kept tag. Here kubectl is available, so it drops the tag
-# link from the registry's storage and the now-untagged manifest is collected
-# by the sweep in the same run.
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -45,20 +15,23 @@ rules:
   # instead of `kubectl rollout status`.
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    resourceNames: ["registry", "ci-runner"]
-    verbs: ["get", "patch", "update"]
-  - apiGroups: ["apps"]
-    resources: ["deployments/scale"]
-    resourceNames: ["registry"]
+    resourceNames:
+      - registry
     verbs: ["get", "patch", "update"]
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]
-  # `create` on pods/exec cannot be restricted to a named pod; the namespace is
-  # the boundary. Everything else above is as narrow as RBAC allows.
   - apiGroups: [""]
     resources: ["pods/exec"]
     verbs: ["create"]
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    resourceNames:
+      - ci-runner
+    verbs:
+      - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -69,32 +42,6 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: registry-gc
-subjects:
-  - kind: ServiceAccount
-    name: registry-gc
-    namespace: pfa
----
-# Cross-namespace: the job has to stop Argo from reverting the read-only patch.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: registry-gc-argocd
-  namespace: argocd
-rules:
-  - apiGroups: ["argoproj.io"]
-    resources: ["applications"]
-    resourceNames: ["pfa-ci"]
-    verbs: ["get", "patch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: registry-gc-argocd
-  namespace: argocd
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: registry-gc-argocd
 subjects:
   - kind: ServiceAccount
     name: registry-gc
@@ -139,7 +86,6 @@ spec:
                 - |
                   set -eu
                   NS=pfa
-                  APP=pfa-ci
                   DEPLOY=registry
                   CONFIG=/etc/registry/config.yml
                   READONLY=REGISTRY_STORAGE_MAINTENANCE_READONLY
@@ -172,20 +118,12 @@ spec:
                   }
 
                   writable() {
-                    kubectl -n "$NS" set env "deploy/$DEPLOY" "$READONLY-" >/dev/null 2>&1 || true
+                    kubectl -n "$NS" set env "deploy/$DEPLOY" "$READONLY={enabled: false}" >/dev/null 2>&1 || true
                     wait_rollout 180 >/dev/null 2>&1 || true
                   }
 
-                  restore_sync() {
-                    if [ -n "${SYNCPOLICY:-}" ]; then
-                      kubectl -n argocd patch app "$APP" --type merge \
-                        -p "{\"spec\":{\"syncPolicy\":$SYNCPOLICY}}" >/dev/null 2>&1 || true
-                    fi
-                  }
-
-                  # Whatever happens, never leave the registry read-only or Argo
-                  # with its automated sync disabled.
-                  cleanup() { writable; restore_sync; }
+                  # Only the registry read-only value is ignored by GitOps. No Argo API permissions are needed.
+                  cleanup() { writable; }
                   trap cleanup EXIT
 
                   # A push landing while the registry is read-only gets a 405 and
@@ -217,13 +155,6 @@ spec:
                   fi
                   log "$pending blobs eligible; collecting"
 
-                  SYNCPOLICY="$(kubectl -n argocd get app "$APP" \
-                    -o jsonpath='{.spec.syncPolicy}' 2>/dev/null || true)"
-                  if [ -n "$SYNCPOLICY" ]; then
-                    log "suspending automated sync for $APP"
-                    kubectl -n argocd patch app "$APP" --type merge -p '{"spec":{"syncPolicy":null}}'
-                  fi
-
                   # The value must be the whole map as YAML, not a per-key env
                   # var: the env parser builds map[string]interface{} for nested
                   # keys, while handlers.NewApp asserts map[interface{}]interface{}
@@ -253,6 +184,10 @@ spec:
                   value: /certs/client.cert
                 - name: REGISTRY_KEY
                   value: /certs/client.key
+                - name: HOME
+                  value: /tmp
+                - name: KUBECTL_REMOTE_COMMAND_WEBSOCKETS
+                  value: 'false'
               volumeMounts:
                 - name: scripts
                   mountPath: /scripts
@@ -260,6 +195,8 @@ spec:
                 - name: tls
                   mountPath: /certs
                   readOnly: true
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 requests:
                   cpu: 50m
@@ -267,6 +204,12 @@ spec:
                 limits:
                   cpu: 500m
                   memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                readOnlyRootFilesystem: true
           volumes:
             - name: scripts
               configMap:
@@ -278,3 +221,13 @@ spec:
                 # registry no longer accepts the latter.
                 secretName: ci-tls-registry-client
                 defaultMode: 0440
+            - name: tmp
+              emptyDir: {}
+          automountServiceAccountToken: true
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            fsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault

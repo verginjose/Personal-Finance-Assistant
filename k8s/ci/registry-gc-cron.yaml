@@ -107,9 +107,15 @@ spec:
                   wait_rollout() {
                     deadline=$(( $(date +%s) + ${1:-180} ))
                     while [ "$(date +%s)" -lt "$deadline" ]; do
-                      want="$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.spec.replicas}' 2>/dev/null || true)"
-                      ready="$(kubectl -n "$NS" get deploy "$DEPLOY" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
-                      if [ -n "$want" ] && [ -n "$ready" ] && [ "$ready" = "$want" ]; then
+                      # Require the new generation, not a ready old pod before
+                      # the Deployment controller has observed the env change.
+                      if kubectl -n "$NS" get deploy "$DEPLOY" -o json 2>/dev/null | jq -e '
+                        .spec.replicas as $want |
+                        .status.observedGeneration >= .metadata.generation and
+                        .status.updatedReplicas == $want and
+                        .status.readyReplicas == $want and
+                        .status.availableReplicas == $want and
+                        .status.replicas == $want' >/dev/null; then
                         return 0
                       fi
                       sleep 2

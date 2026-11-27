@@ -294,6 +294,8 @@ kind: Deployment
 metadata:
   name: laptop-health
   namespace: pfa-system
+  annotations:
+    reloader.stakater.com/auto: 'true'
 spec:
   replicas: 1
   revisionHistoryLimit: 2
@@ -305,8 +307,6 @@ spec:
       labels:
         app: laptop-health
         app.kubernetes.io/part-of: personal-finance-assistant
-      annotations:
-        reloader.stakater.com/auto: 'true'
     spec:
       automountServiceAccountToken: true
       runtimeClassName: nvidia

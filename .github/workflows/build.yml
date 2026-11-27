@@ -48,11 +48,11 @@ env:
   CARGO_MIRROR_URL: https://cargo-proxy.pfa.svc.cluster.local:8443/cargo/index/
   BUILDKIT_HOST: tcp://buildkitd.pfa-system.svc.cluster.local:1234
   BUILDKIT_TLS_DIR: /certs
-  BUILDKIT_VERSION: v0.15.2
-  # SHA-256 of buildkit-v0.15.2.linux-amd64.tar.gz, and the GitHub release
+  BUILDKIT_VERSION: v0.35.1
+  # SHA-256 of buildkit-v0.35.1.linux-amd64.tar.gz, and the GitHub release
   # asset id used as a download fallback. Bump all three together.
-  BUILDCTL_SHA256: 59279df5853bef19a03ec15c5c31b772e59d91d079ab0221e1bafa023cf41c35
-  BUILDKIT_ASSET_ID: "186162870"
+  BUILDCTL_SHA256: b248c2b91698aafef11818fe8b681dc5e341581f7d5676709ff45ca1f29b0408
+  BUILDKIT_ASSET_ID: "769109644"
   ALL_SERVICES: auth-service edge-router command-service query-service frontend ocr-service
 
 jobs:
@@ -183,15 +183,23 @@ jobs:
             --tlskey "$BUILDKIT_TLS_DIR/client.key" \
             build \
             --progress plain \
+            --metadata-file "${SERVICE}.json" \
             --frontend dockerfile.v0 \
             --local context="./${SERVICE}" \
             --local dockerfile="./${SERVICE}" \
             --opt filename=Dockerfile \
             --opt build-arg:BASE_IMAGE_REGISTRY="${PUSH_REGISTRY}/base" \
             --opt build-arg:OCR_BASE="${PUSH_REGISTRY}/finance/ocr-base:cu126-py311-v1" \
-            --opt build-arg:CARGO_MIRROR_URL="${CARGO_MIRROR_URL}" \ \
+            --opt build-arg:CARGO_MIRROR_URL="${CARGO_MIRROR_URL}" \
             --secret id=ci_ca,src=/certs/ca.crt \
             --output "type=image,name=${PUSH_REGISTRY}/finance/${SERVICE}:${TAG},push=true"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: image-digest-${{ matrix.service }}
+          path: ${{ matrix.service }}.json
+          retention-days: 3
+          if-no-files-found: error
 
       - name: Reclaim cache for this build
         # The post-build GC runs ~1s after Solve returns, before the build's
@@ -254,6 +262,12 @@ jobs:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: image-digest-*
+          path: image-digests
+          merge-multiple: true
+
       - name: Propose the tag bump and open a pull request
         id: promotion
         env:
@@ -265,10 +279,11 @@ jobs:
           BRANCH="ci/tag-bump-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
           for svc in $(echo "$SERVICES" | jq -r '.[]'); do
+            digest="$(jq -er '.["containerimage.digest"] | select(test("^sha256:[a-f0-9]{64}$"))' "image-digests/${svc}.json")"
             file="k8s/apps/${svc}.yaml"
-            sed -i -E "s#(image: ).*finance/${svc}:.*#\1${PULL_REGISTRY}/finance/${svc}:${TAG}#" "$file"
+            sed -i -E "s#(image: ).*finance/${svc}:.*#\1${PULL_REGISTRY}/finance/${svc}:${TAG}@${digest}#" "$file"
             if [[ "$svc" == "auth-service" ]]; then
-              sed -i -E "s#(image: ).*finance/auth-service:.*#\1${PULL_REGISTRY}/finance/auth-service:${TAG}#" k8s/apps/storage-service.yaml
+              sed -i -E "s#(image: ).*finance/auth-service:.*#\1${PULL_REGISTRY}/finance/auth-service:${TAG}@${digest}#" k8s/apps/storage-service.yaml
             fi
             if [[ "$svc" == "ocr-service" ]]; then
               # Activate /ready together with the new image that provides it.

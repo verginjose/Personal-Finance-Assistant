@@ -77,7 +77,7 @@ spec:
       # and a container restart always finds a fresh token.
       initContainers:
         - name: mint-registration-token
-          image: myoung34/github-runner:2.338.2-ubuntu-jammy
+          image: myoung34/github-runner:2.338.2-ubuntu-jammy@sha256:9944eb7fe15cff8f31ce6389a1cd39f5fb32627f56bdfa8a21fb27e56e99fa1a
           imagePullPolicy: IfNotPresent
           # Native sidecar (k8s >= 1.29): starts before the runner and stays up.
           restartPolicy: Always
@@ -133,7 +133,7 @@ spec:
               mountPath: /runner-registration
       containers:
         - name: runner
-          image: myoung34/github-runner:2.338.2-ubuntu-jammy
+          image: myoung34/github-runner:2.338.2-ubuntu-jammy@sha256:9944eb7fe15cff8f31ce6389a1cd39f5fb32627f56bdfa8a21fb27e56e99fa1a
           imagePullPolicy: IfNotPresent
           # Registration and job execution both run as the unprivileged runner.
           securityContext:

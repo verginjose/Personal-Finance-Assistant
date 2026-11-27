@@ -610,3 +610,16 @@ Verify these boundaries without changing Deployments or application data:
 ```bash
 python3 scripts/verify-registry-gc-boundaries.py --kubeconfig "$HOME/.kube/k3s.yaml"
 ```
+
+PostgreSQL certificates are issued for one year. Keep the private CA and server
+material in the ignored `.certs/postgres/` directory with a private backup. Renew
+before the final 30 days using `python3 scripts/provision-postgres-tls.py --renew`;
+commit its SealedSecret and public CA output, merge, then verify primary and
+replica rollouts and `pg_stat_ssl`. Ordinary renewal retains the CA, so client
+trust does not change. A CA replacement requires a separate staged trust rollout.
+
+External runtime images are digest-pinned. When updating a version, resolve its
+vendor digest and review the scheduled security scan. Service builds publish
+BuildKit digest metadata as run artifacts; promotion retains the source tag and
+adds its immutable digest. Registry retention also preserves every deployed tag,
+including `tag@digest` references, before collecting old builds.

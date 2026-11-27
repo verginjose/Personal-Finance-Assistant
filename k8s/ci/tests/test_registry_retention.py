@@ -22,7 +22,7 @@ else:
 
 
 class RegistryRetentionTests(unittest.TestCase):
-    def run_retention(self, dates, index=False):
+    def run_retention(self, dates, index=False, protected=""):
         fixtures = {'': {}, '_catalog': {'repositories': ['finance/auth-service']},
                     'finance/auth-service/tags/list': {'tags': list(dates)}}
         for tag, date in dates.items():
@@ -41,7 +41,7 @@ class RegistryRetentionTests(unittest.TestCase):
             env = dict(os.environ, PATH=folder + os.pathsep + os.environ['PATH'],
                        REGISTRY='https://registry.invalid', REGISTRY_CA='unused',
                        REGISTRY_CERT='unused', REGISTRY_KEY='unused',
-                       REGISTRY_FIXTURES=json.dumps(fixtures))
+                       REGISTRY_FIXTURES=json.dumps(fixtures), REGISTRY_PROTECTED_IMAGES=protected)
             result = subprocess.run(['bash', str(HELPER), '--dry-run', '--retention-only',
                                      '--keep=2'], env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -57,6 +57,14 @@ class RegistryRetentionTests(unittest.TestCase):
                 self.assertIn('delete finance/auth-service:oldest ', output)
                 self.assertNotIn('delete finance/auth-service:fresh ', output)
                 self.assertNotIn('delete finance/auth-service:previous ', output)
+
+    def test_keeps_deployed_digest_pinned_tag_beyond_retention(self):
+        output = self.run_retention({'old': '2026-11-20T10:00:00Z',
+                                    'previous': '2026-11-26T10:00:00Z',
+                                    'fresh': '2026-11-27T10:00:00Z'},
+            protected='127.0.0.1:30500/finance/auth-service:old@sha256:' + 'a'*64)
+        self.assertIn('keep finance/auth-service:old (deployed)', output)
+        self.assertNotIn('delete finance/auth-service:old ', output)
 
     def test_negative_offset_is_converted_to_utc(self):
         output = self.run_retention({'oldest': '2026-11-26T10:00:00Z',

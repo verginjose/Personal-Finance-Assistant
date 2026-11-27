@@ -4,38 +4,95 @@ metadata:
   name: grafana-datasources
   namespace: pfa
 data:
-  redis.yml: "apiVersion: 1\n\n# Redis datasource for the \"Data \u2014 Postgres &\
-    \ Redis\" dashboard. Uses the\n# redis-datasource plugin installed by GF_INSTALL_PLUGINS\
-    \ in the Grafana\n# Deployment, so panels can run DBSIZE / INFO / SCAN against\
-    \ the live server\n# instead of relying on an exporter's precomputed metrics.\n\
-    #\n# The password is injected from the redis-secrets Secret into the Grafana\n\
-    # environment and resolved by Grafana at provisioning time.\ndatasources:\n  -\
-    \ name: Redis\n    type: redis-datasource\n    uid: redis-ds\n    access: proxy\n\
-    \    editable: true\n    url: redis://redis:6379\n    jsonData:\n      client:\
-    \ standalone\n      addr: redis:6379\n      poolSize: 4\n      timeout: 10\n \
-    \     pingInterval: 0\n      pipelineWindow: 0\n    secureJsonData:\n      password:\
-    \ $__env{REDIS_PASSWORD}\n"
-  postgres.yml: "apiVersion: 1\n\n# Read-only Postgres datasource used by the \"Data\
-    \ \u2014 Postgres & Redis\"\n# dashboard. It points at the PRIMARY on purpose:\
-    \ PostgreSQL's statistics\n# collector is per-instance and is not replicated,\
-    \ so on the standby\n# pg_stat_user_tables.n_live_tup is 0 and cache/scan figures\
-    \ are meaningless.\n# Every panel is a SELECT on lightweight catalog/statistics\
-    \ views.\n#\n# Credentials come from the Grafana Deployment's environment, which\
-    \ is fed\n# from the postgres-secrets Secret (see k8s/infrastructure/grafana.yaml).\n\
-    # $__env{} is resolved by Grafana at provisioning time, so no password is\n# stored\
-    \ in this file.\ndatasources:\n  - name: Postgres\n    type: postgres\n    uid:\
-    \ postgres-ds\n    access: proxy\n    editable: true\n    url: postgres-primary:5432\n\
-    \    database: $__env{POSTGRES_DS_DB}\n    user: $__env{POSTGRES_DS_USER}\n  \
-    \  jsonData:\n      sslmode: verify-full\n      tlsConfigurationMethod: file-path\n\
-    \      sslRootCertFile: /etc/postgres-ca/ca.crt\n      maxOpenConns: 4\n     \
-    \ maxIdleConns: 2\n      connMaxLifetime: 14400\n      postgresVersion: 1500\n\
-    \      timescaledb: false\n    secureJsonData:\n      password: $__env{POSTGRES_DS_PASSWORD}\n"
-  clickhouse.yml: "apiVersion: 1\n\ndatasources:\n  - name: ClickHouse\n    type:\
-    \ grafana-clickhouse-datasource\n    uid: clickhouse-ds\n    access: proxy\n \
-    \   editable: true\n    jsonData:\n      host: clickhouse\n      port: 8123\n\
-    \      protocol: http\n      defaultDatabase: default\n      username: default\n\
-    \      tlsSkipVerify: true\n    secureJsonData:\n      password: $__env{CLICKHOUSE_PASSWORD}\n"
-  prometheus.yml: "apiVersion: 1\n\ndatasources:\n  - name: Prometheus\n    type:\
-    \ prometheus\n    uid: prometheus-ds\n    access: proxy\n    url: http://prometheus:9090\n\
-    \    isDefault: true\n    editable: true\n    jsonData:\n      httpMethod: POST\n\
-    \      timeInterval: 15s\n"
+  redis.yml: |
+    apiVersion: 1
+
+    # Redis datasource for the "Data — Postgres & Redis" dashboard. Uses the
+    # redis-datasource plugin installed by GF_INSTALL_PLUGINS in the Grafana
+    # Deployment, so panels can run DBSIZE / INFO / SCAN against the live server
+    # instead of relying on an exporter's precomputed metrics.
+    #
+    # The password is injected from the redis-secrets Secret into the Grafana
+    # environment and resolved by Grafana at provisioning time.
+    datasources:
+      - name: Redis
+        type: redis-datasource
+        uid: redis-ds
+        access: proxy
+        editable: true
+        url: redis://redis:6379
+        jsonData:
+          client: standalone
+          addr: redis:6379
+          poolSize: 4
+          timeout: 10
+          pingInterval: 0
+          pipelineWindow: 0
+        secureJsonData:
+          password: $__env{REDIS_PASSWORD}
+  postgres.yml: |
+    apiVersion: 1
+
+    # Read-only Postgres datasource used by the "Data — Postgres & Redis"
+    # dashboard. It points at the PRIMARY on purpose: PostgreSQL's statistics
+    # collector is per-instance and is not replicated, so on the standby
+    # pg_stat_user_tables.n_live_tup is 0 and cache/scan figures are meaningless.
+    # Every panel is a SELECT on lightweight catalog/statistics views.
+    #
+    # Credentials come from the Grafana Deployment's environment, which is fed
+    # from the postgres-grafana-secrets Secret (see k8s/infrastructure/grafana.yaml).
+    # $__env{} is resolved by Grafana at provisioning time, so no password is
+    # stored in this file.
+    datasources:
+      - name: Postgres
+        type: postgres
+        uid: postgres-ds
+        access: proxy
+        editable: true
+        url: postgres-primary:5432
+        database: $__env{POSTGRES_DS_DB}
+        user: $__env{POSTGRES_DS_USER}
+        jsonData:
+          database: $__env{POSTGRES_DS_DB}
+          sslmode: verify-full
+          tlsConfigurationMethod: file-path
+          sslRootCertFile: /etc/postgres-ca/ca.crt
+          maxOpenConns: 4
+          maxIdleConns: 2
+          connMaxLifetime: 14400
+          postgresVersion: 1500
+          timescaledb: false
+        secureJsonData:
+          password: $__env{POSTGRES_DS_PASSWORD}
+  clickhouse.yml: |
+    apiVersion: 1
+
+    datasources:
+      - name: ClickHouse
+        type: grafana-clickhouse-datasource
+        uid: clickhouse-ds
+        access: proxy
+        editable: true
+        jsonData:
+          host: clickhouse
+          port: 8123
+          protocol: http
+          defaultDatabase: default
+          username: default
+          tlsSkipVerify: true
+        secureJsonData:
+          password: $__env{CLICKHOUSE_PASSWORD}
+  prometheus.yml: |
+    apiVersion: 1
+
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus-ds
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: true
+        jsonData:
+          httpMethod: POST
+          timeInterval: 15s

@@ -80,7 +80,7 @@ spec:
             - name: gc
               # Pinned to the cluster's minor version; `registry` is not needed
               # here because garbage-collect runs inside the registry pod.
-              image: alpine/k8s:1.36.5
+              image: alpine/k8s:1.36.5@sha256:094adf64cdc4827377cdbe7ea5747472ce115f9fbc64a4e35970ec66777f9a00
               command: ["/bin/sh", "-c"]
               args:
                 - |

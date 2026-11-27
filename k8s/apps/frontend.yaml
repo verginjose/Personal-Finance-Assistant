@@ -41,7 +41,7 @@ spec:
         # nginx resolves proxy_pass upstreams once at startup; wait until the
         # gateway Service exists so the first boot does not crash-loop.
         - name: wait-for-edge
-          image: busybox:1.36
+          image: busybox:1.36@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true
@@ -58,7 +58,7 @@ spec:
           command: ["sh", "-c", "until nslookup edge-router.pfa.svc.cluster.local >/dev/null 2>&1; do echo waiting for edge-router; sleep 2; done"]
       containers:
         - name: frontend
-          image: 127.0.0.1:30500/finance/frontend:624de1ad7b0f
+          image: 127.0.0.1:30500/finance/frontend:624de1ad7b0f@sha256:33c2f57a10614a4cad39c3d658d6ab4090b52acf16fdd79444875797f365b0db
           imagePullPolicy: IfNotPresent
           # nginx:alpine's nginx user. Port 80 needs NET_BIND_SERVICE, which
           # Restricted PSA allows as the only added capability once ALL is

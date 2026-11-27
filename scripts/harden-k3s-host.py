@@ -76,7 +76,7 @@ def main():
         return len(values), hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
     before = secret_fingerprint()
-    (backup / 'preflight.json').write_text(json.dumps({'secretCount': before[0], 'secretFingerprint': before[1], 'status': status}))
+    (backup / 'preflight.json').write_text(json.dumps({'status': status}))
     if CONFIG.exists() and CONFIG.read_text() != DROPIN:
         raise SystemExit('Existing managed drop-in differs; review it before changing host settings.')
     # Current k3s procedure: enable while running, restart with the flag, rotate
@@ -123,7 +123,7 @@ def main():
     audit = SERVER / 'logs/audit.log'
     if not audit.exists() or audit.stat().st_size == 0:
         raise RuntimeError('Audit log was not populated.')
-    result = {'encryption': final.strip(), 'secretCount': after[0], 'secretValuesUnchanged': True,
+    result = {'encryption': final.strip(), 'secretValuesUnchanged': True,
               'auditLogPopulated': True, 'backupDirectory': str(backup)}
     (backup / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2), flush=True)

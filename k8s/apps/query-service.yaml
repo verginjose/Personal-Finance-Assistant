@@ -94,6 +94,10 @@ spec:
           # total ~5 MiB), so 256Mi leaves ample headroom for the sqlx pool
           # and streamed CSV exports. The old Spring numbers (512Mi request /
           # 3Gi limit) reserved memory it never used.
+            - name: PGSSLMODE
+              value: verify-full
+            - name: PGSSLROOTCERT
+              value: /etc/postgres-ca/ca.crt
           resources:
             requests:
               cpu: 250m
@@ -124,6 +128,12 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: postgres-ca
+          configMap:
+            name: postgres-ca

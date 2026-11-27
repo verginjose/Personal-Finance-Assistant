@@ -103,6 +103,20 @@ merged_envfile() {  # service -> path on stdout
   }
   _read_env "${file}"
   [[ -f "${ROOT_DIR}/env/${svc}.local.env" ]] && _read_env "${ROOT_DIR}/env/${svc}.local.env"
+  # Application identities must never inherit the PostgreSQL administrator.
+  local scope=""
+  case "${svc}" in
+    auth-service) scope=AUTH ;;
+    command-service) scope=COMMAND ;;
+    query-service) scope=QUERY ;;
+  esac
+  if [[ -n "${scope}" ]]; then
+    for key in DB_USER DB_PASSWORD; do
+      val="$(sed -n "s/^${scope}_${key}=//p" "${ENV_FILE}" | tail -n 1)"
+      [[ -n "${val}" ]] || { echo "${scope}_${key} is required for scoped database access" >&2; exit 1; }
+      kv["${key}"]="${val}"
+    done
+  fi
   for key in "${!kv[@]}"; do printf '%s=%s\n' "${key}" "${kv[${key}]}" >> "${out}"; done
   echo "${out}"
 }
@@ -124,6 +138,24 @@ seal_envkeys() {  # name key...
   seal_envfile "${name}" "${tmp}"
   rm -f "${tmp}"
 }
+
+seal_scoped_database() {  # Secret name, .env prefix
+  local name="$1" prefix="$2" tmp value key
+  tmp="$(mktemp)"
+  for key in DB_NAME DB_USER DB_PASSWORD; do
+    if [[ "$key" == DB_NAME ]]; then
+      value="$(sed -n 's/^DB_NAME=//p' "${ENV_FILE}" | tail -n 1)"
+    else
+      value="$(sed -n "s/^${prefix}_${key}=//p" "${ENV_FILE}" | tail -n 1)"
+    fi
+    [[ -n "$value" ]] || { echo "Missing scoped credential for $name" >&2; rm -f "$tmp"; exit 1; }
+    printf '%s=%s\n' "$key" "$value" >> "$tmp"
+  done
+  seal_envfile "$name" "$tmp"
+  rm -f "$tmp"
+}
+if wanted postgres-replica-secrets; then seal_scoped_database postgres-replica-secrets REPLICATION; fi
+if wanted postgres-grafana-secrets; then seal_scoped_database postgres-grafana-secrets GRAFANA; fi
 
 # 1. One Secret per infrastructure workload group, containing only the keys
 #    that group consumes. Replaces the old catch-all pfa-secrets.

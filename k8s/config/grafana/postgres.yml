@@ -20,7 +20,9 @@ datasources:
     database: $__env{POSTGRES_DS_DB}
     user: $__env{POSTGRES_DS_USER}
     jsonData:
-      sslmode: disable
+      sslmode: verify-full
+      tlsConfigurationMethod: file-path
+      sslRootCertFile: /etc/postgres-ca/ca.crt
       maxOpenConns: 4
       maxIdleConns: 2
       connMaxLifetime: 14400

@@ -62,13 +62,13 @@ spec:
             # single source; the provisioning file only references these names.
             - name: POSTGRES_DS_DB
               valueFrom:
-                secretKeyRef: {name: postgres-secrets, key: DB_NAME}
+                secretKeyRef: {name: postgres-grafana-secrets, key: DB_NAME}
             - name: POSTGRES_DS_USER
               valueFrom:
-                secretKeyRef: {name: postgres-secrets, key: DB_USER}
+                secretKeyRef: {name: postgres-grafana-secrets, key: DB_USER}
             - name: POSTGRES_DS_PASSWORD
               valueFrom:
-                secretKeyRef: {name: postgres-secrets, key: DB_PASSWORD}
+                secretKeyRef: {name: postgres-grafana-secrets, key: DB_PASSWORD}
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef: {name: redis-secrets, key: REDIS_PASSWORD}
@@ -112,6 +112,9 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -155,6 +158,9 @@ spec:
             name: grafana-dashboards
         - name: tmp
           emptyDir: {}
+        - name: postgres-ca
+          configMap:
+            name: postgres-ca
       automountServiceAccountToken: false
 ---
 apiVersion: v1

@@ -121,8 +121,8 @@ argocd/apps/40-edge.yaml      → k8s/edge              (ingress)
 ```
 
 The `sync-wave` annotation on each child only orders their creation; after that
-each reconciles independently. All children use `prune: false` and
-`selfHeal: true`.
+each reconciles independently. The root and all children use `prune: true`
+and `selfHeal: true`.
 
 **Still outside Argo**, and applied by `./k8s/apply.sh`:
 
@@ -193,8 +193,9 @@ Caveats:
 
 - **Argo `selfHeal` reverts manual image edits.** Hot-patching an image without
   committing the tag in `k8s/apps/` is undone on the next sync.
-- **Argo does not prune** (`prune: false`): deleting a file under `k8s/apps/`
-  leaves the live resource running.
+- **Argo automatically prunes** (`prune: true`): removing a managed resource
+  from Git deletes it from the cluster on the next sync. Bootstrap resources
+  outside Argo tracking are not affected.
 - **CI ignores `**.md` and `k8s/ci/**`** in `paths-ignore`, so doc-only pushes
   do not trigger a run.
 - **Init SQL is first-boot only.** `postgres-init` and `clickhouse-init` are

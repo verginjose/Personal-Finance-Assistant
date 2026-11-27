@@ -11,8 +11,8 @@
 # Afterwards each child reconciles on its own, which is fine: services retry
 # until their dependencies are ready.
 #
-# prune stays false. Deleting an Application with cascade deletes the
-# resources it owns, and this tree now contains the stateful data layer.
+# Automatic pruning removes managed resources deleted from Git. The root
+# reconciles child Application definitions; each child prunes its own layer.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -31,7 +31,7 @@ spec:
     namespace: argocd
   syncPolicy:
     automated:
-      prune: false
+      prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=false

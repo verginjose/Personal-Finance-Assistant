@@ -187,7 +187,7 @@ rule matches `finance/ocr-base` specifically.
 
 ## Deployment: Argo CD
 
-Argo CD watches `k8s/apps` on `master` and syncs automatically (no prune,
+Argo CD watches `k8s/apps` on `master` and syncs automatically (auto-prune,
 `selfHeal: true`). Set it up with:
 
 ```bash

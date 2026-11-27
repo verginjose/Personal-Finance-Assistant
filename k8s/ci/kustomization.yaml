@@ -29,7 +29,6 @@ configMapGenerator:
     files:
       - registry-gc.sh
     options:
-      # No name-suffix hash: the CronJob re-reads the file on every run, and
-      # pfa-ci syncs with prune: false, so a hash would leave one orphaned
-      # ConfigMap behind per edit.
+      # Keep the mounted ConfigMap name stable: the CronJob re-reads this
+      # file on every run, so script edits do not require a new template.
       disableNameSuffixHash: true

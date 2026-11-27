@@ -21,9 +21,9 @@ for name in names:
         if line.startswith(('---', '+++')) or not line.startswith(('+', '-')):
             continue
         value = line[1:].strip()
-        image = re.fullmatch(r'image: 127\.0\.0\.1:30500/finance/' + re.escape('auth-service' if match[1] == 'storage-service' else match[1]) + r':[a-f0-9]{12}', value)
+        image = re.fullmatch(r'image: 127\.0\.0\.1:30500/finance/' + re.escape('auth-service' if match[1] == 'storage-service' else match[1]) + r':[a-f0-9]{12}(?:@sha256:[a-f0-9]{64})?', value)
         probe = match[1] == 'ocr-service' and value in ('path: /health', 'path: /ready')
         if not image and not probe:
             raise SystemExit('Refusing to approve unexpected manifest edits')
-        if source and line.startswith('+') and image and not value.endswith(':' + source[:12]):
+        if source and line.startswith('+') and image and not value.split('@', 1)[0].endswith(':' + source[:12]):
             raise SystemExit('Promotion image does not match the successful build source')

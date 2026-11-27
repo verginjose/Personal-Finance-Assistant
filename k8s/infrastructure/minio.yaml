@@ -44,7 +44,7 @@ spec:
           # The official `minio/minio` Docker Hub repo was removed and Quay now
           # requires auth. pgsty/minio is a maintained fork with the same
           # entrypoint and MinIO-compatible API.
-          image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+          image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
           imagePullPolicy: IfNotPresent
           args: ["server", "/data", "--console-address", ":9001"]
           env:
@@ -99,7 +99,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       initContainers:
         - name: volume-permissions
-          image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+          image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
           command:
             - /bin/sh
             - -c

@@ -1,0 +1,81 @@
+name: security-inventory
+on:
+  schedule:
+    - cron: '35 3 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Scan dependency lockfiles
+        uses: aquasecurity/trivy-action@38b337fff0a2f984d5be173c99e3f633438167ec
+        with:
+          version: v0.76.2
+          scan-type: fs
+          scanners: vuln
+          format: sarif
+          output: dependencies.sarif
+      - uses: github/codeql-action/upload-sarif@bf58c2ac1f8060aa73f1225f461c80391348076a
+        with:
+          sarif_file: dependencies.sarif
+          category: dependency-inventory
+      - name: Generate a dependency SBOM
+        uses: aquasecurity/trivy-action@38b337fff0a2f984d5be173c99e3f633438167ec
+        with:
+          version: v0.76.2
+          scan-type: fs
+          format: cyclonedx
+          output: dependencies.cdx.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dependency-sbom
+          path: dependencies.cdx.json
+          retention-days: 30
+  discover-images:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.discover.outputs.images }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - id: discover
+        shell: python
+        run: |
+          import json, os, pathlib, re
+          images = set()
+          for folder in ['apps', 'infrastructure', 'system', 'ci', 'optional', 'reloader']:
+              for path in (pathlib.Path('k8s') / folder).glob('*.yaml'):
+                  for ref in re.findall(r'^\s*(?:- )?image:\s*"?([^\s"\n]+)', path.read_text(), re.M):
+                      if '@sha256:' in ref and not ref.startswith('127.0.0.1:'):
+                          images.add(ref)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('images=' + json.dumps(sorted(images)) + '\n')
+  images:
+    needs: discover-images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        image: ${{ fromJSON(needs.discover-images.outputs.images) }}
+    steps:
+      - name: Scan the pinned public image
+        uses: aquasecurity/trivy-action@38b337fff0a2f984d5be173c99e3f633438167ec
+        with:
+          version: v0.76.2
+          image-ref: ${{ matrix.image }}
+          scanners: vuln
+          format: sarif
+          output: image.sarif
+          timeout: 15m
+      - uses: github/codeql-action/upload-sarif@bf58c2ac1f8060aa73f1225f461c80391348076a
+        with:
+          sarif_file: image.sarif
+          category: image-${{ matrix.image }}

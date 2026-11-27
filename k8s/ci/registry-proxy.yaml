@@ -131,7 +131,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: nginx
-          image: 127.0.0.1:30500/base/nginx:alpine
+          image: 127.0.0.1:30500/base/nginx:alpine@sha256:697b0b156c70b91130853fd0675c6be36665939d5f93dce2686be04b4c3f98a8
           imagePullPolicy: IfNotPresent
           # Skip the image entrypoint: it writes to /etc/nginx, which is
           # read-only here.

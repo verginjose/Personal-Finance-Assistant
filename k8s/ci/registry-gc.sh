@@ -157,6 +157,18 @@ drop_tag_link() {  # repo tag -> remove the tag link directory
     rm -rf "${STORAGE_ROOT}/docker/registry/v2/repositories/$1/_manifests/tags/$2"
 }
 
+# A running or rolling-back workload may still use a tag older than the two
+# newest builds. Keep those manifests (and their tag links), including tag@digest
+# references. Fail closed if the cluster inventory cannot be read.
+if [[ -v REGISTRY_PROTECTED_IMAGES ]]; then
+  protected_images="$REGISTRY_PROTECTED_IMAGES"
+else
+  protected_images="$(kubectl -n "$NS" get pods -o json | jq -er '[.items[].spec | (.containers[]?, .initContainers[]?) | .image] | join("\n")')" \
+    || { echo "Cannot inventory deployed images; refusing retention" >&2; exit 1; }
+fi
+printf '%s\n' "$protected_images" | sed 's/@.*//' > "$TMP/protected-images"
+protected_tag() { grep -qFx "127.0.0.1:30500/$1:$2" "$TMP/protected-images"; }
+
 echo "==> Pruning tags (keep ${KEEP} per repository)"
 # Only finance/* - CI's immutable per-build tags. The registry also holds the
 # mirrored Docker Hub base images under base/* (k8s/ci/mirror-base-images.sh);
@@ -171,6 +183,10 @@ rcurl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[] | select(startswit
   for tag in ${tags}; do
     digest="$(manifest_digest "${repo}" "${tag}")"
     if [[ -z "${digest}" ]]; then
+      if protected_tag "$repo" "$tag"; then
+        echo "    keep ${repo}:${tag} (deployed)"
+        continue
+      fi
       if [[ "${HAVE_KUBECTL}" == false ]]; then
         # No cluster access (CI runner): the tag link can only be removed from
         # the registry's filesystem, so leave it for the periodic GC job.
@@ -204,9 +220,16 @@ rcurl -fsS "${REGISTRY}/v2/_catalog" | jq -r '.repositories[] | select(startswit
   # the image the build just pushed. That is how command-service:cc1ea84aab75
   # disappeared one second after BuildKit pushed it (2026-11-07 13:23:01).
   sort -r "${TMP}/tags" > "${TMP}/sorted"
-  kept_digests="$(head -n "${KEEP}" "${TMP}/sorted" | awk '{print $3}' | sort -u)"
+  { head -n "$KEEP" "$TMP/sorted"; while read -r created tag digest; do
+      if protected_tag "$repo" "$tag"; then printf '%s %s %s\n' "$created" "$tag" "$digest"; fi
+    done < "$TMP/sorted"; } > "$TMP/kept"
+  kept_digests="$(awk '{print $3}' "$TMP/kept" | sort -u)"
 
   tail -n +"$((KEEP + 1))" "${TMP}/sorted" | while read -r _ tag digest; do
+    if protected_tag "$repo" "$tag"; then
+      echo "    keep ${repo}:${tag} (deployed)"
+      continue
+    fi
     if printf '%s\n' "${kept_digests}" | grep -qxF "${digest}"; then
       # Retire the tag link only. Without cluster access (the CI runner) there
       # is no way to remove a single tag over HTTP, so leave it: harmless, and

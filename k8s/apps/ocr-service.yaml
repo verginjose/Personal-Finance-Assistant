@@ -87,7 +87,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: ocr-service
-          image: 127.0.0.1:30500/finance/ocr-service:6888b3f5f651
+          image: 127.0.0.1:30500/finance/ocr-service:6888b3f5f651@sha256:c75c4319cc9c13f0cf13d2e859832af3a8ffa0c0b8b45e48cbbb9dd6a8cbbf98
           imagePullPolicy: IfNotPresent
           # Stays root: PaddleOCR keeps its model cache under /root/.paddleocr
           # (the PVC below) and the CUDA stack expects a root home. The rest is

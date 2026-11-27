@@ -51,7 +51,8 @@ class AutoMergeTests(unittest.TestCase):
             git('commit', '-qm', 'source')
             source = git('rev-parse', 'HEAD')
             tag = 'bbbbbbbbbbbb' if case == 'wrong_image' else source[:12]
-            path.write_text(f'image: 127.0.0.1:30500/finance/ocr-service:{tag}\n')
+            digest = '@sha256:' + 'c'*64 if case == 'digest' else ('@sha256:bad' if case == 'bad_digest' else '')
+            path.write_text(f'image: 127.0.0.1:30500/finance/ocr-service:{tag}{digest}\n')
             if case == 'source_edit':
                 (root / 'source.py').write_text('print("unexpected")\n')
             git('add', '.')
@@ -79,6 +80,11 @@ class AutoMergeTests(unittest.TestCase):
         self.assertIn('mergeMethod:MERGE', request['query'])
         self.assertNotIn('test-token', result.stdout + result.stderr)
 
+    def test_accepts_digest_pinned_build(self):
+        result, request = self.run_case('digest')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNotNone(request)
+
     def test_already_enabled_is_success(self):
         result, request = self.run_case('already_enabled')
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -86,7 +92,7 @@ class AutoMergeTests(unittest.TestCase):
 
     def test_rejects_unvalidated_or_unready_promotions(self):
         for case in ('source_edit', 'wrong_image', 'changed_head', 'human_pr',
-                     'wrong_branch', 'fork', 'extra_commits'):
+                     'wrong_branch', 'fork', 'extra_commits', 'bad_digest'):
             with self.subTest(case=case):
                 result, request = self.run_case(case)
                 self.assertNotEqual(result.returncode, 0, result.stdout)

@@ -233,8 +233,8 @@ spec:
               cpu: 500m
               memory: 1Gi
             limits:
-              # Laptop health takes priority over build speed.
-              cpu: "2"
+              # Four cores for compilation; one build task at a time.
+              cpu: "4"
               memory: 3Gi
       volumes:
         - name: config

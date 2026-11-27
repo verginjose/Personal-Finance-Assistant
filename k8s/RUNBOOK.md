@@ -363,14 +363,23 @@ the previous parse finishes. No ledger transaction is created from parsed
 receipts. Ordinary scenario writes and synthetic accounts persist; a clean
 production reset must run after validation if an empty deployment is required.
 
-The guard requires 60 continuous seconds at or below 65°C CPU, 55°C GPU, 60°C
+The guard requires 60 measured cool seconds at or below 65°C CPU, 55°C GPU, 60°C
 SSD, at least 8 GiB available RAM and at most 50% CPU before launching traffic.
 It refuses to start if these conditions are not met within two minutes.
-During the run it samples every half-second and immediately aborts at 78°C
-CPU, 65°C GPU, 70°C SSD, 80% host CPU, less than 6 GiB available RAM, active
-swap-out, or full memory pressure above 1%. Missing/invalid sensors or telemetry
-older than three seconds also stop the run. The hard run ceiling is ten minutes;
-thresholds cannot be relaxed through workflow inputs or CLI flags.
+Brief temperature excursions pause this clock; confirmed heat resets it.
+During the run it samples every half-second. Temperatures at/above 78°C CPU or
+65°C GPU must persist for two seconds; SSD at/above 70°C must persist for five
+seconds. Confirmation uses distinct sensor timestamps, so fetching the same
+reading again cannot confirm heat. Isolated warnings and their clearance are
+recorded, with UTC timestamps and the last 120 readings retained in the report.
+The client and independent server watchdog use the same confirmation policy.
+
+Critical readings stop immediately: CPU 85°C, GPU 75°C or SSD 82°C. Host CPU at
+80%, available RAM below 6 GiB, active swap-out, memory PSI full above 1%, and
+missing/invalid/stale (>3s) telemetry also stop immediately. A server watchdog
+trip remains latched so the client stops even if the next temperature is cool.
+The hard run ceiling remains ten minutes; workflow/CLI inputs cannot relax the
+limits. Builds use four CPU cores with one BuildKit task at a time.
 
 An armed telemetry service independently watches these limits and can only
 patch the `ocr-service` replica count, using narrowly scoped RBAC. A trip pauses

@@ -161,7 +161,7 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/buildctl" --version
 
-      - name: Build and push (two services in parallel)
+      - name: Build and push selected images (up to two in parallel)
         run: python3 k8s/ci/build-services.py --services "$SERVICES" --jobs 2
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

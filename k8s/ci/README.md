@@ -30,6 +30,13 @@ There is no plaintext listener left in the chain.
 The build itself is unchanged: the same Dockerfiles run, so the Rust services
 still compile with Cargo inside the image.
 
+The **Build and push selected images** Actions step lists each image tag before
+starting. BuildKit output is prefixed with the service name, and a successful
+step summary lists each pushed image with its digest. The runner uses one
+workflow job with two concurrent BuildKit requests, so the Actions page keeps
+the shared runner visible while the step log shows which images are building.
+The larger OCR image is built after those requests finish.
+
 ## One-time setup
 
 ### 1. Generate the mTLS material

@@ -26,6 +26,9 @@ def build_images(services, env, root, output, jobs=2, executable='buildctl'):
     registry, tls = env['PUSH_REGISTRY'], env['BUILDKIT_TLS_DIR']
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
+    print(f'Build plan: {len(services)} image(s), concurrency={jobs}', flush=True)
+    for service in services:
+        print(f'Queued image: {registry}/finance/{service}:{source[:12]}', flush=True)
     processes = set()
     process_lock, output_lock = threading.Lock(), threading.Lock()
     stop = threading.Event()
@@ -50,6 +53,8 @@ def build_images(services, env, root, output, jobs=2, executable='buildctl'):
     def build(service):
         if stop.is_set():
             return False
+        image = f'{registry}/finance/{service}:{source[:12]}'
+        print(f'[{service}] Starting image build: {image}', flush=True)
         metadata = output / f'{service}.json'
         metadata.unlink(missing_ok=True)
         command = [executable, '--tlscacert', f'{tls}/ca.crt',
@@ -76,13 +81,17 @@ def build_images(services, env, root, output, jobs=2, executable='buildctl'):
             for line in process.stdout:
                 with output_lock:
                     print(f'[{service}] {line.rstrip()}', flush=True)
-            if process.wait() != 0:
+            exit_code = process.wait()
+            if exit_code != 0:
                 metadata.unlink(missing_ok=True)
+                print(f'[{service}] Image build failed (exit {exit_code})', flush=True)
                 return False
             digest = json.loads(metadata.read_text()).get('containerimage.digest', '')
             if not re.fullmatch(r'sha256:[a-f0-9]{64}', digest):
                 metadata.unlink(missing_ok=True)
+                print(f'[{service}] Build completed without a valid image digest', flush=True)
                 return False
+            print(f'[{service}] Pushed image: {image}@{digest}', flush=True)
             return True
         finally:
             process.stdout.close()
@@ -99,6 +108,14 @@ def build_images(services, env, root, output, jobs=2, executable='buildctl'):
             return 1
         if 'ocr-service' in services and not build('ocr-service'):
             return 1
+        summary = env.get('GITHUB_STEP_SUMMARY')
+        if summary:
+            lines = ['## Images built', '', '| Service | Image |', '| --- | --- |']
+            for service in services:
+                digest = json.loads((output / f'{service}.json').read_text())['containerimage.digest']
+                lines.append(f'| `{service}` | `{registry}/finance/{service}:{source[:12]}@{digest}` |')
+            with open(summary, 'a', encoding='utf-8') as stream:
+                stream.write('\n'.join(lines) + '\n')
         return 0
     finally:
         for sig, handler in previous.items():

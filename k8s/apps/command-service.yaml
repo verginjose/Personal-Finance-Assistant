@@ -65,7 +65,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: command-service
-          image: 127.0.0.1:30500/finance/command-service:7e46f5ee3d70@sha256:f74701fe44f0435fc99ca8a9d49819f44864b556206838b2c9d671b316ce6b86
+          image: 127.0.0.1:30500/finance/command-service:b91223bddfc5@sha256:cda84ab758555a4ed9820c617831e1d328515a3b88c5b39d9ec30df51b25607d
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsNonRoot: true

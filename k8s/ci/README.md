@@ -413,3 +413,20 @@ returns the required checks, rather than a disabled-protection error.
 If CodeQL default setup is moved to a checked-in workflow, a PR authored by
 `GITHUB_TOKEN` will not trigger it and promotion merges stop (fail closed) until
 the trigger is adjusted. No branch-protection bypass is used.
+
+## Parallel service builds
+
+One CI job starts up to two independent image builds through
+`build-services.py`, so a second runner is unnecessary. Logs carry the service
+name. BuildKit also admits two tasks; they share the existing four-core,
+3 GiB container budget. Rust builds use two Cargo jobs each and independent
+target caches. Cargo coordinates its shared registry cache with its own locks.
+OCR image builds run alone after other services because their CUDA/Python
+layers are much larger. Cache pruning runs only after every build finishes.
+All requested images must succeed before their digest artifact is uploaded
+and the existing promotion PR is opened.
+
+Rust Dockerfiles use one source COPY instead of three: the native snapshotter
+otherwise copies the large Rust filesystem for each COPY. Their dockerignore
+files keep targets and retired sources outside the build context while retaining
+the integration tests.

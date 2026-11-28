@@ -49,7 +49,7 @@ data:
     # records used more recently than the duration, it does not expire them.
     [worker.oci]
       gc = true
-      max-parallelism = 1
+      max-parallelism = 2
 
       # Pin by omission: the base images every service build needs (rust,
       # debian, nginx, dockerfile frontend) match no rule below, so
@@ -245,7 +245,7 @@ spec:
               cpu: 500m
               memory: 1Gi
             limits:
-              # Four cores for compilation; one build task at a time.
+              # Two build tasks share the existing four-core total budget.
               cpu: "4"
               memory: 3Gi
       volumes:

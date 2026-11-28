@@ -1,0 +1,274 @@
+{
+  "schemaVersion": 1,
+  "remediationDate": "2026-11-28",
+  "verifiedAt": "2026-11-28T12:58:39.460569+00:00",
+  "scope": "The thirteen configuration findings in the 2026-11-27 PFA/shared-k3s audit, plus verified host controls and the JWT dependency alert discovered during remediation.",
+  "overallStatus": "Original cluster configuration findings remediated; additional package and frontend static-analysis findings remain open.",
+  "originalFindings": [
+    {
+      "id": "K8S-01",
+      "originalSeverity": "high",
+      "title": "Privileged kubelet proxy access",
+      "status": "configuration-remediated",
+      "evidence": "Removed nodes/proxy from the Prometheus ClusterRole. The actual nodes proxy subresource authorization is denied; cAdvisor scraping is healthy with the kubelet CA verified."
+    },
+    {
+      "id": "K8S-02",
+      "originalSeverity": "high",
+      "title": "Outdated PostgreSQL",
+      "status": "configuration-remediated",
+      "evidence": "Primary and retained replica run digest-pinned PostgreSQL 15.20; pgvector is 0.8.7. Restored the pre-change dump in an isolated database before upgrading and verified replication."
+    },
+    {
+      "id": "K8S-03",
+      "originalSeverity": "high",
+      "title": "Shared database superuser",
+      "status": "configuration-remediated",
+      "evidence": "Created distinct nonadministrative auth, command, query, Grafana and replication identities. Query/Grafana are read-only. Restricted admin access to the local operator and rotated the former shared admin password after migration."
+    },
+    {
+      "id": "K8S-04",
+      "originalSeverity": "high",
+      "title": "Plaintext Grafana datasource credential",
+      "status": "configuration-remediated",
+      "evidence": "Rotated the ClickHouse credential and moved datasource passwords to Secret-backed environment references. All three secureJsonData password fields in the live ConfigMap are environment references. No historical committed .env was found in this repository."
+    },
+    {
+      "id": "K8S-05",
+      "originalSeverity": "high",
+      "title": "Unrestricted registry maintenance execution",
+      "status": "configuration-remediated",
+      "evidence": "Removed runner Deployment writes and Argo application permissions. Fail-closed admission policies restrict exec to exact maintenance/probe commands and restrict registry changes to a literal read-only switch. Fourteen real API authorization/admission probes passed; denied tests include database exec, Secret injection, privilege escalation and replacing commands/images. The maintenance job waits for the new read-only generation before collecting."
+    },
+    {
+      "id": "K8S-06",
+      "originalSeverity": "high",
+      "title": "Cluster-wide Reloader Secret reads",
+      "status": "configuration-remediated",
+      "evidence": "Removed the global ClusterRoleBinding. PFA Reloader is bound only in pfa and pfa-system; hospital has a separate identity. PFA Reloader cannot list Secrets in kube-system, argocd or hospital."
+    },
+    {
+      "id": "K8S-07",
+      "originalSeverity": "medium",
+      "title": "Unrestricted GitOps project",
+      "status": "configuration-remediated",
+      "evidence": "Assigned all seven PFA applications dedicated AppProjects with the real repository, destinations and required resource kinds. Root only manages Applications. Shared Argo controller administrative privileges remain part of the bootstrap trust boundary."
+    },
+    {
+      "id": "K8S-08",
+      "originalSeverity": "medium",
+      "title": "HTTP Argo NodePort",
+      "status": "configuration-remediated",
+      "evidence": "Changed Argo server to ClusterIP and restricted ingress. Connections to former NodePort 30080 on loopback and node addresses are rejected. Public Argo and Grafana return Cloudflare Access login redirects."
+    },
+    {
+      "id": "K8S-09",
+      "originalSeverity": "medium",
+      "title": "Root CI runner",
+      "status": "configuration-remediated",
+      "evidence": "Runner executes as uid 1001/gid 121 with zero effective capabilities, NoNewPrivs=1 and seccomp filter mode. Registration credentials are issued separately with group-limited token access."
+    },
+    {
+      "id": "K8S-10",
+      "originalSeverity": "medium",
+      "title": "Infrastructure privileges and API tokens",
+      "status": "configuration-remediated",
+      "evidence": "Infrastructure workloads use explicit non-root users, dropped capabilities, no privilege escalation and RuntimeDefault seccomp. Only the runner, Prometheus and Vector running workloads mount Kubernetes tokens, for their API functions. Bounded volume-ownership initializers remain documented exceptions. The hardened cloudflared manifest is applied and healthy; effective kubelet seccompDefault is true."
+    },
+    {
+      "id": "K8S-11",
+      "originalSeverity": "medium",
+      "title": "Unencrypted PostgreSQL traffic",
+      "status": "configuration-remediated",
+      "evidence": "Enabled private-CA TLS, rejected network connections without TLS, and configured verify-full for clients and replication. Observed TLSv1.3 connections under pfa_auth, pfa_command, pfa_query, pfa_grafana and pfa_replicator. Local operator Unix-socket sessions are expected to report ssl=false."
+    },
+    {
+      "id": "K8S-12",
+      "originalSeverity": "medium",
+      "title": "Network policy gaps",
+      "status": "configuration-remediated",
+      "evidence": "Added namespace-wide default deny in pfa and pfa-system plus Argo egress isolation and Reloader policy. Existing DNS/controller paths work. Runner connectivity probes to PostgreSQL, MinIO and Storage are denied; application reads and all seven monitoring targets are healthy."
+    },
+    {
+      "id": "K8S-13",
+      "originalSeverity": "low",
+      "title": "Mutable image references and old vendor versions",
+      "status": "configuration-remediated",
+      "evidence": "Pinned deployed PFA runtime images to immutable digests, upgraded Grafana to 13.3.2 and BuildKit to 0.35.1, and retained the source tag plus digest in future promotions. Registry retention protects deployed tag@digest references. Added and executed hosted public-image/dependency scans and dependency SBOM generation. Package vulnerabilities reported by this first inventory remain a separate open backlog below."
+    }
+  ],
+  "hostControls": {
+    "secretEncryptionProvider": "Secretbox (XSalsa20-Poly1305)",
+    "rotationStage": "reencrypt_finished",
+    "encryptionHashesMatch": true,
+    "allSecretValuesUnchanged": true,
+    "auditPolicy": "Metadata only; omit RequestReceived; no request/response bodies",
+    "auditRetention": {
+      "maxDays": 7,
+      "backupFiles": 3,
+      "maxFileMiB": 50
+    },
+    "auditLogPopulated": true,
+    "kubeletSeccompDefault": true,
+    "privateStoppedDatastoreBackup": true
+  },
+  "validation": {
+    "ciAutomationTests": 14,
+    "nativeTests": 11,
+    "nativeClippy": "passed",
+    "registryBoundaryProbes": 14,
+    "certificateProvisioning": "Reuse and renewal retained CA trust; mismatched keys and renewal without original CA were rejected before output changes.",
+    "buildkitSmoke": "Real RUN instruction completed on 0.35.1 using the isolated existing rootless builder; no application data accessed.",
+    "grafana": "13.3.2 healthy; PostgreSQL, ClickHouse, Redis and Prometheus datasource health checks return 200/OK; SQLite backup integrity_check=ok.",
+    "prometheus": "All seven configured targets up, including cAdvisor and cross-namespace Vector.",
+    "readOnlyApi": [
+      {
+        "path": "/api/auth/me",
+        "status": 200,
+        "json": true
+      },
+      {
+        "path": "/api/upsert/entries",
+        "status": 200,
+        "json": true
+      },
+      {
+        "path": "/api/upsert/summary",
+        "status": 200,
+        "json": true
+      },
+      {
+        "path": "/api/upsert/groups",
+        "status": 200,
+        "json": true
+      },
+      {
+        "path": "/api/upsert/budgets",
+        "status": 200,
+        "json": true
+      },
+      {
+        "path": "/api/analytics/transactions/by-type",
+        "status": 200,
+        "json": true
+      },
+      {
+        "check": "anonymous",
+        "status": 401
+      },
+      {
+        "check": "spoofed_identity",
+        "status": 401
+      },
+      {
+        "check": "different_user",
+        "status": 403
+      }
+    ],
+    "databasePreservation": {
+      "applicationTablesCompared": 16,
+      "allTableHashesUnchanged": true,
+      "registeredAccounts": 1,
+      "recheckedAfterJwtPromotion": true
+    },
+    "clusterSecretPreservation": "Compared all Secret values in memory before and after host maintenance; unchanged.",
+    "liveJwtClaims": [
+      {
+        "check": "malformed_nbf",
+        "status": 401
+      },
+      {
+        "check": "future_nbf",
+        "status": 401
+      },
+      {
+        "check": "malformed_exp",
+        "status": 401
+      },
+      {
+        "check": "expired",
+        "status": 401
+      }
+    ],
+    "gitOpsApplications": "7/7 Synced and Healthy",
+    "scheduledRegistryMaintenance": "Latest successful job 2026-11-28T12:47:07Z; registry write access restored; all 14 admission probes pass.",
+    "kubernetesAuditLog": "Mode 0600; 116 sampled events were Metadata only without request/response objects."
+  },
+  "userDecisionsPreserved": {
+    "ocrReplicas": 1,
+    "laptopHealthRemoved": true,
+    "postgresReadReplicaRetained": true,
+    "autoPrune": true,
+    "selfHeal": true,
+    "noSyntheticAccountsBillsOrLedgerWrites": true,
+    "buildkitIdleReplicas": 0
+  },
+  "additionalDependencyPatch": {
+    "advisory": "GHSA-h395-gr6q-cpjc / CVE-2026-25537",
+    "sourceVersion": "jsonwebtoken 10.4.0",
+    "sourcePullRequest": "https://github.com/verginjose/Personal-Finance-Assistant/pull/132",
+    "nativeTestsAndClippy": "passed",
+    "buildRun": "https://github.com/verginjose/Personal-Finance-Assistant/actions/runs/46060682903",
+    "runtimeValidation": "Auth and Storage run the patched immutable image; malformed nbf, future nbf, malformed exp and expired tokens all return 401 through the public endpoint.",
+    "image": "127.0.0.1:30500/finance/auth-service:47502e21fa45@sha256:0784d903d9b57d9b7be51f7c2b4116fccbd5c2f64a6bf6891cca43341bddc77f",
+    "promotionPullRequest": "https://github.com/verginjose/Personal-Finance-Assistant/pull/136"
+  },
+  "additionalOpenFindings": {
+    "packageScan": {
+      "scanRun": "https://github.com/verginjose/Personal-Finance-Assistant/actions/runs/46060684342",
+      "severityCounts": {
+        "medium": 3049,
+        "high": 1766,
+        "critical": 73,
+        "low": 2390,
+        "unknown": 93
+      },
+      "uniqueAdvisories": 4604,
+      "preexistingCodeQLAlerts": 20,
+      "interpretation": "Untriaged package inventory findings, including image packages that may not execute at runtime; these are not confirmed exploitability counts. The public infrastructure scans and dependency lockfile scan do not cover private finance image OS contents."
+    },
+    "codeScanningUrl": "https://github.com/verginjose/Personal-Finance-Assistant/security/code-scanning",
+    "packageFollowup": "Review applicability and supported upgrade paths per image; newer package inventory findings are not closed by digest pinning. Some reports concern kernel packages or tools not executed by the container. Do not treat those observations as blanket dismissals.",
+    "frontendFollowup": "Twenty pre-existing CodeQL alerts remain: nineteen DOM XSS reports and one untrusted-script-source report. They require a separate source and reachability review. No alert was suppressed to make this report appear clean."
+  },
+  "documentedExceptions": [
+    "OCR retains uid 0 for its existing CUDA/Paddle model-cache layout, with no effective capabilities, no privilege escalation, read-only root and no API token.",
+    "Rootless BuildKit requires setuid UID-map helpers and its existing Localhost seccomp profile; it has no API token or direct registry delete credential.",
+    "Vector requires read-only host log access and Kubernetes metadata permissions.",
+    "MinIO/RabbitMQ/BuildKit volume setup uses narrowly bounded ownership-repair initialization before unprivileged runtime."
+  ],
+  "limitations": [
+    "This is not a vulnerability-free attestation or complete CIS assessment.",
+    "Hosted scans cover pinned public infrastructure images and repository lockfiles; OS contents of private finance images are not scanned by that hosted workflow.",
+    "A second real user was not created; the cross-user HTTP check used an unrelated UUID parameter and returned 403.",
+    "Cloudflare Access redirects were verified, while the complete Cloudflare account policy configuration and independent-host LAN reachability were not audited.",
+    "Historical exposed Careline/provider credentials recorded in sibling instructions remain outside this PFA remediation; provider rotation was not verified."
+  ],
+  "sourcePullRequests": [
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/125",
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/126",
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/127",
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/128",
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/129",
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/130",
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/131",
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/132",
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/133",
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/134",
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/136"
+  ],
+  "operatorTools": [
+    "scripts/configure-postgres-roles.py",
+    "scripts/provision-postgres-tls.py",
+    "scripts/harden-k3s-host.py",
+    "scripts/verify-registry-gc-boundaries.py"
+  ],
+  "vendorReferences": [
+    "https://docs.k3s.io/cli/secrets-encrypt",
+    "https://docs.k3s.io/installation/configuration",
+    "https://grafana.com/docs/grafana/latest/upgrade-guide/",
+    "https://github.com/moby/buildkit/releases/tag/v0.35.1",
+    "https://github.com/advisories/GHSA-h395-gr6q-cpjc"
+  ],
+  "reportPullRequest": "https://github.com/verginjose/Personal-Finance-Assistant/pull/135"
+}

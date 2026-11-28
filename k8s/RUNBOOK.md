@@ -634,3 +634,20 @@ rewrites existing Secrets, records metadata-only audit events with bounded
 rotation, and enables kubelet default seccomp. Preserve the backup and final
 encryption keys together. Do not restore an old database into a running server.
 Use the k3s recovery procedure with the corresponding datastore/config/keys.
+
+Certificate renewal refuses missing original CA/server material and mismatched
+certificate/key pairs. Restore the private backup before renewal if those files
+are missing; renewal must retain the existing client trust anchor.
+
+The security inventory workflow reports package findings to GitHub code scanning
+and publishes a dependency SBOM. Its successful completion means the inventory
+ran, not that every package is free of vulnerabilities. Review applicability and
+upgrade paths before closing findings. The initial cluster configuration fixes
+and the remaining package/frontend findings are recorded in
+`docs/cluster-security-remediation-2026-11-28.json`.
+
+If registry maintenance is interrupted after switching to read-only mode, restore
+writes with `kubectl -n pfa set env deploy/registry
+REGISTRY_STORAGE_MAINTENANCE_READONLY='{enabled: false}'` (one command), then wait
+for the Deployment rollout. Only this value is ignored by GitOps; auto-prune and
+self-healing remain enabled for all seven PFA applications.

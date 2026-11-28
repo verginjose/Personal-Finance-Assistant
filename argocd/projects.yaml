@@ -59,6 +59,10 @@ spec:
     kind: RoleBinding
   - group: bitnami.com
     kind: SealedSecret
+  - group: ''
+    kind: Pod
+  - group: apps
+    kind: ReplicaSet
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
@@ -110,6 +114,10 @@ spec:
     kind: RoleBinding
   - group: bitnami.com
     kind: SealedSecret
+  - group: ''
+    kind: Pod
+  - group: apps
+    kind: ReplicaSet
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
@@ -163,6 +171,10 @@ spec:
     kind: RoleBinding
   - group: bitnami.com
     kind: SealedSecret
+  - group: ''
+    kind: Pod
+  - group: apps
+    kind: ReplicaSet
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
@@ -214,6 +226,10 @@ spec:
     kind: RoleBinding
   - group: bitnami.com
     kind: SealedSecret
+  - group: ''
+    kind: Pod
+  - group: apps
+    kind: ReplicaSet
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject

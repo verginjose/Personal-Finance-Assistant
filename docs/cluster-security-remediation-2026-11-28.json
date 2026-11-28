@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "remediationDate": "2026-11-28",
-  "verifiedAt": "2026-11-27T20:12:41.713925+00:00",
+  "verifiedAt": "2026-11-28T12:58:39.460569+00:00",
   "scope": "The thirteen configuration findings in the 2026-11-27 PFA/shared-k3s audit, plus verified host controls and the JWT dependency alert discovered during remediation.",
   "overallStatus": "Original cluster configuration findings remediated; additional package and frontend static-analysis findings remain open.",
   "originalFindings": [
@@ -168,9 +168,31 @@
     "databasePreservation": {
       "applicationTablesCompared": 16,
       "allTableHashesUnchanged": true,
-      "registeredAccounts": 1
+      "registeredAccounts": 1,
+      "recheckedAfterJwtPromotion": true
     },
-    "clusterSecretPreservation": "Compared all Secret values in memory before and after host maintenance; unchanged."
+    "clusterSecretPreservation": "Compared all Secret values in memory before and after host maintenance; unchanged.",
+    "liveJwtClaims": [
+      {
+        "check": "malformed_nbf",
+        "status": 401
+      },
+      {
+        "check": "future_nbf",
+        "status": 401
+      },
+      {
+        "check": "malformed_exp",
+        "status": 401
+      },
+      {
+        "check": "expired",
+        "status": 401
+      }
+    ],
+    "gitOpsApplications": "7/7 Synced and Healthy",
+    "scheduledRegistryMaintenance": "Latest successful job 2026-11-28T12:47:07Z; registry write access restored; all 14 admission probes pass.",
+    "kubernetesAuditLog": "Mode 0600; 116 sampled events were Metadata only without request/response objects."
   },
   "userDecisionsPreserved": {
     "ocrReplicas": 1,
@@ -178,7 +200,8 @@
     "postgresReadReplicaRetained": true,
     "autoPrune": true,
     "selfHeal": true,
-    "noSyntheticAccountsBillsOrLedgerWrites": true
+    "noSyntheticAccountsBillsOrLedgerWrites": true,
+    "buildkitIdleReplicas": 0
   },
   "additionalDependencyPatch": {
     "advisory": "GHSA-h395-gr6q-cpjc / CVE-2026-25537",
@@ -186,7 +209,9 @@
     "sourcePullRequest": "https://github.com/verginjose/Personal-Finance-Assistant/pull/132",
     "nativeTestsAndClippy": "passed",
     "buildRun": "https://github.com/verginjose/Personal-Finance-Assistant/actions/runs/46060682903",
-    "runtimeValidation": "pending image promotion"
+    "runtimeValidation": "Auth and Storage run the patched immutable image; malformed nbf, future nbf, malformed exp and expired tokens all return 401 through the public endpoint.",
+    "image": "127.0.0.1:30500/finance/auth-service:47502e21fa45@sha256:0784d903d9b57d9b7be51f7c2b4116fccbd5c2f64a6bf6891cca43341bddc77f",
+    "promotionPullRequest": "https://github.com/verginjose/Personal-Finance-Assistant/pull/136"
   },
   "additionalOpenFindings": {
     "packageScan": {
@@ -229,7 +254,8 @@
     "https://github.com/verginjose/Personal-Finance-Assistant/pull/131",
     "https://github.com/verginjose/Personal-Finance-Assistant/pull/132",
     "https://github.com/verginjose/Personal-Finance-Assistant/pull/133",
-    "https://github.com/verginjose/Personal-Finance-Assistant/pull/134"
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/134",
+    "https://github.com/verginjose/Personal-Finance-Assistant/pull/136"
   ],
   "operatorTools": [
     "scripts/configure-postgres-roles.py",
@@ -243,5 +269,6 @@
     "https://grafana.com/docs/grafana/latest/upgrade-guide/",
     "https://github.com/moby/buildkit/releases/tag/v0.35.1",
     "https://github.com/advisories/GHSA-h395-gr6q-cpjc"
-  ]
+  ],
+  "reportPullRequest": "https://github.com/verginjose/Personal-Finance-Assistant/pull/135"
 }

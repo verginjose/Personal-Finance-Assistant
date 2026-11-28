@@ -291,6 +291,11 @@ kubectl -n pfa exec deploy/grafana -- \
 | **Redis — Health & Diagnostics** | keys, throughput, memory, clients, keyspace, replication, pod resources and logs; expandable prefix counts and runbook |
 | **Postgres — Health & Diagnostics** | database capacity, replica lag, table sizes, outbox backlog, sessions, indexes, pod resources and logs; expandable settings and runbook |
 
+The Finance Assistant overview includes separate request and 5xx panels for
+receipt, profile, bill and storage routes. Those routes now run through
+`command-service`; Prometheus scrapes Command once, while Traefik preserves the
+`storage@file` route label for route-level visibility.
+
 Pods navigation uses dashboard UID `pfa-pods`. Workload group applies directly
 to panel queries even when Pod is All; choosing a specific Pod further narrows
 the group. Data overview contains only summary cards. PostgreSQL and Redis

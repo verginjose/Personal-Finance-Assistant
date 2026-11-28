@@ -747,13 +747,13 @@ data:
       "panels": [
         {
           "id": 1,
-          "title": "Healthy backend targets (expected: 5)",
+          "title": "Healthy backend scrape targets (expected: 4)",
           "type": "stat",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "description": "Prometheus scrape targets currently UP (edge-router, auth-service, command-service, query-service).",
+          "description": "Prometheus scrape targets currently UP (edge-router, auth-service, command-service, query-service). Storage APIs are served by Command and do not have a separate scrape target.",
           "targets": [
             {
               "expr": "sum(up{job=~\"edge-router|auth-service|command-service|query-service\"})",
@@ -1153,9 +1153,120 @@ data:
             "h": 8
           },
           "description": "Time recorded inside each backend application handler, excluding the time before the handler starts and after it returns. Compare with Traefik-to-service p99 above."
+        },
+        {
+          "id": 9,
+          "title": "Storage routes / min",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "description": "Receipt, profile, bill and storage API traffic. These routes are backed by Command after the storage service merge; Traefik keeps the storage route label for visibility.",
+          "targets": [
+            {
+              "expr": "round(sum(rate(traefik_service_requests_total{job=\"edge-router\",service=\"storage@file\"}[$__rate_interval])) * 60) or vector(0)",
+              "refId": "A",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": {
+                "mode": "fixed"
+              },
+              "mappings": [],
+              "noValue": "No data"
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "graphMode": "area",
+            "textMode": "auto",
+            "colorMode": "none",
+            "justifyMode": "center"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 20,
+            "w": 12,
+            "h": 4
+          }
+        },
+        {
+          "id": 10,
+          "title": "Storage route errors / min",
+          "type": "stat",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus-ds"
+          },
+          "description": "5xx responses from receipt, profile, bill and storage routes backed by Command.",
+          "targets": [
+            {
+              "expr": "round(sum(rate(traefik_service_requests_total{job=\"edge-router\",service=\"storage@file\",code=~\"5..\"}[$__rate_interval])) * 60) or vector(0)",
+              "refId": "A",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 10
+                  }
+                ]
+              },
+              "mappings": [],
+              "noValue": "No data"
+            }
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "graphMode": "area",
+            "textMode": "auto",
+            "colorMode": "background",
+            "justifyMode": "center"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 20,
+            "w": 12,
+            "h": 4
+          }
         }
       ],
-      "description": "Application health, traffic, errors and latency. Metrics cover the four instrumented backend services; gateway traffic represents incoming requests. Open Pods, Logs or Data for investigation.",
+      "description": "Application health, traffic, errors and latency. Command metrics include receipt, profile, bill and storage APIs formerly served by the storage service. Open Pods, Logs or Data for investigation.",
       "links": [
         {
           "title": "Pods",

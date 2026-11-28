@@ -26,7 +26,7 @@
         "name": "app_group",
         "label": "Workload group",
         "type": "custom",
-        "query": "All : .*, pfa-apps : ^(auth-service|edge-router|command-service|query-service|frontend|storage-service|ocr-service)-.*, ci : ^(ci-runner|cargo-proxy|registry-proxy|registry|buildkitd|buildkit-prune|registry-gc|mirror-base-images)-.*, infra : ^(postgres-primary|postgres-replica|redis|rabbitmq|minio|clickhouse|prometheus|grafana|vector|cloudflared)-.*",
+        "query": "All : .*, pfa-apps : ^(auth-service|edge-router|command-service|query-service|frontend|ocr-service)-.*, ci : ^(ci-runner|cargo-proxy|registry-proxy|registry|buildkitd|buildkit-prune|registry-gc|mirror-base-images)-.*, infra : ^(postgres-primary|postgres-replica|redis|rabbitmq|minio|clickhouse|prometheus|grafana|vector|cloudflared)-.*",
         "options": [
           {
             "selected": true,
@@ -36,7 +36,7 @@
           {
             "selected": false,
             "text": "pfa-apps",
-            "value": "^(auth-service|edge-router|command-service|query-service|frontend|storage-service|ocr-service)-.*"
+            "value": "^(auth-service|edge-router|command-service|query-service|frontend|ocr-service)-.*"
           },
           {
             "selected": false,

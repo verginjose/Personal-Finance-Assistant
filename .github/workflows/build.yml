@@ -282,9 +282,6 @@ jobs:
             digest="$(jq -er '.["containerimage.digest"] | select(test("^sha256:[a-f0-9]{64}$"))' "image-digests/${svc}.json")"
             file="k8s/apps/${svc}.yaml"
             sed -i -E "s#(image: ).*finance/${svc}:.*#\1${PULL_REGISTRY}/finance/${svc}:${TAG}@${digest}#" "$file"
-            if [[ "$svc" == "auth-service" ]]; then
-              sed -i -E "s#(image: ).*finance/auth-service:.*#\1${PULL_REGISTRY}/finance/auth-service:${TAG}@${digest}#" k8s/apps/storage-service.yaml
-            fi
             if [[ "$svc" == "ocr-service" ]]; then
               # Activate /ready together with the new image that provides it.
               # The source PR must not send old OCR images to a missing route.

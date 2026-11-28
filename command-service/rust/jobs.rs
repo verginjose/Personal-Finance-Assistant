@@ -115,16 +115,29 @@ async fn process_one(a: &App, row: &RecurringRow) -> sqlx::Result<()> {
         }
     }
     let aggregated = current.amount * Decimal::from(missed);
-    let note = current.description.clone().unwrap_or_default().trim().to_string();
+    let note = current
+        .description
+        .clone()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     let description = if missed > 1 {
         format!(
             "Auto-generated (aggregated {missed} missed periods){}",
-            if note.is_empty() { String::new() } else { format!(": {note}") }
+            if note.is_empty() {
+                String::new()
+            } else {
+                format!(": {note}")
+            }
         )
     } else {
         format!(
             "Auto-generated{}",
-            if note.is_empty() { String::new() } else { format!(": {note}") }
+            if note.is_empty() {
+                String::new()
+            } else {
+                format!(": {note}")
+            }
         )
     };
     let entry_id: i64 = sqlx::query_scalar(
@@ -201,17 +214,19 @@ async fn outbox(a: App) {
         for (id, user, kind, entity) in events {
             let mut ok = cache::evict_user_keys(&a, &HashSet::from([user])).await;
             // Deferred per-member fan-out for group expenses (see add_expense_core).
-            if ok && kind == "FANOUT" {
-                if let Err(e) = crate::groups::fanout_expense(&a, entity).await {
-                    tracing::warn!(error = ?e, event = id, "expense fan-out failed; will retry");
-                    ok = false;
-                }
+            if ok
+                && kind == "FANOUT"
+                && let Err(error) = crate::groups::fanout_expense(&a, entity).await
+            {
+                tracing::warn!(error = ?error, event = id, "expense fan-out failed; will retry");
+                ok = false;
             }
             if ok {
-                let _ = sqlx::query("UPDATE finance.outbox_events SET status='PROCESSED' WHERE id=$1")
-                    .bind(id)
-                    .execute(&a.db)
-                    .await;
+                let _ =
+                    sqlx::query("UPDATE finance.outbox_events SET status='PROCESSED' WHERE id=$1")
+                        .bind(id)
+                        .execute(&a.db)
+                        .await;
             } else {
                 tracing::warn!(id, %user, "outbox delivery failed; will retry");
             }

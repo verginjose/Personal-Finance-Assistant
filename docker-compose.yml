@@ -129,23 +129,30 @@ services:
     depends_on:
       postgres-primary:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     restart: on-failure
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 512M
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-primary:5432/${DB_NAME}
-      SPRING_DATASOURCE_USERNAME: ${DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
-      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${FINANCE_DB_SCHEMA}
-      SPRING_DATASOURCE_HIKARI_SCHEMA: ${FINANCE_DB_SCHEMA}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      DB_HOST: postgres-primary
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=65.0 -XX:+UseZGC -XX:+ZGenerational -XX:SoftRefLRUPolicyMSPerMB=0 -XX:+ExitOnOutOfMemoryError"
-      ANALYTICS_SERVICE_URL: http://query-service:8084
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-dev-internal-token-change-me}
     ports:
       - "127.0.0.1:${UPSERT_SERVICE_PORT}:8081"
@@ -236,7 +243,7 @@ services:
   edge-router:
     build: ./edge-router
     container_name: edge-router
-    depends_on: [auth-service, storage-service, command-service, query-service]
+    depends_on: [auth-service, command-service, query-service]
     restart: on-failure
     deploy:
       resources:
@@ -244,31 +251,6 @@ services:
           memory: 128M
     ports:
       - "127.0.0.1:${API_GATEWAY_PORT}:8080"
-    networks: [finance-network]
-
-  storage-service:
-    build: ./auth-service
-    container_name: storage-service
-    depends_on:
-      redis: {condition: service_healthy}
-      minio: {condition: service_started}
-      rabbitmq: {condition: service_started}
-    restart: on-failure
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    environment:
-      SERVICE_MODE: storage
-      JWT_SECRET: ${JWT_SECRET}
-      REDIS_HOST: redis
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-admin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: ${RABBITMQ_USER}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
     networks: [finance-network]
 
   auth-service:

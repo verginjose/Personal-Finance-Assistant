@@ -1,5 +1,7 @@
-use crate::*;
-use super::*;
+use super::ENTRY_COLS;
+use super::categories::{CATEGORIES, INCOME_CATEGORIES, KINDS, MOVEMENT_CATEGORIES, PERIODS};
+use super::models::{EntryRequest, EntryRow, Validated};
+use crate::{Result, bad, forbidden};
 use rust_decimal::Decimal;
 use serde_json::Value;
 use sqlx::{Postgres, Transaction};
@@ -29,7 +31,8 @@ pub(crate) fn require_owned(url: Option<&str>, user: Uuid) -> Result<()> {
         && !url.is_empty()
     {
         let prefix = format!("/api/storage/receipts/{user}");
-        if !url.starts_with(&format!("{prefix}/")) && !url.starts_with(&format!("{prefix}-batch-")) {
+        if !url.starts_with(&format!("{prefix}/")) && !url.starts_with(&format!("{prefix}-batch-"))
+        {
             return Err(forbidden("Receipt was not uploaded by this user"));
         }
     }
@@ -44,7 +47,11 @@ pub(crate) fn basic(req: &EntryRequest) -> Result<Validated> {
     if name.chars().count() > 100 {
         return Err(bad("Name cannot exceed 100 characters"));
     }
-    let amount = parse_amount(req.amount.as_ref().ok_or_else(|| bad("Amount is required"))?)?;
+    let amount = parse_amount(
+        req.amount
+            .as_ref()
+            .ok_or_else(|| bad("Amount is required"))?,
+    )?;
     if amount <= Decimal::ZERO {
         return Err(bad("Amount must be greater than zero"));
     }
@@ -71,7 +78,10 @@ pub(crate) fn basic(req: &EntryRequest) -> Result<Validated> {
         return Err(bad("Currency must be 3 characters"));
     }
     let description = req.description.clone().filter(|d| !d.is_empty());
-    if description.as_ref().is_some_and(|d| d.chars().count() > 500) {
+    if description
+        .as_ref()
+        .is_some_and(|d| d.chars().count() > 500)
+    {
         return Err(bad("Description cannot exceed 500 characters"));
     }
     let subcategory = req.subcategory.clone().map(|s| s.trim().to_string());
@@ -114,7 +124,9 @@ pub(crate) fn rules(v: &Validated, self_id: Option<i64>) -> Result<()> {
             .as_ref()
             .ok_or_else(|| bad("Category is required"))?;
         if v.original_id.is_some() {
-            return Err(bad("Only refunds and reimbursements can link to an expense"));
+            return Err(bad(
+                "Only refunds and reimbursements can link to an expense",
+            ));
         }
         if v.kind == "STANDARD"
             && !MOVEMENT_CATEGORIES.contains(&category.as_str())
@@ -236,10 +248,7 @@ pub(crate) async fn validate_patched(
     Ok(())
 }
 
-pub(crate) async fn group_link_exists(
-    tx: &mut Transaction<'_, Postgres>,
-    id: i64,
-) -> Result<bool> {
+pub(crate) async fn group_link_exists(tx: &mut Transaction<'_, Postgres>, id: i64) -> Result<bool> {
     Ok(sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM groups.expense_transaction_links WHERE transaction_entry_id=$1)",
     )
@@ -265,4 +274,3 @@ pub(crate) async fn outbox(
     .await?;
     Ok(())
 }
-

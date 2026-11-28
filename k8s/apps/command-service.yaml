@@ -30,6 +30,11 @@ data:
   # INTERNAL_API_TOKEN come from command-service-secrets; DB_HOST defaults to
   # postgres-primary (the write side of CQRS).
   REDIS_HOST: redis
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_BUCKET: receipts
+  MINIO_PROFILE_BUCKET: profiles
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: '5672'
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -81,6 +86,26 @@ spec:
             - secretRef:
                 name: command-service-secrets
           env:
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: storage-service-secrets
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: storage-service-secrets
+                  key: MINIO_ROOT_PASSWORD
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: storage-service-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: storage-service-secrets
+                  key: RABBITMQ_PASSWORD
             # Write side of CQRS: always hits the primary. The Rust service
             # reads JSON logs straight to stdout for the Vector pipeline.
             - name: DB_HOST

@@ -1,4 +1,5 @@
-use super::*;
+use super::models::{ExpenseRequest, ExpenseRow, MemberRow, SplitRow};
+use crate::Result;
 use crate::{bad, forbidden};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use serde_json::Value;
@@ -6,7 +7,6 @@ use sqlx::{Postgres, Transaction};
 use std::collections::HashSet;
 use std::str::FromStr;
 use uuid::Uuid;
-
 
 pub(crate) fn parse_amount(v: &Value) -> Result<Decimal> {
     Decimal::from_str(v.to_string().trim_matches('"')).map_err(|_| bad("Invalid amount"))
@@ -17,7 +17,8 @@ pub(crate) fn receipt_owned(url: Option<&str>, user: Uuid) -> Result<()> {
         && !url.is_empty()
     {
         let prefix = format!("/api/storage/receipts/{user}");
-        if !url.starts_with(&format!("{prefix}/")) && !url.starts_with(&format!("{prefix}-batch-")) {
+        if !url.starts_with(&format!("{prefix}/")) && !url.starts_with(&format!("{prefix}-batch-"))
+        {
             return Err(forbidden("Receipt was not uploaded by this user"));
         }
     }
@@ -128,7 +129,10 @@ pub(crate) async fn insert_splits(
     let amts: Vec<Decimal> = (0..accepted.len())
         .map(|i| amounts.get(i).copied().unwrap_or(Decimal::ZERO))
         .collect();
-    let settled: Vec<bool> = accepted.iter().map(|m| m.user_id == expense.paid_by).collect();
+    let settled: Vec<bool> = accepted
+        .iter()
+        .map(|m| m.user_id == expense.paid_by)
+        .collect();
     sqlx::query(
         "INSERT INTO groups.expense_splits (shared_expense_id,user_id,user_name,amount,is_settled) \
          SELECT $1, u, n, a, s \

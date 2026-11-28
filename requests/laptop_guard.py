@@ -16,12 +16,13 @@ import time
 import urllib.error
 import urllib.request
 
-LIMITS = dict(cpu_c=78, gpu_c=65, ssd_c=70, available_gib=6, cpu_percent=80)
-CRITICAL = dict(cpu_c=85, gpu_c=75, ssd_c=82)
+LIMITS = dict(cpu_c=90, gpu_c=65, ssd_c=90, available_gib=6, cpu_percent=80)
+CRITICAL = dict(cpu_c=90, gpu_c=75, ssd_c=90)
 THERMAL_CONFIRM_SECONDS = dict(cpu_c=2, gpu_c=2, ssd_c=5)
+# User-requested CPU/SSD ceiling: 90C, with 5C of start headroom.
 # The display keeps this laptop's GPU around 50–52C at idle. Keep ten
 # degrees of headroom while allowing a genuinely idle laptop to start.
-START = dict(cpu_c=65, gpu_c=55, ssd_c=60, available_gib=8, cpu_percent=50)
+START = dict(cpu_c=85, gpu_c=55, ssd_c=85, available_gib=8, cpu_percent=50)
 FRESH_SECONDS = 3
 COOL_SECONDS = 60
 

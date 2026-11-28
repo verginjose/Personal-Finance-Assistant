@@ -276,7 +276,8 @@ if wanted pfa-ci-secrets; then
   rm -f "${tmp}"
 fi
 
-# 3. One secret per application service.
+# 3. Application credentials. Retain the named storage bundle for Command;
+# Sealed Secrets ciphertext is bound to its existing Secret name.
 for svc in auth-service storage-service command-service query-service ocr-service; do
   wanted "${svc}-secrets" || continue
   merged="$(merged_envfile "${svc}")"

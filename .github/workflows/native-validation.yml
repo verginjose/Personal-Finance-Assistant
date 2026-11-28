@@ -3,7 +3,18 @@ on:
   pull_request:
     paths:
       - auth-service/**
+      - command-service/**
+      - query-service/**
       - .github/workflows/native-validation.yml
+      - requests/laptop_guard.py
+      - requests/test_laptop_guard.py
+      - docker-compose.yml
+      - edge-router/**
+      - k8s/apps/**
+      - k8s/infrastructure/tests/test_storage_consolidation.py
+      - k8s/config/infra/prometheus-config.yaml
+      - k8s/config/infra/grafana-dashboards.yaml
+      - observability/**
 permissions:
   contents: read
 concurrency:
@@ -14,12 +25,27 @@ jobs:
     # Compile/test away from the laptop; deployment builds remain bounded.
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      matrix:
+        service: [auth-service, command-service, query-service]
     env:
       CARGO_BUILD_JOBS: '2'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - run: rustup toolchain install stable --profile minimal --component clippy
-      - run: cargo +stable test --locked --manifest-path auth-service/Cargo.toml
-      - run: cargo +stable clippy --locked --manifest-path auth-service/Cargo.toml -- -D warnings
+      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
+      - run: cargo +stable fmt --manifest-path ${{ matrix.service }}/Cargo.toml --check
+      - run: cargo +stable test --locked --all-targets --manifest-path ${{ matrix.service }}/Cargo.toml
+      - run: cargo +stable clippy --locked --all-targets --manifest-path ${{ matrix.service }}/Cargo.toml -- -D warnings
+
+  deployment-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: python3 -m pip install PyYAML
+      - run: python3 -m unittest discover -s k8s/infrastructure/tests -p test_storage_consolidation.py
+      - run: python3 -m unittest discover -s requests -p test_laptop_guard.py

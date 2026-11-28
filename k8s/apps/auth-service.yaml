@@ -29,7 +29,6 @@ metadata:
 data:
   REDIS_HOST: redis
   COOKIE_SECURE: 'true'
-  SERVICE_MODE: auth
   # Load-test switch: skip the /internal/verify token buckets so a capacity
   # ladder measures the services, not the limiter. Remove to restore limits.
 ---

@@ -9,7 +9,7 @@ if source:
         raise SystemExit('Invalid build source commit')
     subprocess.run(['git', 'merge-base', '--is-ancestor', source, sha + '^'], check=True)
 names = subprocess.check_output(['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', sha], text=True).splitlines()
-services = {'auth-service', 'edge-router', 'storage-service', 'command-service', 'query-service', 'frontend', 'ocr-service'}
+services = {'auth-service', 'edge-router', 'command-service', 'query-service', 'frontend', 'ocr-service'}
 if not names:
     raise SystemExit('Refusing to approve an empty promotion')
 for name in names:
@@ -21,7 +21,7 @@ for name in names:
         if line.startswith(('---', '+++')) or not line.startswith(('+', '-')):
             continue
         value = line[1:].strip()
-        image = re.fullmatch(r'image: 127\.0\.0\.1:30500/finance/' + re.escape('auth-service' if match[1] == 'storage-service' else match[1]) + r':[a-f0-9]{12}(?:@sha256:[a-f0-9]{64})?', value)
+        image = re.fullmatch(r'image: 127\.0\.0\.1:30500/finance/' + re.escape(match[1]) + r':[a-f0-9]{12}(?:@sha256:[a-f0-9]{64})?', value)
         probe = match[1] == 'ocr-service' and value in ('path: /health', 'path: /ready')
         if not image and not probe:
             raise SystemExit('Refusing to approve unexpected manifest edits')

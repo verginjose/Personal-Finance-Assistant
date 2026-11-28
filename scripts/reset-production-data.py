@@ -16,7 +16,7 @@ import time
 
 SCHEMAS = ('activity', 'auth', 'finance', 'groups')
 APPS = ('pfa-apps', 'pfa-edge', 'pfa-infra', 'pfa-system')
-WORKLOADS = ('auth-service', 'command-service', 'query-service', 'storage-service',
+WORKLOADS = ('auth-service', 'command-service', 'query-service',
              'ocr-service', 'frontend', 'edge-router', 'cloudflared', 'prometheus', 'grafana')
 
 
@@ -126,7 +126,7 @@ class Reset:
         for name, replicas in state['replicas'].items():
             if name not in ('cloudflared', 'frontend', 'edge-router'):
                 self.kube('pfa', 'scale', 'deployment/' + name, '--replicas=' + str(replicas))
-        for name in ('auth-service', 'command-service', 'query-service', 'storage-service', 'ocr-service'):
+        for name in ('auth-service', 'command-service', 'query-service', 'ocr-service'):
             self.kube('pfa', 'rollout', 'status', 'deployment/' + name, '--timeout=120s')
         self.kube('pfa-system', 'patch', 'daemonset', 'vector', '--type=json', '-p',
                   json.dumps([{'op':'replace', 'path':'/spec/template/spec/nodeSelector', 'value':state['vector_selector'] or {}}]))

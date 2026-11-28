@@ -73,3 +73,11 @@ git add k8s/sealed/ && git commit -m 'chore(secrets): rotate …'
 `sync-env.sh` does the same thing and additionally restarts workloads that
 reference the Secrets, which covers the infrastructure pieces (Postgres, Redis,
 Grafana, …) that are not yet annotated for Reloader.
+
+## Storage credentials after consolidation
+
+`storage-service.env` is retained as the input for the existing encrypted
+`storage-service-secrets` bundle. There is no separate storage process.
+Command selects only the MinIO/RabbitMQ keys from this bundle; it does not
+import its legacy JWT or Redis values. Renaming a SealedSecret requires
+resealing its ciphertext rather than copying it under another name.

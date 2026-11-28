@@ -1,7 +1,7 @@
-use super::*;
+use crate::app::App;
+use crate::error::{Error, Result};
 
-
-pub(crate) fn currency(value: &str) -> Result<String> {
+pub fn currency(value: &str) -> Result<String> {
     let c = value.trim().to_ascii_uppercase();
     if c.len() != 3 || !c.bytes().all(|b| b.is_ascii_uppercase()) {
         return Err(Error::bad("Default currency must be a 3-letter ISO code"));

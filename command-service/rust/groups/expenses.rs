@@ -1,8 +1,14 @@
-use super::*;
+use super::EXPENSE_COLS;
+use super::SPLIT_COLS;
+use super::helpers::{Notice, actor, expense_json, group, log_activity, members, send_notices};
+use super::models::{ExpenseRequest, ExpenseRow, SplitRow};
+use super::personal_entries::{create_personal_transactions, delete_personal_transactions};
+use super::splits::{insert_splits, parse_amount, receipt_owned};
+use crate::{App, JsonBody, Result};
 use crate::{bad, cache, forbidden, not_found};
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -13,152 +19,21 @@ use sqlx::{Postgres, Transaction};
 use std::collections::HashSet;
 use uuid::Uuid;
 
-
-pub(crate) async fn insert_entry(
-    tx: &mut Transaction<'_, Postgres>,
-    user: Uuid,
-    name: &str,
-    amount: Decimal,
-    r#type: &str,
-    category: &str,
-    currency: &str,
-    description: &str,
-) -> Result<i64> {
-    Ok(sqlx::query_scalar::<_, i64>(
-        "INSERT INTO finance.transaction_entries \
-         (user_id,name,amount,type,category,currency,description,created_at,updated_at,\
-          recurring,transaction_kind) \
-         VALUES ($1,$2,$3,$4,$5,$6,$7,now(),now(),false,'STANDARD') RETURNING id",
-    )
-    .bind(user)
-    .bind(name)
-    .bind(amount)
-    .bind(r#type)
-    .bind(category)
-    .bind(currency)
-    .bind(description)
-    .fetch_one(&mut **tx)
-    .await?)
-}
-
-pub(crate) async fn create_personal_transactions(
-    tx: &mut Transaction<'_, Postgres>,
-    expense: &ExpenseRow,
-    splits: &[SplitRow],
-    group_name: &str,
-    payer_name: &str,
-) -> Result<()> {
-    let category = if expense.split_type == "SETTLEMENT" {
-        "SETTLEMENT".to_string()
-    } else {
-        expense
-            .expense_category
-            .clone()
-            .unwrap_or_else(|| "OTHERS".into())
-    };
-    for split in splits.iter().filter(|s| s.amount > Decimal::ZERO) {
-        let mut entries: Vec<(Uuid, String, Decimal, &str)> = Vec::new();
-        if expense.split_type == "SETTLEMENT" {
-            entries.push((
-                expense.paid_by,
-                format!("Paid {}", split.user_name.clone().unwrap_or_default()),
-                split.amount,
-                "EXPENSE",
-            ));
-            entries.push((
-                split.user_id,
-                format!("Received from {payer_name}"),
-                split.amount,
-                "INCOME",
-            ));
-        } else {
-            entries.push((
-                split.user_id,
-                expense.description.clone(),
-                split.amount,
-                "EXPENSE",
-            ));
-        }
-        for (user, name, amount, r#type) in entries {
-            let description = if expense.split_type == "SETTLEMENT" {
-                format!("Settlement · {group_name}")
-            } else {
-                format!("Split expense · {group_name}")
-            };
-            let entry_id = insert_entry(
-                tx,
-                user,
-                &name,
-                amount,
-                r#type,
-                &category,
-                &expense.currency,
-                &description,
-            )
-            .await?;
-            sqlx::query(
-                "INSERT INTO groups.expense_transaction_links \
-                 (shared_expense_id,user_id,transaction_entry_id) VALUES ($1,$2,$3)",
-            )
-            .bind(expense.id)
-            .bind(user)
-            .bind(entry_id)
-            .execute(&mut **tx)
-            .await?;
-        }
-    }
-    Ok(())
-}
-
-pub(crate) async fn delete_personal_transactions(
-    tx: &mut Transaction<'_, Postgres>,
-    expense_id: i64,
-) -> Result<Vec<Uuid>> {
-    let links: Vec<(i64, Uuid)> = sqlx::query_as(
-        "SELECT transaction_entry_id, user_id FROM groups.expense_transaction_links \
-         WHERE shared_expense_id=$1",
-    )
-    .bind(expense_id)
-    .fetch_all(&mut **tx)
-    .await?;
-    let mut users = Vec::new();
-    for (entry_id, user) in links {
-        sqlx::query(
-            "UPDATE finance.transaction_entries SET deleted_at=now(), updated_at=now() \
-             WHERE id=$1 AND deleted_at IS NULL",
-        )
-        .bind(entry_id)
-        .execute(&mut **tx)
-        .await?;
-        sqlx::query(
-            "INSERT INTO finance.outbox_events (user_id,event_type,entity_id,status,created_at) \
-             VALUES ($1,'DELETE',$2,'PENDING',now())",
-        )
-        .bind(user)
-        .bind(entry_id)
-        .execute(&mut **tx)
-        .await?;
-        users.push(user);
-    }
-    sqlx::query("DELETE FROM groups.expense_transaction_links WHERE shared_expense_id=$1")
-        .bind(expense_id)
-        .execute(&mut **tx)
-        .await?;
-    Ok(users)
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) async fn insert_expense_row(
-    tx: &mut Transaction<'_, Postgres>,
+struct NewExpense<'a> {
     group: i64,
-    description: &str,
+    description: &'a str,
     amount: Decimal,
-    currency: &str,
+    currency: &'a str,
     paid_by: Uuid,
-    split_type: &str,
-    category: Option<&str>,
+    split_type: &'a str,
+    category: Option<&'a str>,
     date: Option<NaiveDateTime>,
-    receipt: Option<&str>,
+    receipt: Option<&'a str>,
+}
+
+async fn insert_expense_row(
+    tx: &mut Transaction<'_, Postgres>,
+    expense: NewExpense<'_>,
 ) -> Result<ExpenseRow> {
     Ok(sqlx::query_as::<_, ExpenseRow>(&format!(
         "INSERT INTO groups.shared_expenses \
@@ -167,15 +42,15 @@ pub(crate) async fn insert_expense_row(
          VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8::timestamp,now()),now(),$9) \
          RETURNING {EXPENSE_COLS}"
     ))
-    .bind(group)
-    .bind(description)
-    .bind(amount)
-    .bind(currency)
-    .bind(paid_by)
-    .bind(split_type)
-    .bind(category)
-    .bind(date)
-    .bind(receipt)
+    .bind(expense.group)
+    .bind(expense.description)
+    .bind(expense.amount)
+    .bind(expense.currency)
+    .bind(expense.paid_by)
+    .bind(expense.split_type)
+    .bind(expense.category)
+    .bind(expense.date)
+    .bind(expense.receipt)
     .fetch_one(&mut **tx)
     .await?)
 }
@@ -204,14 +79,23 @@ pub(crate) async fn add_expense_core(
     if !all.iter().any(|m| m.user_id == paid_by) {
         return Err(forbidden("Payer is not a member of this group"));
     }
-    let description = body.description.clone().unwrap_or_default().trim().to_string();
+    let description = body
+        .description
+        .clone()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     if description.is_empty() {
         return Err(bad("Description is required"));
     }
     if description.chars().count() > 100 {
         return Err(bad("Description cannot exceed 100 characters"));
     }
-    let amount = parse_amount(body.amount.as_ref().ok_or_else(|| bad("Amount is required"))?)?;
+    let amount = parse_amount(
+        body.amount
+            .as_ref()
+            .ok_or_else(|| bad("Amount is required"))?,
+    )?;
     if amount <= Decimal::ZERO {
         return Err(bad("Amount must be greater than zero"));
     }
@@ -233,15 +117,21 @@ pub(crate) async fn add_expense_core(
 
     let expense = insert_expense_row(
         tx,
-        group_id,
-        &description,
-        amount,
-        &currency,
-        paid_by,
-        &split_type,
-        category.as_deref(),
-        body.expense_date.as_deref().map(crate::datetime).transpose()?,
-        body.receipt_url.as_deref(),
+        NewExpense {
+            group: group_id,
+            description: &description,
+            amount,
+            currency: &currency,
+            paid_by,
+            split_type: &split_type,
+            category: category.as_deref(),
+            date: body
+                .expense_date
+                .as_deref()
+                .map(crate::datetime)
+                .transpose()?,
+            receipt: body.receipt_url.as_deref(),
+        },
     )
     .await?;
     let splits = insert_splits(tx, &expense, &all, body).await?;
@@ -268,7 +158,16 @@ pub(crate) async fn add_expense_core(
             ),
         )
     };
-    log_activity(tx, group_id, user, &actor_row.name, kind, &message, expense.id).await?;
+    log_activity(
+        tx,
+        group_id,
+        user,
+        &actor_row.name,
+        kind,
+        &message,
+        expense.id,
+    )
+    .await?;
 
     let affected: Vec<Uuid> = all.iter().map(|m| m.user_id).collect();
     let mut evict_users: Vec<Uuid> = splits
@@ -284,7 +183,15 @@ pub(crate) async fn add_expense_core(
         .map(|s| s.user_id)
         .collect::<HashSet<_>>()
         .into_iter()
-        .map(|u| Notice::new(u, group_id, "expense-added", recipient_message.clone(), "INFO"))
+        .map(|u| {
+            Notice::new(
+                u,
+                group_id,
+                "expense-added",
+                recipient_message.clone(),
+                "INFO",
+            )
+        })
         .collect();
     Ok(ExpenseOutcome {
         json: expense_json(&expense),
@@ -365,14 +272,23 @@ pub(crate) async fn update_expense(
         .execute(&mut *tx)
         .await?;
 
-    let description = body.description.clone().unwrap_or_default().trim().to_string();
+    let description = body
+        .description
+        .clone()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
     if description.is_empty() {
         return Err(bad("Description is required"));
     }
     if description.chars().count() > 100 {
         return Err(bad("Description cannot exceed 100 characters"));
     }
-    let amount = parse_amount(body.amount.as_ref().ok_or_else(|| bad("Amount is required"))?)?;
+    let amount = parse_amount(
+        body.amount
+            .as_ref()
+            .ok_or_else(|| bad("Amount is required"))?,
+    )?;
     if amount <= Decimal::ZERO {
         return Err(bad("Amount must be greater than zero"));
     }
@@ -405,7 +321,12 @@ pub(crate) async fn update_expense(
     .bind(paid_by)
     .bind(&split_type)
     .bind(&category)
-    .bind(body.expense_date.as_deref().map(crate::datetime).transpose()?)
+    .bind(
+        body.expense_date
+            .as_deref()
+            .map(crate::datetime)
+            .transpose()?,
+    )
     .bind(&body.receipt_url)
     .fetch_one(&mut *tx)
     .await?;
@@ -523,123 +444,4 @@ pub(crate) async fn delete_expense(
     cache::evict_users(&a, &evict_users).await;
     cache::evict_group(&a, group_id, &affected).await;
     Ok(Json(json!({"message":"Expense deleted successfully"})).into_response())
-}
-
-pub(crate) async fn settle_debt_core(
-    tx: &mut Transaction<'_, Postgres>,
-    group_id: i64,
-    from: Uuid,
-    to: Uuid,
-    actor: Uuid,
-) -> Result<Option<ExpenseOutcome>> {
-    let bals = balances(tx, group_id).await?;
-    let currency = currency_of(tx, group_id).await?;
-    let total: Decimal = minimize_debts(&bals, &currency)
-        .into_iter()
-        .filter(|s| s.from == from && s.to == to)
-        .map(|s| s.amount)
-        .sum();
-    if total <= Decimal::ZERO {
-        return Ok(None);
-    }
-    let from_name = bals
-        .iter()
-        .find(|b| b.user_id == from)
-        .map(|b| b.user_name.clone())
-        .unwrap_or_else(|| from.to_string());
-    let to_name = bals
-        .iter()
-        .find(|b| b.user_id == to)
-        .map(|b| b.user_name.clone())
-        .unwrap_or_else(|| to.to_string());
-    let body = ExpenseRequest {
-        description: Some(format!("Payment from {from_name} to {to_name}")),
-        amount: Some(json!(total)),
-        currency: Some(currency),
-        paid_by: Some(from),
-        split_type: Some("SETTLEMENT".into()),
-        expense_category: Some("SETTLEMENT".into()),
-        expense_date: None,
-        split_details: Some(vec![SplitDetail {
-            user_id: Some(to),
-            value: Some(json!(total)),
-        }]),
-        receipt_url: None,
-    };
-    let mut outcome = add_expense_core(tx, group_id, &body, actor).await?;
-    let target = if from == actor { to } else { from };
-    outcome.notices.push(Notice::new(
-        target,
-        group_id,
-        "debt-settled",
-        format!(
-            "{from_name} recorded a ₹{} settlement with {to_name}",
-            total.round_dp(2)
-        ),
-        "SUCCESS",
-    ));
-    Ok(Some(outcome))
-}
-
-pub(crate) async fn settle_debt(
-    State(a): State<App>,
-    h: HeaderMap,
-    Path(group_id): Path<i64>,
-    Query(q): Query<Params>,
-) -> Result<Response> {
-    let user = actor(&h)?;
-    let from = q_uuid(&q, "fromUserId")?;
-    let to = q_uuid(&q, "toUserId")?;
-    let mut tx = a.db.begin().await?;
-    let _ = require_member(&mut tx, group_id, user).await?;
-    let outcome = settle_debt_core(&mut tx, group_id, from, to, user).await?;
-    tx.commit().await?;
-    if let Some(outcome) = outcome {
-        apply_outcome(&a, group_id, outcome).await;
-    }
-    Ok(Json(json!({"message":"Settlement recorded successfully"})).into_response())
-}
-
-/// Materialise the per-member personal transactions for a group expense.
-/// Called by the outbox worker, off the request path. Idempotent: the
-/// expense_transaction_links rows are the completion marker, and the whole
-/// fan-out commits in one transaction, so a retry either redoes nothing or
-/// completes the work atomically.
-pub(crate) async fn fanout_expense(a: &App, expense_id: i64) -> Result<()> {
-    let mut tx = a.db.begin().await?;
-    let existing: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM groups.expense_transaction_links WHERE shared_expense_id=$1",
-    )
-    .bind(expense_id)
-    .fetch_one(&mut *tx)
-    .await?;
-    if existing > 0 {
-        return Ok(());
-    }
-    let expense: ExpenseRow = sqlx::query_as(&format!(
-        "SELECT {EXPENSE_COLS} FROM groups.shared_expenses WHERE id=$1"
-    ))
-    .bind(expense_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or_else(|| not_found("Expense not found"))?;
-    let splits: Vec<SplitRow> = sqlx::query_as(&format!(
-        "SELECT {SPLIT_COLS} FROM groups.expense_splits WHERE shared_expense_id=$1"
-    ))
-    .bind(expense_id)
-    .fetch_all(&mut *tx)
-    .await?;
-    let group_name: String =
-        sqlx::query_scalar("SELECT name FROM groups.expense_groups WHERE id=$1")
-            .bind(expense.group_id)
-            .fetch_one(&mut *tx)
-            .await?;
-    let payer_name = splits
-        .iter()
-        .find(|s| s.user_id == expense.paid_by)
-        .and_then(|s| s.user_name.clone())
-        .unwrap_or_default();
-    create_personal_transactions(&mut tx, &expense, &splits, &group_name, &payer_name).await?;
-    tx.commit().await?;
-    Ok(())
 }

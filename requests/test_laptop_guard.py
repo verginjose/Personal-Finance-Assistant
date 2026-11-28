@@ -35,7 +35,7 @@ class GuardTests(unittest.TestCase):
         self.assertIsNotNone(guard.violation(sample))
 
     def test_cool_start_is_stricter_than_running_limits(self):
-        sample=healthy();sample['cpu_c']=70
+        sample=healthy();sample['cpu_c']=87
         self.assertIsNone(guard.violation(sample))
         self.assertIsNotNone(guard.violation(sample,starting=True))
 
@@ -48,7 +48,7 @@ class GuardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             args=argparse.Namespace(local_sensors=False,health_url='http://fixture', report=folder+'/report.json',
                                     command=[sys.executable,'-c','import time; time.sleep(60)'])
-            hot=healthy();hot['cpu_c']=85
+            hot=healthy();hot['cpu_c']=guard.CRITICAL['cpu_c']
             replies=[Reply(healthy()),Reply(healthy()),Reply(hot)]
             real_popen=subprocess.Popen
             processes=[]
@@ -71,31 +71,31 @@ class GuardTests(unittest.TestCase):
                 start.assert_not_called()
 
     def test_one_ssd_spike_clears_without_stopping(self):
-        window=guard.SafetyWindow()
-        self.assertIsNone(window.check(healthy(timestamp=100,ssd_c=80.85),now=100))
+        window=guard.SafetyWindow(starting=True)
+        self.assertIsNone(window.check(healthy(timestamp=100,ssd_c=86),now=100))
         self.assertIsNone(window.check(healthy(timestamp=100.5,ssd_c=42),now=100.5))
         self.assertFalse(window.hot)
         self.assertEqual([e['kind'] for e in window.events],['warning','cleared'])
-        self.assertEqual(window.events[0]['value'],80.85)
+        self.assertEqual(window.events[0]['value'],86)
 
     def test_persistent_heat_requires_two_seconds_of_new_samples(self):
         window=guard.SafetyWindow()
         for stamp in [100,100.5,101,101.5]:
-            self.assertIsNone(window.check(healthy(timestamp=stamp,cpu_c=78),now=stamp))
-        reason=window.check(healthy(timestamp=102,cpu_c=78),now=102)
+            self.assertIsNone(window.check(healthy(timestamp=stamp,gpu_c=65),now=stamp))
+        reason=window.check(healthy(timestamp=102,gpu_c=65),now=102)
         self.assertIn('2s',reason)
         self.assertEqual(window.events[-1]['kind'],'confirmed')
         self.assertEqual(window.events[-1]['first_sample_utc'],guard.utc(100))
 
     def test_observed_ssd_pulse_clears_but_five_seconds_of_heat_stops(self):
-        window=guard.SafetyWindow()
+        window=guard.SafetyWindow(starting=True)
         for stamp in [100,100.7,101.4,102.1]:
-            self.assertIsNone(window.check(healthy(timestamp=stamp,ssd_c=80.85),now=stamp))
+            self.assertIsNone(window.check(healthy(timestamp=stamp,ssd_c=86),now=stamp))
         self.assertIsNone(window.check(healthy(timestamp=102.8,ssd_c=46),now=102.8))
         self.assertEqual(window.events[-1]['kind'],'cleared')
         for stamp in [110,111,112,113,114]:
-            self.assertIsNone(window.check(healthy(timestamp=stamp,ssd_c=80.85),now=stamp))
-        self.assertIn('5s',window.check(healthy(timestamp=115,ssd_c=80.85),now=115))
+            self.assertIsNone(window.check(healthy(timestamp=stamp,ssd_c=86),now=stamp))
+        self.assertIn('5s',window.check(healthy(timestamp=115,ssd_c=86),now=115))
 
     def test_server_policy_also_stops_on_swap_out(self):
         window=guard.SafetyWindow()
@@ -104,7 +104,7 @@ class GuardTests(unittest.TestCase):
         self.assertTrue(window.immediate)
 
     def test_duplicate_samples_do_not_confirm_heat(self):
-        window=guard.SafetyWindow();sample=healthy(timestamp=100,ssd_c=80.85)
+        window=guard.SafetyWindow(starting=True);sample=healthy(timestamp=100,ssd_c=86)
         self.assertIsNone(window.check(sample,now=100))
         self.assertIsNone(window.check(sample,now=102))
         self.assertIn('stale',window.check(sample,now=103.1))
@@ -112,8 +112,17 @@ class GuardTests(unittest.TestCase):
     def test_resource_and_sensor_failures_do_not_wait_for_heat_confirmation(self):
         for change in [dict(available_gib=5.9),dict(cpu_percent=80),dict(gpu_c=None),dict(swapout_total=None)]:
             window=guard.SafetyWindow()
-            self.assertIsNotNone(window.check(healthy(ssd_c=80.85,**change)))
+            self.assertIsNotNone(window.check(healthy(ssd_c=86,**change)))
             self.assertTrue(window.immediate)
+
+    def test_cpu_and_ssd_use_the_requested_90_degree_ceiling(self):
+        for key in ['cpu_c', 'ssd_c']:
+            self.assertEqual(guard.LIMITS[key], 90)
+            self.assertEqual(guard.START[key], 85)
+            self.assertIsNone(guard.SafetyWindow().check(healthy(**{key: 89.9})))
+            self.assertIn('critical', guard.SafetyWindow().check(healthy(**{key: 90})))
+        self.assertEqual(guard.LIMITS['gpu_c'], 65)
+        self.assertEqual(guard.START['gpu_c'], 55)
 
     def test_every_critical_limit_trips_immediately(self):
         for key,value in guard.CRITICAL.items():
@@ -135,7 +144,7 @@ class GuardTests(unittest.TestCase):
         def read(*args,**kwargs):
             nonlocal calls
             calls+=1
-            return Reply(healthy(ssd_c=80.85 if calls==3 else 40))
+            return Reply(healthy(ssd_c=86 if calls==3 else 40))
         with tempfile.TemporaryDirectory() as folder:
             args=argparse.Namespace(local_sensors=False,health_url='http://fixture',report=folder+'/report.json',
                                     command=[sys.executable,'-c','pass'])
@@ -156,7 +165,7 @@ class GuardTests(unittest.TestCase):
         def read(*args,**kwargs):
             nonlocal calls
             calls+=1
-            return Reply(healthy(cpu_c=78 if calls>2 else 50))
+            return Reply(healthy(gpu_c=65 if calls>2 else 50))
         with tempfile.TemporaryDirectory() as folder:
             args=argparse.Namespace(local_sensors=False,health_url='http://fixture',report=folder+'/report.json',
                                     command=[sys.executable,'-c','import time;time.sleep(60)'])

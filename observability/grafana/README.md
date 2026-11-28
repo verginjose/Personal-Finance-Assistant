@@ -2,8 +2,8 @@
 
 Start with **Finance Assistant — Production Overview**: backend scrape health,
 incoming gateway traffic, gateway errors and latency, then service trends.
-The five expected backend targets are storage-service, edge-router, auth-service,
-command-service, and query-service. Scrape health indicates metric endpoint reachability, not
+The four expected backend targets are edge-router, auth-service, command-service
+and query-service. Storage handler metrics are included in Command. Scrape health indicates metric endpoint reachability, not
 end-to-end application availability. No traffic or missing metrics can display
 “No data”; this is not a healthy zero.
 

@@ -108,13 +108,13 @@ All API traffic passes through **Traefik** (`edge-router:8080`).
   ForwardAuth, which checks JWT signatures, expiry, Redis revocation and session
   versions, then provides the trusted `X-User-Id`. Redis rate limits are shared
   across edge replicas. Short-lived stream tickets authenticate SSE only.
-- **Storage**: Rust `storage-service:8083` spools bounded uploads to disk, checks
+- **Storage**: the Rust storage module in `command-service:8081` spools bounded uploads to disk, checks
   media signatures, stores private objects in MinIO, and confirms durable OCR
   jobs through RabbitMQ. Receipt reads check ownership/group access in Command.
 - **Compatibility**: Rust auth retains the existing `auth.users` schema, BCrypt
   passwords, JWT claims, refresh cookies and Redis session keys. Concurrent
   refreshes converge on one session pair during the 60-second grace period.
-- **Memory limits**: auth 256 MiB, storage 256 MiB, Traefik 128 MiB, Command
+- **Memory limits**: auth 256 MiB, Traefik 128 MiB, Command
   512 MiB, Query 256 MiB. Every backend service is Rust now. Management
   endpoints use private port 9090.
 
@@ -399,3 +399,4 @@ This repository ships with a comprehensive Python-based End-to-End (E2E) test su
 - Analytics generation and complex aggregation workflows.
 
 The suite can be executed locally using the commands outlined above. Continuous Integration pipelines are configured to execute this script on every push to ensure system integrity. The Rust services are checked with `cargo clippy --locked` and `cargo build --locked`; the Python golden suite is the end-to-end gate.
+Rust development: [code structure and test crates](docs/rust-code-guide.md).

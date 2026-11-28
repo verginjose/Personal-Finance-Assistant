@@ -1,11 +1,10 @@
-# Native auth and storage
+# Native auth
 
-One Rust/Axum executable runs two isolated services. `SERVICE_MODE=auth`
-(default) owns `/api/auth/**` and Traefik's private `/internal/verify` endpoint.
-`SERVICE_MODE=storage` owns receipt/bill/avatar uploads and private downloads.
-The storage role has no database credentials. Both roles validate signed JWTs
-and check Redis revocation/session versions; backend identity headers are never
-accepted from clients.
+The Rust/Axum auth service owns `/api/auth/**` and Traefik's private
+`/internal/verify` endpoint. Storage is now a module in Command; Auth has no
+MinIO or RabbitMQ client. Auth verifies signed JWTs and checks Redis
+revocation/session versions. The edge strips client identity headers before
+forwarding authenticated requests to Command and Query.
 
 The original PostgreSQL `auth.users` table, Spring BCrypt hashes, JWT HMAC key
 selection, token claims and Redis keys are retained. Refresh cookies remain
@@ -19,13 +18,6 @@ lock and password changes hold an exclusive lock while updating credentials and
 revoking sessions, preventing an old-password login racing a password change
 from issuing a token with the new session version.
 
-Storage uploads are limited to 12 MiB and eight simultaneous spools, with a
-256-request admission bound. Magic bytes must match the accepted media type;
-stored extensions are normalized to that type. MinIO buckets stay private.
-Receipt reads consult Command's ownership/group checks. OCR jobs use persistent
-RabbitMQ messages, mandatory routing and publisher confirms. Connections are
-reestablished after broker failure; readiness checks dependencies.
-
 ## Development
 
 ```sh
@@ -35,12 +27,14 @@ cargo fmt --check
 docker build -t finance/auth-service:dev .
 ```
 
-Runtime variables are declared in `env/auth-service.env`,
-`env/storage-service.env` and the Kubernetes ConfigMaps. Required credentials
-must be provided explicitly. Auth additionally reads `DB_HOST` (default
-`postgres-primary`), `DB_PORT` (5432), `DB_NAME` (pfa), `DB_USER`, and
-`DB_PASSWORD`. Auth listens on 8082; storage on 8083. Both expose liveness,
-dependency readiness, and Prometheus histograms on private port 9090.
+Runtime credentials are declared in `env/auth-service.env`; non-secret settings
+live in the auth ConfigMap. Required credentials must be provided explicitly.
+Auth reads `DB_HOST` (default `postgres-primary`), `DB_PORT` (5432), `DB_NAME`
+(pfa), `DB_USER` and `DB_PASSWORD`. It listens on 8082 and exposes liveness,
+dependency readiness and Prometheus histograms on private port 9090.
+
+For the module map and test-crate layout, see
+[the Rust code guide](../docs/rust-code-guide.md).
 
 Run `python3 requests/test_native_migration.py --base-url http://localhost:3001`
 from the repository root for live auth, storage, routing, SSE and cross-account

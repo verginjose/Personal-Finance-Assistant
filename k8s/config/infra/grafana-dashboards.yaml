@@ -753,10 +753,10 @@ data:
             "type": "prometheus",
             "uid": "prometheus-ds"
           },
-          "description": "Prometheus scrape targets currently UP (edge-router, auth-service, storage-service, command-service, query-service).",
+          "description": "Prometheus scrape targets currently UP (edge-router, auth-service, command-service, query-service).",
           "targets": [
             {
-              "expr": "sum(up{job=~\"storage-service|edge-router|auth-service|command-service|query-service\"})",
+              "expr": "sum(up{job=~\"edge-router|auth-service|command-service|query-service\"})",
               "refId": "A",
               "instant": true,
               "format": "table"
@@ -997,7 +997,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"storage-service|auth-service|command-service|query-service\"}[$__rate_interval]))",
+              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"auth-service|command-service|query-service\"}[$__rate_interval]))",
               "refId": "A",
               "legendFormat": "{{job}}",
               "instant": false,
@@ -1050,7 +1050,7 @@ data:
           },
           "targets": [
             {
-              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"storage-service|auth-service|command-service|query-service\",status=~\"5..\"}[$__rate_interval]))",
+              "expr": "sum by (job) (rate(http_server_requests_seconds_count{job=~\"auth-service|command-service|query-service\",status=~\"5..\"}[$__rate_interval]))",
               "refId": "A",
               "legendFormat": "{{job}}",
               "instant": false,
@@ -1103,14 +1103,14 @@ data:
           },
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"storage-service|auth-service|command-service|query-service\"}[$__rate_interval]))) * 1000",
+              "expr": "histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"auth-service|command-service|query-service\"}[$__rate_interval]))) * 1000",
               "refId": "A",
               "legendFormat": "{{job}} p95",
               "instant": false,
               "range": true
             },
             {
-              "expr": "histogram_quantile(0.99, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"storage-service|auth-service|command-service|query-service\"}[$__rate_interval]))) * 1000",
+              "expr": "histogram_quantile(0.99, sum by (le, job) (rate(http_server_requests_seconds_bucket{job=~\"auth-service|command-service|query-service\"}[$__rate_interval]))) * 1000",
               "refId": "B",
               "legendFormat": "{{job}} p99",
               "instant": false,
@@ -1719,7 +1719,7 @@ data:
             "name": "app_group",
             "label": "Workload group",
             "type": "custom",
-            "query": "All : .*, pfa-apps : ^(auth-service|edge-router|command-service|query-service|frontend|storage-service|ocr-service)-.*, ci : ^(ci-runner|cargo-proxy|registry-proxy|registry|buildkitd|buildkit-prune|registry-gc|mirror-base-images)-.*, infra : ^(postgres-primary|postgres-replica|redis|rabbitmq|minio|clickhouse|prometheus|grafana|vector|cloudflared)-.*",
+            "query": "All : .*, pfa-apps : ^(auth-service|edge-router|command-service|query-service|frontend|ocr-service)-.*, ci : ^(ci-runner|cargo-proxy|registry-proxy|registry|buildkitd|buildkit-prune|registry-gc|mirror-base-images)-.*, infra : ^(postgres-primary|postgres-replica|redis|rabbitmq|minio|clickhouse|prometheus|grafana|vector|cloudflared)-.*",
             "options": [
               {
                 "selected": true,
@@ -1729,7 +1729,7 @@ data:
               {
                 "selected": false,
                 "text": "pfa-apps",
-                "value": "^(auth-service|edge-router|command-service|query-service|frontend|storage-service|ocr-service)-.*"
+                "value": "^(auth-service|edge-router|command-service|query-service|frontend|ocr-service)-.*"
               },
               {
                 "selected": false,

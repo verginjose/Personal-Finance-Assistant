@@ -1,10 +1,12 @@
-use super::*;
+use super::GROUP_COLS;
+use super::MEMBER_COLS;
+use super::models::{ExpenseRow, GroupRow, MemberRow};
+use crate::{App, Params, Result};
 use crate::{bad, forbidden, money, not_found, notifications, ts};
 use axum::http::HeaderMap;
 use serde_json::{Value, json};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
-
 
 pub(crate) fn actor(h: &HeaderMap) -> Result<Uuid> {
     let raw = h
@@ -86,7 +88,10 @@ pub(crate) async fn group(tx: &mut Transaction<'_, Postgres>, id: i64) -> Result
     .ok_or_else(|| not_found(&format!("Group {id} not found")))
 }
 
-pub(crate) async fn members(tx: &mut Transaction<'_, Postgres>, group: i64) -> Result<Vec<MemberRow>> {
+pub(crate) async fn members(
+    tx: &mut Transaction<'_, Postgres>,
+    group: i64,
+) -> Result<Vec<MemberRow>> {
     Ok(sqlx::query_as::<_, MemberRow>(&format!(
         "SELECT {MEMBER_COLS} FROM groups.group_members WHERE group_id=$1 ORDER BY id"
     ))
@@ -115,9 +120,8 @@ pub(crate) async fn display_name(tx: &mut Transaction<'_, Postgres>, user: Uuid)
             .bind(user)
             .fetch_optional(&mut **tx)
             .await?;
-    let (username, email) = row.ok_or_else(|| {
-        bad("User not found. Only registered users can be added to groups.")
-    })?;
+    let (username, email) =
+        row.ok_or_else(|| bad("User not found. Only registered users can be added to groups."))?;
     username
         .or(email)
         .ok_or_else(|| bad("User not found. Only registered users can be added to groups."))
@@ -218,8 +222,14 @@ impl Notice {
 pub(crate) async fn send_notices(a: &App, notices: Vec<Notice>) {
     let items = notices
         .into_iter()
-        .map(|n| (n.user, n.status, Some(n.event), n.message, Some(n.group), n.payload))
+        .map(|notice| notifications::BatchNotification {
+            user: notice.user,
+            status: notice.status,
+            event: Some(notice.event),
+            message: notice.message,
+            group: Some(notice.group),
+            payload: notice.payload,
+        })
         .collect();
     notifications::send_batch(a, items).await;
 }
-

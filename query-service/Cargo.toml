@@ -3,6 +3,9 @@ name = "pfa-query"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+path = "rust/lib.rs"
+
 [[bin]]
 name = "pfa-query"
 path = "rust/main.rs"

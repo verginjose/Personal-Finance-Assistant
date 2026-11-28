@@ -4,6 +4,7 @@ ARG CARGO_MIRROR_URL=
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY rust ./rust
+COPY tests ./tests
 # CI uses the read-only Cargo cache over the existing dependency-proxy route.
 # The CI CA is a build secret and is never copied into a layer.
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,target=/build/target,sharing=locked --mount=type=secret,id=ci_ca \

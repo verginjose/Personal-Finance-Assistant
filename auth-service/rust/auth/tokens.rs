@@ -1,11 +1,17 @@
-use super::*;
+use super::models::{Claims, User};
+use crate::app::App;
+use crate::config::{env, now};
+use crate::error::{Error, Result};
+use axum::Json;
 use axum::http::{HeaderMap, HeaderValue};
+use axum::response::IntoResponse;
+use axum::response::Response;
 use base64::Engine;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use redis::AsyncCommands;
 use serde_json::Value;
+use serde_json::json;
 use uuid::Uuid;
-
 
 pub fn resolve_key(secret: &str) -> std::result::Result<Vec<u8>, &'static str> {
     let decoded = base64::engine::general_purpose::STANDARD
@@ -18,7 +24,7 @@ pub fn resolve_key(secret: &str) -> std::result::Result<Vec<u8>, &'static str> {
     }
     Ok(key)
 }
-pub(crate) fn algorithm(key: &[u8]) -> Algorithm {
+pub fn algorithm(key: &[u8]) -> Algorithm {
     if key.len() >= 64 {
         Algorithm::HS512
     } else if key.len() >= 48 {
@@ -53,7 +59,7 @@ pub(crate) fn mint(app: &App, user: &User, sv: i64, stream: bool) -> Result<Stri
     )
     .map_err(Error::internal)
 }
-fn token_validation(key: &[u8]) -> Validation {
+pub fn token_validation(key: &[u8]) -> Validation {
     let mut validation = Validation::new(algorithm(key));
     validation.algorithms = vec![Algorithm::HS256, Algorithm::HS384, Algorithm::HS512];
     validation.leeway = 0;
@@ -61,7 +67,7 @@ fn token_validation(key: &[u8]) -> Validation {
     validation
 }
 
-pub async fn validate(app: &App, token: &str, stream: bool) -> Result<Claims> {
+pub(crate) async fn validate(app: &App, token: &str, stream: bool) -> Result<Claims> {
     // JJWT chooses the signing algorithm based on the HMAC key length. Accept
     // the HMAC family for existing tokens, never asymmetric or unsigned tokens.
     let validation = token_validation(&app.key);
@@ -96,7 +102,7 @@ pub(crate) fn bearer(headers: &HeaderMap) -> Result<&str> {
         .filter(|v| !v.is_empty())
         .ok_or_else(Error::unauthorized)
 }
-pub async fn identity(app: &App, headers: &HeaderMap) -> Result<Claims> {
+pub(crate) async fn identity(app: &App, headers: &HeaderMap) -> Result<Claims> {
     validate(app, bearer(headers)?, false).await
 }
 pub(crate) async fn version(app: &App, id: Uuid) -> Result<i64> {
@@ -140,33 +146,4 @@ pub(crate) fn input_string<'a>(body: &'a Value, name: &str) -> Result<&'a str> {
         .and_then(Value::as_str)
         .filter(|s| !s.trim().is_empty())
         .ok_or_else(|| Error::bad(&format!("{name} is required")))
-}
-
-#[cfg(test)]
-mod security_tests {
-    use super::*;
-
-    #[test]
-    fn accepts_existing_hmac_algorithms() {
-        let key = [7u8; 64];
-        for algorithm in [Algorithm::HS256, Algorithm::HS384, Algorithm::HS512] {
-            let claims = json!({"sub": "test", "exp": now() + 300});
-            let token = jsonwebtoken::encode(&Header::new(algorithm), &claims, &EncodingKey::from_secret(&key)).unwrap();
-            assert!(jsonwebtoken::decode::<Value>(&token, &DecodingKey::from_secret(&key), &token_validation(&key)).is_ok());
-        }
-    }
-
-    #[test]
-    fn rejects_malformed_or_future_time_claims() {
-        let key = [7u8; 64];
-        for claims in [
-            json!({"exp": (now() + 300).to_string()}),
-            json!({"exp": now() + 300, "nbf": "99999999999"}),
-            json!({"exp": now() + 300, "nbf": now() + 300}),
-            json!({"exp": now() - 300}),
-        ] {
-            let token = jsonwebtoken::encode(&Header::new(Algorithm::HS512), &claims, &EncodingKey::from_secret(&key)).unwrap();
-            assert!(jsonwebtoken::decode::<Value>(&token, &DecodingKey::from_secret(&key), &token_validation(&key)).is_err());
-        }
-    }
 }

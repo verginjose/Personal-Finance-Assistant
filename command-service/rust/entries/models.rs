@@ -64,4 +64,3 @@ pub struct EntryRow {
     pub original_transaction_id: Option<i64>,
     pub subcategory: Option<String>,
 }
-

@@ -106,8 +106,12 @@ pub fn previous_charge_date(next_charge: NaiveDate, period: &str) -> NaiveDate {
     match period {
         "DAILY" => next_charge - Days::new(1),
         "WEEKLY" => next_charge - Days::new(7),
-        "MONTHLY" => next_charge.checked_sub_months(Months::new(1)).unwrap_or(next_charge),
-        "YEARLY" => next_charge.checked_sub_months(Months::new(12)).unwrap_or(next_charge),
+        "MONTHLY" => next_charge
+            .checked_sub_months(Months::new(1))
+            .unwrap_or(next_charge),
+        "YEARLY" => next_charge
+            .checked_sub_months(Months::new(12))
+            .unwrap_or(next_charge),
         _ => next_charge,
     }
 }

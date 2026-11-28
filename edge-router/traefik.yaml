@@ -8,6 +8,16 @@ entryPoints:
         readTimeout: 120s
         writeTimeout: 0s
         idleTimeout: 180s
+  # kubectl port-forward reaches pod loopback. No Service exposes this port.
+  local-test:
+    address: '127.0.0.1:8085'
+    http:
+      aliasHeadersStrategy: reject
+    transport:
+      respondingTimeouts:
+        readTimeout: 120s
+        writeTimeout: 0s
+        idleTimeout: 180s
   management:
     address: ':9090'
     http:

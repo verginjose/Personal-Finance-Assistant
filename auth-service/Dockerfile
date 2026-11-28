@@ -4,6 +4,7 @@ ARG CARGO_MIRROR_URL=
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY rust ./rust
+COPY tests ./tests
 # CI uses the read-only Cargo cache over the existing dependency-proxy route.
 # The CI CA is a build secret and is never copied into a layer.
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,target=/build/target,sharing=locked --mount=type=secret,id=ci_ca \
@@ -17,5 +18,5 @@ FROM ${BASE_IMAGE_REGISTRY}/debian:bookworm-slim
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /pfa-native /usr/local/bin/pfa-native
 USER 65534:65534
-EXPOSE 8082 8083 9090
+EXPOSE 8082 9090
 ENTRYPOINT ["/usr/local/bin/pfa-native"]

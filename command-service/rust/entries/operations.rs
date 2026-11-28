@@ -1,9 +1,14 @@
-use crate::*;
-use super::*;
+use super::ENTRY_COLS;
+use super::models::{EntryRequest, EntryRow, Validated};
+use super::validation::{
+    group_link_exists, outbox, parse_amount, reportable, validate, validate_patched,
+};
+use crate::{App, Result, bad, forbidden, illegal_state, money, not_found, server_error, ts};
 use crate::{cache, subscriptions};
 use chrono::{NaiveDateTime, Utc};
 use rust_decimal::Decimal;
 use serde_json::Value;
+use serde_json::json;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
@@ -12,9 +17,15 @@ pub fn next_run(created: Option<NaiveDateTime>, period: &str) -> Option<NaiveDat
     let next = match period {
         "DAILY" => base + chrono::Days::new(1),
         "WEEKLY" => base + chrono::Days::new(7),
-        "MONTHLY" => base.checked_add_months(chrono::Months::new(1)).unwrap_or(base),
-        "YEARLY" => base.checked_add_months(chrono::Months::new(12)).unwrap_or(base),
-        _ => base.checked_add_months(chrono::Months::new(1)).unwrap_or(base),
+        "MONTHLY" => base
+            .checked_add_months(chrono::Months::new(1))
+            .unwrap_or(base),
+        "YEARLY" => base
+            .checked_add_months(chrono::Months::new(12))
+            .unwrap_or(base),
+        _ => base
+            .checked_add_months(chrono::Months::new(1))
+            .unwrap_or(base),
     };
     next.date().and_hms_opt(0, 0, 0)
 }
@@ -138,11 +149,7 @@ pub(crate) async fn replay(a: &App, user: Uuid, key: &str) -> Result<Value> {
     Ok(entry_response(&row))
 }
 
-pub async fn create_bulk(
-    a: &App,
-    user: Uuid,
-    reqs: Vec<EntryRequest>,
-) -> Result<Vec<Value>> {
+pub async fn create_bulk(a: &App, user: Uuid, reqs: Vec<EntryRequest>) -> Result<Vec<Value>> {
     let mut tx = a.db.begin().await?;
     let mut rows = Vec::new();
     for req in &reqs {
@@ -207,7 +214,9 @@ pub async fn update(a: &App, user: Uuid, req: EntryRequest) -> Result<Value> {
     .await?
     .ok_or_else(|| not_found(&format!("Transaction entry with ID {id} not found")))?;
     if existing.user_id != user {
-        return Err(forbidden("User is not authorized to update this transaction"));
+        return Err(forbidden(
+            "User is not authorized to update this transaction",
+        ));
     }
     if group_link_exists(&mut tx, id).await? {
         return Err(illegal_state(
@@ -253,12 +262,7 @@ pub async fn update(a: &App, user: Uuid, req: EntryRequest) -> Result<Value> {
     Ok(entry_response(&row))
 }
 
-pub async fn patch_amount(
-    a: &App,
-    id: i64,
-    user: Uuid,
-    amount: Value,
-) -> Result<Value> {
+pub async fn patch_amount(a: &App, id: i64, user: Uuid, amount: Value) -> Result<Value> {
     let new_amount = parse_amount(&amount)?;
     if new_amount <= Decimal::ZERO {
         return Err(bad("Amount must be greater than zero"));
@@ -321,7 +325,9 @@ pub async fn delete(a: &App, id: i64, user: Uuid) -> Result<()> {
     .await?
     .ok_or_else(|| not_found(&format!("Transaction entry with ID {id} not found")))?;
     if existing.user_id != user {
-        return Err(forbidden("User is not authorized to delete this transaction"));
+        return Err(forbidden(
+            "User is not authorized to delete this transaction",
+        ));
     }
     require_no_recoveries(&mut tx, user, &existing).await?;
     adjust_allocation(&mut tx, user, id, Decimal::ZERO, false).await?;
@@ -379,7 +385,11 @@ pub(crate) async fn adjust_allocation(
     let Some((allocation_id, goal_id, allocation_amount)) = alloc else {
         return Ok(());
     };
-    let delta = if change_allocation { diff } else { -allocation_amount };
+    let delta = if change_allocation {
+        diff
+    } else {
+        -allocation_amount
+    };
     if change_allocation {
         sqlx::query("UPDATE finance.transaction_goal_allocations SET amount=$2 WHERE id=$1")
             .bind(allocation_id)

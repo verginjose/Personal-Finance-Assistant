@@ -22,11 +22,6 @@ scrape_configs:
     static_configs:
       - targets: ['auth-service:9090']
 
-  - job_name: storage-service
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ['storage-service:9090']
-
   - job_name: command-service
     metrics_path: /actuator/prometheus
     static_configs:

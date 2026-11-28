@@ -3,22 +3,32 @@ name = "pfa-command"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+path = "rust/lib.rs"
+
 [[bin]]
 name = "pfa-command"
 path = "rust/main.rs"
 
 [dependencies]
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart"] }
 chrono = { version = "0.4", features = ["serde"] }
 futures-util = "0.3"
-rust_decimal = { version = "1", features = ["serde-with-str"] }
+hex = "0.4"
+hmac = "0.12"
+lapin = "2"
 metrics = "0.24"
 metrics-exporter-prometheus = { version = "0.17", default-features = false }
 redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+rust_decimal = { version = "1", features = ["serde-with-str"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
+sha2 = "0.10"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "derive", "json", "chrono", "rust_decimal"] }
+tempfile = "3"
 tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
 tower = { version = "0.5", features = ["limit"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

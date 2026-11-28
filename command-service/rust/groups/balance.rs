@@ -1,9 +1,12 @@
-use super::*;
+use super::EXPENSE_COLS;
+use super::SPLIT_COLS;
+use super::helpers::members;
+use super::models::{ExpenseRow, SplitRow};
+use crate::Result;
 use rust_decimal::Decimal;
 use sqlx::{Postgres, Transaction};
 use std::collections::HashMap;
 use uuid::Uuid;
-
 
 pub(crate) async fn group_name(tx: &mut Transaction<'_, Postgres>, group: i64) -> Result<String> {
     Ok(
@@ -39,7 +42,10 @@ pub(crate) struct Suggestion {
     pub(crate) amount: Decimal,
 }
 
-pub(crate) async fn balances(tx: &mut Transaction<'_, Postgres>, group: i64) -> Result<Vec<Balance>> {
+pub(crate) async fn balances(
+    tx: &mut Transaction<'_, Postgres>,
+    group: i64,
+) -> Result<Vec<Balance>> {
     let members = members(tx, group).await?;
     let expenses = sqlx::query_as::<_, ExpenseRow>(&format!(
         "SELECT {EXPENSE_COLS} FROM groups.shared_expenses WHERE group_id=$1 ORDER BY created_at DESC"
@@ -123,4 +129,3 @@ pub(crate) fn minimize_debts(balances: &[Balance], currency: &str) -> Vec<Sugges
     let _ = currency;
     out
 }
-

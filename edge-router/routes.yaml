@@ -31,10 +31,43 @@ http:
       entryPoints: [web]
       service: storage
       middlewares: [sanitize, authenticate]
+    # Local testing follows the same routes, authentication and services.
+    auth-local-test:
+      rule: PathPrefix(`/api/auth/`)
+      entryPoints: [local-test]
+      service: auth
+      middlewares: [sanitize, local-test-marker, authenticate, auth-breaker]
+    notifications-local-test:
+      rule: Path(`/api/upsert/notifications`) || PathPrefix(`/api/upsert/notifications/`)
+      priority: 200
+      entryPoints: [local-test]
+      service: notifications
+      middlewares: [sanitize, local-test-marker, authenticate, strip-notifications]
+    writes-local-test:
+      rule: PathPrefix(`/api/upsert/`) && (Method(`POST`) || Method(`PUT`) || Method(`PATCH`) || Method(`DELETE`))
+      entryPoints: [local-test]
+      service: command
+      middlewares: [sanitize, local-test-marker, authenticate, strip-api, command-breaker]
+    reads-local-test:
+      rule: PathPrefix(`/api/upsert/`) && Method(`GET`)
+      entryPoints: [local-test]
+      service: query
+      middlewares: [sanitize, local-test-marker, authenticate, strip-api, query-breaker]
+    analytics-local-test:
+      rule: PathPrefix(`/api/analytics/`)
+      entryPoints: [local-test]
+      service: query
+      middlewares: [sanitize, local-test-marker, authenticate, strip-api, query-breaker]
+    storage-local-test:
+      rule: PathPrefix(`/api/receipt/`) || PathPrefix(`/api/profile/`) || PathPrefix(`/api/bill/`) || PathPrefix(`/api/storage/`)
+      entryPoints: [local-test]
+      service: storage
+      middlewares: [sanitize, local-test-marker, authenticate]
   middlewares:
     sanitize:
       headers:
         customRequestHeaders:
+          X-PFA-Local-Test: ''
           X-User-Id: ''
           X-User-Email: ''
           X-User-Role: ''
@@ -44,12 +77,16 @@ http:
         customResponseHeaders:
           X-Content-Type-Options: nosniff
           X-Frame-Options: DENY
+    local-test-marker:
+      headers:
+        customRequestHeaders:
+          X-PFA-Local-Test: '1'
     authenticate:
       forwardAuth:
         address: http://auth-service:8082/internal/verify
         trustForwardHeader: false
         maxResponseBodySize: 65536
-        authRequestHeaders: [Authorization, X-Real-IP]
+        authRequestHeaders: [Authorization, X-Real-IP, X-PFA-Local-Test]
         authResponseHeaders: [X-User-Id]
     strip-api:
       stripPrefix:
@@ -99,7 +136,7 @@ http:
       loadBalancer:
         serversTransport: storage
         servers:
-          - url: http://storage-service:8083
+          - url: http://command-service:8081
   serversTransports:
     auth:
       # 5s dial timeout produced 504s when a login burst briefly saturated the

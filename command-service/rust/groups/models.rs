@@ -4,7 +4,6 @@ use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
 
-
 #[derive(Debug, sqlx::FromRow)]
 #[allow(dead_code)]
 pub(crate) struct GroupRow {
@@ -100,4 +99,3 @@ pub(crate) struct ExpenseRequest {
     pub(crate) split_details: Option<Vec<SplitDetail>>,
     pub(crate) receipt_url: Option<String>,
 }
-

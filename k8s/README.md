@@ -589,7 +589,8 @@ reachable with `port-forward` (they are `ClusterIP` services, matching the
   decrypted in-cluster by the Sealed Secrets controller running in
   `kube-system`. `apply.sh` applies `k8s/sealed/` and waits for the Secrets to
   appear. Every Secret is scoped to the workload that reads it: one per
-  application service (`auth-service-secrets`, `storage-service-secrets`, …), one
+  application credential bundle (`auth-service-secrets`, `command-service-secrets`,
+  plus the existing `storage-service-secrets` keys selected by Command), one
   per infrastructure group (`postgres-secrets`, `redis-secrets`,
   `clickhouse-secrets`, `minio-secrets`, `grafana-secrets`,
   `cloudflared-secrets`) and `pfa-ci-secrets` for the GitHub runner. There is

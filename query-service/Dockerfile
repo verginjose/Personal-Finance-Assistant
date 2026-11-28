@@ -2,12 +2,13 @@ ARG BASE_IMAGE_REGISTRY=docker.io/library
 FROM ${BASE_IMAGE_REGISTRY}/rust:1.100.0-bookworm AS build
 ARG CARGO_MIRROR_URL=
 WORKDIR /build
-COPY Cargo.toml Cargo.lock ./
-COPY rust ./rust
-COPY tests ./tests
+# One copy avoids three full filesystem snapshots with the native worker.
+# .dockerignore excludes targets, IDE files and retired sources.
+COPY . .
+ENV CARGO_BUILD_JOBS=2
 # CI uses the read-only Cargo cache over the existing dependency-proxy route.
 # The CI CA is a build secret and is never copied into a layer.
-RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked --mount=type=cache,target=/build/target,sharing=locked --mount=type=secret,id=ci_ca \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=shared --mount=type=cache,id=pfa-query-target,target=/build/target,sharing=locked --mount=type=secret,id=ci_ca \
     if [ -n "$CARGO_MIRROR_URL" ]; then \
       printf '[source.crates-io]\nreplace-with = "pfa-cache"\n[source.pfa-cache]\nregistry = "sparse+%s"\n' "$CARGO_MIRROR_URL" > /usr/local/cargo/config.toml; \
       export CARGO_HTTP_CAINFO=/run/secrets/ci_ca; \

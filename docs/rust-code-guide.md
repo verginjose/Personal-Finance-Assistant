@@ -139,3 +139,7 @@ buckets. Traefik strips the private test marker from public requests and adds
 it only on this listener. It is not a Service or public ingress port. Public
 traffic retains rate limits; supplying a loopback address in a header does
 not enable the exemption.
+
+Image builds run two services concurrently through `k8s/ci/build-services.py`.
+Each Rust service has its own target cache; both share the existing bounded
+BuildKit CPU and memory allocation. The heavy OCR image builds alone.

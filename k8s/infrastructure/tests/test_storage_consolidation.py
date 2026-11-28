@@ -128,8 +128,10 @@ class StorageConsolidationTests(unittest.TestCase):
     def test_image_builds_include_the_separate_test_crates(self):
         for service in ['auth-service', 'command-service', 'query-service']:
             dockerfile = (ROOT / service / 'Dockerfile').read_text()
-            self.assertIn('COPY tests ./tests', dockerfile)
-            self.assertLess(dockerfile.index('COPY tests ./tests'), dockerfile.index('cargo test'))
+            self.assertIn('COPY . .', dockerfile)
+            ignored = (ROOT / service / '.dockerignore').read_text().splitlines()
+            self.assertNotIn('tests/', ignored)
+            self.assertLess(dockerfile.index('COPY . .'), dockerfile.index('cargo test'))
             self.assertTrue(list((ROOT / service / 'tests').glob('*.rs')))
 
 

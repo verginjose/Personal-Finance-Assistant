@@ -10,7 +10,6 @@ on:
     branches: ["master", "k8s/local-deployment"]
     paths-ignore:
       - "**.md"
-      - "k8s/ci/**"
   workflow_dispatch:
     inputs:
       service:
@@ -78,6 +77,7 @@ jobs:
         run: |
           set -euo pipefail
           selected=""
+          changed_files=""
           if [[ "$EVENT" == "workflow_dispatch" ]]; then
             if [[ "$INPUT_SERVICE" == "all" ]]; then
               selected="$ALL_SERVICES"
@@ -99,7 +99,10 @@ jobs:
               fi
             done
           fi
-          selected="$(echo $selected)"   # trim leading space
+          if printf '%s\n' "$changed_files" | grep -Eq '^(.github/workflows/build.yml|k8s/ci/build-services.py|k8s/system/buildkit.yaml)$'; then
+            selected="$selected auth-service edge-router command-service query-service"
+          fi
+          selected="$(printf '%s\n' $selected | sort -u | xargs)"
           json="[]"
           if [[ -n "$selected" ]]; then
             json="[$(printf '%s\n' $selected | sed 's/.*/"&"/' | paste -sd, -)]"
@@ -107,20 +110,15 @@ jobs:
           echo "services=$json" >> "$GITHUB_OUTPUT"
           echo "Selected: $json"
 
-      - name: Test promotion automation
+      - name: Test build and promotion automation
         run: python3 -I -m unittest discover -s k8s/ci/tests -v
 
   build:
     needs: detect
     if: needs.detect.outputs.services != '[]'
     runs-on: [self-hosted, linux, x64, pfa]
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        service: ${{ fromJSON(needs.detect.outputs.services) }}
     env:
-      SERVICE: ${{ matrix.service }}
+      SERVICES: ${{ needs.detect.outputs.services }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5
         with:
@@ -163,45 +161,17 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/buildctl" --version
 
-      - name: Build and push
-        run: |
-          set -euo pipefail
-          TAG="${GITHUB_SHA::12}"
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "Building ${PUSH_REGISTRY}/finance/${SERVICE}:${TAG} from ./${SERVICE}"
-          # Cargo dependencies come from the in-cluster pull-through cache
-          # (k8s/ci/cargo-proxy.yaml), not from crates.io. CARGO_MIRROR_URL is a
-          # build arg; the CI CA that signs the cache's certificate is a
-          # BuildKit secret, so it never lands in a layer and local
-          # `docker build` still works (the Dockerfile treats both as optional).
-          #
-          # Base images are mirrored into the registry (k8s/ci/mirror-base-images.sh),
-          # so a cold BuildKit cache costs a loopback pull instead of Docker Hub.
-          buildctl \
-            --tlscacert "$BUILDKIT_TLS_DIR/ca.crt" \
-            --tlscert "$BUILDKIT_TLS_DIR/client.cert" \
-            --tlskey "$BUILDKIT_TLS_DIR/client.key" \
-            build \
-            --progress plain \
-            --metadata-file "${SERVICE}.json" \
-            --frontend dockerfile.v0 \
-            --local context="./${SERVICE}" \
-            --local dockerfile="./${SERVICE}" \
-            --opt filename=Dockerfile \
-            --opt build-arg:BASE_IMAGE_REGISTRY="${PUSH_REGISTRY}/base" \
-            --opt build-arg:OCR_BASE="${PUSH_REGISTRY}/finance/ocr-base:cu126-py311-v1" \
-            --opt build-arg:CARGO_MIRROR_URL="${CARGO_MIRROR_URL}" \
-            --secret id=ci_ca,src=/certs/ca.crt \
-            --output "type=image,name=${PUSH_REGISTRY}/finance/${SERVICE}:${TAG},push=true"
+      - name: Build and push (two services in parallel)
+        run: python3 k8s/ci/build-services.py --services "$SERVICES" --jobs 2
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: image-digest-${{ matrix.service }}
-          path: ${{ matrix.service }}.json
+          name: image-digest-batch
+          path: image-digests/*.json
           retention-days: 3
           if-no-files-found: error
 
-      - name: Reclaim cache for this build
+      - name: Reclaim cache after all builds finish
         # The post-build GC runs ~1s after Solve returns, before the build's
         # own leases have all dropped, so it skips the layers this build just
         # pulled and never revisits them. Re-running the prune here - idle by

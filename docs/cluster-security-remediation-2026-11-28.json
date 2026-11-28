@@ -270,5 +270,13 @@
     "https://github.com/moby/buildkit/releases/tag/v0.35.1",
     "https://github.com/advisories/GHSA-h395-gr6q-cpjc"
   ],
-  "reportPullRequest": "https://github.com/verginjose/Personal-Finance-Assistant/pull/135"
+  "reportPullRequest": "https://github.com/verginjose/Personal-Finance-Assistant/pull/135",
+  "postRemediationCorrections": [
+    {
+      "date": "2026-11-28T13:13:42.746535+00:00",
+      "issue": "AppProject resource allowlists omitted Pod and ReplicaSet, hiding live workload children from Argo pod/tree views.",
+      "fix": "Explicit Pod and apps/ReplicaSet entries in pfa-apps, pfa-ci, pfa-infra and pfa-system. Other project boundaries retained.",
+      "validation": "Authenticated Argo resource-tree API returns 10 app pods, 4 CI pods including ci-runner, 8 infrastructure pods and 1 system pod; pfa-apps node grouping contains one host."
+    }
+  ]
 }

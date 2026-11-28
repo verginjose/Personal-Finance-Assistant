@@ -651,3 +651,9 @@ writes with `kubectl -n pfa set env deploy/registry
 REGISTRY_STORAGE_MAINTENANCE_READONLY='{enabled: false}'` (one command), then wait
 for the Deployment rollout. Only this value is ignored by GitOps; auto-prune and
 self-healing remain enabled for all seven PFA applications.
+
+Argo project allowlists also filter the resource tree. Workload projects must
+permit core `Pod` and `apps/ReplicaSet` to show Deployment children in the UI.
+Keep these explicit kinds alongside the workload controllers; restricting the
+list to only Git-managed parent resources hides running pods. Validate the
+Application `resource-tree` API and its pod groups after project-policy changes.
